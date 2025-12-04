@@ -8,7 +8,13 @@ Für eine kleine Firma (20-30 MA) mit 70-150 Kunden soll der Contract Manager ei
 - Bei verbundenen Verträgen ist ein Vertrag der primäre und er bestimmt dann die Laufzeit und Zahlungsintervalle
 - Verträge enthalten n Produkte in Anzahl m 
 - Verträge haben entweder einen Komplettpreis oder bestehen aus den Projekt-Einzelpreisen
-- 
+- Es gibt Vertragsbestandteile wie Rabatte mit un dohne zeitlicher Laufzeit
+- Es gibt automatische Vertragsanpassungen (wie Inflationsanpassung auf alles iHv x prozent ab Datum)
+- Verträge bestehen aus Produkten, frei bestimmbar oder aus einer Produktliste mit Preisen (Preisliste)
+- Für Kunden können Vereinbarungen bestehen wie: 10% auf die Preisliste oder 20% Rabatt bei > 2J Laufzeit
+
+- Das Tool wird nur intern genutzt.
+- Login via User/pass, later via magic email link or email code
 
 ## Tech Stack
 - React with Typescript
