@@ -468,6 +468,41 @@ Kundenvereinbarung > Vertragsklausel > System-Default
 - [ ] Export (CSV/Excel)
 - [ ] Magic Link Login
 
+## UI Grundlagen
+
+**Tech:**
+- Shadcn/ui (https://ui.shadcn.com/)
+- Preline (https://preline.co/) als Referenz
+- Tailwind CSS
+
+**Layout:**
+- Klassisch: Sidebar links + Content rechts
+- Desktop-first (Mobile nice-to-have, kein Fokus)
+
+**Navigation (Sidebar):**
+- Dashboard
+- Kunden
+- Produkte
+- Verträge
+- Einstellungen
+
+**Suche:**
+- Global (über alles)
+- Kontextbezogen innerhalb Bereiche (z.B. Produkte eines Kunden)
+
+**Tabellen:**
+- Sortierung
+- Filterung
+- Paginierung
+
+**Formulare:**
+- Wizard (Schritt für Schritt) bevorzugt
+- Alternativ: Tabs
+
+**Sonstiges:**
+- i18n von Anfang an (Deutsch + Englisch)
+- Kein Dark Mode nötig
+
 ## Development Guidelines
 - use TDD
 - commit only when all tests are green
