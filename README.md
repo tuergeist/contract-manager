@@ -4,17 +4,222 @@ Für eine kleine Firma (20-30 MA) mit 70-150 Kunden soll der Contract Manager ei
 
 ## Fakten
 
-- Kunden können mehrere Verträge haben die voneinander unabhängig oder miteinander verbunden sein können
-- Bei verbundenen Verträgen ist ein Vertrag der primäre und er bestimmt dann die Laufzeit und Zahlungsintervalle
-- Verträge enthalten n Produkte in Anzahl m 
-- Verträge haben entweder einen Komplettpreis oder bestehen aus den Projekt-Einzelpreisen
-- Es gibt Vertragsbestandteile wie Rabatte mit un dohne zeitlicher Laufzeit
-- Es gibt automatische Vertragsanpassungen (wie Inflationsanpassung auf alles iHv x prozent ab Datum)
-- Verträge bestehen aus Produkten, frei bestimmbar oder aus einer Produktliste mit Preisen (Preisliste)
-- Für Kunden können Vereinbarungen bestehen wie: 10% auf die Preisliste oder 20% Rabatt bei > 2J Laufzeit
+### Kunden
+- Kunden werden aus Hubspot synchronisiert (nur inbound, one-way, read-only)
+- Sync: Initial-Import + Webhook (Fallback: regelmäßiger Sync)
+- Daten aus Hubspot: Firmenname (Pflicht), Adresse (optional)
+- Lokales Notizfeld pro Kunde (nur im Contract-Manager)
+- Kunden können mehrere Verträge haben (unabhängig oder miteinander verbunden)
+- Ein Standort pro Kunde (keine Konzernstrukturen)
+- Kein Löschen: Deaktivierte Hubspot-Kunden werden markiert, Verträge bleiben erhalten
 
-- Das Tool wird nur intern genutzt.
-- Login via User/pass, later via magic email link or email code
+### Produkte
+
+**Herkunft & Sync:**
+- Import aus Hubspot (komplett, read-only, Sync wie Kunden)
+- Eigene Produkte manuell anlegbar (z.B. Legacy-Produkte)
+- Gelöschte Hubspot-Produkte bleiben markiert im System
+
+**Struktur:**
+- Primär Subscriptions, One-off optional für Vollständigkeit
+- Kategorien/Gruppen optional
+- Produktvarianten optional (z.B. S/M/L)
+- Abhängigkeiten definierbar:
+  - Automatisch mitgebucht (Pflicht)
+  - Hinweis bei Auswahl (Empfehlung)
+
+**Preise:**
+- Preise aus CRM, für eigene Produkte manuell festlegbar
+- I.d.R. Stückpreis, aber alle Modelle möglich (Staffel, pro Einheit)
+- Kundenspezifische Preislisten möglich
+- Kundenspezifische Preise via Rabatt oder direkter Preisänderung pro Kunde/Vertrag
+
+**Lifecycle:**
+- Produkte können deaktiviert werden (nicht mehr buchbar, aber in bestehenden Verträgen)
+- Optionaler Nachfolger definierbar
+
+### Verträge
+
+**Lebenszyklus:**
+- Status: Entwurf → Aktiv → (Pausiert: alles eingefroren) → Gekündigt → Beendet
+- Vertrag startet ab definiertem Startdatum
+- Kündigung beidseitig möglich (Kunde oder Anbieter)
+- Kündigungsfristen frei verhandelbar (z.B. Mindestlaufzeit 12 Mo, dann 3 Mo zum Laufzeitende, danach 3 Mo zum Monatsende)
+
+**Laufzeiten:**
+- Regelfall: Unbefristete Subscriptions mit Mindestlaufzeit
+- Ausnahme: Befristete Verträge (enden automatisch)
+
+**Preisanpassungen:**
+- Automatische Inflationsanpassung (z.B. jährlich zum 1.1.)
+- Manuelle Preisanpassungen zu beliebigen Daten (auch mehrfach für die Zukunft, z.B. 1.7.26, 1.1.27, 1.1.28)
+
+**Struktur:**
+- Verträge enthalten n Produkte in Anzahl m
+- Verträge haben Komplettpreis oder Produkt-Einzelpreise
+- Primär-/Sekundärverträge: Sekundär fügt Produkte hinzu mit eigenem Startdatum für Abrechnung
+- Änderungen/Nachträge sind die Regel (keine Neuverträge nötig)
+
+**Dokumente:**
+- Upload von n Dokumenten pro Vertrag oder Kunde (PDFs, Scans)
+
+### Preise & Abrechnung
+
+**Währung:**
+- Eine Währung pro System, wählbar (Default: EUR)
+
+**Abrechnungszyklus:**
+- Intervalle: monatlich, quartalsweise, halbjährlich, jährlich
+- Stichtag pro Vertrag individuell (Default: Abrechnungsintervall-Anfang)
+- Startdatum und Abrechnungsbeginn können unterschiedlich sein (Bruchteilpreis möglich)
+- Subscriptions im Voraus, nutzungsbasiert nachträglich
+
+**Preisberechnung:**
+- Pro-rata oder frei wählbarer Preis bei Vertragsstart
+- Kündigung i.d.R. zum Abrechnungsintervall-Ende
+- Mengenänderungen (Up-/Downgrade): flexibel, immer abfragen
+
+**Rechnungsstellung:**
+- Contract-Manager erstellt keine Rechnungen
+- Dient als Datengrundlage, Export und Kontrolle
+- API zu Rechnungstools später
+
+**Preishistorie:**
+- Vollständige Nachvollziehbarkeit: Welcher Preis galt wann und warum
+- Rückwirkende Auswertungen möglich
+
+### Rabatte & Konditionen
+
+**Rabattarten:**
+- Prozentual (z.B. 10%)
+- Absolutbetrag (z.B. 50€)
+- Staffelrabatt (ab Menge X: Y%)
+- Gratiseinheiten (z.B. 12 zahlen, 1 gratis)
+
+**Bezug:**
+- Auf einzelnes Produkt (Line Item)
+- Auf gesamten Vertrag
+- Auf Produktkategorie
+- Auf Preisliste
+
+**Gültigkeit:**
+- Permanent (gesamte Vertragslaufzeit)
+- Befristet (z.B. nur erstes Jahr)
+- Einmalig (nur erste Rechnung)
+
+**Kombinationen:**
+- Mehrere Rabatte gleichzeitig möglich
+- Reihenfolge: erst Line-Item-Rabatt, dann Vertrags-Rabatt
+
+**Kundenvereinbarungen:**
+- Gelten automatisch für alle Verträge des Kunden
+- Können pro Vertrag deaktiviert oder überschrieben werden
+
+**Sonstiges:**
+- Zahlungsziele etc. nicht relevant, ggf. in Notizen
+
+### Preisanpassungen
+
+**Preisquellen (Hierarchie):**
+1. Vertraglich fixierter Preis (höchste Priorität)
+2. Kundenspezifische Preisliste
+3. Standard-Listenpreis (aus CRM)
+
+**Automatische Anpassungen:**
+- System-Default: Inflationsanpassung (z.B. X% zum 1.1.)
+- Kann pro Kunde/Vertrag überschrieben werden
+- Auch zeitlich begrenzt möglich (z.B. "keine Erhöhung für 3 Jahre")
+
+**Preislistenanpassungen aus CRM:**
+- Wirken für alle Kunden ab nächster Verlängerung
+- Außer: vertraglich anderes vereinbart
+
+**Typische Szenarien:**
+- Fixpreis für Jahr 1, 2, 3 → danach Preis Jahr 3 + Inflation
+- Fixpreis für 24 Monate → danach Listenpreis
+- Immer Listenpreis minus X%
+- Keine automatischen Erhöhungen
+- Viele weitere Kombinationen möglich
+
+**Priorität bei Konflikten:**
+Kundenvereinbarung > Vertragsklausel > System-Default
+
+**Erinnerungen:**
+- Konfigurierbare Ankündigungen (z.B. "Vertragsende in 3 Monaten", "Preiserhöhung in 30 Tagen")
+
+### Auditing
+- Vollständiges Audit-Log für alle Änderungen im System
+- Erfasst: Wer, Was, Wann, Alter Wert, Neuer Wert
+- Gilt für: Kunden, Verträge, Produkte, Konditionen, etc.
+
+### Benutzer & Berechtigungen
+
+**Multi-Tenant:**
+- System ist mandantenfähig (mehrere Unternehmen)
+- 2-20 Benutzer pro Tenant
+- Strikte Datentrennung zwischen Tenants
+
+**Benutzerkreis:**
+- Primär intern (Vertrieb, Buchhaltung, GF)
+- Später evtl. externe (Steuerberater, Buchprüfer)
+
+**Rollen & Rechte:**
+- Rollen mit Defaults, konfigurierbar
+- Zunächst: App-Admin (Hersteller) legt Rollen an, Tenants weisen nur zu
+- Später: Tenants können eigene Rollen konfigurieren
+- Einschränkbar: Kunden, Verträge, Produkte, Preise, Rabatte, Audit-Log, Einstellungen
+
+**Datensichtbarkeit:**
+- Default: alle Benutzer sehen alle Daten (innerhalb ihres Tenants)
+- Später einschränkbar (z.B. nach Team/Region)
+
+**Freigabe-Workflows:**
+- Zunächst nicht nötig
+- Neue Deals kommen aus CRM (Hubspot)
+
+**Authentifizierung:**
+- Phase 1: User/Passwort
+- Phase 2: Magic Email Link / Email-Code
+- Später optional: SSO (Google Workspace, Microsoft 365)
+
+### Output & Integration
+
+**Reporting & Auswertungen:**
+- Umsatz pro Kunde/Zeitraum
+- MRR / ARR (Monthly/Annual Recurring Revenue)
+- Auslaufende Verträge (in X Tagen)
+- Kündigungen / Churn-Rate
+- Rabattübersicht
+- Produkt-Mix (was wird wie oft verkauft)
+
+**Dashboards:**
+- Übersicht auf Startseite mit wichtigen KPIs
+
+**Export:**
+- Excel/CSV für alle relevanten Daten
+- PDF-Reports (Vertragsübersichten)
+
+**Dokumente:**
+- Upload externer Dokumente ✓
+- PDF-Generierung für Vertragsübersichten
+
+**Integrationen:**
+- Hubspot: Kunden-Sync, Produkt-Sync (inbound)
+- Buchhaltung/ERP: zunächst nicht nötig
+- Rechnungsstellung: generischer Export, später Integration
+
+**Benachrichtigungen:**
+- E-Mail (definitiv)
+- Optional: Kalender, Teams, Slack
+
+**API:**
+- Eigene API bereitstellen (wichtig!)
+- Webhooks bei Ereignissen (Vertrag erstellt, Kündigung, Preisänderung, etc.)
+- Für externe Systeme nutzbar
+
+### Sonstiges
+- Das Tool wird nur intern genutzt (pro Tenant)
+- Später evtl. Öffnung für externe Prüfer
 
 ## Tech Stack
 - React with Typescript
