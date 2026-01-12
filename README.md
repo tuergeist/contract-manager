@@ -438,6 +438,36 @@ Kundenvereinbarung > Vertragsklausel > System-Default
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
+## Implementierungs-Phasen
+
+### Phase 1: MVP
+- [ ] Projekt-Setup (Docker, Django, React, PostgreSQL)
+- [ ] Multi-Tenant Grundstruktur
+- [ ] User/Auth (Login mit User/Pass)
+- [ ] Hubspot-Sync (Kunden + Produkte)
+- [ ] Produkte (auch manuell anlegbar)
+- [ ] Verträge anlegen & bearbeiten (Status, Laufzeit, Items, Kündigungsfristen)
+- [ ] Bestehende Verträge erfassen (Rückwirkend mit Startdatum)
+- [ ] Audit-Log Grundgerüst
+- [ ] Einfache Listen- und Detailansichten
+
+### Phase 2: Kernfunktionen
+- [ ] Amendments (Nachträge)
+- [ ] Rabatte (prozentual, absolut)
+- [ ] Preishistorie & Validity Columns
+- [ ] Kundenvereinbarungen
+- [ ] Dashboard mit KPIs (MRR/ARR, auslaufende Verträge)
+- [ ] Primär-/Sekundärverträge
+
+### Phase 3: Erweiterungen
+- [ ] API & Webhooks
+- [ ] Komplexe Preisanpassungen (Inflation, geplante Änderungen)
+- [ ] PDF-Generierung (Vertragsübersichten)
+- [ ] Benachrichtigungen (Email)
+- [ ] Dokument-Upload
+- [ ] Export (CSV/Excel)
+- [ ] Magic Link Login
+
 ## Development Guidelines
 - use TDD
 - commit only when all tests are green

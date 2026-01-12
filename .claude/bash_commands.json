@@ -33,5 +33,12 @@
     "tool_name": "Bash",
     "command": "git add -A && git commit -m \"$(cat <<'EOF'\nAdd architecture decisions and data model\n\nArchitecture:\n- Multi-tenant: Shared schema with tenant_id\n- Temporal data: Validity columns (valid_from/to)\n- Audit log: Application level\n- Contract versioning: Amendments\n- Price calculation: Hybrid approach\n\nData model with 20+ entities covering:\n- Tenant & Auth (Tenant, User, Role, AuditLog)\n- Customers (Customer, CustomerNote, CustomerAgreement)\n- Products (Product, ProductPrice, Categories, Variants, Dependencies, PriceLists)\n- Contracts (Contract, ContractItem, ContractAmendment, ContractDocument)\n- Discounts & Price Adjustments\n- Notifications\nEOF\n)\"",
     "description": "Commit architecture and data model"
+  },
+  {
+    "timestamp": "2026-01-12T19:32:01.458852",
+    "session_id": "57d26f0b-e1dc-4798-8279-13b63ce2548b",
+    "tool_name": "Bash",
+    "command": "git add -A && git commit -m \"$(cat <<'EOF'\nAdd implementation phases (MVP, Core, Extensions)\n\nPhase 1 (MVP): Setup, Multi-tenant, Auth, Hubspot sync, \nProducts, Contracts with retrospective entry, Audit log\n\nPhase 2: Amendments, Discounts, Price history, \nCustomer agreements, Dashboard, Primary/Secondary contracts\n\nPhase 3: API/Webhooks, Price adjustments, PDF, \nNotifications, Documents, Export, Magic Link\nEOF\n)\"",
+    "description": "Commit implementation phases"
   }
 ]
