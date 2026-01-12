@@ -227,6 +227,217 @@ Kundenvereinbarung > Vertragsklausel > System-Default
 - PostgreSQL as a database
 - if needed, Redis for caching
 
+## Architektur-Entscheidungen
+
+| Thema | Entscheidung | Begründung |
+|-------|--------------|------------|
+| Multi-Tenant | Shared Schema + Tenant-ID | Einfach, ausreichend für 70-150 Tenants |
+| Temporale Daten | Validity Columns (valid_from, valid_to) | Einfache "Was galt wann?"-Abfragen |
+| Audit-Log | Application Level (django-auditlog) | Flexibel, testbar |
+| Vertrags-Versionierung | Amendments | Bildet reale Nachträge ab, separat unterschrieben |
+| Preisberechnung | Hybrid | Basis materialisiert, Modifikationen zur Laufzeit |
+
+## Datenmodell (Entwurf)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ TENANT & AUTH                                                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Tenant                      User                                           │
+│  ├── id (PK)                 ├── id (PK)                                    │
+│  ├── name                    ├── tenant_id (FK)                             │
+│  ├── currency (EUR)          ├── email                                      │
+│  ├── hubspot_config          ├── role_id (FK)                               │
+│  └── settings (JSON)         └── is_active                                  │
+│                                                                             │
+│  Role                        AuditLog                                       │
+│  ├── id (PK)                 ├── id (PK)                                    │
+│  ├── tenant_id (FK)          ├── tenant_id (FK)                             │
+│  ├── name                    ├── user_id (FK)                               │
+│  └── permissions (JSON)      ├── action (create/update/delete)              │
+│                              ├── model_name                                 │
+│                              ├── object_id                                  │
+│                              ├── old_values (JSON)                          │
+│                              ├── new_values (JSON)                          │
+│                              └── timestamp                                  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ KUNDEN                                                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Customer                    CustomerNote                                   │
+│  ├── id (PK)                 ├── id (PK)                                    │
+│  ├── tenant_id (FK)          ├── customer_id (FK)                           │
+│  ├── hubspot_id (unique)     ├── user_id (FK)                               │
+│  ├── name                    ├── content                                    │
+│  ├── address (JSON)          └── created_at                                 │
+│  ├── is_active                                                              │
+│  ├── synced_at               CustomerAgreement                              │
+│  └── hubspot_deleted_at      ├── id (PK)                                    │
+│                              ├── customer_id (FK)                           │
+│                              ├── type (discount_percent, custom_pricelist)  │
+│                              ├── value (JSON)                               │
+│                              ├── valid_from                                 │
+│                              └── valid_to (nullable)                        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PRODUKTE                                                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Product                     ProductPrice                                   │
+│  ├── id (PK)                 ├── id (PK)                                    │
+│  ├── tenant_id (FK)          ├── product_id (FK)                            │
+│  ├── hubspot_id (nullable)   ├── price                                      │
+│  ├── sku                     ├── price_model (unit, tiered, per_unit)       │
+│  ├── name                    ├── tiers (JSON, nullable)                     │
+│  ├── description             ├── valid_from                                 │
+│  ├── category_id (FK)        └── valid_to (nullable)                        │
+│  ├── type (subscription, one_off)                                           │
+│  ├── is_active               ProductDependency                              │
+│  ├── successor_id (FK, nullable)  ├── id (PK)                               │
+│  └── hubspot_deleted_at      ├── product_id (FK)                            │
+│                              ├── requires_product_id (FK)                   │
+│  ProductCategory             └── type (required, recommended)               │
+│  ├── id (PK)                                                                │
+│  ├── tenant_id (FK)          PriceList                                      │
+│  └── name                    ├── id (PK)                                    │
+│                              ├── tenant_id (FK)                             │
+│  ProductVariant              ├── name                                       │
+│  ├── id (PK)                 └── is_default                                 │
+│  ├── product_id (FK)                                                        │
+│  ├── name (S/M/L)            PriceListItem                                  │
+│  └── price_modifier          ├── id (PK)                                    │
+│                              ├── pricelist_id (FK)                          │
+│                              ├── product_id (FK)                            │
+│                              ├── price                                      │
+│                              ├── valid_from                                 │
+│                              └── valid_to (nullable)                        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ VERTRÄGE                                                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Contract                                                                   │
+│  ├── id (PK)                                                                │
+│  ├── tenant_id (FK)                                                         │
+│  ├── customer_id (FK)                                                       │
+│  ├── primary_contract_id (FK, nullable) -- für Sekundärverträge             │
+│  ├── status (draft, active, paused, cancelled, ended)                       │
+│  ├── start_date                                                             │
+│  ├── end_date (nullable) -- nur bei befristeten                             │
+│  ├── billing_start_date                                                     │
+│  ├── billing_interval (monthly, quarterly, semi_annual, annual)             │
+│  ├── billing_anchor_day                                                     │
+│  ├── min_duration_months (nullable)                                         │
+│  ├── notice_period_months                                                   │
+│  ├── notice_period_anchor (end_of_duration, end_of_month, end_of_quarter)   │
+│  ├── cancelled_at (nullable)                                                │
+│  ├── cancellation_effective_date (nullable)                                 │
+│  └── created_at                                                             │
+│                                                                             │
+│  ContractItem                                                               │
+│  ├── id (PK)                                                                │
+│  ├── contract_id (FK)                                                       │
+│  ├── product_id (FK)                                                        │
+│  ├── variant_id (FK, nullable)                                              │
+│  ├── quantity                                                               │
+│  ├── unit_price -- materialisierter Preis bei Vertragsschluss               │
+│  ├── price_source (list, custom, customer_agreement)                        │
+│  └── added_by_amendment_id (FK, nullable)                                   │
+│                                                                             │
+│  ContractAmendment                                                          │
+│  ├── id (PK)                                                                │
+│  ├── contract_id (FK)                                                       │
+│  ├── effective_date                                                         │
+│  ├── type (product_added, product_removed, quantity_changed,                │
+│  │         price_changed, terms_changed)                                    │
+│  ├── description                                                            │
+│  ├── changes (JSON) -- Details der Änderung                                 │
+│  └── created_at                                                             │
+│                                                                             │
+│  ContractDocument                                                           │
+│  ├── id (PK)                                                                │
+│  ├── contract_id (FK, nullable)                                             │
+│  ├── customer_id (FK, nullable) -- oder auf Kundenebene                     │
+│  ├── filename                                                               │
+│  ├── file_path                                                              │
+│  ├── uploaded_by_id (FK)                                                    │
+│  └── uploaded_at                                                            │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ RABATTE & PREISANPASSUNGEN                                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Discount                                                                   │
+│  ├── id (PK)                                                                │
+│  ├── tenant_id (FK)                                                         │
+│  ├── contract_id (FK, nullable) -- Vertragsrabatt                           │
+│  ├── contract_item_id (FK, nullable) -- Line-Item-Rabatt                    │
+│  ├── customer_id (FK, nullable) -- Kundenrabatt                             │
+│  ├── type (percent, absolute, tiered, free_units)                           │
+│  ├── value (JSON) -- abhängig vom Typ                                       │
+│  ├── applies_to (contract, product, category, pricelist)                    │
+│  ├── valid_from                                                             │
+│  ├── valid_to (nullable)                                                    │
+│  └── is_active                                                              │
+│                                                                             │
+│  PriceAdjustmentRule                                                        │
+│  ├── id (PK)                                                                │
+│  ├── tenant_id (FK)                                                         │
+│  ├── contract_id (FK, nullable) -- spezifisch oder tenant-weit              │
+│  ├── customer_id (FK, nullable)                                             │
+│  ├── type (inflation, manual, pricelist_follow)                             │
+│  ├── percentage (nullable)                                                  │
+│  ├── anchor_date (z.B. 01-01 für 1. Januar)                                 │
+│  ├── valid_from                                                             │
+│  ├── valid_to (nullable)                                                    │
+│  └── is_active                                                              │
+│                                                                             │
+│  ScheduledPriceChange                                                       │
+│  ├── id (PK)                                                                │
+│  ├── contract_id (FK)                                                       │
+│  ├── contract_item_id (FK, nullable)                                        │
+│  ├── new_price                                                              │
+│  ├── effective_date                                                         │
+│  ├── reason                                                                 │
+│  └── applied_at (nullable) -- wann wurde es angewendet                      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ BENACHRICHTIGUNGEN                                                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  NotificationRule                                                           │
+│  ├── id (PK)                                                                │
+│  ├── tenant_id (FK)                                                         │
+│  ├── event_type (contract_ending, price_change, ...)                        │
+│  ├── days_before                                                            │
+│  ├── channels (JSON) -- [email, slack, teams]                               │
+│  └── is_active                                                              │
+│                                                                             │
+│  Notification                                                               │
+│  ├── id (PK)                                                                │
+│  ├── tenant_id (FK)                                                         │
+│  ├── rule_id (FK)                                                           │
+│  ├── related_object_type                                                    │
+│  ├── related_object_id                                                      │
+│  ├── message                                                                │
+│  ├── sent_at                                                                │
+│  └── channels_sent (JSON)                                                   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
 ## Development Guidelines
 - use TDD
 - commit only when all tests are green
