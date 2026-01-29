@@ -32,6 +32,12 @@ class Product(TenantModel):
         ANNUAL = "annual", "Annual"
 
     hubspot_id = models.CharField(max_length=100, blank=True, null=True)
+    netsuite_item_name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Item name from NetSuite (e.g., 'Hosting + Maintenance : Software Maintenance')",
+    )
     sku = models.CharField(max_length=100, blank=True)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)

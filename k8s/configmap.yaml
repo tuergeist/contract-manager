@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: contract-manager-config
+  namespace: contract-manager
+data:
+  DJANGO_DEBUG: "false"
+  DJANGO_ALLOWED_HOSTS: "contract-manager.example.com,localhost"
+  DJANGO_CSRF_TRUSTED_ORIGINS: "https://contract-manager.example.com"

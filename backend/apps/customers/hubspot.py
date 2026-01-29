@@ -121,8 +121,163 @@ class HubSpotService:
         except Exception as e:
             logger.warning(f"Failed to fetch HubSpot portal ID: {e}")
 
+    def _get_company_filters(self) -> list[dict]:
+        """Get company filters from tenant config."""
+        return self.config.get("company_filters", [])
+
+    def list_company_properties(self) -> dict[str, Any]:
+        """List all available company properties from HubSpot.
+
+        Returns:
+            {
+                "success": bool,
+                "error": str | None,
+                "properties": list[dict] | None,  # [{name, label, type, options}]
+            }
+        """
+        if not self.is_configured:
+            return {"success": False, "error": "API key not configured", "properties": None}
+
+        try:
+            with httpx.Client() as client:
+                response = client.get(
+                    f"{HUBSPOT_API_BASE}/crm/v3/properties/companies",
+                    headers=self._get_headers(),
+                    timeout=10.0,
+                )
+
+                if response.status_code != 200:
+                    return {
+                        "success": False,
+                        "error": f"API error: {response.status_code}",
+                        "properties": None,
+                    }
+
+                data = response.json()
+                properties = []
+
+                for prop in data.get("results", []):
+                    prop_type = prop.get("type", "")
+                    options = None
+                    if prop_type == "enumeration":
+                        options = [opt.get("value") for opt in prop.get("options", [])]
+
+                    properties.append({
+                        "name": prop.get("name", ""),
+                        "label": prop.get("label", ""),
+                        "type": prop_type,
+                        "options": options,
+                    })
+
+                # Sort by label for easier browsing
+                properties.sort(key=lambda p: p.get("label", "").lower())
+
+                return {
+                    "success": True,
+                    "error": None,
+                    "properties": properties,
+                }
+
+        except httpx.TimeoutException:
+            return {"success": False, "error": "Connection timeout", "properties": None}
+        except Exception as e:
+            logger.exception("HubSpot list properties failed")
+            return {"success": False, "error": str(e), "properties": None}
+
+    def check_company_property(self, property_name: str) -> dict[str, Any]:
+        """Check if a company property exists and get its available options.
+
+        Returns:
+            {
+                "success": bool,
+                "error": str | None,
+                "exists": bool,
+                "options": list[str] | None,  # Available values for enumeration properties
+                "property_type": str | None,  # e.g., "enumeration", "string", "number"
+            }
+        """
+        if not self.is_configured:
+            return {"success": False, "error": "API key not configured", "exists": False}
+
+        try:
+            with httpx.Client() as client:
+                response = client.get(
+                    f"{HUBSPOT_API_BASE}/crm/v3/properties/companies/{property_name}",
+                    headers=self._get_headers(),
+                    timeout=10.0,
+                )
+
+                if response.status_code == 404:
+                    return {
+                        "success": True,
+                        "error": None,
+                        "exists": False,
+                        "options": None,
+                        "property_type": None,
+                    }
+
+                if response.status_code != 200:
+                    return {
+                        "success": False,
+                        "error": f"API error: {response.status_code}",
+                        "exists": False,
+                    }
+
+                data = response.json()
+                property_type = data.get("type", "")
+
+                # Get options for enumeration properties
+                options = None
+                if property_type == "enumeration":
+                    options = [opt.get("value") for opt in data.get("options", [])]
+
+                return {
+                    "success": True,
+                    "error": None,
+                    "exists": True,
+                    "options": options,
+                    "property_type": property_type,
+                }
+
+        except httpx.TimeoutException:
+            return {"success": False, "error": "Connection timeout", "exists": False}
+        except Exception as e:
+            logger.exception("HubSpot property check failed")
+            return {"success": False, "error": str(e), "exists": False}
+
+    def _company_matches_filters(self, properties: dict) -> bool:
+        """Check if a company matches the configured filters.
+
+        If no filters are configured, all companies are considered active.
+        If filters are configured, company must match ALL filters (AND logic).
+        Each filter checks if the property value is in the allowed values list.
+        """
+        filters = self._get_company_filters()
+
+        # No filters = all companies are active
+        if not filters:
+            return True
+
+        # Check each filter (AND logic)
+        for f in filters:
+            property_name = f.get("property_name", "")
+            allowed_values = f.get("values", [])
+
+            if not property_name or not allowed_values:
+                continue
+
+            property_value = properties.get(property_name, "")
+            if property_value not in allowed_values:
+                return False
+
+        return True
+
     def sync_companies(self) -> dict[str, Any]:
-        """Sync companies from HubSpot to local customers."""
+        """Sync companies from HubSpot to local customers.
+
+        Imports ALL companies but only marks those matching the configured
+        filters as active. If no filters are configured, all companies are active.
+        """
         if not self.is_configured:
             return {
                 "success": False,
@@ -168,15 +323,11 @@ class HubSpotService:
 
                     for company in companies:
                         try:
-                            # Only import customers with lifecycle stage "customer" or "evangelist"
                             properties = company.get("properties", {})
-                            lifecycle_stage = properties.get("lifecyclestage", "")
-                            if lifecycle_stage not in ("customer", "evangelist"):
-                                # Remove if previously imported but no longer qualifies
-                                self._remove_non_qualifying_company(company)
-                                continue
+                            # Determine if company should be active based on filters
+                            is_active = self._company_matches_filters(properties)
 
-                            result = self._sync_company(company)
+                            result = self._sync_company(company, is_active=is_active)
                             if result == "created":
                                 created += 1
                             elif result == "updated":
@@ -219,20 +370,14 @@ class HubSpotService:
                 "updated": updated,
             }
 
-    def _remove_non_qualifying_company(self, company_data: dict) -> None:
-        """Mark a previously imported company as inactive if lifecycle stage no longer qualifies."""
-        hubspot_id = str(company_data["id"])
-        customer = Customer.objects.filter(
-            tenant=self.tenant,
-            hubspot_id=hubspot_id,
-        ).first()
-        if customer and customer.is_active:
-            customer.is_active = False
-            customer.synced_at = datetime.now(timezone.utc)
-            customer.save(update_fields=["is_active", "synced_at"])
+    def _sync_company(self, company_data: dict, is_active: bool = True) -> str:
+        """Sync a single company from HubSpot.
 
-    def _sync_company(self, company_data: dict) -> str:
-        """Sync a single company from HubSpot."""
+        Args:
+            company_data: The company data from HubSpot API
+            is_active: Whether the company should be marked as active.
+                       Based on company_filters configuration.
+        """
         hubspot_id = str(company_data["id"])
         properties = company_data.get("properties", {})
 
@@ -251,10 +396,10 @@ class HubSpotService:
         ).first()
 
         if customer:
-            # Update existing (reactivate if previously deactivated)
+            # Update existing
             customer.name = properties.get("name", "") or f"Company {hubspot_id}"
             customer.address = address
-            customer.is_active = True
+            customer.is_active = is_active
             customer.synced_at = datetime.now(timezone.utc)
             customer.hubspot_deleted_at = None
             customer.save()
@@ -266,6 +411,7 @@ class HubSpotService:
                 hubspot_id=hubspot_id,
                 name=properties.get("name", "") or f"Company {hubspot_id}",
                 address=address,
+                is_active=is_active,
                 synced_at=datetime.now(timezone.utc),
             )
             return "created"

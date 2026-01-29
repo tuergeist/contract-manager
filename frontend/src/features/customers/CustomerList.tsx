@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
 import { Link } from 'react-router-dom'
 import { Loader2, Search, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { usePersistedState } from '@/lib/usePersistedState'
+import { formatDateTime } from '@/lib/utils'
 
 const CUSTOMERS_QUERY = gql`
   query Customers($search: String, $isActive: Boolean, $page: Int, $pageSize: Int, $sortBy: String, $sortOrder: String) {
@@ -14,6 +16,7 @@ const CUSTOMERS_QUERY = gql`
         address
         isActive
         syncedAt
+        activeContractCount
       }
       totalCount
       page
@@ -38,6 +41,7 @@ interface Customer {
   address: CustomerAddress | null
   isActive: boolean
   syncedAt: string | null
+  activeContractCount: number
 }
 
 interface CustomersData {
@@ -57,13 +61,13 @@ type SortOrder = 'asc' | 'desc'
 const PAGE_SIZE = 20
 
 export function CustomerList() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const [searchTerm, setSearchTerm] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
-  const [sortBy, setSortBy] = useState<SortField>('name')
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
-  const [showOnlyActive, setShowOnlyActive] = useState(true)
+  const [sortBy, setSortBy] = usePersistedState<SortField>('customers-sort-by', 'name')
+  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('customers-sort-order', 'asc')
+  const [showOnlyActive, setShowOnlyActive] = usePersistedState('customers-show-only-active', true)
 
   const { data, loading, error } = useQuery<CustomersData>(CUSTOMERS_QUERY, {
     variables: {
@@ -75,11 +79,6 @@ export function CustomerList() {
       sortOrder,
     },
   })
-
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleString(i18n.language)
-  }
 
   const formatAddress = (address: CustomerAddress | null) => {
     if (!address) return '-'
@@ -182,6 +181,9 @@ export function CustomerList() {
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     {t('customers.address')}
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('customers.activeContracts')}
+                  </th>
                   <th
                     className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
                     onClick={() => handleSort('isActive')}
@@ -220,6 +222,15 @@ export function CustomerList() {
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {formatAddress(customer.address)}
                     </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
+                      {customer.activeContractCount > 0 ? (
+                        <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+                          {customer.activeContractCount}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
                     <td className="whitespace-nowrap px-6 py-4">
                       <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
                         customer.isActive
@@ -230,7 +241,7 @@ export function CustomerList() {
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {formatDate(customer.syncedAt)}
+                      {formatDateTime(customer.syncedAt)}
                     </td>
                   </tr>
                 ))}

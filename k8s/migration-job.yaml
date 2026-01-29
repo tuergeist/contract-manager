@@ -1,0 +1,20 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: django-migrate
+  namespace: contract-manager
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      containers:
+        - name: migrate
+          image: ghcr.io/OWNER/contract-manager/backend:main
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          envFrom:
+            - configMapRef:
+                name: contract-manager-config
+            - secretRef:
+                name: contract-manager-secrets
+      restartPolicy: Never
+  backoffLimit: 3

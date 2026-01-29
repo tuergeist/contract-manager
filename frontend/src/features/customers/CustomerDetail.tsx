@@ -1,8 +1,9 @@
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
-import { Loader2, ArrowLeft, Building2, MapPin, FileText } from 'lucide-react'
+import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { formatDate, formatDateTime } from '@/lib/utils'
 
 const CUSTOMER_QUERY = gql`
   query Customer($id: ID!) {
@@ -10,6 +11,8 @@ const CUSTOMER_QUERY = gql`
       id
       name
       hubspotId
+      hubspotUrl
+      netsuiteCustomerNumber
       address
       isActive
       syncedAt
@@ -46,6 +49,8 @@ interface Customer {
   id: string
   name: string
   hubspotId: string | null
+  hubspotUrl: string | null
+  netsuiteCustomerNumber: string | null
   address: CustomerAddress | null
   isActive: boolean
   syncedAt: string | null
@@ -65,16 +70,6 @@ export function CustomerDetail() {
     variables: { id },
     skip: !id,
   })
-
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString(i18n.language)
-  }
-
-  const formatDateTime = (dateStr: string | null) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleString(i18n.language)
-  }
 
   const formatCurrency = (value: string | null) => {
     if (!value) return '-'
@@ -167,8 +162,19 @@ export function CustomerDetail() {
               >
                 {customer.isActive ? t('customers.active') : t('customers.inactive')}
               </span>
-              {customer.hubspotId && (
-                <span className="text-sm text-gray-500">HubSpot ID: {customer.hubspotId}</span>
+              {customer.netsuiteCustomerNumber && (
+                <span className="text-sm text-gray-500">{customer.netsuiteCustomerNumber}</span>
+              )}
+              {customer.hubspotUrl && (
+                <a
+                  href={customer.hubspotUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-sm text-orange-600 hover:text-orange-800"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  HubSpot
+                </a>
               )}
             </div>
           </div>

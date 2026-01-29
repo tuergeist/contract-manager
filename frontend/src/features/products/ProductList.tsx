@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
 import { Loader2, Search, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { usePersistedState } from '@/lib/usePersistedState'
+import { formatDateTime } from '@/lib/utils'
 
 const PRODUCTS_QUERY = gql`
   query Products($search: String, $page: Int, $pageSize: Int, $sortBy: String, $sortOrder: String) {
@@ -77,8 +79,8 @@ export function ProductList() {
   const [searchTerm, setSearchTerm] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
-  const [sortBy, setSortBy] = useState<SortField>('name')
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
+  const [sortBy, setSortBy] = usePersistedState<SortField>('products-sort-by', 'name')
+  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('products-sort-order', 'asc')
 
   const { data, loading, error } = useQuery<ProductsData>(PRODUCTS_QUERY, {
     variables: {
@@ -96,11 +98,6 @@ export function ProductList() {
       style: 'currency',
       currency: 'EUR'
     }).format(parseFloat(price))
-  }
-
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleString(i18n.language)
   }
 
   const handleSearch = (e: React.FormEvent) => {
@@ -250,7 +247,7 @@ export function ProductList() {
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {formatDate(product.syncedAt)}
+                      {formatDateTime(product.syncedAt)}
                     </td>
                   </tr>
                 ))}

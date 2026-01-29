@@ -26,7 +26,36 @@ class Contract(TenantModel):
         END_OF_QUARTER = "end_of_quarter", "End of quarter"
 
     hubspot_deal_id = models.CharField(max_length=100, blank=True, null=True)
+    netsuite_sales_order_number = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Sales Order number from NetSuite (e.g., 'SO-VSX-25-039')",
+    )
+    netsuite_contract_number = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Contract number from NetSuite (e.g., '13634_2025-01-01_2025-12-31')",
+    )
+    po_number = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Purchase Order number",
+    )
     name = models.CharField(max_length=255, blank=True)
+    notes = models.TextField(
+        blank=True,
+        help_text="Additional notes (e.g., invoicing instructions)",
+    )
+    discount_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Total discount amount for this contract (from Sales Discount rows)",
+    )
     customer = models.ForeignKey(
         "customers.Customer",
         on_delete=models.PROTECT,
@@ -123,6 +152,10 @@ class Contract(TenantModel):
         items = self.items.select_related("product").all()
 
         for item in items:
+            # Skip descriptive-only items (no product = no billing)
+            if not item.product:
+                continue
+
             # Determine item's billing period
             item_billing_start = item.billing_start_date or self.billing_start_date
             item_billing_end = item.billing_end_date  # Can be None = ongoing
@@ -307,6 +340,13 @@ class ContractItem(TenantModel):
         "products.Product",
         on_delete=models.PROTECT,
         related_name="contract_items",
+        null=True,
+        blank=True,
+        help_text="Optional for descriptive-only line items",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Additional description or notes for this line item",
     )
     quantity = models.PositiveIntegerField(default=1)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -362,7 +402,9 @@ class ContractItem(TenantModel):
         ordering = ["created_at"]
 
     def __str__(self):
-        return f"{self.product.name} x{self.quantity}"
+        if self.product:
+            return f"{self.product.name} x{self.quantity}"
+        return self.description[:50] if self.description else f"Item {self.id}"
 
     @property
     def total_price(self):

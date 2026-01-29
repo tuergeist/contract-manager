@@ -19,7 +19,7 @@ import {
   CalendarRange,
   Info,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, formatDate, formatDateTime, formatMonthYear } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -73,12 +73,17 @@ const CONTRACT_DETAIL_QUERY = gql`
       totalValue
       monthlyRecurringValue
       hubspotUrl
+      netsuiteSalesOrderNumber
+      netsuiteContractNumber
+      poNumber
+      discountAmount
       customer {
         id
         name
       }
       items {
         id
+        description
         quantity
         unitPrice
         priceSource
@@ -237,6 +242,7 @@ interface PricePeriod {
 
 interface ContractItem {
   id: string
+  description: string
   quantity: number
   unitPrice: string
   priceSource: string
@@ -254,7 +260,7 @@ interface ContractItem {
     id: string
     name: string
     sku: string | null
-  }
+  } | null
 }
 
 interface Amendment {
@@ -284,6 +290,10 @@ interface Contract {
   totalValue: string
   monthlyRecurringValue: string
   hubspotUrl: string | null
+  netsuiteSalesOrderNumber: string | null
+  netsuiteContractNumber: string | null
+  poNumber: string | null
+  discountAmount: string | null
   customer: {
     id: string
     name: string
@@ -307,16 +317,6 @@ export function ContractDetail() {
   })
 
   const contract = data?.contract as Contract | undefined
-
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString(i18n.language)
-  }
-
-  const formatDateTime = (dateStr: string | null) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleString(i18n.language)
-  }
 
   const formatCurrency = (value: string | null) => {
     if (!value) return '-'
@@ -394,10 +394,8 @@ export function ContractDetail() {
             <h1 className="text-2xl font-bold">
               {contract.name || contract.customer.name}
             </h1>
-            {contract.name && (
-              <p className="text-sm text-muted-foreground">{contract.customer.name}</p>
-            )}
-            <div className="mt-1 flex items-center gap-2">
+            <p className="text-sm text-muted-foreground">{contract.customer.name}</p>
+            <div className="mt-1 flex items-center gap-2 flex-wrap">
               <span
                 className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusBadgeClass(
                   contract.status
@@ -405,6 +403,16 @@ export function ContractDetail() {
               >
                 {t(`contracts.status.${contract.status}`)}
               </span>
+              {contract.netsuiteContractNumber && (
+                <span className="text-xs text-gray-500">
+                  {t('contracts.netsuiteContract')}: {contract.netsuiteContractNumber}
+                </span>
+              )}
+              {contract.poNumber && (
+                <span className="text-xs text-gray-500">
+                  {t('contracts.poNumber')}: {contract.poNumber}
+                </span>
+              )}
               {contract.hubspotUrl && (
                 <a
                   href={contract.hubspotUrl}
@@ -451,6 +459,12 @@ export function ContractDetail() {
           <p className="text-sm text-gray-500">{t('contracts.detail.totalValue')}</p>
           <p className="text-lg font-semibold">{formatCurrency(contract.totalValue)}</p>
         </div>
+        {contract.discountAmount && parseFloat(contract.discountAmount) !== 0 && (
+          <div className="rounded-lg border bg-white p-4">
+            <p className="text-sm text-gray-500">{t('contracts.detail.discount')}</p>
+            <p className="text-lg font-semibold text-red-600">{formatCurrency(contract.discountAmount)}</p>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -550,13 +564,17 @@ export function ContractDetail() {
                         const monthlyTotal = parseFloat(item.totalPrice)
                         const intervalMultiplier = getIntervalMultiplier(contract.billingInterval)
                         const billingTotal = monthlyTotal * intervalMultiplier
+                        const itemName = item.product?.name || item.description || '-'
 
                         return (
                           <tr key={item.id}>
                             <td className="px-6 py-4">
-                              <span className="font-medium text-gray-900">{item.product.name}</span>
-                              {item.product.sku && (
+                              <span className="font-medium text-gray-900">{itemName}</span>
+                              {item.product?.sku && (
                                 <div className="text-xs text-gray-500">{item.product.sku}</div>
+                              )}
+                              {item.product && item.description && (
+                                <div className="text-xs text-gray-500">{item.description}</div>
                               )}
                             </td>
                             <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
@@ -612,7 +630,7 @@ export function ContractDetail() {
                                 </button>
                                 <RemoveItemButton
                                   itemId={item.id}
-                                  productName={item.product.name}
+                                  itemName={itemName}
                                   onSuccess={() => refetch()}
                                 />
                               </td>
@@ -655,12 +673,17 @@ export function ContractDetail() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 bg-white">
-                        {contract.items.filter(item => item.isOneOff).map((item) => (
+                        {contract.items.filter(item => item.isOneOff).map((item) => {
+                          const itemName = item.product?.name || item.description || '-'
+                          return (
                           <tr key={item.id}>
                             <td className="px-6 py-4">
-                              <span className="font-medium text-gray-900">{item.product.name}</span>
-                              {item.product.sku && (
+                              <span className="font-medium text-gray-900">{itemName}</span>
+                              {item.product?.sku && (
                                 <div className="text-xs text-gray-500">{item.product.sku}</div>
+                              )}
+                              {item.product && item.description && (
+                                <div className="text-xs text-gray-500">{item.description}</div>
                               )}
                             </td>
                             <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
@@ -689,13 +712,14 @@ export function ContractDetail() {
                                 </button>
                                 <RemoveItemButton
                                   itemId={item.id}
-                                  productName={item.product.name}
+                                  itemName={itemName}
                                   onSuccess={() => refetch()}
                                 />
                               </td>
                             )}
                           </tr>
-                        ))}
+                        )})}
+
                       </tbody>
                     </table>
                   </div>
@@ -781,8 +805,9 @@ function AddItemModal({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const [productId, setProductId] = useState('')
+  const [description, setDescription] = useState('')
   const [quantity, setQuantity] = useState(1)
   const [unitPrice, setUnitPrice] = useState('')
   const [priceSource, setPriceSource] = useState('list')
@@ -843,16 +868,11 @@ function AddItemModal({
     }
   }
 
-  const formatDateForDisplay = (dateStr: string) => {
-    if (!dateStr) return ''
-    return new Date(dateStr).toLocaleDateString(i18n.language)
-  }
-
   const handleSubmit = async () => {
     setError(null)
 
-    if (!productId) {
-      setError(t('contracts.form.selectProduct'))
+    if (!productId && !description) {
+      setError(t('contracts.item.productOrDescriptionRequired'))
       return
     }
 
@@ -861,9 +881,10 @@ function AddItemModal({
         variables: {
           contractId,
           input: {
-            productId,
+            productId: productId || null,
+            description,
             quantity,
-            unitPrice,
+            unitPrice: unitPrice || '0',
             priceSource,
             startDate: startDate || null,
             billingStartDate: billingStartDate || null,
@@ -899,7 +920,7 @@ function AddItemModal({
         <div className="space-y-4 py-4">
           {/* Searchable Product Selector */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">{t('contracts.item.product')} *</label>
+            <label className="text-sm font-medium">{t('contracts.item.product')}</label>
             <Popover open={productSearchOpen} onOpenChange={setProductSearchOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -969,6 +990,21 @@ function AddItemModal({
                 </Command>
               </PopoverContent>
             </Popover>
+          </div>
+
+          {/* Description */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{t('contracts.item.description')}</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={t('contracts.item.descriptionPlaceholder')}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              rows={2}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t('contracts.item.descriptionHint')}
+            </p>
           </div>
 
           {/* Quantity */}
@@ -1077,14 +1113,14 @@ function AddItemModal({
                     {loadingSuggestion ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      formatDateForDisplay(suggestedDate)
+                      formatDate(suggestedDate)
                     )}
                   </Button>
                 )}
               </div>
               {suggestedDate && (
                 <p className="text-xs text-muted-foreground">
-                  {t('contracts.item.suggestedDate')}: {formatDateForDisplay(suggestedDate)}
+                  {t('contracts.item.suggestedDate')}: {formatDate(suggestedDate)}
                 </p>
               )}
             </div>
@@ -1115,6 +1151,7 @@ function EditItemModal({
   onSuccess: () => void
 }) {
   const { t, i18n } = useTranslation()
+  const [description, setDescription] = useState(item.description || '')
   const [quantity, setQuantity] = useState(item.quantity)
   const [unitPrice, setUnitPrice] = useState(item.unitPrice)
   const [priceSource, setPriceSource] = useState(item.priceSource)
@@ -1133,19 +1170,11 @@ function EditItemModal({
   const [newPeriodSource, setNewPeriodSource] = useState('fixed')
   const [error, setError] = useState<string | null>(null)
 
+  const itemDisplayName = item.product?.name || item.description || `Item ${item.id}`
+
   const [updateItem, { loading }] = useMutation(UPDATE_CONTRACT_ITEM_MUTATION)
   const [addPricePeriodMutation, { loading: addingPeriod }] = useMutation(ADD_CONTRACT_ITEM_PRICE_MUTATION)
   const [removePricePeriodMutation, { loading: removingPeriod }] = useMutation(REMOVE_CONTRACT_ITEM_PRICE_MUTATION)
-
-  const formatDateForDisplay = (dateStr: string) => {
-    if (!dateStr) return ''
-    return new Date(dateStr).toLocaleDateString(i18n.language)
-  }
-
-  const formatMonthYearForDisplay = (dateStr: string) => {
-    if (!dateStr) return ''
-    return new Date(dateStr).toLocaleDateString(i18n.language, { month: '2-digit', year: 'numeric' })
-  }
 
   const formatCurrencyLocal = (value: string | null) => {
     if (!value) return '-'
@@ -1210,6 +1239,7 @@ function EditItemModal({
         variables: {
           input: {
             id: item.id,
+            description,
             quantity,
             unitPrice,
             priceSource,
@@ -1238,7 +1268,7 @@ function EditItemModal({
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[900px]">
         <DialogHeader>
-          <DialogTitle>{t('common.edit')}: {item.product.name}</DialogTitle>
+          <DialogTitle>{t('common.edit')}: {itemDisplayName}</DialogTitle>
         </DialogHeader>
 
         {error && (
@@ -1248,6 +1278,18 @@ function EditItemModal({
         )}
 
         <div className="space-y-4 py-4">
+          {/* Description */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{t('contracts.item.description')}</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={t('contracts.item.descriptionPlaceholder')}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              rows={2}
+            />
+          </div>
+
           {/* Quantity, Unit Price, Price Source - 3 columns */}
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
@@ -1343,9 +1385,9 @@ function EditItemModal({
                     {pricePeriods.map((period) => (
                       <div key={period.id} className="flex items-center justify-between rounded border bg-gray-50 p-2 text-sm">
                         <div className="flex items-center gap-4">
-                          <span>{formatMonthYearForDisplay(period.validFrom)}</span>
+                          <span>{formatMonthYear(period.validFrom)}</span>
                           <span className="text-gray-400">→</span>
-                          <span>{period.validTo ? formatMonthYearForDisplay(period.validTo) : t('contracts.item.ongoing')}</span>
+                          <span>{period.validTo ? formatMonthYear(period.validTo) : t('contracts.item.ongoing')}</span>
                           <span className="font-medium">{formatCurrencyLocal(period.unitPrice)}</span>
                           <span className="text-xs text-gray-500">{t(`contracts.item.source${period.source.charAt(0).toUpperCase() + period.source.slice(1)}`)}</span>
                         </div>
@@ -1484,7 +1526,7 @@ function EditItemModal({
               />
               {item.suggestedAlignmentDate && (
                 <p className="text-xs text-muted-foreground">
-                  {t('contracts.item.suggestedDate')}: {formatDateForDisplay(item.suggestedAlignmentDate)}
+                  {t('contracts.item.suggestedDate')}: {formatDate(item.suggestedAlignmentDate)}
                 </p>
               )}
             </div>
@@ -1507,18 +1549,18 @@ function EditItemModal({
 
 function RemoveItemButton({
   itemId,
-  productName,
+  itemName,
   onSuccess,
 }: {
   itemId: string
-  productName: string
+  itemName: string
   onSuccess: () => void
 }) {
   const { t } = useTranslation()
   const [removeItem, { loading }] = useMutation(REMOVE_CONTRACT_ITEM_MUTATION)
 
   const handleRemove = async () => {
-    if (!confirm(`${t('contracts.actions.delete')} "${productName}"?`)) {
+    if (!confirm(`${t('contracts.actions.delete')} "${itemName}"?`)) {
       return
     }
 
@@ -1584,10 +1626,6 @@ function ForecastTab({ contractId }: { contractId: string }) {
   })
 
   const schedule = data?.billingSchedule as BillingScheduleResult | undefined
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString(i18n.language)
-  }
 
   const formatCurrency = (value: string) => {
     return new Intl.NumberFormat(i18n.language, {

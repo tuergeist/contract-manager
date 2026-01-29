@@ -13,6 +13,8 @@ import {
   Plus,
   Filter,
 } from 'lucide-react'
+import { usePersistedState } from '@/lib/usePersistedState'
+import { formatDate } from '@/lib/utils'
 
 const CONTRACTS_QUERY = gql`
   query Contracts(
@@ -80,7 +82,7 @@ interface ContractsData {
   }
 }
 
-type SortField = 'customer_name' | 'status' | 'start_date' | 'end_date' | 'created_at'
+type SortField = 'name' | 'customer_name' | 'status' | 'start_date' | 'end_date' | 'total_value' | 'created_at'
 type SortOrder = 'asc' | 'desc'
 
 const PAGE_SIZE = 20
@@ -93,8 +95,8 @@ export function ContractList() {
   const [searchInput, setSearchInput] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [page, setPage] = useState(1)
-  const [sortBy, setSortBy] = useState<SortField>('created_at')
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+  const [sortBy, setSortBy] = usePersistedState<SortField>('contracts-sort-by', 'created_at')
+  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('contracts-sort-order', 'desc')
 
   const { data, loading, error } = useQuery<ContractsData>(CONTRACTS_QUERY, {
     variables: {
@@ -106,11 +108,6 @@ export function ContractList() {
       sortOrder,
     },
   })
-
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString(i18n.language)
-  }
 
   const formatCurrency = (value: string | null) => {
     if (!value) return '-'
@@ -249,8 +246,14 @@ export function ContractList() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    {t('contracts.form.name')}
+                  <th
+                    className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                    onClick={() => handleSort('name')}
+                  >
+                    <div className="flex items-center">
+                      {t('contracts.form.name')}
+                      <SortIcon field="name" />
+                    </div>
                   </th>
                   <th
                     className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
@@ -288,8 +291,14 @@ export function ContractList() {
                       <SortIcon field="end_date" />
                     </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    {t('contracts.value')}
+                  <th
+                    className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                    onClick={() => handleSort('total_value')}
+                  >
+                    <div className="flex items-center">
+                      {t('contracts.value')}
+                      <SortIcon field="total_value" />
+                    </div>
                   </th>
                   <th
                     className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"

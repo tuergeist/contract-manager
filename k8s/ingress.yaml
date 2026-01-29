@@ -1,0 +1,51 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: contract-manager
+  namespace: contract-manager
+  annotations:
+    # For nginx ingress controller
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # For cert-manager (optional)
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  # Uncomment for TLS
+  # tls:
+  #   - hosts:
+  #       - contract-manager.example.com
+  #     secretName: contract-manager-tls
+  rules:
+    - host: contract-manager.example.com
+      http:
+        paths:
+          # API routes go to backend
+          - path: /graphql
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+          # Everything else goes to frontend
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

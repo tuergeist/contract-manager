@@ -1,7 +1,21 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, gql } from '@apollo/client'
-import { RefreshCw, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { RefreshCw, CheckCircle, XCircle, Loader2, Upload, Plus, X } from 'lucide-react'
+import { formatDateTime } from '@/lib/utils'
+
+interface CompanyFilter {
+  propertyName: string
+  values: string[]
+}
+
+interface HubSpotProperty {
+  name: string
+  label: string
+  propertyType: string
+  options: string[] | null
+}
 
 const HUBSPOT_SETTINGS_QUERY = gql`
   query HubSpotSettings {
@@ -11,6 +25,19 @@ const HUBSPOT_SETTINGS_QUERY = gql`
       lastSync
       lastProductSync
       lastDealSync
+      companyFilters {
+        propertyName
+        values
+      }
+    }
+    hubspotCompanyProperties {
+      success
+      properties {
+        name
+        label
+        propertyType
+        options
+      }
     }
   }
 `
@@ -57,6 +84,15 @@ const SYNC_HUBSPOT_DEALS = gql`
   }
 `
 
+const SAVE_COMPANY_FILTERS = gql`
+  mutation SaveHubSpotCompanyFilters($filters: [HubSpotCompanyFilterInput!]!) {
+    saveHubspotCompanyFilters(filters: $filters) {
+      success
+      error
+    }
+  }
+`
+
 export function Settings() {
   const { t, i18n } = useTranslation()
   const [apiKey, setApiKey] = useState('')
@@ -64,15 +100,97 @@ export function Settings() {
   const [customerSyncMessage, setCustomerSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [productSyncMessage, setProductSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [dealSyncMessage, setDealSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [companyFilters, setCompanyFilters] = useState<CompanyFilter[]>([])
+  const [filterMessage, setFilterMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [propertySearch, setPropertySearch] = useState('')
+  const [openPropertyDropdown, setOpenPropertyDropdown] = useState<number | null>(null)
 
   const { data: settingsData, refetch: refetchSettings } = useQuery(HUBSPOT_SETTINGS_QUERY)
   const [saveSettings, { loading: saving }] = useMutation(SAVE_HUBSPOT_SETTINGS)
   const [syncCustomers, { loading: syncingCustomers }] = useMutation(SYNC_HUBSPOT_CUSTOMERS)
   const [syncProducts, { loading: syncingProducts }] = useMutation(SYNC_HUBSPOT_PRODUCTS)
   const [syncDeals, { loading: syncingDeals }] = useMutation(SYNC_HUBSPOT_DEALS)
+  const [saveFilters, { loading: savingFilters }] = useMutation(SAVE_COMPANY_FILTERS)
+
+  // Initialize filters from settings
+  useEffect(() => {
+    if (settingsData?.hubspotSettings?.companyFilters) {
+      setCompanyFilters(
+        settingsData.hubspotSettings.companyFilters.map((f: CompanyFilter) => ({
+          propertyName: f.propertyName,
+          values: [...f.values],
+        }))
+      )
+    }
+  }, [settingsData?.hubspotSettings?.companyFilters])
 
   const changeLanguage = (lang: string) => {
     i18n.changeLanguage(lang)
+  }
+
+  const addFilter = () => {
+    setCompanyFilters([...companyFilters, { propertyName: '', values: [] }])
+  }
+
+  const removeFilter = (index: number) => {
+    setCompanyFilters(companyFilters.filter((_, i) => i !== index))
+  }
+
+  const updateFilterProperty = (index: number, propertyName: string) => {
+    const updated = [...companyFilters]
+    updated[index] = { ...updated[index], propertyName }
+    setCompanyFilters(updated)
+  }
+
+  const updateFilterValues = (index: number, valuesString: string) => {
+    const updated = [...companyFilters]
+    const values = valuesString.split(',').map(v => v.trim()).filter(v => v)
+    updated[index] = { ...updated[index], values }
+    setCompanyFilters(updated)
+  }
+
+  const toggleFilterValue = (index: number, value: string) => {
+    const updated = [...companyFilters]
+    const currentValues = updated[index].values
+    if (currentValues.includes(value)) {
+      updated[index] = { ...updated[index], values: currentValues.filter(v => v !== value) }
+    } else {
+      updated[index] = { ...updated[index], values: [...currentValues, value] }
+    }
+    setCompanyFilters(updated)
+  }
+
+  const selectProperty = (index: number, propertyName: string) => {
+    updateFilterProperty(index, propertyName)
+    setOpenPropertyDropdown(null)
+    setPropertySearch('')
+  }
+
+  const handleSaveFilters = async () => {
+    setFilterMessage(null)
+    try {
+      // Filter out empty entries
+      const validFilters = companyFilters.filter(f => f.propertyName && f.values.length > 0)
+      const result = await saveFilters({
+        variables: {
+          filters: validFilters.map(f => ({
+            propertyName: f.propertyName,
+            values: f.values,
+          })),
+        },
+      })
+      if (result.data?.saveHubspotCompanyFilters?.success) {
+        setFilterMessage({ type: 'success', text: t('settings.hubspot.filtersSaved') })
+        refetchSettings()
+      } else {
+        setFilterMessage({
+          type: 'error',
+          text: result.data?.saveHubspotCompanyFilters?.error || t('settings.hubspot.filtersSaveFailed')
+        })
+      }
+    } catch {
+      setFilterMessage({ type: 'error', text: t('settings.hubspot.filtersSaveFailed') })
+    }
   }
 
   const handleSaveApiKey = async () => {
@@ -161,14 +279,25 @@ export function Settings() {
   }
 
   const hubspotSettings = settingsData?.hubspotSettings
+  const hubspotProperties: HubSpotProperty[] = settingsData?.hubspotCompanyProperties?.properties || []
+
+  // Filter properties for dropdown search
+  const filteredProperties = hubspotProperties.filter(p =>
+    p.label.toLowerCase().includes(propertySearch.toLowerCase()) ||
+    p.name.toLowerCase().includes(propertySearch.toLowerCase())
+  )
+
+  // Get property details by name
+  const getPropertyByName = (name: string) => hubspotProperties.find(p => p.name === name)
+
   const lastCustomerSync = hubspotSettings?.lastSync
-    ? new Date(hubspotSettings.lastSync).toLocaleString(i18n.language)
+    ? formatDateTime(hubspotSettings.lastSync)
     : null
   const lastProductSync = hubspotSettings?.lastProductSync
-    ? new Date(hubspotSettings.lastProductSync).toLocaleString(i18n.language)
+    ? formatDateTime(hubspotSettings.lastProductSync)
     : null
   const lastDealSync = hubspotSettings?.lastDealSync
-    ? new Date(hubspotSettings.lastDealSync).toLocaleString(i18n.language)
+    ? formatDateTime(hubspotSettings.lastDealSync)
     : null
 
   return (
@@ -259,6 +388,143 @@ export function Settings() {
                       {customerSyncMessage.text}
                     </p>
                   )}
+
+                  {/* Company Filters */}
+                  <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-4">
+                    <h4 className="text-sm font-medium text-gray-700">{t('settings.hubspot.activeFilter')}</h4>
+                    <p className="mt-1 text-xs text-gray-500">{t('settings.hubspot.activeFilterDescription')}</p>
+
+                    <div className="mt-3 space-y-4">
+                      {companyFilters.map((filter, index) => {
+                        const selectedProperty = getPropertyByName(filter.propertyName)
+                        const hasOptions = selectedProperty?.options && selectedProperty.options.length > 0
+
+                        return (
+                          <div key={index} className="rounded-md border border-gray-200 bg-white p-3">
+                            <div className="flex items-center gap-2">
+                              {/* Property Dropdown */}
+                              <div className="relative flex-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenPropertyDropdown(openPropertyDropdown === index ? null : index)}
+                                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-left text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                >
+                                  {selectedProperty ? (
+                                    <span>{selectedProperty.label} <span className="text-gray-400">({selectedProperty.name})</span></span>
+                                  ) : filter.propertyName ? (
+                                    <span className="text-gray-600">{filter.propertyName}</span>
+                                  ) : (
+                                    <span className="text-gray-400">{t('settings.hubspot.selectProperty')}</span>
+                                  )}
+                                </button>
+
+                                {openPropertyDropdown === index && (
+                                  <div className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                                    <div className="sticky top-0 bg-white p-2">
+                                      <input
+                                        type="text"
+                                        value={propertySearch}
+                                        onChange={(e) => setPropertySearch(e.target.value)}
+                                        placeholder={t('common.search')}
+                                        className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                                        autoFocus
+                                      />
+                                    </div>
+                                    <div className="max-h-48 overflow-y-auto">
+                                      {filteredProperties.map(prop => (
+                                        <button
+                                          key={prop.name}
+                                          type="button"
+                                          onClick={() => selectProperty(index, prop.name)}
+                                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100"
+                                        >
+                                          <span className="font-medium">{prop.label}</span>
+                                          <span className="ml-2 text-gray-400">({prop.name})</span>
+                                          {prop.propertyType === 'enumeration' && (
+                                            <span className="ml-2 text-xs text-blue-500">{prop.options?.length} options</span>
+                                          )}
+                                        </button>
+                                      ))}
+                                      {filteredProperties.length === 0 && (
+                                        <p className="px-3 py-2 text-sm text-gray-500">{t('settings.hubspot.noPropertiesFound')}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <button
+                                onClick={() => removeFilter(index)}
+                                className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+
+                            {/* Values Selection */}
+                            {filter.propertyName && (
+                              <div className="mt-2">
+                                {hasOptions ? (
+                                  <div className="flex flex-wrap gap-2">
+                                    {selectedProperty.options!.map(option => (
+                                      <label
+                                        key={option}
+                                        className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                                          filter.values.includes(option)
+                                            ? 'bg-blue-100 text-blue-800'
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={filter.values.includes(option)}
+                                          onChange={() => toggleFilterValue(index, option)}
+                                          className="sr-only"
+                                        />
+                                        {option}
+                                      </label>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    value={filter.values.join(', ')}
+                                    onChange={(e) => updateFilterValues(index, e.target.value)}
+                                    placeholder={t('settings.hubspot.filterValuesPlaceholder')}
+                                    className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  />
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between">
+                      <button
+                        onClick={addFilter}
+                        className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        <Plus className="h-4 w-4" />
+                        {t('settings.hubspot.addFilter')}
+                      </button>
+                      <button
+                        onClick={handleSaveFilters}
+                        disabled={savingFilters}
+                        className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {savingFilters && <Loader2 className="h-3 w-3 animate-spin" />}
+                        {t('common.save')}
+                      </button>
+                    </div>
+
+                    {filterMessage && (
+                      <p className={`mt-2 text-sm ${filterMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                        {filterMessage.text}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Products Sync */}
@@ -321,6 +587,22 @@ export function Settings() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Contract Import */}
+        <div className="rounded-lg border bg-white p-6">
+          <h2 className="text-lg font-medium">{t('import.title')}</h2>
+          <p className="mt-1 text-sm text-gray-500">{t('import.description')}</p>
+
+          <div className="mt-4">
+            <Link
+              to="/contracts/import"
+              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              <Upload className="h-4 w-4" />
+              {t('import.title')}
+            </Link>
           </div>
         </div>
 

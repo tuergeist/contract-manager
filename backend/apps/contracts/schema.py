@@ -1,10 +1,14 @@
 """GraphQL schema for contracts."""
+
 from datetime import date, datetime
 from decimal import Decimal
 from typing import List
+import base64
+import tempfile
+import os
 
 import strawberry
-from strawberry import auto
+from strawberry import auto, UNSET
 import strawberry_django
 from strawberry.types import Info
 from django.db import transaction
@@ -17,6 +21,7 @@ from apps.customers.schema import CustomerType
 from apps.products.models import Product
 from apps.products.schema import ProductType
 from .models import Contract, ContractItem, ContractAmendment, ContractItemPrice
+from .services import ExcelParser, ImportService, MatchStatus
 
 
 @strawberry.type
@@ -51,7 +56,8 @@ class ContractItemType:
     unit_price: Decimal
     price_source: str
     total_price: Decimal
-    product: ProductType
+    product: ProductType | None = None  # Optional for descriptive items
+    description: str = ""  # Additional description or text-only items
     # When item becomes effective
     start_date: date | None = None
     # Billing fields
@@ -87,6 +93,10 @@ class ContractType:
     cancelled_at: auto
     cancellation_effective_date: auto
     created_at: auto
+    netsuite_sales_order_number: auto
+    netsuite_contract_number: auto
+    po_number: auto
+    discount_amount: auto
     customer: CustomerType
 
     @strawberry.field
@@ -128,11 +138,12 @@ class ContractType:
                     price_source=item.price_source,
                     total_price=item.total_price,
                     product=item.product,
+                    description=item.description,
                     start_date=item.start_date,
                     billing_start_date=item.billing_start_date,
                     billing_end_date=item.billing_end_date,
                     align_to_contract_at=item.align_to_contract_at,
-                    suggested_alignment_date=item.get_suggested_alignment_date(),
+                    suggested_alignment_date=item.get_suggested_alignment_date() if item.product else None,
                     is_one_off=item.is_one_off,
                     price_locked=item.price_locked,
                     price_locked_until=item.price_locked_until,
@@ -210,6 +221,7 @@ class ContractConnection:
 class CreateContractInput:
     customer_id: strawberry.ID
     name: str | None = None
+    po_number: str | None = None
     start_date: date
     end_date: date | None = None
     billing_start_date: date | None = None
@@ -225,8 +237,9 @@ class CreateContractInput:
 class UpdateContractInput:
     id: strawberry.ID
     name: str | None = None
+    po_number: str | None = None
     start_date: date | None = None
-    end_date: date | None = None
+    end_date: date | None = UNSET
     billing_start_date: date | None = None
     billing_interval: str | None = None
     billing_anchor_day: int | None = None
@@ -238,9 +251,10 @@ class UpdateContractInput:
 
 @strawberry.input
 class ContractItemInput:
-    product_id: strawberry.ID
-    quantity: int
-    unit_price: Decimal
+    product_id: strawberry.ID | None = None  # Optional for descriptive items
+    description: str = ""  # Additional description or text-only items
+    quantity: int = 1
+    unit_price: Decimal = Decimal("0")
     price_source: str = "list"
     start_date: date | None = None
     billing_start_date: date | None = None
@@ -251,6 +265,7 @@ class ContractItemInput:
 @strawberry.input
 class UpdateContractItemInput:
     id: strawberry.ID
+    description: str | None = None
     quantity: int | None = None
     unit_price: Decimal | None = None
     price_source: str | None = None
@@ -572,10 +587,10 @@ class ContractQuery:
                 period_column_set.add(key)
                 current += relativedelta(months=1)
 
-        # Get all active/paused contracts
+        # Get all active/paused contracts (exclude drafts - they're not committed yet)
         contracts = Contract.objects.filter(
             tenant=user.tenant,
-            status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED, Contract.Status.DRAFT],
+            status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
         ).select_related("customer")
 
         # Calculate revenue per contract per period
@@ -709,9 +724,16 @@ class ContractQuery:
 
         queryset = Contract.objects.filter(tenant=user.tenant).select_related("customer")
 
-        # Search filter (by customer name)
+        # Search filter (by customer name, contract name, or NetSuite IDs)
         if search:
-            queryset = queryset.filter(customer__name__icontains=search)
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(customer__name__icontains=search) |
+                Q(name__icontains=search) |
+                Q(netsuite_sales_order_number__icontains=search) |
+                Q(netsuite_contract_number__icontains=search) |
+                Q(po_number__icontains=search)
+            )
 
         # Status filter
         if status:
@@ -724,9 +746,31 @@ class ContractQuery:
             "end_date",
             "status",
             "customer_name",
+            "name",
+            "total_value",
         }
         if sort_by == "customer_name":
             order_field = "-customer__name" if sort_order == "desc" else "customer__name"
+        elif sort_by == "total_value":
+            # Annotate with total value for sorting
+            # Total value = (recurring items * 12) + one-off items
+            from django.db.models import Case, When, Value, DecimalField
+            from django.db.models.functions import Coalesce
+            queryset = queryset.annotate(
+                _total_value=Coalesce(
+                    Sum(
+                        Case(
+                            When(items__is_one_off=False, then=F("items__quantity") * F("items__unit_price") * 12),
+                            When(items__is_one_off=True, then=F("items__quantity") * F("items__unit_price")),
+                            default=Value(0),
+                            output_field=DecimalField(),
+                        )
+                    ),
+                    Value(0),
+                    output_field=DecimalField(),
+                )
+            )
+            order_field = "-_total_value" if sort_order == "desc" else "_total_value"
         elif sort_by and sort_by in allowed_sort_fields:
             order_field = f"-{sort_by}" if sort_order == "desc" else sort_by
         else:
@@ -782,6 +826,7 @@ class ContractMutation:
                 tenant=user.tenant,
                 customer=customer,
                 name=input.name or "",
+                po_number=input.po_number,
                 status=Contract.Status.DRAFT,
                 start_date=input.start_date,
                 end_date=input.end_date,
@@ -815,6 +860,8 @@ class ContractMutation:
         try:
             if input.name is not None:
                 contract.name = input.name
+            if input.po_number is not None:
+                contract.po_number = input.po_number
             # Start date and billing start date can only be changed for draft contracts
             if input.start_date is not None:
                 if contract.status != Contract.Status.DRAFT:
@@ -824,7 +871,7 @@ class ContractMutation:
                 if contract.status != Contract.Status.DRAFT:
                     return ContractResult(error="Billing start date can only be changed for draft contracts")
                 contract.billing_start_date = input.billing_start_date
-            if input.end_date is not None:
+            if input.end_date is not UNSET:
                 contract.end_date = input.end_date
             if input.billing_interval is not None:
                 contract.billing_interval = input.billing_interval
@@ -862,11 +909,16 @@ class ContractMutation:
         if not contract:
             return ContractItemResult(error="Contract not found")
 
-        product = Product.objects.filter(
-            tenant=user.tenant, id=input.product_id
-        ).first()
-        if not product:
-            return ContractItemResult(error="Product not found")
+        # Product is optional - either product or description is required
+        product = None
+        if input.product_id:
+            product = Product.objects.filter(
+                tenant=user.tenant, id=input.product_id
+            ).first()
+            if not product:
+                return ContractItemResult(error="Product not found")
+        elif not input.description:
+            return ContractItemResult(error="Either product or description is required")
 
         try:
             with transaction.atomic():
@@ -874,6 +926,7 @@ class ContractMutation:
                     tenant=user.tenant,
                     contract=contract,
                     product=product,
+                    description=input.description,
                     quantity=input.quantity,
                     unit_price=input.unit_price,
                     price_source=input.price_source,
@@ -885,15 +938,17 @@ class ContractMutation:
 
                 # Create amendment record only for non-draft contracts
                 if contract.status != Contract.Status.DRAFT:
+                    item_name = product.name if product else input.description[:50]
                     ContractAmendment.objects.create(
                         tenant=user.tenant,
                         contract=contract,
                         effective_date=date.today(),
                         type=ContractAmendment.AmendmentType.PRODUCT_ADDED,
-                        description=f"Added {product.name} x{input.quantity}",
+                        description=f"Added {item_name} x{input.quantity}",
                         changes={
-                            "product_id": str(product.id),
-                            "product_name": product.name,
+                            "product_id": str(product.id) if product else None,
+                            "product_name": product.name if product else None,
+                            "description": input.description,
                             "quantity": input.quantity,
                             "unit_price": str(input.unit_price),
                         },
@@ -907,11 +962,12 @@ class ContractMutation:
                     price_source=item.price_source,
                     total_price=item.total_price,
                     product=product,
+                    description=item.description,
                     start_date=item.start_date,
                     billing_start_date=item.billing_start_date,
                     billing_end_date=item.billing_end_date,
                     align_to_contract_at=item.align_to_contract_at,
-                    suggested_alignment_date=item.get_suggested_alignment_date(),
+                    suggested_alignment_date=item.get_suggested_alignment_date() if product else None,
                     is_one_off=item.is_one_off,
                     price_locked=item.price_locked,
                     price_locked_until=item.price_locked_until,
@@ -943,6 +999,7 @@ class ContractMutation:
                     "quantity": item.quantity,
                     "unit_price": str(item.unit_price),
                     "price_source": item.price_source,
+                    "description": item.description,
                 }
 
                 # Check if price is locked
@@ -950,6 +1007,8 @@ class ContractMutation:
                     item.price_locked_until is None or item.price_locked_until >= date.today()
                 )
 
+                if input.description is not None:
+                    item.description = input.description
                 if input.quantity is not None:
                     item.quantity = input.quantity
                 if input.unit_price is not None:
@@ -978,15 +1037,16 @@ class ContractMutation:
                 # Create amendment record only for non-draft contracts
                 if item.contract.status != Contract.Status.DRAFT:
                     # Determine amendment type
+                    item_name = item.product.name if item.product else item.description[:50]
                     if input.quantity is not None and old_values["quantity"] != input.quantity:
                         amendment_type = ContractAmendment.AmendmentType.QUANTITY_CHANGED
-                        description = f"Changed {item.product.name} quantity from {old_values['quantity']} to {input.quantity}"
+                        description = f"Changed {item_name} quantity from {old_values['quantity']} to {input.quantity}"
                     elif input.unit_price is not None:
                         amendment_type = ContractAmendment.AmendmentType.PRICE_CHANGED
-                        description = f"Changed {item.product.name} price from {old_values['unit_price']} to {input.unit_price}"
+                        description = f"Changed {item_name} price from {old_values['unit_price']} to {input.unit_price}"
                     else:
                         amendment_type = ContractAmendment.AmendmentType.TERMS_CHANGED
-                        description = f"Updated {item.product.name}"
+                        description = f"Updated {item_name}"
 
                     ContractAmendment.objects.create(
                         tenant=user.tenant,
@@ -996,12 +1056,14 @@ class ContractMutation:
                         description=description,
                         changes={
                             "item_id": str(item.id),
-                            "product_name": item.product.name,
+                            "product_name": item.product.name if item.product else None,
+                            "description": item.description,
                             "old_values": old_values,
                             "new_values": {
                                 "quantity": item.quantity,
                                 "unit_price": str(item.unit_price),
                                 "price_source": item.price_source,
+                                "description": item.description,
                             },
                         },
                     )
@@ -1026,11 +1088,12 @@ class ContractMutation:
                     price_source=item.price_source,
                     total_price=item.total_price,
                     product=item.product,
+                    description=item.description,
                     start_date=item.start_date,
                     billing_start_date=item.billing_start_date,
                     billing_end_date=item.billing_end_date,
                     align_to_contract_at=item.align_to_contract_at,
-                    suggested_alignment_date=item.get_suggested_alignment_date(),
+                    suggested_alignment_date=item.get_suggested_alignment_date() if item.product else None,
                     is_one_off=item.is_one_off,
                     price_locked=item.price_locked,
                     price_locked_until=item.price_locked_until,
@@ -1060,15 +1123,17 @@ class ContractMutation:
             with transaction.atomic():
                 # Create amendment record only for non-draft contracts
                 if item.contract.status != Contract.Status.DRAFT:
+                    item_name = item.product.name if item.product else item.description[:50]
                     ContractAmendment.objects.create(
                         tenant=user.tenant,
                         contract=item.contract,
                         effective_date=date.today(),
                         type=ContractAmendment.AmendmentType.PRODUCT_REMOVED,
-                        description=f"Removed {item.product.name}",
+                        description=f"Removed {item_name}",
                         changes={
-                            "product_id": str(item.product.id),
-                            "product_name": item.product.name,
+                            "product_id": str(item.product.id) if item.product else None,
+                            "product_name": item.product.name if item.product else None,
+                            "description": item.description,
                             "quantity": item.quantity,
                             "unit_price": str(item.unit_price),
                         },
@@ -1322,3 +1387,430 @@ class ContractMutation:
             return DeleteResult(success=True)
         except Exception as e:
             return DeleteResult(error=str(e))
+
+
+# =============================================================================
+# Contract Import Types and Mutations
+# =============================================================================
+
+
+@strawberry.type
+class ImportMatchAlternative:
+    """An alternative customer match option."""
+    customer_id: int
+    customer_name: str
+    customer_city: str | None
+    confidence: float
+
+
+@strawberry.type
+class ImportMatchResult:
+    """Result of customer matching."""
+    status: str  # "matched", "review", "not_found"
+    customer_id: int | None
+    customer_name: str | None
+    customer_city: str | None
+    confidence: float
+    alternatives: List[ImportMatchAlternative]
+    original_name: str
+    netsuite_customer_number: str
+
+
+@strawberry.type
+class ImportLineItem:
+    """A line item in an import proposal."""
+    item_name: str
+    monthly_rate: float
+    product_id: int | None
+    product_name: str | None
+
+
+@strawberry.type
+class ImportProposalType:
+    """A proposal for importing a contract."""
+    id: str
+    customer_number: str
+    customer_name: str
+    sales_order_number: str
+    contract_number: str
+    start_date: date | None
+    end_date: date | None
+    invoicing_instructions: str
+    match_result: ImportMatchResult | None
+    selected_customer_id: int | None
+    items: List[ImportLineItem]
+    discount_amount: float
+    total_monthly_rate: float
+    approved: bool
+    rejected: bool
+    error: str | None
+    needs_review: bool
+    existing_contract_id: int | None  # If set, contract already exists
+
+
+@strawberry.type
+class ImportSummary:
+    """Summary of import proposals."""
+    total_proposals: int
+    auto_matched: int
+    needs_review: int
+    not_found: int
+    total_items: int
+    already_imported: int  # Contracts that already exist
+
+
+@strawberry.type
+class ImportSessionType:
+    """An import session with proposals."""
+    id: str
+    proposals: List[ImportProposalType]
+    summary: ImportSummary
+    parser_errors: List[str]
+
+
+@strawberry.type
+class ImportUploadResult:
+    """Result of uploading an Excel file for import."""
+    session: ImportSessionType | None = None
+    success: bool = False
+    error: str | None = None
+
+
+@strawberry.type
+class ImportApplyResult:
+    """Result of applying import proposals."""
+    created_contracts: List[ContractType]
+    success: bool = False
+    error: str | None = None
+    errors_by_proposal: List[str] | None = None
+
+
+# Store import sessions in memory (in production, use Redis or database)
+_import_sessions: dict[str, dict] = {}
+
+
+def _get_customer_city(customer) -> str | None:
+    """Extract city from customer address."""
+    if not customer or not customer.address:
+        return None
+    address = customer.address
+    if isinstance(address, dict):
+        return address.get("city") or address.get("City")
+    return None
+
+
+def _convert_proposal_to_type(proposal) -> ImportProposalType:
+    """Convert an ImportProposal to ImportProposalType."""
+    match_result = None
+    if proposal.match_result:
+        mr = proposal.match_result
+        alternatives = []
+        for alt in mr.alternatives:
+            alternatives.append(ImportMatchAlternative(
+                customer_id=alt.customer.id,
+                customer_name=alt.customer.name,
+                customer_city=_get_customer_city(alt.customer),
+                confidence=alt.confidence,
+            ))
+        match_result = ImportMatchResult(
+            status=mr.status.value,
+            customer_id=mr.customer.id if mr.customer else None,
+            customer_name=mr.customer.name if mr.customer else None,
+            customer_city=_get_customer_city(mr.customer),
+            confidence=mr.confidence,
+            alternatives=alternatives,
+            original_name=mr.original_name,
+            netsuite_customer_number=mr.netsuite_customer_number,
+        )
+
+    items = []
+    for item in proposal.items:
+        items.append(ImportLineItem(
+            item_name=item.item_name,
+            monthly_rate=float(item.monthly_rate),
+            product_id=item.product.id if item.product else None,
+            product_name=item.product.name if item.product else None,
+        ))
+
+    return ImportProposalType(
+        id=proposal.id,
+        customer_number=proposal.customer_number,
+        customer_name=proposal.customer_name,
+        sales_order_number=proposal.sales_order_number,
+        contract_number=proposal.contract_number,
+        start_date=proposal.start_date,
+        end_date=proposal.end_date,
+        invoicing_instructions=proposal.invoicing_instructions,
+        match_result=match_result,
+        selected_customer_id=proposal.selected_customer.id if proposal.selected_customer else None,
+        items=items,
+        discount_amount=float(proposal.discount_amount),
+        total_monthly_rate=float(proposal.total_monthly_rate),
+        approved=proposal.approved,
+        rejected=proposal.rejected,
+        error=proposal.error,
+        needs_review=proposal.needs_review,
+        existing_contract_id=proposal.existing_contract_id,
+    )
+
+
+@strawberry.input
+class ReviewProposalInput:
+    """Input for reviewing a proposal."""
+    proposal_id: str
+    approved: bool
+    selected_customer_id: strawberry.ID | None = None
+
+
+@strawberry.type
+class ContractImportQuery:
+    @strawberry.field
+    def import_session(
+        self,
+        info: Info[Context, None],
+        session_id: str,
+    ) -> ImportSessionType | None:
+        """Get an import session by ID."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return None
+
+        session_key = f"{user.tenant.id}:{session_id}"
+        session_data = _import_sessions.get(session_key)
+        if not session_data:
+            return None
+
+        service = session_data["service"]
+        parser_errors = session_data.get("parser_errors", [])
+
+        proposals = [_convert_proposal_to_type(p) for p in service.proposals]
+        summary_data = service.get_summary()
+
+        # Count already imported
+        already_imported = sum(1 for p in service.proposals if p.existing_contract_id is not None)
+
+        return ImportSessionType(
+            id=session_id,
+            proposals=proposals,
+            summary=ImportSummary(
+                total_proposals=summary_data["total_proposals"],
+                auto_matched=summary_data["auto_matched"],
+                needs_review=summary_data["needs_review"],
+                not_found=summary_data["not_found"],
+                total_items=summary_data["total_items"],
+                already_imported=already_imported,
+            ),
+            parser_errors=parser_errors,
+        )
+
+
+@strawberry.type
+class ContractImportMutation:
+    @strawberry.mutation
+    def upload_contract_import(
+        self,
+        info: Info[Context, None],
+        file_content: str,
+        filename: str,
+        auto_approve_threshold: float = 0.9,
+    ) -> ImportUploadResult:
+        """
+        Upload an Excel file and generate import proposals.
+
+        Args:
+            file_content: Base64-encoded Excel file content
+            filename: Original filename (must end with .xlsx)
+            auto_approve_threshold: Confidence threshold for auto-approval (default: 0.9)
+        """
+        import uuid
+
+        user = get_current_user(info)
+        if not user.tenant:
+            return ImportUploadResult(error="No tenant assigned")
+
+        if not filename.endswith(".xlsx"):
+            return ImportUploadResult(error="File must be an Excel file (.xlsx)")
+
+        try:
+            # Decode base64 content
+            try:
+                file_bytes = base64.b64decode(file_content)
+            except Exception:
+                return ImportUploadResult(error="Invalid base64 file content")
+
+            # Save to temp location
+            with tempfile.NamedTemporaryFile(
+                suffix=".xlsx", delete=False
+            ) as tmp_file:
+                tmp_file.write(file_bytes)
+                tmp_path = tmp_file.name
+
+            try:
+                # Parse Excel file
+                parser = ExcelParser()
+                rows = parser.parse(tmp_path)
+
+                if not rows and parser.errors:
+                    return ImportUploadResult(
+                        error=f"Failed to parse file: {'; '.join(parser.errors)}"
+                    )
+
+                # Generate proposals
+                service = ImportService(user.tenant)
+                service.AUTO_APPROVE_THRESHOLD = auto_approve_threshold
+                service.generate_proposals(rows)
+
+                # Store session
+                session_id = str(uuid.uuid4())
+                session_key = f"{user.tenant.id}:{session_id}"
+                _import_sessions[session_key] = {
+                    "service": service,
+                    "parser_errors": parser.errors,
+                }
+
+                # Build response
+                proposals = [_convert_proposal_to_type(p) for p in service.proposals]
+                summary_data = service.get_summary()
+
+                # Count already imported
+                already_imported = sum(1 for p in service.proposals if p.existing_contract_id is not None)
+
+                return ImportUploadResult(
+                    session=ImportSessionType(
+                        id=session_id,
+                        proposals=proposals,
+                        summary=ImportSummary(
+                            total_proposals=summary_data["total_proposals"],
+                            auto_matched=summary_data["auto_matched"],
+                            needs_review=summary_data["needs_review"],
+                            not_found=summary_data["not_found"],
+                            total_items=summary_data["total_items"],
+                            already_imported=already_imported,
+                        ),
+                        parser_errors=parser.errors,
+                    ),
+                    success=True,
+                )
+            finally:
+                # Clean up temp file
+                os.unlink(tmp_path)
+
+        except Exception as e:
+            return ImportUploadResult(error=str(e))
+
+    @strawberry.mutation
+    def review_import_proposals(
+        self,
+        info: Info[Context, None],
+        session_id: str,
+        reviews: List[ReviewProposalInput],
+    ) -> ImportUploadResult:
+        """Review and approve/reject import proposals."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return ImportUploadResult(error="No tenant assigned")
+
+        session_key = f"{user.tenant.id}:{session_id}"
+        session_data = _import_sessions.get(session_key)
+        if not session_data:
+            return ImportUploadResult(error="Session not found")
+
+        service = session_data["service"]
+
+        # Apply reviews
+        proposals_by_id = {p.id: p for p in service.proposals}
+        for review in reviews:
+            proposal = proposals_by_id.get(review.proposal_id)
+            if not proposal:
+                continue
+
+            proposal.approved = review.approved
+            proposal.rejected = not review.approved
+
+            if review.selected_customer_id:
+                customer = Customer.objects.filter(
+                    tenant=user.tenant, id=review.selected_customer_id
+                ).first()
+                if customer:
+                    proposal.selected_customer = customer
+
+        # Build response
+        proposals = [_convert_proposal_to_type(p) for p in service.proposals]
+        summary_data = service.get_summary()
+        already_imported = sum(1 for p in service.proposals if p.existing_contract_id is not None)
+
+        return ImportUploadResult(
+            session=ImportSessionType(
+                id=session_id,
+                proposals=proposals,
+                summary=ImportSummary(
+                    total_proposals=summary_data["total_proposals"],
+                    auto_matched=summary_data["auto_matched"],
+                    needs_review=summary_data["needs_review"],
+                    not_found=summary_data["not_found"],
+                    total_items=summary_data["total_items"],
+                    already_imported=already_imported,
+                ),
+                parser_errors=session_data.get("parser_errors", []),
+            ),
+            success=True,
+        )
+
+    @strawberry.mutation
+    def apply_import_proposals(
+        self,
+        info: Info[Context, None],
+        session_id: str,
+        auto_create_products: bool = True,
+    ) -> ImportApplyResult:
+        """Apply approved import proposals and create contracts."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return ImportApplyResult(error="No tenant assigned")
+
+        session_key = f"{user.tenant.id}:{session_id}"
+        session_data = _import_sessions.get(session_key)
+        if not session_data:
+            return ImportApplyResult(error="Session not found")
+
+        service = session_data["service"]
+
+        try:
+            created = service.apply_proposals(
+                auto_create_products=auto_create_products
+            )
+
+            # Collect errors
+            errors = [
+                f"{p.sales_order_number}: {p.error}"
+                for p in service.proposals
+                if p.error
+            ]
+
+            # Clean up session after successful apply
+            del _import_sessions[session_key]
+
+            return ImportApplyResult(
+                created_contracts=created,
+                success=True,
+                errors_by_proposal=errors if errors else None,
+            )
+        except Exception as e:
+            return ImportApplyResult(error=str(e))
+
+    @strawberry.mutation
+    def cancel_import_session(
+        self,
+        info: Info[Context, None],
+        session_id: str,
+    ) -> DeleteResult:
+        """Cancel an import session and clean up."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        session_key = f"{user.tenant.id}:{session_id}"
+        if session_key in _import_sessions:
+            del _import_sessions[session_key]
+            return DeleteResult(success=True)
+        return DeleteResult(error="Session not found")

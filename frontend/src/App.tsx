@@ -11,6 +11,7 @@ import { ContractForm } from './features/contracts/ContractForm'
 import { ContractDetail } from './features/contracts/ContractDetail'
 import { RevenueForecast } from './features/forecast/RevenueForecast'
 import { Settings } from './features/settings/Settings'
+import { ContractImport } from './features/contracts/import/ContractImport'
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
         <Route path="contracts/:id/edit" element={<ContractForm />} />
         <Route path="forecast" element={<RevenueForecast />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="contracts/import" element={<ContractImport />} />
       </Route>
     </Routes>
   )

@@ -64,6 +64,7 @@ const CONTRACT_QUERY = gql`
     contract(id: $id) {
       id
       name
+      poNumber
       status
       startDate
       endDate
@@ -133,6 +134,7 @@ interface Customer {
 interface Contract {
   id: string
   name: string
+  poNumber: string | null
   status: string
   startDate: string
   endDate: string | null
@@ -149,6 +151,7 @@ interface Contract {
 const formSchema = z.object({
   customerId: z.string().min(1, 'Customer is required'),
   name: z.string().optional(),
+  poNumber: z.string().optional().nullable(),
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().optional(),
   billingStartDate: z.string().optional(),
@@ -219,6 +222,7 @@ export function ContractForm() {
     defaultValues: {
       customerId: '',
       name: '',
+      poNumber: '',
       startDate: '',
       endDate: '',
       billingStartDate: '',
@@ -254,6 +258,7 @@ export function ContractForm() {
       form.reset({
         customerId: c.customer.id,
         name: c.name || '',
+        poNumber: c.poNumber || '',
         startDate: c.startDate,
         endDate: c.endDate || '',
         billingStartDate: c.billingStartDate,
@@ -285,6 +290,7 @@ export function ContractForm() {
             input: {
               id,
               name: data.name || null,
+              poNumber: data.poNumber || null,
               // Only include start dates for draft contracts
               ...(contract?.status === 'draft' && {
                 startDate: data.startDate,
@@ -312,6 +318,7 @@ export function ContractForm() {
             input: {
               customerId: data.customerId,
               name: data.name || null,
+              poNumber: data.poNumber || null,
               startDate: data.startDate,
               endDate: data.endDate || null,
               billingStartDate: data.billingStartDate || data.startDate,
@@ -516,13 +523,33 @@ export function ContractForm() {
                 control={form.control}
                 name="name"
                 render={({ field }) => (
-                  <FormItem className="md:col-span-2">
+                  <FormItem>
                     <FormLabel>{t('contracts.form.name')}</FormLabel>
                     <FormControl>
                       <Input
                         placeholder={t('contracts.form.namePlaceholder')}
                         disabled={!isEditing}
                         {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* PO Number */}
+              <FormField
+                control={form.control}
+                name="poNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('contracts.form.poNumber')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={t('contracts.form.poNumberPlaceholder')}
+                        disabled={!isEditing}
+                        {...field}
+                        value={field.value || ''}
                       />
                     </FormControl>
                     <FormMessage />
@@ -776,6 +803,7 @@ export function ContractForm() {
                       form.reset({
                         customerId: contract.customer.id,
                         name: contract.name || '',
+                        poNumber: contract.poNumber || '',
                         startDate: contract.startDate,
                         endDate: contract.endDate || '',
                         billingStartDate: contract.billingStartDate,

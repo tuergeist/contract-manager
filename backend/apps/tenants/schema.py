@@ -28,6 +28,13 @@ class UserType:
 
 
 @strawberry.type
+class HubSpotCompanyFilter:
+    """A filter for HubSpot company sync."""
+    property_name: str  # e.g., "lifecyclestage"
+    values: list[str]   # e.g., ["customer", "evangelist"]
+
+
+@strawberry.type
 class HubSpotSettings:
     """HubSpot integration settings."""
 
@@ -36,6 +43,7 @@ class HubSpotSettings:
     last_sync: str | None
     last_product_sync: str | None
     last_deal_sync: str | None
+    company_filters: list[HubSpotCompanyFilter]
 
 
 @strawberry.type
@@ -67,6 +75,36 @@ class HubSpotDealSyncResult:
 
 
 @strawberry.type
+class HubSpotPropertyCheckResult:
+    """Result of checking a HubSpot company property."""
+
+    success: bool
+    error: str | None
+    exists: bool
+    options: list[str] | None  # Available values for enumeration properties
+    property_type: str | None  # e.g., "enumeration", "string", "number"
+
+
+@strawberry.type
+class HubSpotProperty:
+    """A HubSpot company property."""
+
+    name: str  # Internal name (e.g., "lifecyclestage")
+    label: str  # Display label (e.g., "Lifecycle Stage")
+    property_type: str  # e.g., "enumeration", "string", "number"
+    options: list[str] | None  # Available values for enumeration properties
+
+
+@strawberry.type
+class HubSpotPropertiesResult:
+    """Result of listing HubSpot company properties."""
+
+    success: bool
+    error: str | None
+    properties: list[HubSpotProperty] | None
+
+
+@strawberry.type
 class TenantQuery:
     @strawberry.field
     def current_user(self, info) -> UserType | None:
@@ -90,13 +128,65 @@ class TenantQuery:
         config = user.tenant.hubspot_config or {}
         api_key = config.get("api_key", "")
 
+        # Parse company filters from config
+        filters_data = config.get("company_filters", [])
+        company_filters = [
+            HubSpotCompanyFilter(
+                property_name=f.get("property_name", ""),
+                values=f.get("values", []),
+            )
+            for f in filters_data
+        ]
+
         return HubSpotSettings(
             is_configured=bool(api_key),
             api_key_set=bool(api_key),
             last_sync=config.get("last_sync"),
             last_product_sync=config.get("last_product_sync"),
             last_deal_sync=config.get("last_deal_sync"),
+            company_filters=company_filters,
         )
+
+    @strawberry.field
+    def hubspot_company_properties(
+        self, info: Info[Context, None]
+    ) -> HubSpotPropertiesResult:
+        """List all available HubSpot company properties."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return HubSpotPropertiesResult(
+                success=False,
+                error="No tenant assigned",
+                properties=None,
+            )
+
+        service = HubSpotService(user.tenant)
+        result = service.list_company_properties()
+
+        properties = None
+        if result.get("properties"):
+            properties = [
+                HubSpotProperty(
+                    name=p["name"],
+                    label=p["label"],
+                    property_type=p["type"],
+                    options=p.get("options"),
+                )
+                for p in result["properties"]
+            ]
+
+        return HubSpotPropertiesResult(
+            success=result.get("success", False),
+            error=result.get("error"),
+            properties=properties,
+        )
+
+
+@strawberry.input
+class HubSpotCompanyFilterInput:
+    """Input for HubSpot company filter."""
+    property_name: str  # e.g., "lifecyclestage"
+    values: list[str]   # e.g., ["customer", "evangelist"]
 
 
 @strawberry.type
@@ -197,4 +287,57 @@ class TenantMutation:
             error=result.get("error"),
             created=result.get("created", 0),
             skipped=result.get("skipped", 0),
+        )
+
+    @strawberry.mutation
+    def save_hubspot_company_filters(
+        self,
+        info: Info[Context, None],
+        filters: list[HubSpotCompanyFilterInput],
+    ) -> HubSpotTestResult:
+        """Save HubSpot company sync filters."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return HubSpotTestResult(success=False, error="No tenant assigned")
+
+        tenant = user.tenant
+
+        # Save the filters
+        if not tenant.hubspot_config:
+            tenant.hubspot_config = {}
+
+        tenant.hubspot_config["company_filters"] = [
+            {"property_name": f.property_name, "values": f.values}
+            for f in filters
+        ]
+        tenant.save(update_fields=["hubspot_config"])
+
+        return HubSpotTestResult(success=True, error=None)
+
+    @strawberry.mutation
+    def check_hubspot_property(
+        self,
+        info: Info[Context, None],
+        property_name: str,
+    ) -> HubSpotPropertyCheckResult:
+        """Check if a HubSpot company property exists and get available values."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return HubSpotPropertyCheckResult(
+                success=False,
+                error="No tenant assigned",
+                exists=False,
+                options=None,
+                property_type=None,
+            )
+
+        service = HubSpotService(user.tenant)
+        result = service.check_company_property(property_name)
+
+        return HubSpotPropertyCheckResult(
+            success=result.get("success", False),
+            error=result.get("error"),
+            exists=result.get("exists", False),
+            options=result.get("options"),
+            property_type=result.get("property_type"),
         )

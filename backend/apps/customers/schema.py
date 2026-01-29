@@ -19,10 +19,25 @@ class CustomerType:
     id: auto
     name: auto
     hubspot_id: auto
+    netsuite_customer_number: auto
     address: auto
     is_active: auto
     synced_at: auto
     created_at: auto
+
+    @strawberry.field
+    def hubspot_url(self, info: Info[Context, None]) -> str | None:
+        """Get the HubSpot company URL if this customer was synced from HubSpot."""
+        if not self.hubspot_id:
+            return None
+        user = get_current_user(info)
+        if not user.tenant:
+            return None
+        config = user.tenant.hubspot_config or {}
+        portal_id = config.get("portal_id")
+        if not portal_id:
+            return None
+        return f"https://app-eu1.hubspot.com/contacts/{portal_id}/company/{self.hubspot_id}"
 
     @strawberry.field
     def contracts(self) -> List[Annotated["ContractType", strawberry.lazy("apps.contracts.schema")]]:
@@ -30,6 +45,16 @@ class CustomerType:
         from apps.contracts.models import Contract
 
         return list(Contract.objects.filter(customer=self).order_by("-created_at"))
+
+    @strawberry.field
+    def active_contract_count(self) -> int:
+        """Get the number of active contracts for this customer."""
+        from apps.contracts.models import Contract
+
+        return Contract.objects.filter(
+            customer=self,
+            status=Contract.Status.ACTIVE,
+        ).count()
 
 
 @strawberry.type
@@ -74,7 +99,11 @@ class CustomerQuery:
             queryset = queryset.filter(is_active=is_active)
 
         if search:
-            queryset = queryset.filter(name__icontains=search)
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(name__icontains=search) |
+                Q(netsuite_customer_number__icontains=search)
+            )
 
         # Sorting
         allowed_sort_fields = {"name", "is_active", "synced_at", "created_at"}
