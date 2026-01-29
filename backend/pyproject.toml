@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "contract-manager"
 version = "0.1.0"
@@ -51,3 +55,7 @@ ignore_missing_imports = true
 
 [tool.django-stubs]
 django_settings_module = "config.settings.local"
+
+[tool.setuptools]
+# Django project - no packages to discover
+packages = []
