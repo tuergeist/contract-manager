@@ -141,6 +141,8 @@ jobs:
           DATABASE_URL: postgres://test:test@localhost:5432/test
           DJANGO_SECRET_KEY: test-secret-key
           DJANGO_SETTINGS_MODULE: config.settings.test
+          DJANGO_DEBUG: "false"
+          DJANGO_ALLOWED_HOSTS: localhost
         run: pytest --tb=short
 
   test-frontend:
