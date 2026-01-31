@@ -62,18 +62,23 @@ contract-manager/
 
 ## OpenSpec
 
-The project specification is documented in `README.md` using a structured format covering:
+The project has two specification sources:
 
-- **Kunden (Customers)**: HubSpot sync, data model, notes
-- **Produkte (Products)**: Structure, variants, dependencies, pricing models
-- **Verträge (Contracts)**: Lifecycle, billing, amendments, documents
-- **Preise & Abrechnung (Pricing & Billing)**: Intervals, pro-rata, history
-- **Rabatte & Konditionen (Discounts)**: Types, scopes, validity
-- **Preisanpassungen (Price Adjustments)**: Inflation, manual, hierarchies
-- **Auditing**: Full change tracking
-- **Benutzer & Berechtigungen (Users & Permissions)**: Roles, tenants
+**`openspec.yaml`** - Machine-readable specification:
+- All domain entities with attributes, types, and relationships
+- Business rules and pricing hierarchies
+- Invoicing views (invoicable contracts by period, billing calendar)
+- Implementation phases (MVP, Core, Extensions)
+- Integration specifications (HubSpot, billing, notifications)
 
-When implementing features, always reference the README.md specification for business rules.
+**`README.md`** - Human-readable specification (German):
+- Detailed business requirements and use cases
+- Data model diagrams
+- UI guidelines and navigation structure
+
+When implementing features:
+1. Check `openspec.yaml` for entity definitions and business rules
+2. Reference `README.md` for detailed requirements and edge cases
 
 ## Development Commands
 
@@ -192,7 +197,8 @@ The API uses Strawberry-GraphQL with Django integration:
 
 | File | Purpose |
 |------|---------|
-| `README.md` | Full project specification |
+| `openspec.yaml` | Machine-readable specification (entities, rules, invoicing) |
+| `README.md` | Full project specification (German) |
 | `Makefile` | Development commands |
 | `docker-compose.yml` | Local environment |
 | `backend/config/settings.py` | Django configuration |
