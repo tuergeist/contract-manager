@@ -1,0 +1,863 @@
+openspec: "1.0"
+info:
+  title: Contract-Manager
+  version: 0.1.0
+  description: |
+    Internal multi-tenant contract management tool for small companies
+    managing customer contracts, pricing, and billing relationships.
+  language: de-DE
+  target_users:
+    - sales
+    - accounting
+    - management
+
+# ============================================================================
+# DOMAIN ENTITIES
+# ============================================================================
+entities:
+  tenant:
+    description: Organization using the system (multi-tenant)
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: name
+        type: string
+        required: true
+      - name: currency
+        type: string
+        default: EUR
+      - name: hubspot_config
+        type: json
+        nullable: true
+      - name: settings
+        type: json
+        default: {}
+
+  user:
+    description: System user belonging to a tenant
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: tenant_id
+        type: uuid
+        foreign_key: tenant.id
+      - name: email
+        type: string
+        required: true
+        unique_within: tenant
+      - name: role_id
+        type: uuid
+        foreign_key: role.id
+      - name: is_active
+        type: boolean
+        default: true
+
+  role:
+    description: Permission role for users
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: tenant_id
+        type: uuid
+        foreign_key: tenant.id
+      - name: name
+        type: string
+        required: true
+      - name: permissions
+        type: json
+        description: |
+          Permission flags for: customers, contracts, products,
+          prices, discounts, audit_log, settings
+
+  customer:
+    description: Customer synced from HubSpot or manually created
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: tenant_id
+        type: uuid
+        foreign_key: tenant.id
+      - name: hubspot_id
+        type: string
+        nullable: true
+        unique_within: tenant
+      - name: name
+        type: string
+        required: true
+      - name: address
+        type: json
+        nullable: true
+      - name: is_active
+        type: boolean
+        default: true
+      - name: synced_at
+        type: datetime
+        nullable: true
+      - name: hubspot_deleted_at
+        type: datetime
+        nullable: true
+    rules:
+      - Customers from HubSpot are read-only (sync inbound only)
+      - Deleted HubSpot customers are marked, not removed
+      - One location per customer (no corporate structures)
+
+  customer_note:
+    description: Local notes for customers (not synced to HubSpot)
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: customer_id
+        type: uuid
+        foreign_key: customer.id
+      - name: user_id
+        type: uuid
+        foreign_key: user.id
+      - name: content
+        type: text
+        required: true
+      - name: created_at
+        type: datetime
+        auto: true
+
+  customer_agreement:
+    description: Customer-level agreements (apply to all contracts)
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: customer_id
+        type: uuid
+        foreign_key: customer.id
+      - name: type
+        type: enum
+        values: [discount_percent, custom_pricelist]
+      - name: value
+        type: json
+      - name: valid_from
+        type: date
+        required: true
+      - name: valid_to
+        type: date
+        nullable: true
+    rules:
+      - Apply automatically to all customer contracts
+      - Can be overridden per contract
+
+  product:
+    description: Product or service that can be included in contracts
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: tenant_id
+        type: uuid
+        foreign_key: tenant.id
+      - name: hubspot_id
+        type: string
+        nullable: true
+      - name: sku
+        type: string
+        required: true
+        unique_within: tenant
+      - name: name
+        type: string
+        required: true
+      - name: description
+        type: text
+        nullable: true
+      - name: category_id
+        type: uuid
+        foreign_key: product_category.id
+        nullable: true
+      - name: type
+        type: enum
+        values: [subscription, one_off]
+        default: subscription
+      - name: is_active
+        type: boolean
+        default: true
+      - name: successor_id
+        type: uuid
+        foreign_key: product.id
+        nullable: true
+      - name: hubspot_deleted_at
+        type: datetime
+        nullable: true
+    rules:
+      - Primarily subscriptions, one-off optional
+      - Deactivated products remain in existing contracts
+      - Optional successor for deprecated products
+
+  product_category:
+    description: Optional grouping for products
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: tenant_id
+        type: uuid
+        foreign_key: tenant.id
+      - name: name
+        type: string
+        required: true
+
+  product_variant:
+    description: Product variants (e.g., S/M/L)
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: product_id
+        type: uuid
+        foreign_key: product.id
+      - name: name
+        type: string
+        required: true
+      - name: price_modifier
+        type: decimal
+        description: Multiplier or addition to base price
+
+  product_dependency:
+    description: Dependencies between products
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: product_id
+        type: uuid
+        foreign_key: product.id
+      - name: requires_product_id
+        type: uuid
+        foreign_key: product.id
+      - name: type
+        type: enum
+        values: [required, recommended]
+    rules:
+      - required: Automatically added when parent selected
+      - recommended: Shown as suggestion
+
+  product_price:
+    description: Time-bound pricing for products
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: product_id
+        type: uuid
+        foreign_key: product.id
+      - name: price
+        type: decimal
+        required: true
+      - name: price_model
+        type: enum
+        values: [unit, tiered, per_unit]
+        default: unit
+      - name: tiers
+        type: json
+        nullable: true
+        description: Tier definitions for tiered pricing
+      - name: valid_from
+        type: date
+        required: true
+      - name: valid_to
+        type: date
+        nullable: true
+
+  price_list:
+    description: Named price list for customer-specific pricing
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: tenant_id
+        type: uuid
+        foreign_key: tenant.id
+      - name: name
+        type: string
+        required: true
+      - name: is_default
+        type: boolean
+        default: false
+
+  price_list_item:
+    description: Product price within a price list
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: pricelist_id
+        type: uuid
+        foreign_key: price_list.id
+      - name: product_id
+        type: uuid
+        foreign_key: product.id
+      - name: price
+        type: decimal
+        required: true
+      - name: valid_from
+        type: date
+        required: true
+      - name: valid_to
+        type: date
+        nullable: true
+
+  contract:
+    description: Customer contract with lifecycle management
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: tenant_id
+        type: uuid
+        foreign_key: tenant.id
+      - name: customer_id
+        type: uuid
+        foreign_key: customer.id
+      - name: primary_contract_id
+        type: uuid
+        foreign_key: contract.id
+        nullable: true
+        description: For secondary contracts
+      - name: status
+        type: enum
+        values: [draft, active, paused, cancelled, ended]
+        default: draft
+      - name: start_date
+        type: date
+        required: true
+      - name: end_date
+        type: date
+        nullable: true
+        description: Only for fixed-term contracts
+      - name: billing_start_date
+        type: date
+        required: true
+      - name: billing_interval
+        type: enum
+        values: [monthly, quarterly, semi_annual, annual]
+        default: monthly
+      - name: billing_anchor_day
+        type: integer
+        default: 1
+      - name: min_duration_months
+        type: integer
+        nullable: true
+      - name: notice_period_months
+        type: integer
+        default: 1
+      - name: notice_period_anchor
+        type: enum
+        values: [end_of_duration, end_of_month, end_of_quarter]
+        default: end_of_month
+      - name: cancelled_at
+        type: datetime
+        nullable: true
+      - name: cancellation_effective_date
+        type: date
+        nullable: true
+      - name: created_at
+        type: datetime
+        auto: true
+    lifecycle:
+      - from: draft
+        to: [active]
+      - from: active
+        to: [paused, cancelled]
+      - from: paused
+        to: [active, cancelled]
+        description: Paused freezes everything
+      - from: cancelled
+        to: [ended]
+    rules:
+      - Cancellation possible by customer or provider
+      - Notice periods are freely negotiable
+      - Amendments are the norm (no new contracts needed)
+
+  contract_item:
+    description: Product line item within a contract
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: contract_id
+        type: uuid
+        foreign_key: contract.id
+      - name: product_id
+        type: uuid
+        foreign_key: product.id
+      - name: variant_id
+        type: uuid
+        foreign_key: product_variant.id
+        nullable: true
+      - name: quantity
+        type: integer
+        default: 1
+      - name: unit_price
+        type: decimal
+        required: true
+        description: Materialized price at contract creation
+      - name: price_source
+        type: enum
+        values: [list, custom, customer_agreement]
+      - name: added_by_amendment_id
+        type: uuid
+        foreign_key: contract_amendment.id
+        nullable: true
+
+  contract_amendment:
+    description: Contract changes/addendums
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: contract_id
+        type: uuid
+        foreign_key: contract.id
+      - name: effective_date
+        type: date
+        required: true
+      - name: type
+        type: enum
+        values: [product_added, product_removed, quantity_changed, price_changed, terms_changed]
+      - name: description
+        type: text
+        nullable: true
+      - name: changes
+        type: json
+        description: Detailed change data
+      - name: created_at
+        type: datetime
+        auto: true
+
+  contract_document:
+    description: Uploaded documents for contracts or customers
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: contract_id
+        type: uuid
+        foreign_key: contract.id
+        nullable: true
+      - name: customer_id
+        type: uuid
+        foreign_key: customer.id
+        nullable: true
+      - name: filename
+        type: string
+        required: true
+      - name: file_path
+        type: string
+        required: true
+      - name: uploaded_by_id
+        type: uuid
+        foreign_key: user.id
+      - name: uploaded_at
+        type: datetime
+        auto: true
+
+  discount:
+    description: Discount rules for contracts, items, or customers
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: tenant_id
+        type: uuid
+        foreign_key: tenant.id
+      - name: contract_id
+        type: uuid
+        foreign_key: contract.id
+        nullable: true
+      - name: contract_item_id
+        type: uuid
+        foreign_key: contract_item.id
+        nullable: true
+      - name: customer_id
+        type: uuid
+        foreign_key: customer.id
+        nullable: true
+      - name: type
+        type: enum
+        values: [percent, absolute, tiered, free_units]
+      - name: value
+        type: json
+        description: Type-dependent value structure
+      - name: applies_to
+        type: enum
+        values: [contract, product, category, pricelist]
+      - name: valid_from
+        type: date
+        required: true
+      - name: valid_to
+        type: date
+        nullable: true
+      - name: is_active
+        type: boolean
+        default: true
+    rules:
+      - Multiple discounts can be combined
+      - Order: line-item discount first, then contract discount
+
+  price_adjustment_rule:
+    description: Automatic price adjustment rules (e.g., inflation)
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: tenant_id
+        type: uuid
+        foreign_key: tenant.id
+      - name: contract_id
+        type: uuid
+        foreign_key: contract.id
+        nullable: true
+      - name: customer_id
+        type: uuid
+        foreign_key: customer.id
+        nullable: true
+      - name: type
+        type: enum
+        values: [inflation, manual, pricelist_follow]
+      - name: percentage
+        type: decimal
+        nullable: true
+      - name: anchor_date
+        type: string
+        description: "MM-DD format, e.g., 01-01 for January 1st"
+      - name: valid_from
+        type: date
+        required: true
+      - name: valid_to
+        type: date
+        nullable: true
+      - name: is_active
+        type: boolean
+        default: true
+
+  scheduled_price_change:
+    description: Manually scheduled future price changes
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: contract_id
+        type: uuid
+        foreign_key: contract.id
+      - name: contract_item_id
+        type: uuid
+        foreign_key: contract_item.id
+        nullable: true
+      - name: new_price
+        type: decimal
+        required: true
+      - name: effective_date
+        type: date
+        required: true
+      - name: reason
+        type: text
+        nullable: true
+      - name: applied_at
+        type: datetime
+        nullable: true
+
+  notification_rule:
+    description: Configurable notification triggers
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: tenant_id
+        type: uuid
+        foreign_key: tenant.id
+      - name: event_type
+        type: enum
+        values: [contract_ending, price_change, contract_cancelled, billing_due]
+      - name: days_before
+        type: integer
+        required: true
+      - name: channels
+        type: json
+        description: "[email, slack, teams]"
+      - name: is_active
+        type: boolean
+        default: true
+
+  audit_log:
+    description: Complete change history
+    attributes:
+      - name: id
+        type: uuid
+        primary_key: true
+      - name: tenant_id
+        type: uuid
+        foreign_key: tenant.id
+      - name: user_id
+        type: uuid
+        foreign_key: user.id
+      - name: action
+        type: enum
+        values: [create, update, delete]
+      - name: model_name
+        type: string
+        required: true
+      - name: object_id
+        type: uuid
+        required: true
+      - name: old_values
+        type: json
+        nullable: true
+      - name: new_values
+        type: json
+        nullable: true
+      - name: timestamp
+        type: datetime
+        auto: true
+
+# ============================================================================
+# BUSINESS RULES
+# ============================================================================
+business_rules:
+  pricing_hierarchy:
+    description: Price source priority (highest first)
+    order:
+      - contract_fixed_price
+      - customer_specific_pricelist
+      - standard_list_price
+
+  conflict_priority:
+    description: Rule priority when conflicts occur
+    order:
+      - customer_agreement
+      - contract_clause
+      - system_default
+
+  hubspot_sync:
+    customers:
+      - direction: inbound_only
+      - method: initial_import + webhook
+      - fallback: periodic_sync
+      - fields: [company_name, address]
+    products:
+      - direction: inbound_only
+      - method: same_as_customers
+      - deleted: mark_not_remove
+
+  billing:
+    - currency: single_per_tenant
+    - intervals: [monthly, quarterly, semi_annual, annual]
+    - subscriptions: billed_in_advance
+    - usage_based: billed_in_arrears
+    - pro_rata: optional_at_start
+
+# ============================================================================
+# FEATURES BY PHASE
+# ============================================================================
+phases:
+  mvp:
+    - project_setup
+    - multi_tenant_structure
+    - user_auth_password
+    - hubspot_sync_customers_products
+    - products_manual_create
+    - contracts_crud
+    - contracts_backdate
+    - audit_log_basic
+    - list_detail_views
+
+  core:
+    - amendments
+    - discounts_percent_absolute
+    - price_history_validity
+    - customer_agreements
+    - dashboard_kpis
+    - primary_secondary_contracts
+
+  extensions:
+    - api_webhooks
+    - complex_price_adjustments
+    - pdf_generation
+    - notifications_email
+    - document_upload
+    - export_csv_excel
+    - magic_link_login
+
+# ============================================================================
+# UI SPECIFICATION
+# ============================================================================
+ui:
+  framework:
+    - shadcn_ui
+    - tailwind_css
+    - reference: preline
+
+  layout:
+    type: sidebar_content
+    focus: desktop_first
+    mobile: nice_to_have
+
+  navigation:
+    - dashboard
+    - customers
+    - products
+    - contracts
+    - settings
+
+  features:
+    search:
+      - global
+      - contextual
+    tables:
+      - sorting
+      - filtering
+      - pagination
+    forms:
+      - wizard_preferred
+      - tabs_alternative
+
+  i18n:
+    - de
+    - en
+    dark_mode: false
+
+# ============================================================================
+# INTEGRATIONS
+# ============================================================================
+integrations:
+  hubspot:
+    type: inbound
+    entities: [customers, products]
+    sync: webhook_with_fallback
+
+  billing_tools:
+    status: planned
+    type: export_first
+
+  notifications:
+    channels:
+      - email: required
+      - calendar: optional
+      - teams: optional
+      - slack: optional
+
+  api:
+    type: graphql
+    public: true
+    webhooks:
+      events:
+        - contract_created
+        - contract_cancelled
+        - price_changed
+
+# ============================================================================
+# REPORTING
+# ============================================================================
+reports:
+  - name: revenue_by_customer
+    dimensions: [customer, time_period]
+  - name: mrr_arr
+    type: recurring_revenue
+  - name: expiring_contracts
+    parameter: days_ahead
+  - name: churn_rate
+    type: cancellation_analysis
+  - name: discount_overview
+    type: discount_usage
+  - name: product_mix
+    type: sales_distribution
+
+# ============================================================================
+# INVOICING VIEWS
+# ============================================================================
+invoicing:
+  invoicable_contracts:
+    description: |
+      List all contracts that are invoicable for a given billing period.
+      Used as data source for invoice generation in external billing tools.
+    parameters:
+      - name: period_start
+        type: date
+        required: true
+        description: Start of billing period (inclusive)
+      - name: period_end
+        type: date
+        required: true
+        description: End of billing period (inclusive)
+      - name: customer_id
+        type: uuid
+        required: false
+        description: Filter by specific customer
+      - name: billing_interval
+        type: enum
+        values: [monthly, quarterly, semi_annual, annual]
+        required: false
+        description: Filter by billing interval
+    returns:
+      - contract_id
+      - contract_number
+      - customer_id
+      - customer_name
+      - billing_interval
+      - billing_anchor_day
+      - period_start
+      - period_end
+      - items:
+          - product_id
+          - product_name
+          - quantity
+          - unit_price
+          - effective_price  # After discounts and adjustments
+          - discount_amount
+          - line_total
+      - subtotal
+      - total_discounts
+      - total_amount
+      - currency
+      - status
+    filters:
+      - Contract status must be 'active'
+      - Billing period must overlap with contract validity
+      - Pro-rata calculation for partial periods
+    business_rules:
+      - Include contracts where billing_anchor_day falls within period
+      - Apply all active discounts (customer, contract, line-item)
+      - Apply price adjustments effective during period
+      - Calculate pro-rata for:
+          - New contracts starting mid-period
+          - Cancelled contracts ending mid-period
+          - Quantity changes during period
+      - Exclude paused contracts
+      - Include secondary contracts with their own billing dates
+
+  invoice_preview:
+    description: Generate invoice preview for a single contract
+    parameters:
+      - name: contract_id
+        type: uuid
+        required: true
+      - name: period_start
+        type: date
+        required: true
+      - name: period_end
+        type: date
+        required: true
+    returns:
+      - Same as invoicable_contracts but for single contract
+      - price_breakdown showing all adjustments applied
+
+  billing_calendar:
+    description: Overview of upcoming billing dates
+    parameters:
+      - name: start_date
+        type: date
+        required: true
+      - name: end_date
+        type: date
+        required: true
+    returns:
+      - List of billing events with dates and amounts

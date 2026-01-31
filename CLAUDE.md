@@ -1,28 +1,91 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# CLAUDE.md - AI Assistant Guide for Contract-Manager
 
 ## Project Overview
 
-Contract-Manager is an internal contract management tool for small companies. It handles complex contract relationships including:
-- Customers synced from Hubspot (one-way, read-only)
-- Products from CRM or manually created
-- Contracts with amendments, flexible pricing, and various billing cycles
-- Multi-tenant architecture
+Contract-Manager is an internal multi-tenant contract management tool designed for small companies (20-30 employees) managing 70-150 customers. The application handles complex contract relationships, pricing structures, customer agreements, and integrates with HubSpot for customer/product sync.
+
+### Business Domain
+
+**Core Concepts:**
+- **Customers**: Synced from HubSpot (read-only), can have multiple contracts (independent or linked)
+- **Products**: Imported from HubSpot or manually created, with variants and dependencies
+- **Contracts**: Full lifecycle (Draft → Active → Paused → Cancelled → Ended), with amendments
+- **Pricing**: Hierarchical (contract-fixed > customer-specific > list price), with automatic adjustments
+- **Discounts**: Percentage, absolute, tiered, free units - applicable to items, contracts, or categories
+- **Multi-tenant**: Shared schema with tenant isolation
 
 ## Tech Stack
 
-- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, Shadcn/ui
-- **Backend**: Django 5, Strawberry-GraphQL, PostgreSQL
-- **Caching**: Redis (when needed)
-- **Containerization**: Docker Compose for local development
+| Layer | Technology |
+|-------|------------|
+| Frontend | React 18 + TypeScript + Vite |
+| UI Components | shadcn/ui + Tailwind CSS |
+| Backend | Django 5 + Strawberry-GraphQL |
+| API | GraphQL (via strawberry-django) |
+| Database | PostgreSQL 16 |
+| Caching | Redis (when needed) |
+| E2E Testing | Playwright |
+| Linting | Ruff (backend), ESLint (frontend) |
+| Containerization | Docker Compose (dev), Kubernetes (prod) |
+
+## Project Structure
+
+```
+contract-manager/
+├── backend/                  # Django application
+│   ├── apps/
+│   │   ├── contracts/        # Contract management (models, schema, tests)
+│   │   ├── customers/        # Customer management + HubSpot sync
+│   │   ├── products/         # Products, pricing, price lists
+│   │   ├── tenants/          # Multi-tenant support, users, roles
+│   │   └── core/             # Shared utilities, base models
+│   ├── config/               # Django settings, URLs, ASGI/WSGI
+│   ├── tests/                # Integration tests
+│   ├── Dockerfile            # Development image
+│   ├── Dockerfile.prod       # Production image
+│   └── pyproject.toml        # Python dependencies (uv)
+├── frontend/                 # React TypeScript application
+│   ├── src/
+│   │   ├── components/       # Reusable UI components
+│   │   ├── features/         # Feature-based modules
+│   │   ├── lib/              # Utilities, GraphQL client
+│   │   └── locales/          # i18n translations (de, en)
+│   ├── e2e/                  # Playwright E2E tests
+│   ├── Dockerfile            # Development image
+│   └── Dockerfile.prod       # Production image (nginx)
+├── k8s/                      # Kubernetes manifests
+├── .github/workflows/        # CI/CD pipelines
+├── docker-compose.yml        # Local development
+├── Makefile                  # Development commands
+└── README.md                 # Full specification (German)
+```
+
+## OpenSpec
+
+The project has two specification sources:
+
+**`openspec.yaml`** - Machine-readable specification:
+- All domain entities with attributes, types, and relationships
+- Business rules and pricing hierarchies
+- Invoicing views (invoicable contracts by period, billing calendar)
+- Implementation phases (MVP, Core, Extensions)
+- Integration specifications (HubSpot, billing, notifications)
+
+**`README.md`** - Human-readable specification (German):
+- Detailed business requirements and use cases
+- Data model diagrams
+- UI guidelines and navigation structure
+
+When implementing features:
+1. Check `openspec.yaml` for entity definitions and business rules
+2. Reference `README.md` for detailed requirements and edge cases
 
 ## Development Commands
 
-All development happens inside Docker containers. Use `make help` to see all commands.
+Use `make help` to see all available commands. Key commands:
 
 ```bash
-# Docker
+# Docker lifecycle
 make up              # Start all services
 make down            # Stop all services
 make build           # Build/rebuild images
@@ -31,161 +94,126 @@ make clean           # Full reset (removes volumes)
 
 # Testing
 make test            # Run all tests
-make test-back       # Run backend tests only
-make test-front      # Run frontend tests only
+make test-back       # Backend tests (pytest)
+make test-front      # Frontend tests
 
 # Linting
 make lint            # Run all linters
-make lint-back-fix   # Auto-fix backend lint issues
+make lint-back-fix   # Auto-fix backend issues
 
 # Django
-make shell           # Django shell
 make migrate         # Run migrations
-make makemigrations  # Create new migrations
+make makemigrations  # Create migrations
+make shell           # Django shell_plus
 make superuser       # Create superuser
 
+# Database
+make db-shell        # PostgreSQL shell
+make db-dump         # Dump database
+
 # Health checks
-make health          # Check backend health endpoint
+make health          # Check backend health
 make graphql-health  # Test GraphQL endpoint
 ```
 
-## Test Credentials
+## Development Guidelines
 
-```
-Email: admin@test.local
-Password: admin123
-```
+### Test-Driven Development (TDD)
 
-Set up test data with: `docker compose exec backend python manage.py setup_test_data`
+1. **Write tests first** before implementing features
+2. **Unit tests required** for both frontend and backend
+3. **Only commit when all tests are green**
+4. **E2E tests** for critical user flows
 
-## Project Structure
+### Code Quality
 
-```
-contract-manager/
-├── backend/                 # Django + Strawberry-GraphQL
-│   ├── config/             # Django settings and URLs
-│   │   └── settings/       # Split settings (base, local, production, test)
-│   ├── apps/               # Django apps
-│   │   ├── core/          # Base models and utilities
-│   │   ├── tenants/       # Multi-tenant, users, roles
-│   │   ├── customers/     # Customer management
-│   │   ├── products/      # Product catalog
-│   │   └── contracts/     # Contract management
-│   └── tests/              # Pytest tests
-├── frontend/               # React + Vite + TypeScript
-│   ├── src/
-│   │   ├── components/    # Shared UI components (Shadcn/ui)
-│   │   ├── features/      # Feature modules
-│   │   │   ├── auth/      # Login
-│   │   │   ├── customers/ # CustomerList, CustomerDetail
-│   │   │   ├── contracts/ # ContractList, ContractDetail, ContractForm
-│   │   │   ├── products/  # ProductList
-│   │   │   ├── dashboard/ # Dashboard
-│   │   │   └── settings/  # Settings
-│   │   ├── lib/           # Apollo client, i18n, utilities
-│   │   └── locales/       # Translation files (de, en)
-│   ├── e2e/               # Playwright E2E tests
-│   └── playwright.config.ts
-└── docker-compose.yml      # Local development setup
-```
+**Backend (Python/Django):**
+- Ruff for linting and formatting
+- Type hints required
+- Follow Django conventions
+- Use Strawberry for GraphQL types
 
-## Frontend Routes
+**Frontend (React/TypeScript):**
+- Strict TypeScript
+- Functional components with hooks
+- Feature-based organization
+- i18n for all user-facing strings
 
-| Route | Component | Description |
-|-------|-----------|-------------|
-| `/` | Dashboard | Home page |
-| `/customers` | CustomerList | Customer list with search/sort |
-| `/customers/:id` | CustomerDetail | Customer details + contracts |
-| `/contracts` | ContractList | Contract list with filters |
-| `/contracts/new` | ContractForm | Create new contract |
-| `/contracts/:id` | ContractDetail | Contract overview (items, amendments) |
-| `/contracts/:id/edit` | ContractForm | View/Edit contract details |
-| `/products` | ProductList | Product catalog |
-| `/settings` | Settings | App settings, HubSpot integration |
+### Commit and Versioning
 
-## Contract Views Terminology
+- Semantic versioning (MAJOR.MINOR.PATCH)
+- Atomic commits with clear messages
+- Tag releases with git tags
 
-- **Detail View 1** (`/contracts/:id`): Overview with items/amendments tabs
-- **Detail View 2** (`/contracts/:id/edit` read-only): Contract details before clicking "Edit"
-- **Edit View** (`/contracts/:id/edit` editing): Form after clicking "Edit" button
+## CI/CD Workflow
 
-Status transition buttons (Activate, Pause, Cancel, etc.) appear only in Detail View 2.
+| Trigger | Action |
+|---------|--------|
+| Push to branch | Run all tests + linting |
+| Pull request | Build images, run tests |
+| Merge to main | Build and push images, create release |
 
-## Key Conventions
+## GraphQL API
 
-- All development happens inside Docker containers
-- Use TDD: write tests first
-- Multi-tenant: All models use TenantModel base class
-- i18n: German (de) and English (en) supported
-- GraphQL API via Strawberry-Django
+The API uses Strawberry-GraphQL with Django integration:
 
-## Testing
+- Types defined in each app's `schema.py`
+- Root schema in `config/schema.py`
+- Authentication via JWT or session
+- Pagination using Relay-style connections
 
-### E2E Tests (Playwright)
+**Endpoints:**
+- GraphQL: `http://localhost:8001/graphql`
+- GraphiQL: `http://localhost:8001/graphql` (browser)
+- Health: `http://localhost:8001/api/health`
 
-```bash
-cd frontend
-npm run test:e2e        # Run all E2E tests
-npm run test:e2e:ui     # Run with Playwright UI
-```
+## Key Conventions for AI Assistants
 
-### Test ID Convention
+### When Working on This Codebase
 
-Always use `data-testid` attributes for E2E test selectors, never text-based selectors.
+1. **Read README.md** for business requirements (in German)
+2. **Run tests** after making changes: `make test`
+3. **Run linters** before committing: `make lint`
+4. **Use Docker Compose** for all development
+5. **Follow existing patterns** in each app
 
-Pattern: `{entity}-{element}-{id?}`
+### Common Tasks
 
-Examples:
-- `data-testid="customer-detail-page"`
-- `data-testid="customer-name"`
-- `data-testid="customer-link-{id}"`
-- `data-testid="customers-table-body"`
-- `data-testid="contract-row-{id}"`
-- `data-testid="contract-customer-link-{id}"`
+**Adding a new feature:**
+1. Check README.md for specification
+2. Write tests first (TDD)
+3. Implement backend model + GraphQL schema
+4. Implement frontend components
+5. Add E2E test for critical paths
+6. Run `make test && make lint`
 
-## Strawberry GraphQL
+**Bug fixes:**
+1. Write failing test reproducing the bug
+2. Fix the bug
+3. Verify test passes
+4. Check for edge cases
 
-### Circular Imports with Lazy Types
+### Important Files
 
-When types reference each other (e.g., Customer ↔ Contract), use `strawberry.lazy`:
+| File | Purpose |
+|------|---------|
+| `openspec.yaml` | Machine-readable specification (entities, rules, invoicing) |
+| `README.md` | Full project specification (German) |
+| `Makefile` | Development commands |
+| `docker-compose.yml` | Local environment |
+| `backend/config/settings.py` | Django configuration |
+| `backend/apps/*/schema.py` | GraphQL type definitions |
+| `frontend/src/lib/graphql.ts` | GraphQL client setup |
 
-```python
-from typing import TYPE_CHECKING, Annotated, List
-import strawberry
+## Production Environment
 
-if TYPE_CHECKING:
-    from apps.contracts.schema import ContractType
+- **Platform**: Kubernetes (k8s/ manifests provided)
+- **Database**: PostgreSQL (managed or containerized)
+- **Caching**: Redis (when needed)
+- **Static files**: Served via nginx in frontend container
 
-@strawberry_django.type(Customer)
-class CustomerType:
-    @strawberry.field
-    def contracts(self) -> List[Annotated["ContractType", strawberry.lazy("apps.contracts.schema")]]:
-        from apps.contracts.models import Contract
-        return list(Contract.objects.filter(customer=self))
-```
+## Language Note
 
-## Contract Status Transitions
-
-```
-draft → active
-active → paused, cancelled
-paused → active, cancelled
-cancelled → ended
-```
-
-## Firefox Debugging Agent
-
-Use the `firefox-debugger` agent for interactive frontend debugging:
-
-```
-/task firefox-debugger "Debug why the customer table shows no data"
-```
-
-The agent will:
-1. Open Firefox and navigate to the page
-2. Check console for errors
-3. Inspect network requests
-4. Take snapshots to understand page structure
-5. Iteratively fix issues until resolved
-
-**Note**: Firefox MCP is for debugging only. Use Playwright for automated testing.
+- **README.md**: German (project specification)
+- **Code & comments**: English
+- **UI**: i18n (German + English)
