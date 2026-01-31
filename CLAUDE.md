@@ -2,59 +2,113 @@
 
 ## Project Overview
 
-Contract-Manager is an internal contract management tool designed for a small company (20-30 employees) managing 70-150 customers. The application handles complex contract relationships, pricing structures, and customer agreements.
+Contract-Manager is an internal multi-tenant contract management tool designed for small companies (20-30 employees) managing 70-150 customers. The application handles complex contract relationships, pricing structures, customer agreements, and integrates with HubSpot for customer/product sync.
 
 ### Business Domain
 
 **Core Concepts:**
-- **Customers** can have multiple contracts (independent or linked)
-- **Linked Contracts**: One primary contract determines duration and payment intervals for others
-- **Contract Products**: Contracts contain n products in quantity m
-- **Pricing Models**: Either a total price or individual product prices
-- **Discounts**: With or without time limits
-- **Automatic Adjustments**: e.g., inflation adjustments (x% from a specific date)
-- **Price Lists**: Products can be freely defined or selected from a price list
-- **Customer Agreements**: Special arrangements like "10% off price list" or "20% discount for >2 year duration"
+- **Customers**: Synced from HubSpot (read-only), can have multiple contracts (independent or linked)
+- **Products**: Imported from HubSpot or manually created, with variants and dependencies
+- **Contracts**: Full lifecycle (Draft → Active → Paused → Cancelled → Ended), with amendments
+- **Pricing**: Hierarchical (contract-fixed > customer-specific > list price), with automatic adjustments
+- **Discounts**: Percentage, absolute, tiered, free units - applicable to items, contracts, or categories
+- **Multi-tenant**: Shared schema with tenant isolation
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | React with TypeScript |
-| Backend | Django with Strawberry-GraphQL |
+| Frontend | React 18 + TypeScript + Vite |
+| UI Components | shadcn/ui + Tailwind CSS |
+| Backend | Django 5 + Strawberry-GraphQL |
 | API | GraphQL (via strawberry-django) |
-| Database | PostgreSQL |
+| Database | PostgreSQL 16 |
 | Caching | Redis (when needed) |
 | E2E Testing | Playwright |
-| Containerization | Docker Compose (dev), Kubernetes/Swarm (prod) |
+| Linting | Ruff (backend), ESLint (frontend) |
+| Containerization | Docker Compose (dev), Kubernetes (prod) |
 
-## Project Structure (Planned)
+## Project Structure
 
 ```
 contract-manager/
+├── backend/                  # Django application
+│   ├── apps/
+│   │   ├── contracts/        # Contract management (models, schema, tests)
+│   │   ├── customers/        # Customer management + HubSpot sync
+│   │   ├── products/         # Products, pricing, price lists
+│   │   ├── tenants/          # Multi-tenant support, users, roles
+│   │   └── core/             # Shared utilities, base models
+│   ├── config/               # Django settings, URLs, ASGI/WSGI
+│   ├── tests/                # Integration tests
+│   ├── Dockerfile            # Development image
+│   ├── Dockerfile.prod       # Production image
+│   └── pyproject.toml        # Python dependencies (uv)
 ├── frontend/                 # React TypeScript application
 │   ├── src/
 │   │   ├── components/       # Reusable UI components
-│   │   ├── pages/            # Page-level components
-│   │   ├── hooks/            # Custom React hooks
-│   │   ├── graphql/          # GraphQL queries, mutations, fragments
-│   │   ├── types/            # TypeScript type definitions
-│   │   └── utils/            # Utility functions
-│   ├── tests/                # Frontend unit tests
-│   └── package.json
-├── backend/                  # Django application
-│   ├── config/               # Django settings and configuration
-│   ├── apps/
-│   │   ├── contracts/        # Contract management app
-│   │   ├── customers/        # Customer management app
-│   │   ├── products/         # Product and price list app
-│   │   └── users/            # User authentication app
-│   ├── schema/               # Strawberry GraphQL schema
-│   └── tests/                # Backend unit tests
-├── e2e/                      # Playwright E2E tests
-├── docker-compose.yml        # Local development setup
-├── docker-compose.prod.yml   # Production configuration
-└── .github/workflows/        # CI/CD pipelines
+│   │   ├── features/         # Feature-based modules
+│   │   ├── lib/              # Utilities, GraphQL client
+│   │   └── locales/          # i18n translations (de, en)
+│   ├── e2e/                  # Playwright E2E tests
+│   ├── Dockerfile            # Development image
+│   └── Dockerfile.prod       # Production image (nginx)
+├── k8s/                      # Kubernetes manifests
+├── .github/workflows/        # CI/CD pipelines
+├── docker-compose.yml        # Local development
+├── Makefile                  # Development commands
+└── README.md                 # Full specification (German)
+```
+
+## OpenSpec
+
+The project specification is documented in `README.md` using a structured format covering:
+
+- **Kunden (Customers)**: HubSpot sync, data model, notes
+- **Produkte (Products)**: Structure, variants, dependencies, pricing models
+- **Verträge (Contracts)**: Lifecycle, billing, amendments, documents
+- **Preise & Abrechnung (Pricing & Billing)**: Intervals, pro-rata, history
+- **Rabatte & Konditionen (Discounts)**: Types, scopes, validity
+- **Preisanpassungen (Price Adjustments)**: Inflation, manual, hierarchies
+- **Auditing**: Full change tracking
+- **Benutzer & Berechtigungen (Users & Permissions)**: Roles, tenants
+
+When implementing features, always reference the README.md specification for business rules.
+
+## Development Commands
+
+Use `make help` to see all available commands. Key commands:
+
+```bash
+# Docker lifecycle
+make up              # Start all services
+make down            # Stop all services
+make build           # Build/rebuild images
+make logs            # Follow all logs
+make clean           # Full reset (removes volumes)
+
+# Testing
+make test            # Run all tests
+make test-back       # Backend tests (pytest)
+make test-front      # Frontend tests
+
+# Linting
+make lint            # Run all linters
+make lint-back-fix   # Auto-fix backend issues
+
+# Django
+make migrate         # Run migrations
+make makemigrations  # Create migrations
+make shell           # Django shell_plus
+make superuser       # Create superuser
+
+# Database
+make db-shell        # PostgreSQL shell
+make db-dump         # Dump database
+
+# Health checks
+make health          # Check backend health
+make graphql-health  # Test GraphQL endpoint
 ```
 
 ## Development Guidelines
@@ -62,113 +116,98 @@ contract-manager/
 ### Test-Driven Development (TDD)
 
 1. **Write tests first** before implementing features
-2. **Unit tests required** for both frontend and backend code
+2. **Unit tests required** for both frontend and backend
 3. **Only commit when all tests are green**
-4. **E2E tests** with Playwright for critical user flows (login, complete features)
-
-### Commit and Versioning
-
-- Use **semantic versioning** (MAJOR.MINOR.PATCH)
-- Tag releases with git tags
-- Write clear, descriptive commit messages
-- Commits should represent logical units of work
+4. **E2E tests** for critical user flows
 
 ### Code Quality
 
-- **Backend (Python/Django)**:
-  - Follow PEP 8 style guidelines
-  - Use type hints where appropriate
-  - Document complex business logic
+**Backend (Python/Django):**
+- Ruff for linting and formatting
+- Type hints required
+- Follow Django conventions
+- Use Strawberry for GraphQL types
 
-- **Frontend (React/TypeScript)**:
-  - Use functional components with hooks
-  - Maintain strict TypeScript typing
-  - Follow React best practices
+**Frontend (React/TypeScript):**
+- Strict TypeScript
+- Functional components with hooks
+- Feature-based organization
+- i18n for all user-facing strings
 
-### Local Development
+### Commit and Versioning
 
-The development environment uses Docker Compose. Developers should not need to install anything beyond Docker.
-
-```bash
-# Start all services
-docker-compose up
-
-# Run backend tests
-docker-compose exec backend pytest
-
-# Run frontend tests
-docker-compose exec frontend npm test
-
-# Run E2E tests
-docker-compose exec e2e npx playwright test
-```
+- Semantic versioning (MAJOR.MINOR.PATCH)
+- Atomic commits with clear messages
+- Tag releases with git tags
 
 ## CI/CD Workflow
 
 | Trigger | Action |
 |---------|--------|
-| Push to branch | Run all tests |
-| Merge request | Build images, run tests |
-| Merge to main | Build and push final images, create release |
-
-## Authentication
-
-- **Current**: Username/password authentication
-- **Future**: Magic email link or email code authentication
-- Internal use only (no public registration)
+| Push to branch | Run all tests + linting |
+| Pull request | Build images, run tests |
+| Merge to main | Build and push images, create release |
 
 ## GraphQL API
 
-The API uses Strawberry-GraphQL with Django integration. Key considerations:
+The API uses Strawberry-GraphQL with Django integration:
 
-- Define schemas in the `schema/` directory
-- Use Strawberry's Django integration for model types
-- Implement proper authentication/authorization on resolvers
-- Follow GraphQL best practices for pagination and error handling
+- Types defined in each app's `schema.py`
+- Root schema in `config/schema.py`
+- Authentication via JWT or session
+- Pagination using Relay-style connections
 
-**Documentation**: https://github.com/strawberry-graphql/strawberry-django
+**Endpoints:**
+- GraphQL: `http://localhost:8001/graphql`
+- GraphiQL: `http://localhost:8001/graphql` (browser)
+- Health: `http://localhost:8001/api/health`
 
 ## Key Conventions for AI Assistants
 
 ### When Working on This Codebase
 
-1. **Always run tests** after making changes
-2. **Respect the TDD approach** - consider writing tests first
-3. **Use Docker Compose** for all development tasks
-4. **Follow the existing code style** and patterns
-5. **Keep commits atomic** and well-described
+1. **Read README.md** for business requirements (in German)
+2. **Run tests** after making changes: `make test`
+3. **Run linters** before committing: `make lint`
+4. **Use Docker Compose** for all development
+5. **Follow existing patterns** in each app
 
 ### Common Tasks
 
 **Adding a new feature:**
-1. Create/update tests for the new functionality
-2. Implement the backend model and GraphQL schema
-3. Implement the frontend components and queries
-4. Add E2E test for critical paths
-5. Ensure all tests pass before committing
+1. Check README.md for specification
+2. Write tests first (TDD)
+3. Implement backend model + GraphQL schema
+4. Implement frontend components
+5. Add E2E test for critical paths
+6. Run `make test && make lint`
 
 **Bug fixes:**
-1. Write a failing test that reproduces the bug
+1. Write failing test reproducing the bug
 2. Fix the bug
-3. Verify the test passes
-4. Add any additional edge case tests
+3. Verify test passes
+4. Check for edge cases
 
 ### Important Files
 
 | File | Purpose |
 |------|---------|
-| `docker-compose.yml` | Local development environment |
+| `README.md` | Full project specification |
+| `Makefile` | Development commands |
+| `docker-compose.yml` | Local environment |
 | `backend/config/settings.py` | Django configuration |
-| `backend/schema/` | GraphQL schema definitions |
-| `frontend/src/graphql/` | Frontend GraphQL operations |
-| `.github/workflows/` | CI/CD pipeline definitions |
+| `backend/apps/*/schema.py` | GraphQL type definitions |
+| `frontend/src/lib/graphql.ts` | GraphQL client setup |
 
 ## Production Environment
 
-- Target: Kubernetes or Docker Swarm on Linux
-- Database: PostgreSQL (managed or containerized)
-- Caching: Redis (when needed for performance)
+- **Platform**: Kubernetes (k8s/ manifests provided)
+- **Database**: PostgreSQL (managed or containerized)
+- **Caching**: Redis (when needed)
+- **Static files**: Served via nginx in frontend container
 
 ## Language Note
 
-The README and some documentation may be in German (the target company's language). Code, comments, and technical documentation should be in English.
+- **README.md**: German (project specification)
+- **Code & comments**: English
+- **UI**: i18n (German + English)
