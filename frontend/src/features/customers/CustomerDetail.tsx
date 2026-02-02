@@ -1,9 +1,14 @@
+import { useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
-import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink } from 'lucide-react'
+import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, History } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatDate, formatDateTime } from '@/lib/utils'
+import { useAuditLogs, AuditLogTable } from '@/features/audit'
+
+type SortField = 'name' | 'status' | 'startDate' | 'endDate' | 'arr' | 'totalValue' | 'remainingMonths' | null
+type SortOrder = 'asc' | 'desc'
 
 const CUSTOMER_QUERY = gql`
   query Customer($id: ID!) {
@@ -24,6 +29,8 @@ const CUSTOMER_QUERY = gql`
         startDate
         endDate
         totalValue
+        arr
+        remainingMonths
       }
     }
   }
@@ -43,6 +50,8 @@ interface Contract {
   startDate: string
   endDate: string | null
   totalValue: string
+  arr: string
+  remainingMonths: number
 }
 
 interface Customer {
@@ -65,11 +74,74 @@ interface CustomerData {
 export function CustomerDetail() {
   const { id } = useParams<{ id: string }>()
   const { t, i18n } = useTranslation()
+  const [sortField, setSortField] = useState<SortField>(null)
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
 
   const { data, loading, error } = useQuery<CustomerData>(CUSTOMER_QUERY, {
     variables: { id },
     skip: !id,
   })
+
+  const customer = data?.customer
+
+  // Sort contracts
+  const sortedContracts = useMemo(() => {
+    if (!customer?.contracts) return []
+    if (!sortField) return customer.contracts
+
+    return [...customer.contracts].sort((a, b) => {
+      let comparison = 0
+      switch (sortField) {
+        case 'name':
+          comparison = (a.name || '').localeCompare(b.name || '', i18n.language)
+          break
+        case 'status':
+          comparison = a.status.localeCompare(b.status, i18n.language)
+          break
+        case 'startDate':
+          comparison = a.startDate.localeCompare(b.startDate)
+          break
+        case 'endDate':
+          comparison = (a.endDate || '').localeCompare(b.endDate || '')
+          break
+        case 'arr':
+          comparison = parseFloat(a.arr) - parseFloat(b.arr)
+          break
+        case 'totalValue':
+          comparison = parseFloat(a.totalValue) - parseFloat(b.totalValue)
+          break
+        case 'remainingMonths':
+          comparison = a.remainingMonths - b.remainingMonths
+          break
+      }
+      return sortOrder === 'asc' ? comparison : -comparison
+    })
+  }, [customer?.contracts, sortField, sortOrder, i18n.language])
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      if (sortOrder === 'asc') {
+        setSortOrder('desc')
+      } else {
+        setSortField(null)
+        setSortOrder('asc')
+      }
+    } else {
+      setSortField(field)
+      setSortOrder('asc')
+    }
+  }
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="ml-1 inline h-3 w-3 opacity-50" />
+    }
+    return sortOrder === 'asc' ? (
+      <ArrowUp className="ml-1 inline h-3 w-3" />
+    ) : (
+      <ArrowDown className="ml-1 inline h-3 w-3" />
+    )
+  }
 
   const formatCurrency = (value: string | null) => {
     if (!value) return '-'
@@ -122,8 +194,6 @@ export function CustomerDetail() {
       </div>
     )
   }
-
-  const customer = data?.customer
 
   if (!customer) {
     return (
@@ -244,25 +314,59 @@ export function CustomerDetail() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th
+                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('name')}
+                  >
                     {t('contracts.form.name')}
+                    {getSortIcon('name')}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th
+                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('status')}
+                  >
                     {t('contracts.statusLabel')}
+                    {getSortIcon('status')}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th
+                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('startDate')}
+                  >
                     {t('contracts.startDate')}
+                    {getSortIcon('startDate')}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th
+                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('endDate')}
+                  >
                     {t('contracts.endDate')}
+                    {getSortIcon('endDate')}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th
+                    className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('arr')}
+                  >
+                    {t('contracts.detail.arr')}
+                    {getSortIcon('arr')}
+                  </th>
+                  <th
+                    className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('totalValue')}
+                  >
                     {t('contracts.value')}
+                    {getSortIcon('totalValue')}
+                  </th>
+                  <th
+                    className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('remainingMonths')}
+                  >
+                    {t('contracts.remainingMonths')}
+                    {getSortIcon('remainingMonths')}
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
-                {customer.contracts.map((contract) => (
+                {sortedContracts.map((contract) => (
                   <tr key={contract.id} className="hover:bg-gray-50">
                     <td className="whitespace-nowrap px-6 py-4">
                       <Link
@@ -287,8 +391,14 @@ export function CustomerDetail() {
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {formatDate(contract.endDate)}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
+                      {formatCurrency(contract.arr)}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
                       {formatCurrency(contract.totalValue)}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-500">
+                      {contract.remainingMonths > 0 ? contract.remainingMonths : '-'}
                     </td>
                   </tr>
                 ))}
@@ -297,6 +407,57 @@ export function CustomerDetail() {
           </div>
         )}
       </div>
+
+      {/* Activity Section */}
+      <div className="mt-8" data-testid="customer-activity-section">
+        <div className="flex items-center gap-2 mb-4">
+          <History className="h-5 w-5 text-gray-400" />
+          <h2 className="text-lg font-semibold">{t('audit.activity')}</h2>
+        </div>
+        <CustomerActivityLog customerId={parseInt(id!, 10)} />
+      </div>
+    </div>
+  )
+}
+
+function CustomerActivityLog({ customerId }: { customerId: number }) {
+  const { t } = useTranslation()
+  const { entries, totalCount, hasNextPage, loading, error, loadMore } = useAuditLogs({
+    entityType: 'customer',
+    entityId: customerId,
+    includeRelated: false,
+  })
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+        <p className="text-red-600">{error.message}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <AuditLogTable entries={entries} showEntity={false} loading={loading && entries.length === 0} />
+
+      {hasNextPage && (
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={loadMore}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+            {t('audit.loadMore')}
+          </button>
+        </div>
+      )}
+
+      {entries.length > 0 && (
+        <div className="mt-4 text-center text-sm text-gray-500">
+          {t('audit.showing', { count: entries.length, total: totalCount })}
+        </div>
+      )}
     </div>
   )
 }

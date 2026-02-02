@@ -12,6 +12,8 @@ import { ContractDetail } from './features/contracts/ContractDetail'
 import { RevenueForecast } from './features/forecast/RevenueForecast'
 import { Settings } from './features/settings/Settings'
 import { ContractImport } from './features/contracts/import/ContractImport'
+import { InvoiceExportPage } from './features/invoices/InvoiceExportPage'
+import { AuditLogPage } from './features/audit/AuditLogPage'
 
 function App() {
   return (
@@ -36,6 +38,8 @@ function App() {
         <Route path="forecast" element={<RevenueForecast />} />
         <Route path="settings" element={<Settings />} />
         <Route path="contracts/import" element={<ContractImport />} />
+        <Route path="invoices/export" element={<InvoiceExportPage />} />
+        <Route path="audit-log" element={<AuditLogPage />} />
       </Route>
     </Routes>
   )

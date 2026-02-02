@@ -20,7 +20,7 @@ from apps.customers.models import Customer
 from apps.customers.schema import CustomerType
 from apps.products.models import Product
 from apps.products.schema import ProductType
-from .models import Contract, ContractItem, ContractAmendment, ContractItemPrice
+from .models import Contract, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment
 from .services import ExcelParser, ImportService, MatchStatus
 
 
@@ -37,6 +37,20 @@ class ContractAmendmentType:
 
 
 @strawberry.type
+class ContractAttachmentType:
+    """A file attachment for a contract."""
+
+    id: int
+    original_filename: str
+    file_size: int
+    content_type: str
+    description: str
+    uploaded_at: datetime
+    uploaded_by_name: str | None
+    download_url: str
+
+
+@strawberry.type
 class ContractItemPriceType:
     """A price period for a contract item."""
 
@@ -44,6 +58,7 @@ class ContractItemPriceType:
     valid_from: date
     valid_to: date | None
     unit_price: Decimal
+    price_period: str
     source: str
 
 
@@ -54,8 +69,12 @@ class ContractItemType:
     id: int
     quantity: int
     unit_price: Decimal
+    price_period: str  # Period the price refers to (monthly, quarterly, annual, etc.)
     price_source: str
     total_price: Decimal
+    # Effective price for current date (uses period-specific pricing if available)
+    effective_price: Decimal
+    effective_price_period: str
     product: ProductType | None = None  # Optional for descriptive items
     description: str = ""  # Additional description or text-only items
     # When item becomes effective
@@ -66,6 +85,8 @@ class ContractItemType:
     align_to_contract_at: date | None = None
     suggested_alignment_date: date | None = None
     is_one_off: bool = False
+    # Order confirmation
+    order_confirmation_number: str | None = None
     # Price lock fields
     price_locked: bool = False
     price_locked_until: date | None = None
@@ -80,12 +101,12 @@ class ContractType:
     id: auto
     name: auto
     hubspot_deal_id: auto
-    status: auto
     start_date: auto
     end_date: auto
     billing_start_date: auto
     billing_interval: auto
     billing_anchor_day: auto
+    billing_alignment_date: auto
     min_duration_months: auto
     notice_period_months: auto
     notice_period_anchor: auto
@@ -95,9 +116,18 @@ class ContractType:
     created_at: auto
     netsuite_sales_order_number: auto
     netsuite_contract_number: auto
+    netsuite_url: auto
     po_number: auto
+    order_confirmation_number: auto
     discount_amount: auto
+    notes: auto
+    invoice_text: auto
     customer: CustomerType
+
+    @strawberry.field
+    def status(self) -> str:
+        """Get the effective status, accounting for end date in the past."""
+        return self.effective_status
 
     @strawberry.field
     def hubspot_url(self, info: Info[Context, None]) -> str | None:
@@ -118,6 +148,7 @@ class ContractType:
         """Get all contract items."""
         items = ContractItem.objects.filter(contract=self).select_related("product", "contract").prefetch_related("price_periods")
         result = []
+        today = date.today()
         for item in items:
             # Get price periods for this item
             price_periods = [
@@ -126,17 +157,23 @@ class ContractType:
                     valid_from=pp.valid_from,
                     valid_to=pp.valid_to,
                     unit_price=pp.unit_price,
+                    price_period=pp.price_period,
                     source=pp.source,
                 )
                 for pp in item.price_periods.all()
             ]
+            # Get effective price for today (uses period-specific pricing if available)
+            effective_price, effective_price_period = item.get_effective_price_info(today)
             result.append(
                 ContractItemType(
                     id=item.id,
                     quantity=item.quantity,
                     unit_price=item.unit_price,
+                    price_period=item.price_period,
                     price_source=item.price_source,
                     total_price=item.total_price,
+                    effective_price=effective_price,
+                    effective_price_period=effective_price_period,
                     product=item.product,
                     description=item.description,
                     start_date=item.start_date,
@@ -145,6 +182,7 @@ class ContractType:
                     align_to_contract_at=item.align_to_contract_at,
                     suggested_alignment_date=item.get_suggested_alignment_date() if item.product else None,
                     is_one_off=item.is_one_off,
+                    order_confirmation_number=item.order_confirmation_number,
                     price_locked=item.price_locked,
                     price_locked_until=item.price_locked_until,
                     price_periods=price_periods,
@@ -169,39 +207,105 @@ class ContractType:
         ]
 
     @strawberry.field
+    def attachments(self) -> List[ContractAttachmentType]:
+        """Get all file attachments for this contract."""
+        attachments = ContractAttachment.objects.filter(contract=self).select_related("uploaded_by")
+        return [
+            ContractAttachmentType(
+                id=a.id,
+                original_filename=a.original_filename,
+                file_size=a.file_size,
+                content_type=a.content_type,
+                description=a.description,
+                uploaded_at=a.created_at,
+                uploaded_by_name=a.uploaded_by.email if a.uploaded_by else None,
+                download_url=f"/api/attachments/{a.id}/download/",
+            )
+            for a in attachments
+        ]
+
+    @strawberry.field
+    def effective_end_date(self) -> date | None:
+        """Get the effective end date for total value calculation."""
+        return self.get_effective_end_date()
+
+    @strawberry.field
+    def duration_months(self) -> int:
+        """Get the contract duration in months."""
+        return self.get_duration_months()
+
+    @strawberry.field
+    def remaining_months(self) -> int:
+        """Get the remaining months until contract end."""
+        from dateutil.relativedelta import relativedelta
+
+        effective_end = self.get_effective_end_date()
+        if not effective_end:
+            return 0
+
+        today = date.today()
+        if today >= effective_end:
+            return 0
+
+        # Calculate months between today and end date
+        delta = relativedelta(effective_end, today)
+        return delta.years * 12 + delta.months + (1 if delta.days > 0 else 0)
+
+    @strawberry.field
     def total_value(self) -> Decimal:
-        """Calculate total contract value: ARR + one-off items."""
-        # Get monthly recurring value
-        recurring = ContractItem.objects.filter(
-            contract=self,
-            is_one_off=False,
-        ).aggregate(
-            total=Sum(F("quantity") * F("unit_price"))
-        )
-        monthly_recurring = recurring["total"] or Decimal("0")
+        """Calculate total contract value based on duration + one-off items."""
+        from datetime import date
+        today = date.today()
 
-        # Get one-off items total
-        one_off = ContractItem.objects.filter(
-            contract=self,
-            is_one_off=True,
-        ).aggregate(
-            total=Sum(F("quantity") * F("unit_price"))
-        )
-        one_off_total = one_off["total"] or Decimal("0")
+        # Get items and calculate monthly-normalized totals
+        items = ContractItem.objects.filter(contract=self)
 
-        # ARR (annual) + one-off
-        return (monthly_recurring * 12) + one_off_total
+        monthly_recurring = Decimal("0")
+        one_off_total = Decimal("0")
+
+        for item in items:
+            if item.is_one_off:
+                # One-off items use effective price × quantity
+                effective_price, period = item.get_effective_price_info(today)
+                one_off_total += effective_price * item.quantity
+            else:
+                # Recurring items use effective price (monthly-normalized)
+                monthly_unit_price = item.get_price_at(today, normalize_to_monthly=True)
+                monthly_recurring += monthly_unit_price * item.quantity
+
+        # Total value based on contract duration
+        duration_months = self.get_duration_months()
+        return (monthly_recurring * duration_months) + one_off_total
 
     @strawberry.field
     def monthly_recurring_value(self) -> Decimal:
         """Calculate monthly recurring value (excludes one-off items)."""
-        result = ContractItem.objects.filter(
-            contract=self,
-            is_one_off=False,
-        ).aggregate(
-            total=Sum(F("quantity") * F("unit_price"))
-        )
-        return result["total"] or Decimal("0")
+        from datetime import date
+        today = date.today()
+
+        items = ContractItem.objects.filter(contract=self, is_one_off=False)
+
+        monthly_total = Decimal("0")
+        for item in items:
+            # Use effective price considering period-specific pricing
+            monthly_unit_price = item.get_price_at(today, normalize_to_monthly=True)
+            monthly_total += monthly_unit_price * item.quantity
+
+        return monthly_total
+
+    @strawberry.field
+    def arr(self) -> Decimal:
+        """Calculate Annual Recurring Revenue (monthly × 12)."""
+        from datetime import date
+        today = date.today()
+
+        items = ContractItem.objects.filter(contract=self, is_one_off=False)
+        monthly_total = Decimal("0")
+        for item in items:
+            # Use effective price considering period-specific pricing
+            monthly_unit_price = item.get_price_at(today, normalize_to_monthly=True)
+            monthly_total += monthly_unit_price * item.quantity
+        return monthly_total * 12
 
 
 @strawberry.type
@@ -221,12 +325,17 @@ class ContractConnection:
 class CreateContractInput:
     customer_id: strawberry.ID
     name: str | None = None
+    sales_order_number: str | None = None
+    netsuite_url: str | None = None
     po_number: str | None = None
+    order_confirmation_number: str | None = None
+    notes: str | None = None
     start_date: date
     end_date: date | None = None
     billing_start_date: date | None = None
     billing_interval: str = "monthly"
     billing_anchor_day: int = 1
+    billing_alignment_date: date | None = None
     min_duration_months: int | None = None
     notice_period_months: int = 3
     notice_period_anchor: str = "end_of_duration"
@@ -237,12 +346,18 @@ class CreateContractInput:
 class UpdateContractInput:
     id: strawberry.ID
     name: str | None = None
+    sales_order_number: str | None = None
+    netsuite_url: str | None = None
     po_number: str | None = None
+    order_confirmation_number: str | None = None
+    notes: str | None = None
+    invoice_text: str | None = None
     start_date: date | None = None
     end_date: date | None = UNSET
     billing_start_date: date | None = None
     billing_interval: str | None = None
     billing_anchor_day: int | None = None
+    billing_alignment_date: date | None = UNSET
     min_duration_months: int | None = None
     notice_period_months: int | None = None
     notice_period_anchor: str | None = None
@@ -255,11 +370,13 @@ class ContractItemInput:
     description: str = ""  # Additional description or text-only items
     quantity: int = 1
     unit_price: Decimal = Decimal("0")
+    price_period: str = "monthly"  # Period the price refers to (monthly, quarterly, annual, etc.)
     price_source: str = "list"
     start_date: date | None = None
     billing_start_date: date | None = None
     align_to_contract_at: date | None = None
     is_one_off: bool = False
+    order_confirmation_number: str | None = None
 
 
 @strawberry.input
@@ -268,12 +385,14 @@ class UpdateContractItemInput:
     description: str | None = None
     quantity: int | None = None
     unit_price: Decimal | None = None
+    price_period: str | None = None  # Period the price refers to (monthly, quarterly, annual, etc.)
     price_source: str | None = None
     start_date: date | None = None
     billing_start_date: date | None = None
     billing_end_date: date | None = None
     align_to_contract_at: date | None = None
     is_one_off: bool | None = None
+    order_confirmation_number: str | None = None
     price_locked: bool | None = None
     price_locked_until: date | None = None
 
@@ -284,6 +403,7 @@ class ContractItemPriceInput:
     valid_from: date
     valid_to: date | None = None
     unit_price: Decimal
+    price_period: str = "monthly"  # Period the price refers to (monthly, quarterly, annual, etc.)
     source: str = "fixed"
 
 
@@ -294,6 +414,7 @@ class UpdateContractItemPriceInput:
     valid_from: date | None = None
     valid_to: date | None = None
     unit_price: Decimal | None = None
+    price_period: str | None = None  # Period the price refers to (monthly, quarterly, annual, etc.)
     source: str | None = None
 
 
@@ -321,6 +442,31 @@ class ContractItemPriceResult:
 
 @strawberry.type
 class DeleteResult:
+    success: bool = False
+    error: str | None = None
+
+
+# =============================================================================
+# Contract Attachment Types
+# =============================================================================
+
+
+@strawberry.input
+class UploadAttachmentInput:
+    """Input for uploading a file attachment."""
+
+    contract_id: strawberry.ID
+    file_content: str  # Base64-encoded file content
+    filename: str
+    content_type: str
+    description: str = ""
+
+
+@strawberry.type
+class AttachmentResult:
+    """Result of attachment operations."""
+
+    attachment: ContractAttachmentType | None = None
     success: bool = False
     error: str | None = None
 
@@ -438,6 +584,7 @@ class ContractQuery:
         contract_id: strawberry.ID,
         months: int = 13,
         include_history: bool = False,
+        history_periods: int = 2,
     ) -> BillingScheduleResult:
         """
         Calculate the billing schedule for a contract.
@@ -445,7 +592,8 @@ class ContractQuery:
         Args:
             contract_id: The contract to calculate for
             months: Number of months to forecast (default: 13)
-            include_history: Include past billing periods (default: False)
+            include_history: Include ALL past billing periods (default: False)
+            history_periods: Number of past periods to always show (default: 2)
         """
         from dateutil.relativedelta import relativedelta
 
@@ -472,7 +620,16 @@ class ContractQuery:
             )
 
         today = date.today()
-        from_date = contract.billing_start_date if include_history else today
+        if include_history:
+            # Show ALL history from billing start
+            from_date = contract.billing_start_date
+        else:
+            # Show last N billing periods
+            interval_months = contract.get_interval_months()
+            from_date = today - relativedelta(months=interval_months * history_periods)
+            # Don't go before contract billing start
+            if from_date < contract.billing_start_date:
+                from_date = contract.billing_start_date
         to_date = today + relativedelta(months=months)
 
         schedule = contract.get_billing_schedule(
@@ -551,25 +708,22 @@ class ContractQuery:
         today = date.today()
         is_quarterly = view == "quarterly"
 
-        # Start from beginning of current period to include all billing events in this period
-        if is_quarterly:
-            # Start of current quarter
-            current_quarter_month = ((today.month - 1) // 3) * 3 + 1
-            from_date = date(today.year, current_quarter_month, 1)
-            num_quarters = quarters if quarters is not None else 6
-            to_date = today + relativedelta(months=num_quarters * 3)
-        else:
-            # Start of current month
-            from_date = date(today.year, today.month, 1)
-            num_months = months if months is not None else 13
-            to_date = today + relativedelta(months=num_months)
+        # Always start from January 1st of the current year
+        from_date = date(today.year, 1, 1)
 
-        # Generate period columns
+        if is_quarterly:
+            num_quarters = quarters if quarters is not None else 6
+            to_date = from_date + relativedelta(months=num_quarters * 3)
+        else:
+            num_months = months if months is not None else 13
+            to_date = from_date + relativedelta(months=num_months)
+
+        # Generate period columns starting from January
         period_columns = []
         period_column_set = set()
         if is_quarterly:
-            # Start from current quarter
-            current_quarter = (today.month - 1) // 3 + 1
+            # Start from Q1
+            current_quarter = 1
             current_year = today.year
             for _ in range(num_quarters):
                 key = f"{current_year}-Q{current_quarter}"
@@ -580,8 +734,9 @@ class ContractQuery:
                     current_quarter = 1
                     current_year += 1
         else:
-            current = date(today.year, today.month, 1)
-            while current <= to_date:
+            # Start from January
+            current = date(today.year, 1, 1)
+            while current < to_date:
                 key = current.strftime("%Y-%m")
                 period_columns.append(key)
                 period_column_set.add(key)
@@ -609,6 +764,10 @@ class ContractQuery:
             "quarterly": 3,
             "semi_annual": 6,
             "annual": 12,
+            "biennial": 24,
+            "triennial": 36,
+            "quadrennial": 48,
+            "quinquennial": 60,
         }
 
         for contract in contracts:
@@ -826,13 +985,18 @@ class ContractMutation:
                 tenant=user.tenant,
                 customer=customer,
                 name=input.name or "",
+                netsuite_sales_order_number=input.sales_order_number or "",
+                netsuite_url=input.netsuite_url or "",
                 po_number=input.po_number,
+                order_confirmation_number=input.order_confirmation_number,
+                notes=input.notes or "",
                 status=Contract.Status.DRAFT,
                 start_date=input.start_date,
                 end_date=input.end_date,
                 billing_start_date=input.billing_start_date or input.start_date,
                 billing_interval=input.billing_interval,
                 billing_anchor_day=input.billing_anchor_day,
+                billing_alignment_date=input.billing_alignment_date,
                 min_duration_months=input.min_duration_months,
                 notice_period_months=input.notice_period_months,
                 notice_period_anchor=input.notice_period_anchor,
@@ -860,16 +1024,21 @@ class ContractMutation:
         try:
             if input.name is not None:
                 contract.name = input.name
+            if input.sales_order_number is not None:
+                contract.netsuite_sales_order_number = input.sales_order_number
+            if input.netsuite_url is not None:
+                contract.netsuite_url = input.netsuite_url
             if input.po_number is not None:
                 contract.po_number = input.po_number
-            # Start date and billing start date can only be changed for draft contracts
+            if input.order_confirmation_number is not None:
+                contract.order_confirmation_number = input.order_confirmation_number
+            if input.notes is not None:
+                contract.notes = input.notes
+            if input.invoice_text is not None:
+                contract.invoice_text = input.invoice_text
             if input.start_date is not None:
-                if contract.status != Contract.Status.DRAFT:
-                    return ContractResult(error="Start date can only be changed for draft contracts")
                 contract.start_date = input.start_date
             if input.billing_start_date is not None:
-                if contract.status != Contract.Status.DRAFT:
-                    return ContractResult(error="Billing start date can only be changed for draft contracts")
                 contract.billing_start_date = input.billing_start_date
             if input.end_date is not UNSET:
                 contract.end_date = input.end_date
@@ -877,6 +1046,8 @@ class ContractMutation:
                 contract.billing_interval = input.billing_interval
             if input.billing_anchor_day is not None:
                 contract.billing_anchor_day = input.billing_anchor_day
+            if input.billing_alignment_date is not UNSET:
+                contract.billing_alignment_date = input.billing_alignment_date
             if input.min_duration_months is not None:
                 contract.min_duration_months = input.min_duration_months
             if input.notice_period_months is not None:
@@ -929,11 +1100,13 @@ class ContractMutation:
                     description=input.description,
                     quantity=input.quantity,
                     unit_price=input.unit_price,
+                    price_period=input.price_period,
                     price_source=input.price_source,
                     start_date=input.start_date,
                     billing_start_date=input.billing_start_date,
                     align_to_contract_at=input.align_to_contract_at,
                     is_one_off=input.is_one_off,
+                    order_confirmation_number=input.order_confirmation_number,
                 )
 
                 # Create amendment record only for non-draft contracts
@@ -954,13 +1127,18 @@ class ContractMutation:
                         },
                     )
 
+            # Get effective price for today (for new items, this is just the item price)
+            effective_price, effective_price_period = item.get_effective_price_info(date.today())
             return ContractItemResult(
                 item=ContractItemType(
                     id=item.id,
                     quantity=item.quantity,
                     unit_price=item.unit_price,
+                    price_period=item.price_period,
                     price_source=item.price_source,
                     total_price=item.total_price,
+                    effective_price=effective_price,
+                    effective_price_period=effective_price_period,
                     product=product,
                     description=item.description,
                     start_date=item.start_date,
@@ -969,6 +1147,7 @@ class ContractMutation:
                     align_to_contract_at=item.align_to_contract_at,
                     suggested_alignment_date=item.get_suggested_alignment_date() if product else None,
                     is_one_off=item.is_one_off,
+                    order_confirmation_number=item.order_confirmation_number,
                     price_locked=item.price_locked,
                     price_locked_until=item.price_locked_until,
                     price_periods=[],  # Newly created items have no price periods
@@ -1015,6 +1194,8 @@ class ContractMutation:
                     if is_price_locked:
                         return ContractItemResult(error="Price is locked and cannot be changed")
                     item.unit_price = input.unit_price
+                if input.price_period is not None:
+                    item.price_period = input.price_period
                 if input.price_source is not None:
                     item.price_source = input.price_source
                 if input.start_date is not None:
@@ -1027,6 +1208,8 @@ class ContractMutation:
                     item.align_to_contract_at = input.align_to_contract_at
                 if input.is_one_off is not None:
                     item.is_one_off = input.is_one_off
+                if input.order_confirmation_number is not None:
+                    item.order_confirmation_number = input.order_confirmation_number
                 if input.price_locked is not None:
                     item.price_locked = input.price_locked
                 if input.price_locked_until is not None:
@@ -1075,18 +1258,24 @@ class ContractMutation:
                     valid_from=pp.valid_from,
                     valid_to=pp.valid_to,
                     unit_price=pp.unit_price,
+                    price_period=pp.price_period,
                     source=pp.source,
                 )
                 for pp in item.price_periods.all()
             ]
 
+            # Get effective price for today
+            effective_price, effective_price_period = item.get_effective_price_info(date.today())
             return ContractItemResult(
                 item=ContractItemType(
                     id=item.id,
                     quantity=item.quantity,
                     unit_price=item.unit_price,
+                    price_period=item.price_period,
                     price_source=item.price_source,
                     total_price=item.total_price,
+                    effective_price=effective_price,
+                    effective_price_period=effective_price_period,
                     product=item.product,
                     description=item.description,
                     start_date=item.start_date,
@@ -1095,6 +1284,7 @@ class ContractMutation:
                     align_to_contract_at=item.align_to_contract_at,
                     suggested_alignment_date=item.get_suggested_alignment_date() if item.product else None,
                     is_one_off=item.is_one_off,
+                    order_confirmation_number=item.order_confirmation_number,
                     price_locked=item.price_locked,
                     price_locked_until=item.price_locked_until,
                     price_periods=price_periods,
@@ -1289,21 +1479,23 @@ class ContractMutation:
             return ContractItemPriceResult(error="Price is locked and cannot be changed")
 
         try:
-            price_period = ContractItemPrice.objects.create(
+            price_period_record = ContractItemPrice.objects.create(
                 tenant=user.tenant,
                 item=item,
                 valid_from=input.valid_from,
                 valid_to=input.valid_to,
                 unit_price=input.unit_price,
+                price_period=input.price_period,
                 source=input.source,
             )
             return ContractItemPriceResult(
                 price_period=ContractItemPriceType(
-                    id=price_period.id,
-                    valid_from=price_period.valid_from,
-                    valid_to=price_period.valid_to,
-                    unit_price=price_period.unit_price,
-                    source=price_period.source,
+                    id=price_period_record.id,
+                    valid_from=price_period_record.valid_from,
+                    valid_to=price_period_record.valid_to,
+                    unit_price=price_period_record.unit_price,
+                    price_period=price_period_record.price_period,
+                    source=price_period_record.source,
                 ),
                 success=True,
             )
@@ -1342,6 +1534,8 @@ class ContractMutation:
                 price_period.valid_to = input.valid_to
             if input.unit_price is not None:
                 price_period.unit_price = input.unit_price
+            if input.price_period is not None:
+                price_period.price_period = input.price_period
             if input.source is not None:
                 price_period.source = input.source
             price_period.save()
@@ -1352,6 +1546,7 @@ class ContractMutation:
                     valid_from=price_period.valid_from,
                     valid_to=price_period.valid_to,
                     unit_price=price_period.unit_price,
+                    price_period=price_period.price_period,
                     source=price_period.source,
                 ),
                 success=True,
@@ -1384,6 +1579,102 @@ class ContractMutation:
 
         try:
             price_period.delete()
+            return DeleteResult(success=True)
+        except Exception as e:
+            return DeleteResult(error=str(e))
+
+    # =========================================================================
+    # Contract Attachment Mutations
+    # =========================================================================
+
+    @strawberry.mutation
+    def upload_contract_attachment(
+        self,
+        info: Info[Context, None],
+        input: UploadAttachmentInput,
+    ) -> AttachmentResult:
+        """Upload a file attachment to a contract."""
+        from django.conf import settings
+        from django.core.files.base import ContentFile
+
+        user = get_current_user(info)
+        if not user.tenant:
+            return AttachmentResult(error="No tenant assigned")
+
+        # Verify contract belongs to tenant
+        contract = Contract.objects.filter(
+            tenant=user.tenant, id=input.contract_id
+        ).first()
+        if not contract:
+            return AttachmentResult(error="Contract not found")
+
+        # Validate filename extension
+        ext = os.path.splitext(input.filename)[1].lower()
+        if ext not in settings.ALLOWED_ATTACHMENT_EXTENSIONS:
+            return AttachmentResult(error=f"File type {ext} not allowed")
+
+        # Decode and validate file size
+        try:
+            file_bytes = base64.b64decode(input.file_content)
+        except Exception:
+            return AttachmentResult(error="Invalid base64 file content")
+
+        file_size = len(file_bytes)
+        if file_size > settings.MAX_UPLOAD_SIZE:
+            max_mb = settings.MAX_UPLOAD_SIZE / (1024 * 1024)
+            return AttachmentResult(error=f"File too large. Maximum size is {max_mb:.0f}MB")
+
+        try:
+            # Create attachment
+            attachment = ContractAttachment.objects.create(
+                tenant=user.tenant,
+                contract=contract,
+                original_filename=input.filename,
+                file_size=file_size,
+                content_type=input.content_type,
+                description=input.description,
+                uploaded_by=user,
+            )
+
+            # Save file
+            content_file = ContentFile(file_bytes, name=input.filename)
+            attachment.file.save(input.filename, content_file, save=True)
+
+            return AttachmentResult(
+                attachment=ContractAttachmentType(
+                    id=attachment.id,
+                    original_filename=attachment.original_filename,
+                    file_size=attachment.file_size,
+                    content_type=attachment.content_type,
+                    description=attachment.description,
+                    uploaded_at=attachment.created_at,
+                    uploaded_by_name=user.email,
+                    download_url=f"/api/attachments/{attachment.id}/download/",
+                ),
+                success=True,
+            )
+        except Exception as e:
+            return AttachmentResult(error=str(e))
+
+    @strawberry.mutation
+    def delete_contract_attachment(
+        self,
+        info: Info[Context, None],
+        attachment_id: strawberry.ID,
+    ) -> DeleteResult:
+        """Delete a file attachment."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        attachment = ContractAttachment.objects.filter(
+            tenant=user.tenant, id=attachment_id
+        ).first()
+        if not attachment:
+            return DeleteResult(error="Attachment not found")
+
+        try:
+            attachment.delete()  # Will also delete the file from storage
             return DeleteResult(success=True)
         except Exception as e:
             return DeleteResult(error=str(e))

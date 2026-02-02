@@ -18,8 +18,16 @@ import {
   Lock,
   CalendarRange,
   Info,
+  Paperclip,
+  Upload,
+  Download,
+  File,
+  Image,
+  Eye,
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear } from '@/lib/utils'
+import { getToken } from '@/lib/auth'
+import { useAuditLogs, AuditLogTable } from '@/features/audit'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -76,7 +84,10 @@ const CONTRACT_DETAIL_QUERY = gql`
       netsuiteSalesOrderNumber
       netsuiteContractNumber
       poNumber
+      netsuiteUrl
       discountAmount
+      notes
+      invoiceText
       customer {
         id
         name
@@ -86,6 +97,9 @@ const CONTRACT_DETAIL_QUERY = gql`
         description
         quantity
         unitPrice
+        pricePeriod
+        effectivePrice
+        effectivePricePeriod
         priceSource
         totalPrice
         startDate
@@ -94,6 +108,7 @@ const CONTRACT_DETAIL_QUERY = gql`
         alignToContractAt
         suggestedAlignmentDate
         isOneOff
+        orderConfirmationNumber
         priceLocked
         priceLockedUntil
         pricePeriods {
@@ -101,6 +116,7 @@ const CONTRACT_DETAIL_QUERY = gql`
           validFrom
           validTo
           unitPrice
+          pricePeriod
           source
         }
         product {
@@ -115,6 +131,16 @@ const CONTRACT_DETAIL_QUERY = gql`
         type
         description
         createdAt
+      }
+      attachments {
+        id
+        originalFilename
+        fileSize
+        contentType
+        description
+        uploadedAt
+        uploadedByName
+        downloadUrl
       }
     }
   }
@@ -185,6 +211,7 @@ const ADD_CONTRACT_ITEM_PRICE_MUTATION = gql`
         validFrom
         validTo
         unitPrice
+        pricePeriod
         source
       }
     }
@@ -200,9 +227,22 @@ const REMOVE_CONTRACT_ITEM_PRICE_MUTATION = gql`
   }
 `
 
+const UPDATE_CONTRACT_NOTES_MUTATION = gql`
+  mutation UpdateContractNotes($input: UpdateContractInput!) {
+    updateContract(input: $input) {
+      success
+      error
+      contract {
+        id
+        notes
+      }
+    }
+  }
+`
+
 const BILLING_SCHEDULE_QUERY = gql`
-  query BillingSchedule($contractId: ID!, $months: Int, $includeHistory: Boolean) {
-    billingSchedule(contractId: $contractId, months: $months, includeHistory: $includeHistory) {
+  query BillingSchedule($contractId: ID!, $months: Int, $includeAllHistory: Boolean) {
+    billingSchedule(contractId: $contractId, months: $months, includeHistory: $includeAllHistory) {
       events {
         date
         items {
@@ -224,6 +264,34 @@ const BILLING_SCHEDULE_QUERY = gql`
   }
 `
 
+const UPLOAD_ATTACHMENT_MUTATION = gql`
+  mutation UploadContractAttachment($input: UploadAttachmentInput!) {
+    uploadContractAttachment(input: $input) {
+      success
+      error
+      attachment {
+        id
+        originalFilename
+        fileSize
+        contentType
+        description
+        uploadedAt
+        uploadedByName
+        downloadUrl
+      }
+    }
+  }
+`
+
+const DELETE_ATTACHMENT_MUTATION = gql`
+  mutation DeleteContractAttachment($attachmentId: ID!) {
+    deleteContractAttachment(attachmentId: $attachmentId) {
+      success
+      error
+    }
+  }
+`
+
 
 interface Product {
   id: string
@@ -237,6 +305,7 @@ interface PricePeriod {
   validFrom: string
   validTo: string | null
   unitPrice: string
+  pricePeriod: string
   source: string
 }
 
@@ -245,6 +314,9 @@ interface ContractItem {
   description: string
   quantity: number
   unitPrice: string
+  pricePeriod: string
+  effectivePrice: string
+  effectivePricePeriod: string
   priceSource: string
   totalPrice: string
   startDate: string | null
@@ -253,6 +325,7 @@ interface ContractItem {
   alignToContractAt: string | null
   suggestedAlignmentDate: string | null
   isOneOff: boolean
+  orderConfirmationNumber: string | null
   priceLocked: boolean
   priceLockedUntil: string | null
   pricePeriods: PricePeriod[] | null
@@ -269,6 +342,17 @@ interface Amendment {
   type: string
   description: string
   createdAt: string
+}
+
+interface Attachment {
+  id: string
+  originalFilename: string
+  fileSize: number
+  contentType: string
+  description: string
+  uploadedAt: string
+  uploadedByName: string | null
+  downloadUrl: string
 }
 
 interface Contract {
@@ -293,16 +377,20 @@ interface Contract {
   netsuiteSalesOrderNumber: string | null
   netsuiteContractNumber: string | null
   poNumber: string | null
+  netsuiteUrl: string | null
   discountAmount: string | null
+  notes: string
+  invoiceText: string
   customer: {
     id: string
     name: string
   }
   items: ContractItem[]
   amendments: Amendment[]
+  attachments: Attachment[]
 }
 
-type Tab = 'items' | 'amendments' | 'forecast'
+type Tab = 'items' | 'amendments' | 'forecast' | 'attachments' | 'activity'
 
 export function ContractDetail() {
   const { t, i18n } = useTranslation()
@@ -311,12 +399,65 @@ export function ContractDetail() {
   const [activeTab, setActiveTab] = useState<Tab>('items')
   const [showAddItemModal, setShowAddItemModal] = useState(false)
   const [editingItem, setEditingItem] = useState<ContractItem | null>(null)
-  
+  const [isEditingNotes, setIsEditingNotes] = useState(false)
+  const [editedNotes, setEditedNotes] = useState('')
+  const [isEditingInvoiceText, setIsEditingInvoiceText] = useState(false)
+  const [editedInvoiceText, setEditedInvoiceText] = useState('')
+
   const { data, loading, error, refetch } = useQuery(CONTRACT_DETAIL_QUERY, {
     variables: { id },
   })
 
+  const [updateNotes, { loading: savingNotes }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
+  const [updateInvoiceText, { loading: savingInvoiceText }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
+
   const contract = data?.contract as Contract | undefined
+
+  const handleSaveNotes = async () => {
+    if (!contract) return
+    const result = await updateNotes({
+      variables: {
+        input: {
+          id: contract.id,
+          notes: editedNotes,
+        },
+      },
+    })
+    if (result.data?.updateContract.success) {
+      setIsEditingNotes(false)
+      refetch()
+    }
+  }
+
+  const handleStartEditNotes = () => {
+    if (contract) {
+      setEditedNotes(contract.notes || '')
+      setIsEditingNotes(true)
+    }
+  }
+
+  const handleSaveInvoiceText = async () => {
+    if (!contract) return
+    const result = await updateInvoiceText({
+      variables: {
+        input: {
+          id: contract.id,
+          invoiceText: editedInvoiceText,
+        },
+      },
+    })
+    if (result.data?.updateContract.success) {
+      setIsEditingInvoiceText(false)
+      refetch()
+    }
+  }
+
+  const handleStartEditInvoiceText = () => {
+    if (contract) {
+      setEditedInvoiceText(contract.invoiceText || '')
+      setIsEditingInvoiceText(true)
+    }
+  }
 
   const formatCurrency = (value: string | null) => {
     if (!value) return '-'
@@ -332,6 +473,10 @@ export function ContractDetail() {
       case 'quarterly': return 3
       case 'semi_annual': return 6
       case 'annual': return 12
+      case 'biennial': return 24
+      case 'triennial': return 36
+      case 'quadrennial': return 48
+      case 'quinquennial': return 60
       default: return 1
     }
   }
@@ -394,7 +539,9 @@ export function ContractDetail() {
             <h1 className="text-2xl font-bold">
               {contract.name || contract.customer.name}
             </h1>
-            <p className="text-sm text-muted-foreground">{contract.customer.name}</p>
+            <Link to={`/customers/${contract.customer.id}`} className="text-sm text-blue-600 hover:text-blue-800 hover:underline">
+              {contract.customer.name}
+            </Link>
             <div className="mt-1 flex items-center gap-2 flex-wrap">
               <span
                 className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusBadgeClass(
@@ -407,6 +554,23 @@ export function ContractDetail() {
                 <span className="text-xs text-gray-500">
                   {t('contracts.netsuiteContract')}: {contract.netsuiteContractNumber}
                 </span>
+              )}
+              {contract.netsuiteSalesOrderNumber && (
+                contract.netsuiteUrl ? (
+                  <a
+                    href={contract.netsuiteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+                  >
+                    SO: {contract.netsuiteSalesOrderNumber}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                ) : (
+                  <span className="text-xs text-gray-500">
+                    SO: {contract.netsuiteSalesOrderNumber}
+                  </span>
+                )
               )}
               {contract.poNumber && (
                 <span className="text-xs text-gray-500">
@@ -467,6 +631,55 @@ export function ContractDetail() {
         )}
       </div>
 
+      {/* Internal Notes */}
+      <div className="mb-6 rounded-lg border bg-white p-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-medium text-gray-700">{t('contracts.detail.internalNotes')}</p>
+          {!isEditingNotes && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleStartEditNotes}
+              className="h-7 px-2"
+            >
+              <Edit className="h-3 w-3 mr-1" />
+              {t('common.edit')}
+            </Button>
+          )}
+        </div>
+        {isEditingNotes ? (
+          <div className="space-y-2">
+            <textarea
+              className="w-full rounded-md border border-gray-300 p-2 text-sm min-h-[100px] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              value={editedNotes}
+              onChange={(e) => setEditedNotes(e.target.value)}
+              placeholder={t('contracts.detail.notesPlaceholder')}
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditingNotes(false)}
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSaveNotes}
+                disabled={savingNotes}
+              >
+                {savingNotes && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                {t('common.save')}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-600 whitespace-pre-wrap">
+            {contract.notes || <span className="text-gray-400 italic">{t('contracts.detail.noNotes')}</span>}
+          </p>
+        )}
+      </div>
+
       {/* Tabs */}
       <div className="mb-4 border-b">
         <nav className="-mb-px flex gap-4">
@@ -502,6 +715,28 @@ export function ContractDetail() {
           >
             <TrendingUp className="h-4 w-4" />
             {t('contracts.forecast.title')}
+          </button>
+          <button
+            onClick={() => setActiveTab('attachments')}
+            className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium ${
+              activeTab === 'attachments'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            <Paperclip className="h-4 w-4" />
+            {t('attachments.title')} ({contract.attachments.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('activity')}
+            className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium ${
+              activeTab === 'activity'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            <History className="h-4 w-4" />
+            {t('audit.activity')}
           </button>
         </nav>
       </div>
@@ -541,7 +776,7 @@ export function ContractDetail() {
                           {t('contracts.item.quantity')}
                         </th>
                         <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                          {t('contracts.item.unitPriceMonthly')}
+                          {t('contracts.item.unitPrice')}
                         </th>
                         <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                           {t('contracts.item.totalMonthly')}
@@ -561,7 +796,11 @@ export function ContractDetail() {
                     </thead>
                     <tbody className="divide-y divide-gray-200 bg-white">
                       {contract.items.filter(item => !item.isOneOff).map((item) => {
-                        const monthlyTotal = parseFloat(item.totalPrice)
+                        // Calculate monthly total from effectivePrice (respects period-specific pricing)
+                        const effectivePrice = parseFloat(item.effectivePrice)
+                        const pricePeriodMonths = getIntervalMultiplier(item.effectivePricePeriod)
+                        const monthlyUnitPrice = effectivePrice / pricePeriodMonths
+                        const monthlyTotal = monthlyUnitPrice * item.quantity
                         const intervalMultiplier = getIntervalMultiplier(contract.billingInterval)
                         const billingTotal = monthlyTotal * intervalMultiplier
                         const itemName = item.product?.name || item.description || '-'
@@ -587,7 +826,12 @@ export function ContractDetail() {
                                     <Lock className="h-3 w-3 text-amber-500" />
                                   </span>
                                 )}
-                                {formatCurrency(item.unitPrice)}
+                                <span>
+                                  {formatCurrency(item.effectivePrice)}
+                                  <span className="text-xs text-gray-500">
+                                    /{t(`contracts.item.pricePeriodValues.${item.effectivePricePeriod}`)}
+                                  </span>
+                                </span>
                                 {item.pricePeriods && item.pricePeriods.length > 0 && (
                                   <span title={t('contracts.item.yearSpecificPricing')}>
                                     <CalendarRange className="h-3 w-3 text-blue-500" />
@@ -596,7 +840,7 @@ export function ContractDetail() {
                               </div>
                             </td>
                             <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
-                              {formatCurrency(item.totalPrice)}
+                              {formatCurrency(monthlyTotal.toString())}
                             </td>
                             <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
                               {formatCurrency(billingTotal.toString())}
@@ -675,6 +919,7 @@ export function ContractDetail() {
                       <tbody className="divide-y divide-gray-200 bg-white">
                         {contract.items.filter(item => item.isOneOff).map((item) => {
                           const itemName = item.product?.name || item.description || '-'
+                          const oneOffTotal = parseFloat(item.effectivePrice) * item.quantity
                           return (
                           <tr key={item.id}>
                             <td className="px-6 py-4">
@@ -696,11 +941,16 @@ export function ContractDetail() {
                                     <Lock className="h-3 w-3 text-amber-500" />
                                   </span>
                                 )}
-                                {formatCurrency(item.unitPrice)}
+                                <span>
+                                  {formatCurrency(item.effectivePrice)}
+                                  <span className="text-xs text-gray-500">
+                                    /{t(`contracts.item.pricePeriodValues.${item.effectivePricePeriod}`)}
+                                  </span>
+                                </span>
                               </div>
                             </td>
                             <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
-                              {formatCurrency(item.totalPrice)}
+                              {formatCurrency(oneOffTotal.toString())}
                             </td>
                             {contract.status !== 'cancelled' && contract.status !== 'ended' && (
                               <td className="whitespace-nowrap px-6 py-4 text-right">
@@ -725,6 +975,55 @@ export function ContractDetail() {
                   </div>
                 </div>
               )}
+
+              {/* Invoice Text */}
+              <div className="rounded-lg border bg-white p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-gray-700">{t('contracts.detail.invoiceText')}</p>
+                  {!isEditingInvoiceText && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleStartEditInvoiceText}
+                      className="h-7 px-2"
+                    >
+                      <Edit className="h-3 w-3 mr-1" />
+                      {t('common.edit')}
+                    </Button>
+                  )}
+                </div>
+                {isEditingInvoiceText ? (
+                  <div className="space-y-2">
+                    <textarea
+                      className="w-full rounded-md border border-gray-300 p-2 text-sm min-h-[100px] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      value={editedInvoiceText}
+                      onChange={(e) => setEditedInvoiceText(e.target.value)}
+                      placeholder={t('contracts.detail.invoiceTextPlaceholder')}
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsEditingInvoiceText(false)}
+                      >
+                        {t('common.cancel')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleSaveInvoiceText}
+                        disabled={savingInvoiceText}
+                      >
+                        {savingInvoiceText && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                        {t('common.save')}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                    {contract.invoiceText || <span className="text-gray-400 italic">{t('contracts.detail.noInvoiceText')}</span>}
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -764,6 +1063,21 @@ export function ContractDetail() {
       {/* Forecast Tab */}
       {activeTab === 'forecast' && (
         <ForecastTab contractId={id!} />
+      )}
+
+      {/* Attachments Tab */}
+      {activeTab === 'attachments' && (
+        <AttachmentsTab
+          contractId={id!}
+          attachments={contract.attachments}
+          canEdit={contract.status !== 'cancelled' && contract.status !== 'ended'}
+          onRefetch={() => refetch()}
+        />
+      )}
+
+      {/* Activity Tab */}
+      {activeTab === 'activity' && (
+        <ActivityTab contractId={parseInt(id!, 10)} />
       )}
 
       {/* Add Item Modal */}
@@ -810,11 +1124,13 @@ function AddItemModal({
   const [description, setDescription] = useState('')
   const [quantity, setQuantity] = useState(1)
   const [unitPrice, setUnitPrice] = useState('')
+  const [pricePeriod, setPricePeriod] = useState('monthly')
   const [priceSource, setPriceSource] = useState('list')
   const [startDate, setStartDate] = useState('')
   const [billingStartDate, setBillingStartDate] = useState('')
   const [alignToContractAt, setAlignToContractAt] = useState('')
   const [isOneOff, setIsOneOff] = useState(false)
+  const [orderConfirmationNumber, setOrderConfirmationNumber] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [productSearchOpen, setProductSearchOpen] = useState(false)
   const [productSearchTerm, setProductSearchTerm] = useState('')
@@ -885,11 +1201,13 @@ function AddItemModal({
             description,
             quantity,
             unitPrice: unitPrice || '0',
+            pricePeriod,
             priceSource,
             startDate: startDate || null,
             billingStartDate: billingStartDate || null,
             alignToContractAt: alignToContractAt || null,
             isOneOff,
+            orderConfirmationNumber: orderConfirmationNumber || null,
           },
         },
       })
@@ -1018,16 +1336,37 @@ function AddItemModal({
             />
           </div>
 
-          {/* Unit Price */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">{t('contracts.item.unitPrice')} *</label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              value={unitPrice}
-              onChange={(e) => setUnitPrice(e.target.value)}
-            />
+          {/* Unit Price and Price Period - 2 columns */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('contracts.item.unitPrice')} *</label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={unitPrice}
+                onChange={(e) => setUnitPrice(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('contracts.item.pricePeriod')}</label>
+              <Select value={pricePeriod} onValueChange={setPricePeriod}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">{t('contracts.item.pricePeriodValues.monthly')}</SelectItem>
+                  <SelectItem value="bi_monthly">{t('contracts.item.pricePeriodValues.bi_monthly')}</SelectItem>
+                  <SelectItem value="quarterly">{t('contracts.item.pricePeriodValues.quarterly')}</SelectItem>
+                  <SelectItem value="semi_annual">{t('contracts.item.pricePeriodValues.semi_annual')}</SelectItem>
+                  <SelectItem value="annual">{t('contracts.item.pricePeriodValues.annual')}</SelectItem>
+                  <SelectItem value="biennial">{t('contracts.item.pricePeriodValues.biennial')}</SelectItem>
+                  <SelectItem value="triennial">{t('contracts.item.pricePeriodValues.triennial')}</SelectItem>
+                  <SelectItem value="quadrennial">{t('contracts.item.pricePeriodValues.quadrennial')}</SelectItem>
+                  <SelectItem value="quinquennial">{t('contracts.item.pricePeriodValues.quinquennial')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Price Source */}
@@ -1061,6 +1400,16 @@ function AddItemModal({
               id="isOneOff"
               checked={isOneOff}
               onCheckedChange={setIsOneOff}
+            />
+          </div>
+
+          {/* Order Confirmation Number */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{t('contracts.item.orderConfirmationNumber')}</label>
+            <Input
+              placeholder={t('contracts.item.orderConfirmationNumberPlaceholder')}
+              value={orderConfirmationNumber}
+              onChange={(e) => setOrderConfirmationNumber(e.target.value)}
             />
           </div>
 
@@ -1154,12 +1503,14 @@ function EditItemModal({
   const [description, setDescription] = useState(item.description || '')
   const [quantity, setQuantity] = useState(item.quantity)
   const [unitPrice, setUnitPrice] = useState(item.unitPrice)
+  const [pricePeriodValue, setPricePeriodValue] = useState(item.pricePeriod || 'monthly')
   const [priceSource, setPriceSource] = useState(item.priceSource)
   const [startDate, setStartDate] = useState(item.startDate || '')
   const [billingStartDate, setBillingStartDate] = useState(item.billingStartDate || '')
   const [billingEndDate, setBillingEndDate] = useState(item.billingEndDate || '')
   const [alignToContractAt, setAlignToContractAt] = useState(item.alignToContractAt || '')
   const [isOneOff, setIsOneOff] = useState(item.isOneOff)
+  const [orderConfirmationNumber, setOrderConfirmationNumber] = useState(item.orderConfirmationNumber || '')
   const [priceLocked, setPriceLocked] = useState(item.priceLocked)
   const [priceLockedUntil, setPriceLockedUntil] = useState(item.priceLockedUntil || '')
   const [pricePeriods, setPricePeriods] = useState<PricePeriod[]>(item.pricePeriods || [])
@@ -1167,6 +1518,7 @@ function EditItemModal({
   const [newPeriodFrom, setNewPeriodFrom] = useState('')
   const [newPeriodTo, setNewPeriodTo] = useState('')
   const [newPeriodPrice, setNewPeriodPrice] = useState('')
+  const [newPeriodPricePeriod, setNewPeriodPricePeriod] = useState('monthly')
   const [newPeriodSource, setNewPeriodSource] = useState('fixed')
   const [error, setError] = useState<string | null>(null)
 
@@ -1195,6 +1547,7 @@ function EditItemModal({
             validFrom: newPeriodFrom,
             validTo: newPeriodTo || null,
             unitPrice: newPeriodPrice,
+            pricePeriod: newPeriodPricePeriod,
             source: newPeriodSource,
           },
         },
@@ -1206,6 +1559,7 @@ function EditItemModal({
         setNewPeriodFrom('')
         setNewPeriodTo('')
         setNewPeriodPrice('')
+        setNewPeriodPricePeriod('monthly')
         setNewPeriodSource('fixed')
       } else {
         setError(result.data?.addContractItemPrice.error || 'Failed to add price period')
@@ -1242,12 +1596,14 @@ function EditItemModal({
             description,
             quantity,
             unitPrice,
+            pricePeriod: pricePeriodValue,
             priceSource,
             startDate: startDate || null,
             billingStartDate: billingStartDate || null,
             billingEndDate: billingEndDate || null,
             alignToContractAt: alignToContractAt || null,
             isOneOff,
+            orderConfirmationNumber: orderConfirmationNumber || null,
             priceLocked,
             priceLockedUntil: priceLockedUntil || null,
           },
@@ -1290,8 +1646,8 @@ function EditItemModal({
             />
           </div>
 
-          {/* Quantity, Unit Price, Price Source - 3 columns */}
-          <div className="grid grid-cols-3 gap-4">
+          {/* Quantity, Unit Price, Price Period, Price Source - 4 columns */}
+          <div className="grid grid-cols-4 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('contracts.item.quantity')} *</label>
               <Input
@@ -1310,6 +1666,25 @@ function EditItemModal({
                 value={unitPrice}
                 onChange={(e) => setUnitPrice(e.target.value)}
               />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('contracts.item.pricePeriod')}</label>
+              <Select value={pricePeriodValue} onValueChange={setPricePeriodValue}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">{t('contracts.item.pricePeriodValues.monthly')}</SelectItem>
+                  <SelectItem value="bi_monthly">{t('contracts.item.pricePeriodValues.bi_monthly')}</SelectItem>
+                  <SelectItem value="quarterly">{t('contracts.item.pricePeriodValues.quarterly')}</SelectItem>
+                  <SelectItem value="semi_annual">{t('contracts.item.pricePeriodValues.semi_annual')}</SelectItem>
+                  <SelectItem value="annual">{t('contracts.item.pricePeriodValues.annual')}</SelectItem>
+                  <SelectItem value="biennial">{t('contracts.item.pricePeriodValues.biennial')}</SelectItem>
+                  <SelectItem value="triennial">{t('contracts.item.pricePeriodValues.triennial')}</SelectItem>
+                  <SelectItem value="quadrennial">{t('contracts.item.pricePeriodValues.quadrennial')}</SelectItem>
+                  <SelectItem value="quinquennial">{t('contracts.item.pricePeriodValues.quinquennial')}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('contracts.item.priceSource')}</label>
@@ -1389,6 +1764,7 @@ function EditItemModal({
                           <span className="text-gray-400">→</span>
                           <span>{period.validTo ? formatMonthYear(period.validTo) : t('contracts.item.ongoing')}</span>
                           <span className="font-medium">{formatCurrencyLocal(period.unitPrice)}</span>
+                          <span className="text-xs text-blue-600">/{t(`contracts.item.pricePeriodValues.${period.pricePeriod}`)}</span>
                           <span className="text-xs text-gray-500">{t(`contracts.item.source${period.source.charAt(0).toUpperCase() + period.source.slice(1)}`)}</span>
                         </div>
                         <button
@@ -1407,7 +1783,7 @@ function EditItemModal({
                 )}
 
                 {/* Add New Price Period */}
-                <div className="grid grid-cols-4 gap-2 pt-2 border-t">
+                <div className="grid grid-cols-5 gap-2 pt-2 border-t">
                   <div>
                     <label className="text-xs text-gray-500">{t('contracts.item.periodFrom')}</label>
                     <Input
@@ -1436,6 +1812,25 @@ function EditItemModal({
                       onChange={(e) => setNewPeriodPrice(e.target.value)}
                       className="h-8 text-sm"
                     />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500">{t('contracts.item.pricePeriod')}</label>
+                    <Select value={newPeriodPricePeriod} onValueChange={setNewPeriodPricePeriod}>
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">{t('contracts.item.pricePeriodValues.monthly')}</SelectItem>
+                        <SelectItem value="bi_monthly">{t('contracts.item.pricePeriodValues.bi_monthly')}</SelectItem>
+                        <SelectItem value="quarterly">{t('contracts.item.pricePeriodValues.quarterly')}</SelectItem>
+                        <SelectItem value="semi_annual">{t('contracts.item.pricePeriodValues.semi_annual')}</SelectItem>
+                        <SelectItem value="annual">{t('contracts.item.pricePeriodValues.annual')}</SelectItem>
+                        <SelectItem value="biennial">{t('contracts.item.pricePeriodValues.biennial')}</SelectItem>
+                        <SelectItem value="triennial">{t('contracts.item.pricePeriodValues.triennial')}</SelectItem>
+                        <SelectItem value="quadrennial">{t('contracts.item.pricePeriodValues.quadrennial')}</SelectItem>
+                        <SelectItem value="quinquennial">{t('contracts.item.pricePeriodValues.quinquennial')}</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <label className="text-xs text-gray-500">{t('contracts.item.periodSource')}</label>
@@ -1481,6 +1876,16 @@ function EditItemModal({
               id="isOneOffEdit"
               checked={isOneOff}
               onCheckedChange={setIsOneOff}
+            />
+          </div>
+
+          {/* Order Confirmation Number */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{t('contracts.item.orderConfirmationNumber')}</label>
+            <Input
+              placeholder={t('contracts.item.orderConfirmationNumberPlaceholder')}
+              value={orderConfirmationNumber}
+              onChange={(e) => setOrderConfirmationNumber(e.target.value)}
             />
           </div>
 
@@ -1615,13 +2020,13 @@ interface BillingScheduleResult {
 function ForecastTab({ contractId }: { contractId: string }) {
   const { t, i18n } = useTranslation()
   const [months, setMonths] = useState('13')
-  const [includeHistory, setIncludeHistory] = useState(false)
+  const [includeAllHistory, setIncludeAllHistory] = useState(false)
 
   const { data, loading, error } = useQuery(BILLING_SCHEDULE_QUERY, {
     variables: {
       contractId,
       months: parseInt(months),
-      includeHistory,
+      includeAllHistory,
     },
   })
 
@@ -1679,13 +2084,13 @@ function ForecastTab({ contractId }: { contractId: string }) {
         <div className="flex items-center gap-2">
           <input
             type="checkbox"
-            id="includeHistory"
-            checked={includeHistory}
-            onChange={(e) => setIncludeHistory(e.target.checked)}
+            id="includeAllHistory"
+            checked={includeAllHistory}
+            onChange={(e) => setIncludeAllHistory(e.target.checked)}
             className="h-4 w-4 rounded border-gray-300"
           />
-          <label htmlFor="includeHistory" className="text-sm">
-            {t('contracts.forecast.includeHistory')}
+          <label htmlFor="includeAllHistory" className="text-sm">
+            {t('contracts.forecast.includeAllHistory')}
           </label>
         </div>
       </div>
@@ -1714,9 +2119,15 @@ function ForecastTab({ contractId }: { contractId: string }) {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {schedule.events.map((event, eventIndex) => (
-                  <tr key={eventIndex}>
+              <tbody className="divide-y divide-gray-200">
+                {schedule.events.map((event, eventIndex) => {
+                  const eventDate = new Date(event.date)
+                  const today = new Date()
+                  today.setHours(0, 0, 0, 0)
+                  const isFuture = eventDate >= today
+
+                  return (
+                  <tr key={eventIndex} className={isFuture ? 'bg-green-50' : 'bg-white'}>
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       {formatDate(event.date)}
                     </td>
@@ -1743,7 +2154,8 @@ function ForecastTab({ contractId }: { contractId: string }) {
                       {formatCurrency(event.total)}
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
               <tfoot className="bg-gray-50">
                 <tr>
@@ -1762,6 +2174,321 @@ function ForecastTab({ contractId }: { contractId: string }) {
           <p className="text-xs text-gray-500">
             {formatDate(schedule.periodStart)} – {formatDate(schedule.periodEnd)}
           </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AttachmentsTab({
+  contractId,
+  attachments,
+  canEdit,
+  onRefetch,
+}: {
+  contractId: string
+  attachments: Attachment[]
+  canEdit: boolean
+  onRefetch: () => void
+}) {
+  const { t } = useTranslation()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const [uploadAttachment] = useMutation(UPLOAD_ATTACHMENT_MUTATION)
+  const [deleteAttachment] = useMutation(DELETE_ATTACHMENT_MUTATION)
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  const getFileIcon = (contentType: string) => {
+    if (contentType.startsWith('image/')) return <Image className="h-5 w-5" />
+    if (contentType === 'application/pdf') return <FileText className="h-5 w-5" />
+    return <File className="h-5 w-5" />
+  }
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setError(null)
+    setUploading(true)
+
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const base64 = (e.target?.result as string)?.split(',')[1]
+      if (!base64) {
+        setError(t('attachments.readError'))
+        setUploading(false)
+        return
+      }
+
+      try {
+        const result = await uploadAttachment({
+          variables: {
+            input: {
+              contractId,
+              fileContent: base64,
+              filename: file.name,
+              contentType: file.type || 'application/octet-stream',
+              description: '',
+            },
+          },
+        })
+
+        if (result.data?.uploadContractAttachment?.success) {
+          onRefetch()
+        } else {
+          setError(result.data?.uploadContractAttachment?.error || t('attachments.uploadFailed'))
+        }
+      } catch (err) {
+        setError(t('attachments.uploadFailed'))
+      } finally {
+        setUploading(false)
+      }
+    }
+    reader.readAsDataURL(file)
+
+    // Reset input
+    event.target.value = ''
+  }
+
+  const handleDelete = async (attachment: Attachment) => {
+    if (!confirm(t('attachments.confirmDelete', { filename: attachment.originalFilename }))) {
+      return
+    }
+
+    try {
+      const result = await deleteAttachment({
+        variables: { attachmentId: attachment.id },
+      })
+
+      if (result.data?.deleteContractAttachment?.success) {
+        onRefetch()
+      }
+    } catch (err) {
+      console.error('Failed to delete attachment:', err)
+    }
+  }
+
+  const fetchWithAuth = async (url: string): Promise<Blob | null> => {
+    const token = getToken()
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+      })
+      if (!response.ok) {
+        console.error('Failed to fetch file:', response.statusText)
+        return null
+      }
+      return await response.blob()
+    } catch (err) {
+      console.error('Failed to fetch file:', err)
+      return null
+    }
+  }
+
+  const handleDownload = async (attachment: Attachment) => {
+    const blob = await fetchWithAuth(attachment.downloadUrl)
+    if (!blob) return
+
+    // Create download link
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = attachment.originalFilename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const isPreviewable = (contentType: string) => {
+    // Files that can be previewed in browser
+    return (
+      contentType.startsWith('image/') ||
+      contentType === 'application/pdf' ||
+      contentType.startsWith('text/')
+    )
+  }
+
+  const handlePreview = async (attachment: Attachment) => {
+    const blob = await fetchWithAuth(attachment.downloadUrl)
+    if (!blob) return
+
+    // Create blob URL with correct content type and open in new tab
+    const blobWithType = new Blob([blob], { type: attachment.contentType })
+    const url = URL.createObjectURL(blobWithType)
+    window.open(url, '_blank')
+  }
+
+  return (
+    <div>
+      {/* Upload Button */}
+      {canEdit && (
+        <div className="mb-4 flex justify-end">
+          <label className="cursor-pointer">
+            <span className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+              {uploading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t('attachments.uploading')}
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4" />
+                  {t('attachments.uploadFile')}
+                </>
+              )}
+            </span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              onChange={handleFileSelect}
+              disabled={uploading}
+              className="hidden"
+            />
+          </label>
+        </div>
+      )}
+
+      {/* Error Message */}
+      {error && (
+        <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+          {error}
+        </div>
+      )}
+
+      {/* Attachments List */}
+      {attachments.length === 0 ? (
+        <div className="rounded-lg border bg-white p-8 text-center">
+          <Paperclip className="mx-auto h-12 w-12 text-gray-400" />
+          <p className="mt-2 text-gray-600">{t('attachments.noAttachments')}</p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-lg border">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  {t('attachments.filename')}
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                  {t('attachments.size')}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  {t('attachments.uploadedBy')}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  {t('attachments.uploadedAt')}
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                  {/* Actions */}
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 bg-white">
+              {attachments.map((attachment) => (
+                <tr key={attachment.id}>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      {getFileIcon(attachment.contentType)}
+                      <span className="font-medium text-gray-900">
+                        {attachment.originalFilename}
+                      </span>
+                    </div>
+                    {attachment.description && (
+                      <p className="mt-1 text-xs text-gray-500">{attachment.description}</p>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-500">
+                    {formatFileSize(attachment.fileSize)}
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                    {attachment.uploadedByName || '-'}
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                    {formatDateTime(attachment.uploadedAt)}
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 text-right">
+                    {isPreviewable(attachment.contentType) && (
+                      <button
+                        onClick={() => handlePreview(attachment)}
+                        className="mr-2 text-gray-400 hover:text-blue-600"
+                        title={t('attachments.preview')}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDownload(attachment)}
+                      className="mr-2 text-gray-400 hover:text-blue-600"
+                      title={t('attachments.download')}
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+                    {canEdit && (
+                      <button
+                        onClick={() => handleDelete(attachment)}
+                        className="text-gray-400 hover:text-red-600"
+                        title={t('attachments.delete')}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ActivityTab({ contractId }: { contractId: number }) {
+  const { t } = useTranslation()
+  const { entries, totalCount, hasNextPage, loading, error, loadMore } = useAuditLogs({
+    entityType: 'contract',
+    entityId: contractId,
+    includeRelated: true,
+  })
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+        <p className="text-red-600">{error.message}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <AuditLogTable entries={entries} showEntity={true} loading={loading && entries.length === 0} />
+
+      {hasNextPage && (
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={loadMore}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+            {t('audit.loadMore')}
+          </button>
+        </div>
+      )}
+
+      {entries.length > 0 && (
+        <div className="mt-4 text-center text-sm text-gray-500">
+          {t('audit.showing', { count: entries.length, total: totalCount })}
         </div>
       )}
     </div>

@@ -11,6 +11,8 @@ from apps.contracts.schema import (
     ContractImportQuery,
     ContractImportMutation,
 )
+from apps.invoices.schema import InvoiceQuery
+from apps.audit.schema import AuditLogQuery
 
 
 @strawberry.type
@@ -21,6 +23,8 @@ class Query(
     ProductQuery,
     ContractQuery,
     ContractImportQuery,
+    InvoiceQuery,
+    AuditLogQuery,
 ):
     @strawberry.field
     def health(self) -> str:

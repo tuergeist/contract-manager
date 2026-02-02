@@ -42,6 +42,8 @@ LOCAL_APPS = [
     "apps.customers",
     "apps.products",
     "apps.contracts",
+    "apps.invoices",
+    "apps.audit",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -57,6 +59,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "auditlog.middleware.AuditlogMiddleware",
     "apps.tenants.middleware.TenantMiddleware",
+    "apps.audit.middleware.AuditUserMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -117,6 +120,14 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # Media files
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# File upload settings
+MAX_UPLOAD_SIZE = env.int("MAX_UPLOAD_SIZE", default=10 * 1024 * 1024)  # 10MB
+ALLOWED_ATTACHMENT_EXTENSIONS = [
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt", ".rtf",
+    ".png", ".jpg", ".jpeg", ".gif",
+    ".zip", ".rar", ".7z",
+]
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

@@ -1,7 +1,25 @@
 """Contract models."""
+import os
+import uuid
+
 from django.db import models
 
 from apps.core.models import TenantModel
+
+
+def attachment_upload_path(instance, filename):
+    """
+    Generate upload path: uploads/{tenant_id}/contracts/{contract_id}/{uuid}_{ext}
+
+    This structure enables:
+    - Per-tenant backup/restore
+    - Per-contract file organization
+    - Unique filenames to prevent collisions
+    - Easy S3 migration (sync with same path structure)
+    """
+    ext = os.path.splitext(filename)[1]
+    unique_filename = f"{uuid.uuid4().hex}{ext}"
+    return f"uploads/{instance.tenant_id}/contracts/{instance.contract_id}/{unique_filename}"
 
 
 class Contract(TenantModel):
@@ -19,6 +37,10 @@ class Contract(TenantModel):
         QUARTERLY = "quarterly", "Quarterly"
         SEMI_ANNUAL = "semi_annual", "Semi-annual"
         ANNUAL = "annual", "Annual"
+        BIENNIAL = "biennial", "2 Years"
+        TRIENNIAL = "triennial", "3 Years"
+        QUADRENNIAL = "quadrennial", "4 Years"
+        QUINQUENNIAL = "quinquennial", "5 Years"
 
     class NoticePeriodAnchor(models.TextChoices):
         END_OF_DURATION = "end_of_duration", "End of minimum duration"
@@ -38,16 +60,32 @@ class Contract(TenantModel):
         null=True,
         help_text="Contract number from NetSuite (e.g., '13634_2025-01-01_2025-12-31')",
     )
+    netsuite_url = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="Link to this contract in NetSuite",
+    )
     po_number = models.CharField(
         max_length=100,
         blank=True,
         null=True,
         help_text="Purchase Order number",
     )
+    order_confirmation_number = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Order Confirmation number (AB Nummer)",
+    )
     name = models.CharField(max_length=255, blank=True)
     notes = models.TextField(
         blank=True,
-        help_text="Additional notes (e.g., invoicing instructions)",
+        help_text="Internal notes (not shown on invoices)",
+    )
+    invoice_text = models.TextField(
+        blank=True,
+        help_text="Optional text to show on invoices below line items",
     )
     discount_amount = models.DecimalField(
         max_digits=10,
@@ -82,6 +120,11 @@ class Contract(TenantModel):
         default=BillingInterval.MONTHLY,
     )
     billing_anchor_day = models.PositiveSmallIntegerField(default=1)
+    billing_alignment_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date when billing aligns to regular cycle. First invoice covers period from billing_start_date to this date (pro-rated).",
+    )
     min_duration_months = models.PositiveIntegerField(null=True, blank=True)
     notice_period_months = models.PositiveIntegerField(default=3)
     notice_period_anchor = models.CharField(
@@ -106,6 +149,20 @@ class Contract(TenantModel):
             return f"{self.name} ({self.customer.name})"
         return f"Contract {self.id} - {self.customer.name}"
 
+    @property
+    def effective_status(self):
+        """
+        Get the effective status, accounting for end date.
+
+        If contract is 'active' but end_date is in the past, return 'ended'.
+        """
+        from datetime import date as date_type
+
+        if self.status == self.Status.ACTIVE and self.end_date:
+            if self.end_date < date_type.today():
+                return self.Status.ENDED
+        return self.status
+
     def get_interval_months(self):
         """Return the billing interval in months."""
         return {
@@ -113,7 +170,124 @@ class Contract(TenantModel):
             self.BillingInterval.QUARTERLY: 3,
             self.BillingInterval.SEMI_ANNUAL: 6,
             self.BillingInterval.ANNUAL: 12,
+            self.BillingInterval.BIENNIAL: 24,
+            self.BillingInterval.TRIENNIAL: 36,
+            self.BillingInterval.QUADRENNIAL: 48,
+            self.BillingInterval.QUINQUENNIAL: 60,
         }.get(self.billing_interval, 12)
+
+    def get_min_end_date(self):
+        """
+        Calculate the minimum end date based on start_date + min_duration_months.
+        Returns None if no minimum duration is set.
+        """
+        from dateutil.relativedelta import relativedelta
+
+        if not self.min_duration_months:
+            return None
+        return self.start_date + relativedelta(months=self.min_duration_months)
+
+    def get_earliest_cancellation_date(self, from_date=None):
+        """
+        Calculate the earliest possible cancellation date if notice is given on from_date.
+
+        Args:
+            from_date: Date when notice is given (default: today)
+
+        Returns:
+            The earliest date the contract could end based on notice period and anchor.
+        """
+        from datetime import date as date_type
+        from dateutil.relativedelta import relativedelta
+        from calendar import monthrange
+
+        if from_date is None:
+            from_date = date_type.today()
+
+        min_end_date = self.get_min_end_date()
+        is_past_min_duration = min_end_date is None or from_date >= min_end_date
+
+        # Use appropriate notice period
+        if is_past_min_duration and self.notice_period_after_min_months is not None:
+            notice_months = self.notice_period_after_min_months
+        else:
+            notice_months = self.notice_period_months
+
+        # Calculate date after notice period
+        notice_end = from_date + relativedelta(months=notice_months)
+
+        # Apply anchor
+        if self.notice_period_anchor == self.NoticePeriodAnchor.END_OF_MONTH:
+            # End of the month after notice period
+            last_day = monthrange(notice_end.year, notice_end.month)[1]
+            return date_type(notice_end.year, notice_end.month, last_day)
+
+        elif self.notice_period_anchor == self.NoticePeriodAnchor.END_OF_QUARTER:
+            # End of quarter after notice period
+            quarter_end_month = ((notice_end.month - 1) // 3 + 1) * 3
+            if quarter_end_month > 12:
+                quarter_end_month = 12
+            last_day = monthrange(notice_end.year, quarter_end_month)[1]
+            return date_type(notice_end.year, quarter_end_month, last_day)
+
+        else:  # END_OF_DURATION
+            # If we're still in min duration, end at min_end_date
+            if min_end_date and notice_end < min_end_date:
+                return min_end_date
+            return notice_end
+
+    def get_effective_end_date(self):
+        """
+        Calculate the effective end date for total value calculation.
+
+        - If end_date is set: use end_date
+        - If indefinite: use min_end_date or earliest cancellation date (whichever is later)
+
+        Returns:
+            The effective end date for calculating contract total value.
+        """
+        from datetime import date as date_type
+
+        # If contract has explicit end date, use it
+        if self.end_date:
+            return self.end_date
+
+        # If contract was cancelled, use the cancellation effective date
+        if self.cancellation_effective_date:
+            return self.cancellation_effective_date
+
+        today = date_type.today()
+        min_end_date = self.get_min_end_date()
+
+        # If we haven't reached min duration yet, use min_end_date
+        if min_end_date and today < min_end_date:
+            return min_end_date
+
+        # After min duration: calculate earliest possible end date
+        return self.get_earliest_cancellation_date(today)
+
+    def get_duration_months(self):
+        """
+        Calculate the contract duration in months for total value calculation.
+
+        Returns:
+            Number of months from start_date to effective_end_date.
+        """
+        effective_end = self.get_effective_end_date()
+        if not effective_end:
+            # Fallback: if no end date and no min duration, use 12 months (1 year)
+            return 12
+
+        # Calculate months between dates
+        months = (effective_end.year - self.start_date.year) * 12
+        months += effective_end.month - self.start_date.month
+
+        # Add 1 to include the end month (start of Jan to end of Dec = 12 months)
+        # But only if end date is not the start of a month
+        if effective_end.day > 1:
+            months += 1
+
+        return max(1, months)  # At least 1 month
 
     def get_billing_schedule(self, from_date=None, to_date=None, include_history=False):
         """
@@ -331,6 +505,17 @@ class ContractItem(TenantModel):
         CUSTOM = "custom", "Custom price"
         CUSTOMER_AGREEMENT = "customer_agreement", "Customer agreement"
 
+    class PricePeriod(models.TextChoices):
+        MONTHLY = "monthly", "Monthly"
+        BI_MONTHLY = "bi_monthly", "2 Months"
+        QUARTERLY = "quarterly", "Quarterly"
+        SEMI_ANNUAL = "semi_annual", "Semi-annual"
+        ANNUAL = "annual", "Annual"
+        BIENNIAL = "biennial", "2 Years"
+        TRIENNIAL = "triennial", "3 Years"
+        QUADRENNIAL = "quadrennial", "4 Years"
+        QUINQUENNIAL = "quinquennial", "5 Years"
+
     contract = models.ForeignKey(
         Contract,
         on_delete=models.CASCADE,
@@ -350,6 +535,12 @@ class ContractItem(TenantModel):
     )
     quantity = models.PositiveIntegerField(default=1)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    price_period = models.CharField(
+        max_length=20,
+        choices=PricePeriod.choices,
+        default=PricePeriod.MONTHLY,
+        help_text="The period this price refers to (e.g., monthly, quarterly, annual)",
+    )
     price_source = models.CharField(
         max_length=20,
         choices=PriceSource.choices,
@@ -381,6 +572,12 @@ class ContractItem(TenantModel):
         default=False,
         help_text="If True, this item is billed only once (not recurring).",
     )
+    order_confirmation_number = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Order Confirmation number (AB Nummer) for this item",
+    )
     price_locked = models.BooleanField(
         default=False,
         help_text="If True, price cannot be changed until price_locked_until.",
@@ -408,9 +605,41 @@ class ContractItem(TenantModel):
 
     @property
     def total_price(self):
+        """Get total price normalized to monthly (quantity × monthly_unit_price)."""
+        return self.quantity * self.monthly_unit_price
+
+    @property
+    def total_price_raw(self):
+        """Get raw total price without normalization (quantity × unit_price)."""
         return self.quantity * self.unit_price
 
-    def get_price_at(self, target_date):
+    @staticmethod
+    def get_period_months(period: str) -> int:
+        """Convert a price period to number of months."""
+        return {
+            "monthly": 1,
+            "bi_monthly": 2,
+            "quarterly": 3,
+            "semi_annual": 6,
+            "annual": 12,
+            "biennial": 24,
+            "triennial": 36,
+            "quadrennial": 48,
+            "quinquennial": 60,
+        }.get(period, 1)
+
+    @property
+    def price_period_months(self) -> int:
+        """Get the number of months for this item's price period."""
+        return self.get_period_months(self.price_period)
+
+    @property
+    def monthly_unit_price(self):
+        """Get the unit price normalized to monthly."""
+        from decimal import Decimal
+        return self.unit_price / Decimal(self.price_period_months)
+
+    def get_price_at(self, target_date, normalize_to_monthly: bool = True):
         """
         Get the price for this item at a specific date.
 
@@ -420,22 +649,59 @@ class ContractItem(TenantModel):
 
         Args:
             target_date: The date for which to get the price
+            normalize_to_monthly: If True, returns the monthly equivalent price
 
         Returns:
-            Decimal: The unit price at the given date
+            Decimal: The unit price at the given date (monthly if normalized)
         """
+        from decimal import Decimal
+
         # Check for a price period that covers this date
-        price_period = self.price_periods.filter(
+        price_period_record = self.price_periods.filter(
             valid_from__lte=target_date,
         ).filter(
             models.Q(valid_to__gte=target_date) | models.Q(valid_to__isnull=True)
         ).order_by("-valid_from").first()
 
-        if price_period:
-            return price_period.unit_price
+        if price_period_record:
+            price = price_period_record.unit_price
+            period = price_period_record.price_period
+        else:
+            # FALLBACK: Use the item's unit_price and price_period
+            price = self.unit_price
+            period = self.price_period
 
-        # FALLBACK: Return the item's unit_price (existing behavior)
-        return self.unit_price
+        if normalize_to_monthly:
+            period_months = self.get_period_months(period)
+            return price / Decimal(period_months)
+
+        return price
+
+    def get_effective_price_info(self, target_date):
+        """
+        Get the effective price and period for this item at a specific date.
+
+        Returns the price and its period without normalization.
+        Uses period-specific pricing if available, otherwise falls back to base price.
+
+        Args:
+            target_date: The date for which to get the price info
+
+        Returns:
+            tuple: (price: Decimal, period: str) - The effective price and its period
+        """
+        # Check for a price period that covers this date
+        price_period_record = self.price_periods.filter(
+            valid_from__lte=target_date,
+        ).filter(
+            models.Q(valid_to__gte=target_date) | models.Q(valid_to__isnull=True)
+        ).order_by("-valid_from").first()
+
+        if price_period_record:
+            return price_period_record.unit_price, price_period_record.price_period
+
+        # FALLBACK: Use the item's unit_price and price_period
+        return self.unit_price, self.price_period
 
     def get_suggested_alignment_date(self, from_date=None):
         """
@@ -459,6 +725,10 @@ class ContractItem(TenantModel):
             Contract.BillingInterval.QUARTERLY: 3,
             Contract.BillingInterval.SEMI_ANNUAL: 6,
             Contract.BillingInterval.ANNUAL: 12,
+            Contract.BillingInterval.BIENNIAL: 24,
+            Contract.BillingInterval.TRIENNIAL: 36,
+            Contract.BillingInterval.QUADRENNIAL: 48,
+            Contract.BillingInterval.QUINQUENNIAL: 60,
         }.get(contract.billing_interval, 12)
 
         # Find next billing cycle start after from_date
@@ -512,6 +782,9 @@ class ContractItemPrice(TenantModel):
         LIST = "list", "List Price"
         NEGOTIATED = "negotiated", "To Be Negotiated"
 
+    # Reuse PricePeriod from ContractItem
+    PricePeriod = ContractItem.PricePeriod
+
     item = models.ForeignKey(
         ContractItem,
         on_delete=models.CASCADE,
@@ -528,7 +801,13 @@ class ContractItemPrice(TenantModel):
     unit_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        help_text="Monthly unit price during this period",
+        help_text="Unit price during this period",
+    )
+    price_period = models.CharField(
+        max_length=20,
+        choices=ContractItem.PricePeriod.choices,
+        default=ContractItem.PricePeriod.MONTHLY,
+        help_text="The period this price refers to (e.g., monthly, quarterly, annual)",
     )
     source = models.CharField(
         max_length=20,
@@ -543,3 +822,47 @@ class ContractItemPrice(TenantModel):
         if self.valid_to:
             return f"{self.item.product.name}: €{self.unit_price} ({self.valid_from} - {self.valid_to})"
         return f"{self.item.product.name}: €{self.unit_price} (from {self.valid_from})"
+
+
+class ContractAttachment(TenantModel):
+    """A file attachment for a contract."""
+
+    contract = models.ForeignKey(
+        Contract,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    file = models.FileField(upload_to=attachment_upload_path)
+    original_filename = models.CharField(
+        max_length=255,
+        help_text="Original filename as uploaded by user",
+    )
+    file_size = models.PositiveIntegerField(
+        help_text="File size in bytes",
+    )
+    content_type = models.CharField(
+        max_length=100,
+        help_text="MIME type of the file",
+    )
+    uploaded_by = models.ForeignKey(
+        "tenants.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="uploaded_attachments",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Optional description of the attachment",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.original_filename} ({self.contract})"
+
+    def delete(self, *args, **kwargs):
+        """Delete the file from storage when the model is deleted."""
+        if self.file:
+            self.file.delete(save=False)
+        super().delete(*args, **kwargs)
