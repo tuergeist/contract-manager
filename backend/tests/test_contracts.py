@@ -1,10 +1,11 @@
 """Tests for contract models and billing alignment."""
+import base64
 import pytest
 from datetime import date
 from decimal import Decimal
 from dateutil.relativedelta import relativedelta
 
-from apps.contracts.models import Contract, ContractItem
+from apps.contracts.models import Contract, ContractItem, ContractAttachment
 from apps.customers.models import Customer
 from apps.products.models import Product
 
@@ -248,16 +249,83 @@ class TestContractItemTotalPrice:
     """Test ContractItem total price calculation."""
 
     def test_total_price_calculation(self, tenant, annual_contract, product):
-        """Test total price is quantity * unit_price."""
+        """Test total price is quantity * monthly_unit_price (monthly price)."""
         item = ContractItem.objects.create(
             tenant=tenant,
             contract=annual_contract,
             product=product,
             quantity=5,
             unit_price=Decimal("100.00"),
+            price_period="monthly",
         )
 
+        # For monthly: total_price = 5 * (100 / 1) = 500
         assert item.total_price == Decimal("500.00")
+
+    def test_total_price_with_quarterly_period(self, tenant, annual_contract, product):
+        """Test total price normalizes quarterly prices to monthly."""
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("300.00"),  # 300/quarter
+            price_period="quarterly",
+        )
+
+        # For quarterly: total_price = 1 * (300 / 3) = 100/month
+        assert item.total_price == Decimal("100.00")
+        # Raw total should be the un-normalized value
+        assert item.total_price_raw == Decimal("300.00")
+
+    def test_total_price_with_annual_period(self, tenant, annual_contract, product):
+        """Test total price normalizes annual prices to monthly."""
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=2,
+            unit_price=Decimal("1200.00"),  # 1200/year
+            price_period="annual",
+        )
+
+        # For annual: total_price = 2 * (1200 / 12) = 2 * 100 = 200/month
+        assert item.total_price == Decimal("200.00")
+        # Raw total should be the un-normalized value
+        assert item.total_price_raw == Decimal("2400.00")
+
+    def test_same_arr_regardless_of_price_period(self, tenant, annual_contract, product):
+        """Test that ARR is the same whether price is entered monthly, quarterly, or annual."""
+        # Create three items with equivalent prices in different periods
+        item_monthly = ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("100.00"),  # 100/month
+            price_period="monthly",
+        )
+        item_quarterly = ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("300.00"),  # 300/quarter = 100/month
+            price_period="quarterly",
+        )
+        item_annual = ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("1200.00"),  # 1200/year = 100/month
+            price_period="annual",
+        )
+
+        # All should have the same monthly total
+        assert item_monthly.total_price == Decimal("100.00")
+        assert item_quarterly.total_price == Decimal("100.00")
+        assert item_annual.total_price == Decimal("100.00")
 
 
 class TestGetPriceAt:
@@ -551,3 +619,298 @@ class TestBillingScheduleWithPricePeriods:
         assert event["items"][0]["unit_price"] == Decimal("50.00")
         # 1 x €50 x 12 months = €600
         assert event["total"] == Decimal("600.00")
+
+
+class TestContractDurationCalculation:
+    """Test contract duration calculation methods."""
+
+    def test_get_min_end_date_with_min_duration(self, tenant, customer):
+        """Test min_end_date calculation with min_duration_months."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Contract with Min Duration",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            min_duration_months=12,
+        )
+
+        min_end = contract.get_min_end_date()
+        assert min_end == date(2026, 1, 1)  # start_date + 12 months
+
+    def test_get_min_end_date_without_min_duration(self, tenant, customer):
+        """Test min_end_date returns None when no min_duration_months."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Contract without Min Duration",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            min_duration_months=None,
+        )
+
+        assert contract.get_min_end_date() is None
+
+    def test_get_earliest_cancellation_date_end_of_month_anchor(self, tenant, customer):
+        """Test cancellation date calculation with END_OF_MONTH anchor."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Monthly Notice Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            notice_period_months=3,
+            notice_period_anchor=Contract.NoticePeriodAnchor.END_OF_MONTH,
+        )
+
+        # Notice given on March 15, 2025
+        # 3 months later = June 15
+        # End of June = June 30
+        cancellation = contract.get_earliest_cancellation_date(date(2025, 3, 15))
+        assert cancellation == date(2025, 6, 30)
+
+    def test_get_earliest_cancellation_date_end_of_quarter_anchor(self, tenant, customer):
+        """Test cancellation date calculation with END_OF_QUARTER anchor."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Quarterly Notice Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            notice_period_months=3,
+            notice_period_anchor=Contract.NoticePeriodAnchor.END_OF_QUARTER,
+        )
+
+        # Notice given on Feb 15, 2025
+        # 3 months later = May 15
+        # End of Q2 = June 30
+        cancellation = contract.get_earliest_cancellation_date(date(2025, 2, 15))
+        assert cancellation == date(2025, 6, 30)
+
+    def test_get_earliest_cancellation_date_end_of_duration_anchor(self, tenant, customer):
+        """Test cancellation date with END_OF_DURATION anchor during min duration."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Duration Notice Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            min_duration_months=12,
+            notice_period_months=3,
+            notice_period_anchor=Contract.NoticePeriodAnchor.END_OF_DURATION,
+        )
+
+        # Notice given on March 15, 2025 (within min duration)
+        # 3 months later = June 15 (still before min end of Jan 1, 2026)
+        # Should return min_end_date
+        cancellation = contract.get_earliest_cancellation_date(date(2025, 3, 15))
+        assert cancellation == date(2026, 1, 1)
+
+    def test_get_effective_end_date_with_explicit_end(self, tenant, customer):
+        """Test effective_end_date uses explicit end_date when set."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Fixed Term Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 12, 31),  # Explicit end date
+            billing_start_date=date(2025, 1, 1),
+        )
+
+        assert contract.get_effective_end_date() == date(2025, 12, 31)
+
+    def test_get_effective_end_date_cancelled(self, tenant, customer):
+        """Test effective_end_date uses cancellation_effective_date when cancelled."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Cancelled Contract",
+            status=Contract.Status.CANCELLED,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            cancellation_effective_date=date(2025, 6, 30),
+        )
+
+        assert contract.get_effective_end_date() == date(2025, 6, 30)
+
+    def test_get_duration_months_fixed_term(self, tenant, customer):
+        """Test duration calculation for fixed-term contract."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="12-Month Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 12, 31),
+            billing_start_date=date(2025, 1, 1),
+        )
+
+        duration = contract.get_duration_months()
+        assert duration == 12
+
+    def test_get_duration_months_with_min_duration(self, tenant, customer):
+        """Test duration calculation for indefinite contract with min duration."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Contract with Min Duration",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            min_duration_months=24,  # 2 year minimum
+        )
+
+        # When today is before min_end_date, should return min_duration
+        # Note: This test depends on current date, but min_end_date is 2027-01-01
+        # and duration should be 24 months
+        duration = contract.get_duration_months()
+        assert duration >= 24
+
+    def test_get_duration_months_minimum_one(self, tenant, customer):
+        """Test duration is always at least 1 month."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Short Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 1, 15),  # Less than 1 month
+            billing_start_date=date(2025, 1, 1),
+        )
+
+        duration = contract.get_duration_months()
+        assert duration >= 1
+
+
+# =============================================================================
+# Contract Attachment Tests
+# =============================================================================
+
+
+class TestContractAttachments:
+    """Tests for contract file attachments."""
+
+    @pytest.fixture
+    def simple_contract(self, db, tenant, customer):
+        """Create a simple contract for attachment tests."""
+        return Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Test Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+        )
+
+    def test_upload_attachment_success(self, db, tenant, user, simple_contract):
+        """Test successful file upload."""
+        # Sample PDF content (minimal valid PDF header)
+        pdf_content = b"%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n>>\nendobj\n%%EOF"
+
+        attachment = ContractAttachment.objects.create(
+            tenant=tenant,
+            contract=simple_contract,
+            original_filename="test.pdf",
+            file_size=len(pdf_content),
+            content_type="application/pdf",
+            uploaded_by=user,
+        )
+
+        assert attachment.id is not None
+        assert attachment.original_filename == "test.pdf"
+        assert attachment.file_size == len(pdf_content)
+        assert attachment.content_type == "application/pdf"
+        assert attachment.tenant == tenant
+        assert attachment.contract == simple_contract
+
+    def test_attachment_tenant_isolation(self, db, tenant, simple_contract):
+        """Test that attachments are filtered by tenant."""
+        from apps.tenants.models import Tenant
+
+        # Create another tenant
+        other_tenant = Tenant.objects.create(name="Other Tenant")
+
+        attachment = ContractAttachment.objects.create(
+            tenant=tenant,
+            contract=simple_contract,
+            original_filename="test.pdf",
+            file_size=100,
+            content_type="application/pdf",
+        )
+
+        # Query with correct tenant finds attachment
+        assert ContractAttachment.objects.filter(
+            tenant=tenant, id=attachment.id
+        ).exists()
+
+        # Query with other tenant doesn't find attachment
+        assert not ContractAttachment.objects.filter(
+            tenant=other_tenant, id=attachment.id
+        ).exists()
+
+    def test_delete_attachment(self, db, tenant, simple_contract):
+        """Test deleting an attachment."""
+        attachment = ContractAttachment.objects.create(
+            tenant=tenant,
+            contract=simple_contract,
+            original_filename="test.pdf",
+            file_size=100,
+            content_type="application/pdf",
+        )
+
+        attachment_id = attachment.id
+        attachment.delete()
+
+        assert not ContractAttachment.objects.filter(id=attachment_id).exists()
+
+    def test_contract_attachments_relationship(self, db, tenant, simple_contract):
+        """Test the contract.attachments relationship."""
+        ContractAttachment.objects.create(
+            tenant=tenant,
+            contract=simple_contract,
+            original_filename="doc1.pdf",
+            file_size=100,
+            content_type="application/pdf",
+        )
+        ContractAttachment.objects.create(
+            tenant=tenant,
+            contract=simple_contract,
+            original_filename="doc2.pdf",
+            file_size=200,
+            content_type="application/pdf",
+        )
+
+        assert simple_contract.attachments.count() == 2
+        filenames = list(simple_contract.attachments.values_list("original_filename", flat=True))
+        assert "doc1.pdf" in filenames
+        assert "doc2.pdf" in filenames
+
+    def test_attachment_cascade_delete(self, db, tenant, customer):
+        """Test that attachments are deleted when contract is deleted."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Delete Test Contract",
+            status=Contract.Status.DRAFT,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+        )
+
+        attachment = ContractAttachment.objects.create(
+            tenant=tenant,
+            contract=contract,
+            original_filename="test.pdf",
+            file_size=100,
+            content_type="application/pdf",
+        )
+
+        attachment_id = attachment.id
+        contract.delete()
+
+        assert not ContractAttachment.objects.filter(id=attachment_id).exists()

@@ -59,3 +59,17 @@ def get_current_tenant_id(info: Info[Context, None]) -> int:
     if user.tenant_id is None:
         raise PermissionError("User has no tenant assigned")
     return user.tenant_id
+
+
+def get_current_user_from_request(request):
+    """Get the current authenticated user from a Django request.
+
+    Uses the same authentication logic as the GraphQL context.
+    Returns None if not authenticated.
+    """
+    from apps.core.context import get_context
+
+    context = get_context(request)
+    if context.is_authenticated:
+        return context.user
+    return None

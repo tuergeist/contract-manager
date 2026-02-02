@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="{{ language }}">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ labels.invoice }} - {{ invoice.customer_name }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+
+        .invoice-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 20px;
+        }
+
+        .company-info {
+            text-align: right;
+        }
+
+        .company-name {
+            font-size: 18pt;
+            font-weight: bold;
+            color: #2563eb;
+        }
+
+        .invoice-title {
+            font-size: 24pt;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .customer-section {
+            margin-bottom: 30px;
+        }
+
+        .customer-section h3 {
+            font-size: 10pt;
+            color: #666;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .customer-name {
+            font-size: 12pt;
+            font-weight: bold;
+        }
+
+        .customer-address {
+            color: #555;
+        }
+
+        .invoice-details {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 4px;
+        }
+
+        .detail-group {
+            text-align: center;
+        }
+
+        .detail-label {
+            font-size: 9pt;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+
+        .detail-value {
+            font-size: 11pt;
+            font-weight: bold;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        th {
+            background: #2563eb;
+            color: white;
+            padding: 10px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 9pt;
+            text-transform: uppercase;
+        }
+
+        th:last-child {
+            text-align: right;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        td:last-child {
+            text-align: right;
+        }
+
+        .quantity, .unit-price {
+            text-align: center;
+        }
+
+        th.quantity, th.unit-price {
+            text-align: center;
+        }
+
+        .prorated {
+            font-size: 8pt;
+            color: #666;
+            font-style: italic;
+        }
+
+        .totals {
+            float: right;
+            width: 250px;
+        }
+
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+            gap: 20px;
+        }
+
+        .total-row.grand-total {
+            font-size: 14pt;
+            font-weight: bold;
+            border-top: 2px solid #2563eb;
+            border-bottom: none;
+            padding-top: 12px;
+        }
+
+        .total-row span:last-child {
+            white-space: nowrap;
+        }
+
+        .contract-info {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 9pt;
+            color: #666;
+        }
+
+        .page-break {
+            page-break-after: always;
+        }
+    </style>
+</head>
+<body>
+    <div class="invoice-header">
+        <div>
+            <div class="invoice-title">{{ labels.invoice }}</div>
+        </div>
+        <div class="company-info">
+            <div class="company-name">{{ company_name }}</div>
+        </div>
+    </div>
+
+    <div class="customer-section">
+        <h3>{{ labels.bill_to }}</h3>
+        <div class="customer-name">{{ invoice.customer_name }}</div>
+        <div class="customer-address">
+            {% if invoice.customer_address.street %}{{ invoice.customer_address.street }}<br>{% endif %}
+            {% if invoice.customer_address.zip %}{{ invoice.customer_address.zip }} {% endif %}{% if invoice.customer_address.city %}{{ invoice.customer_address.city }}{% endif %}
+            {% if invoice.customer_address.country %}<br>{{ invoice.customer_address.country }}{% endif %}
+        </div>
+    </div>
+
+    <div class="invoice-details">
+        <div class="detail-group">
+            <div class="detail-label">{{ labels.invoice_date }}</div>
+            <div class="detail-value">{{ invoice.billing_date|date:"d.m.Y" }}</div>
+        </div>
+        <div class="detail-group">
+            <div class="detail-label">{{ labels.billing_period }}</div>
+            <div class="detail-value">{{ invoice.billing_period_start|date:"d.m.Y" }} - {{ invoice.billing_period_end|date:"d.m.Y" }}</div>
+        </div>
+        <div class="detail-group">
+            <div class="detail-label">{{ labels.contract }}</div>
+            <div class="detail-value">{{ invoice.contract_name }}</div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>{{ labels.description }}</th>
+                <th class="quantity">{{ labels.quantity }}</th>
+                <th class="unit-price">{{ labels.unit_price }}</th>
+                <th>{{ labels.amount }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in invoice.line_items %}
+            <tr>
+                <td>
+                    {{ item.product_name }}
+                    {% if item.description %}<br><span class="prorated">{{ item.description }}</span>{% endif %}
+                    {% if item.is_prorated %}<br><span class="prorated">{{ labels.prorated }} ({{ item.prorate_factor|floatformat:2 }})</span>{% endif %}
+                    {% if item.is_one_off %}<br><span class="prorated">{{ labels.one_off }}</span>{% endif %}
+                </td>
+                <td class="quantity">{{ item.quantity }}</td>
+                <td class="unit-price">{{ currency_symbol }}{{ item.unit_price|floatformat:2 }}</td>
+                <td>{{ currency_symbol }}{{ item.amount|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="totals">
+        <div class="total-row grand-total">
+            <span>{{ labels.total }}</span>
+            <span>{{ currency_symbol }}{{ invoice.total_amount|floatformat:2 }}</span>
+        </div>
+    </div>
+
+    <div style="clear: both;"></div>
+
+    <div class="contract-info">
+        {{ labels.contract }}: {{ invoice.contract_name }} | {{ labels.customer_id }}: {{ invoice.customer_id }}
+    </div>
+</body>
+</html>

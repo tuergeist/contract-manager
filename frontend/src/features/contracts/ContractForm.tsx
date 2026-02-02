@@ -64,13 +64,17 @@ const CONTRACT_QUERY = gql`
     contract(id: $id) {
       id
       name
+      netsuiteSalesOrderNumber
+      netsuiteUrl
       poNumber
+      orderConfirmationNumber
       status
       startDate
       endDate
       billingStartDate
       billingInterval
       billingAnchorDay
+      billingAlignmentDate
       minDurationMonths
       noticePeriodMonths
       noticePeriodAfterMinMonths
@@ -134,13 +138,17 @@ interface Customer {
 interface Contract {
   id: string
   name: string
+  netsuiteSalesOrderNumber: string | null
+  netsuiteUrl: string | null
   poNumber: string | null
+  orderConfirmationNumber: string | null
   status: string
   startDate: string
   endDate: string | null
   billingStartDate: string
   billingInterval: string
   billingAnchorDay: number
+  billingAlignmentDate: string | null
   minDurationMonths: number | null
   noticePeriodMonths: number
   noticePeriodAfterMinMonths: number | null
@@ -151,12 +159,16 @@ interface Contract {
 const formSchema = z.object({
   customerId: z.string().min(1, 'Customer is required'),
   name: z.string().optional(),
+  salesOrderNumber: z.string().optional().nullable(),
+  netsuiteUrl: z.string().optional().nullable(),
   poNumber: z.string().optional().nullable(),
+  orderConfirmationNumber: z.string().optional().nullable(),
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().optional(),
   billingStartDate: z.string().optional(),
   billingInterval: z.string(),
   billingAnchorDay: z.number().min(1).max(28),
+  billingAlignmentDate: z.string().optional().nullable(),
   minDurationMonths: z.number().optional().nullable(),
   noticePeriodMonths: z.number().min(0),
   noticePeriodAfterMinMonths: z.number().optional().nullable(),
@@ -165,7 +177,7 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>
 
-const BILLING_INTERVALS = ['monthly', 'quarterly', 'semi_annual', 'annual'] as const
+const BILLING_INTERVALS = ['monthly', 'quarterly', 'semi_annual', 'annual', 'biennial', 'triennial', 'quadrennial', 'quinquennial'] as const
 const NOTICE_PERIOD_ANCHORS = ['end_of_duration', 'end_of_month', 'end_of_quarter'] as const
 
 // Status transition types
@@ -222,12 +234,16 @@ export function ContractForm() {
     defaultValues: {
       customerId: '',
       name: '',
+      salesOrderNumber: '',
+      netsuiteUrl: '',
       poNumber: '',
+      orderConfirmationNumber: '',
       startDate: '',
       endDate: '',
       billingStartDate: '',
       billingInterval: 'monthly',
       billingAnchorDay: 1,
+      billingAlignmentDate: '',
       minDurationMonths: null,
       noticePeriodMonths: 3,
       noticePeriodAfterMinMonths: null,
@@ -258,12 +274,16 @@ export function ContractForm() {
       form.reset({
         customerId: c.customer.id,
         name: c.name || '',
+        salesOrderNumber: c.netsuiteSalesOrderNumber || '',
+        netsuiteUrl: c.netsuiteUrl || '',
         poNumber: c.poNumber || '',
+        orderConfirmationNumber: c.orderConfirmationNumber || '',
         startDate: c.startDate,
         endDate: c.endDate || '',
         billingStartDate: c.billingStartDate,
         billingInterval: c.billingInterval,
         billingAnchorDay: c.billingAnchorDay,
+        billingAlignmentDate: c.billingAlignmentDate || '',
         minDurationMonths: c.minDurationMonths,
         noticePeriodMonths: c.noticePeriodMonths,
         noticePeriodAfterMinMonths: c.noticePeriodAfterMinMonths,
@@ -290,15 +310,16 @@ export function ContractForm() {
             input: {
               id,
               name: data.name || null,
+              salesOrderNumber: data.salesOrderNumber || null,
+              netsuiteUrl: data.netsuiteUrl || null,
               poNumber: data.poNumber || null,
-              // Only include start dates for draft contracts
-              ...(contract?.status === 'draft' && {
-                startDate: data.startDate,
-                billingStartDate: data.billingStartDate || data.startDate,
-              }),
+              orderConfirmationNumber: data.orderConfirmationNumber || null,
+              startDate: data.startDate,
+              billingStartDate: data.billingStartDate || data.startDate,
               endDate: data.endDate || null,
               billingInterval: data.billingInterval,
               billingAnchorDay: data.billingAnchorDay,
+              billingAlignmentDate: data.billingAlignmentDate || null,
               minDurationMonths: data.minDurationMonths,
               noticePeriodMonths: data.noticePeriodMonths,
               noticePeriodAfterMinMonths: data.noticePeriodAfterMinMonths,
@@ -318,12 +339,16 @@ export function ContractForm() {
             input: {
               customerId: data.customerId,
               name: data.name || null,
+              salesOrderNumber: data.salesOrderNumber || null,
+              netsuiteUrl: data.netsuiteUrl || null,
               poNumber: data.poNumber || null,
+              orderConfirmationNumber: data.orderConfirmationNumber || null,
               startDate: data.startDate,
               endDate: data.endDate || null,
               billingStartDate: data.billingStartDate || data.startDate,
               billingInterval: data.billingInterval,
               billingAnchorDay: data.billingAnchorDay,
+              billingAlignmentDate: data.billingAlignmentDate || null,
               minDurationMonths: data.minDurationMonths,
               noticePeriodMonths: data.noticePeriodMonths,
               noticePeriodAfterMinMonths: data.noticePeriodAfterMinMonths,
@@ -537,6 +562,59 @@ export function ContractForm() {
                 )}
               />
 
+              {/* Sales Order Number */}
+              <FormField
+                control={form.control}
+                name="salesOrderNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('contracts.form.salesOrderNumber')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={t('contracts.form.salesOrderNumberPlaceholder')}
+                        disabled={!isEditing}
+                        {...field}
+                        value={field.value || ''}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* NetSuite URL */}
+              <FormField
+                control={form.control}
+                name="netsuiteUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('contracts.form.netsuiteUrl')}</FormLabel>
+                    {!isEditing && field.value ? (
+                      <div className="flex items-center h-10">
+                        <a
+                          href={field.value}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 hover:underline truncate"
+                        >
+                          {t('contracts.form.openInNetsuite')}
+                        </a>
+                      </div>
+                    ) : (
+                      <FormControl>
+                        <Input
+                          placeholder={t('contracts.form.netsuiteUrlPlaceholder')}
+                          disabled={!isEditing}
+                          {...field}
+                          value={field.value || ''}
+                        />
+                      </FormControl>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               {/* PO Number */}
               <FormField
                 control={form.control}
@@ -557,7 +635,27 @@ export function ContractForm() {
                 )}
               />
 
-              {/* Start Date - editable for draft contracts */}
+              {/* Order Confirmation Number */}
+              <FormField
+                control={form.control}
+                name="orderConfirmationNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('contracts.form.orderConfirmationNumber')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={t('contracts.form.orderConfirmationNumberPlaceholder')}
+                        disabled={!isEditing}
+                        {...field}
+                        value={field.value || ''}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Start Date */}
               <FormField
                 control={form.control}
                 name="startDate"
@@ -568,7 +666,7 @@ export function ContractForm() {
                       <Input
                         type="date"
                         {...field}
-                        disabled={!isEditing || (isEdit && contract?.status !== 'draft')}
+                        disabled={!isEditing}
                       />
                     </FormControl>
                     <FormMessage />
@@ -609,9 +707,10 @@ export function ContractForm() {
           <Card>
             <CardHeader>
               <CardTitle>{t('contracts.form.billingInterval')}</CardTitle>
+              <p className="text-sm text-muted-foreground">{t('contracts.form.billingDescription')}</p>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-3">
-              {/* Billing Start Date - editable for draft contracts */}
+              {/* Billing Start Date */}
               <FormField
                 control={form.control}
                 name="billingStartDate"
@@ -622,7 +721,7 @@ export function ContractForm() {
                       <Input
                         type="date"
                         {...field}
-                        disabled={!isEditing || (isEdit && contract?.status !== 'draft')}
+                        disabled={!isEditing}
                         onChange={(e) => {
                           billingStartManuallyChanged.current = true
                           field.onChange(e)
@@ -679,6 +778,31 @@ export function ContractForm() {
                           onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
                         />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {/* Billing Alignment Date - only for intervals larger than monthly */}
+              {form.watch('billingInterval') !== 'monthly' && (
+                <FormField
+                  control={form.control}
+                  name="billingAlignmentDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('contracts.form.billingAlignmentDate')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="date"
+                          {...field}
+                          value={field.value || ''}
+                          disabled={!isEditing}
+                        />
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground">
+                        {t('contracts.form.billingAlignmentDateHint')}
+                      </p>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -803,12 +927,16 @@ export function ContractForm() {
                       form.reset({
                         customerId: contract.customer.id,
                         name: contract.name || '',
+                        salesOrderNumber: contract.netsuiteSalesOrderNumber || '',
+                        netsuiteUrl: contract.netsuiteUrl || '',
                         poNumber: contract.poNumber || '',
+                        orderConfirmationNumber: contract.orderConfirmationNumber || '',
                         startDate: contract.startDate,
                         endDate: contract.endDate || '',
                         billingStartDate: contract.billingStartDate,
                         billingInterval: contract.billingInterval,
                         billingAnchorDay: contract.billingAnchorDay,
+                        billingAlignmentDate: contract.billingAlignmentDate || '',
                         minDurationMonths: contract.minDurationMonths,
                         noticePeriodMonths: contract.noticePeriodMonths,
                         noticePeriodAfterMinMonths: contract.noticePeriodAfterMinMonths,

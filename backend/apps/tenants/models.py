@@ -20,6 +20,17 @@ class Tenant(TimestampedModel):
     def __str__(self):
         return self.name
 
+    @property
+    def currency_symbol(self) -> str:
+        """Return the currency symbol for the tenant's currency."""
+        symbols = {
+            "EUR": "\u20ac",
+            "USD": "$",
+            "GBP": "\u00a3",
+            "CHF": "CHF ",
+        }
+        return symbols.get(self.currency, self.currency + " ")
+
 
 class Role(TimestampedModel):
     """Roles for permission management within a tenant."""

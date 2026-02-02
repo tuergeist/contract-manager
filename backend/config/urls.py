@@ -21,8 +21,13 @@ class AuthenticatedGraphQLView(GraphQLView):
         return get_context(request)
 
 
+from apps.invoices.views import InvoiceExportView
+from apps.contracts.views import AttachmentDownloadView
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("graphql", csrf_exempt(AuthenticatedGraphQLView.as_view(schema=schema))),
     path("api/health", health_check),
+    path("api/invoices/export/", InvoiceExportView.as_view(), name="invoice-export"),
+    path("api/attachments/<int:attachment_id>/download/", AttachmentDownloadView.as_view(), name="attachment-download"),
 ]
