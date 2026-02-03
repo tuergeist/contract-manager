@@ -72,6 +72,7 @@ class ProductQuery:
         self,
         info: Info[Context, None],
         search: str | None = None,
+        is_active: bool | None = None,
         page: int = 1,
         page_size: int = 20,
         sort_by: str | None = "name",
@@ -89,6 +90,9 @@ class ProductQuery:
             )
 
         queryset = Product.objects.filter(tenant=user.tenant)
+
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active)
 
         if search:
             queryset = queryset.filter(name__icontains=search)

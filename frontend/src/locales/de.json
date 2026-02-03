@@ -26,6 +26,12 @@
       "next": "Weiter"
     }
   },
+  "search": {
+    "customer": "Kunden",
+    "contract": "Verträge",
+    "noResults": "Keine Ergebnisse gefunden",
+    "moreResults": "+ weitere Ergebnisse..."
+  },
   "auth": {
     "signIn": "Anmelden",
     "signInButton": "Anmelden",
@@ -36,7 +42,21 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "welcome": "Willkommen im Contract Manager"
+    "welcome": "Willkommen im Contract Manager",
+    "kpis": {
+      "totalActiveContracts": "Aktive Verträge",
+      "totalActiveContractsExplanation": "Anzahl der Verträge mit Status 'aktiv'",
+      "totalContractValue": "Gesamtvertragswert",
+      "totalContractValueExplanation": "Summe aller aktiven Vertragswerte über ihre Laufzeit. Bei Verträgen ohne Enddatum wird die Mindestlaufzeit verwendet.",
+      "annualRecurringRevenue": "ARR",
+      "annualRecurringRevenueExplanation": "Jährlich wiederkehrender Umsatz: Monatlicher Wert aller wiederkehrenden Positionen aus aktiven Verträgen, multipliziert mit 12. Ohne Einmalzahlungen.",
+      "yearToDateRevenue": "Umsatz lfd. Jahr",
+      "yearToDateRevenueExplanation": "Realisierter Umsatz vom 1. Januar des laufenden Jahres bis heute.",
+      "currentYearForecast": "Prognose lfd. Jahr",
+      "currentYearForecastExplanation": "Prognostizierter Gesamtumsatz für das laufende Kalenderjahr (1. Januar - 31. Dezember).",
+      "nextYearForecast": "Prognose nächstes Jahr",
+      "nextYearForecastExplanation": "Prognostizierter Gesamtumsatz für das nächste Kalenderjahr. Ohne Verträge, die vor dem nächsten Jahr enden."
+    }
   },
   "customers": {
     "title": "Kunden",
@@ -54,7 +74,11 @@
     "total": "Kunden",
     "searchPlaceholder": "Nach Name oder CUS-Nr. suchen...",
     "showOnlyActive": "Nur aktive Kunden",
-    "activeContracts": "Aktive Verträge"
+    "activeContracts": "Aktive Verträge",
+    "totalContractValue": "Gesamtvertragswert",
+    "totalArr": "Gesamt-ARR",
+    "activeContractsCount": "Aus {{count}} aktiven Verträgen",
+    "annualRecurringRevenue": "Jährlich wiederkehrender Umsatz"
   },
   "products": {
     "title": "Produkte",
@@ -62,13 +86,17 @@
     "name": "Name",
     "sku": "Artikelnummer",
     "category": "Kategorie",
+    "type": "Typ",
+    "subscription": "Wiederkehrend",
+    "oneOff": "Einmalig",
     "price": "Preis",
     "status": "Status",
     "syncedAt": "Synchronisiert am",
     "active": "Aktiv",
     "inactive": "Inaktiv",
     "total": "Produkte",
-    "searchPlaceholder": "Nach Name suchen..."
+    "searchPlaceholder": "Nach Name suchen...",
+    "showInactive": "Inaktive anzeigen"
   },
   "contracts": {
     "title": "Verträge",
@@ -159,6 +187,7 @@
       "notesPlaceholder": "Interne Notizen zu diesem Vertrag hinzufügen...",
       "noNotes": "Keine Notizen",
       "invoiceText": "Rechnungstext",
+      "invoiceTextHint": "Dieser Text wird auf generierten Rechnungen angezeigt",
       "invoiceTextPlaceholder": "Optionaler Text für Rechnungen unterhalb der Positionen...",
       "noInvoiceText": "Kein Rechnungstext"
     },
@@ -421,10 +450,13 @@
   "attachments": {
     "title": "Anhänge",
     "noAttachments": "Keine Anhänge",
+    "upload": "Hochladen",
     "uploadFile": "Datei hochladen",
     "uploading": "Wird hochgeladen...",
     "uploadFailed": "Hochladen fehlgeschlagen",
     "readError": "Datei konnte nicht gelesen werden",
+    "description": "Beschreibung",
+    "descriptionPlaceholder": "Optionale Beschreibung",
     "filename": "Dateiname",
     "size": "Größe",
     "uploadedBy": "Hochgeladen von",
@@ -432,7 +464,23 @@
     "preview": "Vorschau",
     "download": "Herunterladen",
     "delete": "Löschen",
-    "confirmDelete": "Anhang \"{{filename}}\" löschen?"
+    "confirmDelete": "Möchten Sie diesen Anhang wirklich löschen?"
+  },
+  "links": {
+    "title": "Links",
+    "noLinks": "Keine Links",
+    "add": "Hinzufügen",
+    "addLink": "Link hinzufügen",
+    "name": "Name",
+    "namePlaceholder": "Link-Name",
+    "url": "URL",
+    "urlPlaceholder": "https://...",
+    "createdBy": "Erstellt von",
+    "createdAt": "Erstellt am",
+    "delete": "Löschen",
+    "confirmDelete": "Möchten Sie diesen Link wirklich löschen?",
+    "addFailed": "Link konnte nicht hinzugefügt werden",
+    "invalidUrl": "Bitte geben Sie eine gültige URL ein"
   },
   "users": {
     "title": "Benutzer",

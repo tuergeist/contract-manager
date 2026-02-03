@@ -6,8 +6,8 @@ import { usePersistedState } from '@/lib/usePersistedState'
 import { formatDateTime } from '@/lib/utils'
 
 const PRODUCTS_QUERY = gql`
-  query Products($search: String, $page: Int, $pageSize: Int, $sortBy: String, $sortOrder: String) {
-    products(search: $search, page: $page, pageSize: $pageSize, sortBy: $sortBy, sortOrder: $sortOrder) {
+  query Products($search: String, $isActive: Boolean, $page: Int, $pageSize: Int, $sortBy: String, $sortOrder: String) {
+    products(search: $search, isActive: $isActive, page: $page, pageSize: $pageSize, sortBy: $sortBy, sortOrder: $sortOrder) {
       items {
         id
         name
@@ -79,12 +79,14 @@ export function ProductList() {
   const [searchTerm, setSearchTerm] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
+  const [showInactive, setShowInactive] = useState(false)
   const [sortBy, setSortBy] = usePersistedState<SortField>('products-sort-by', 'name')
   const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('products-sort-order', 'asc')
 
   const { data, loading, error } = useQuery<ProductsData>(PRODUCTS_QUERY, {
     variables: {
       search: searchTerm || null,
+      isActive: showInactive ? null : true,
       page,
       pageSize: PAGE_SIZE,
       sortBy: sortBy === 'isActive' ? 'is_active' : sortBy === 'syncedAt' ? 'synced_at' : sortBy,
@@ -139,19 +141,33 @@ export function ProductList() {
         </span>
       </div>
 
-      {/* Search */}
-      <form onSubmit={handleSearch} className="mt-4">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+      {/* Search and Filters */}
+      <div className="mt-4 flex items-center gap-6">
+        <form onSubmit={handleSearch} className="flex-1 max-w-md">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder={t('products.searchPlaceholder')}
+              className="w-full rounded-md border border-gray-300 py-2 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+        </form>
+        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
           <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder={t('products.searchPlaceholder')}
-            className="w-full rounded-md border border-gray-300 py-2 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            type="checkbox"
+            checked={showInactive}
+            onChange={(e) => {
+              setShowInactive(e.target.checked)
+              setPage(1)
+            }}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
-        </div>
-      </form>
+          {t('products.showInactive')}
+        </label>
+      </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
@@ -189,6 +205,9 @@ export function ProductList() {
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     {t('products.category')}
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('products.type')}
                   </th>
                   <th
                     className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
@@ -233,6 +252,15 @@ export function ProductList() {
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {product.category?.name || '-'}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
+                        product.type === 'subscription'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-purple-100 text-purple-800'
+                      }`}>
+                        {product.type === 'subscription' ? t('products.subscription') : t('products.oneOff')}
+                      </span>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       {formatPrice(product.currentPrice?.price)}

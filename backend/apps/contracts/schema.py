@@ -16,11 +16,12 @@ from django.db.models import Sum, F
 
 from apps.core.context import Context
 from apps.core.permissions import get_current_user
+from apps.core.schema import DeleteResult
 from apps.customers.models import Customer
 from apps.customers.schema import CustomerType
 from apps.products.models import Product
 from apps.products.schema import ProductType
-from .models import Contract, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment
+from .models import Contract, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink
 from .services import ExcelParser, ImportService, MatchStatus
 
 
@@ -48,6 +49,17 @@ class ContractAttachmentType:
     uploaded_at: datetime
     uploaded_by_name: str | None
     download_url: str
+
+
+@strawberry.type
+class ContractLinkType:
+    """A named link attached to a contract."""
+
+    id: int
+    name: str
+    url: str
+    created_at: datetime
+    created_by_name: str | None
 
 
 @strawberry.type
@@ -222,6 +234,21 @@ class ContractType:
                 download_url=f"/api/attachments/{a.id}/download/",
             )
             for a in attachments
+        ]
+
+    @strawberry.field
+    def links(self) -> List[ContractLinkType]:
+        """Get all links for this contract."""
+        links = ContractLink.objects.filter(contract=self).select_related("created_by")
+        return [
+            ContractLinkType(
+                id=link.id,
+                name=link.name,
+                url=link.url,
+                created_at=link.created_at,
+                created_by_name=link.created_by.email if link.created_by else None,
+            )
+            for link in links
         ]
 
     @strawberry.field
@@ -440,12 +467,6 @@ class ContractItemPriceResult:
     error: str | None = None
 
 
-@strawberry.type
-class DeleteResult:
-    success: bool = False
-    error: str | None = None
-
-
 # =============================================================================
 # Contract Attachment Types
 # =============================================================================
@@ -467,6 +488,24 @@ class AttachmentResult:
     """Result of attachment operations."""
 
     attachment: ContractAttachmentType | None = None
+    success: bool = False
+    error: str | None = None
+
+
+@strawberry.input
+class AddContractLinkInput:
+    """Input for adding a link to a contract."""
+
+    contract_id: strawberry.ID
+    name: str
+    url: str
+
+
+@strawberry.type
+class ContractLinkResult:
+    """Result of link operations."""
+
+    link: ContractLinkType | None = None
     success: bool = False
     error: str | None = None
 
@@ -1306,6 +1345,40 @@ class ContractQuery:
         return None
 
 
+def _check_price_period_overlap(
+    item: ContractItem,
+    valid_from: date,
+    valid_to: date | None,
+    exclude_id: int | None = None,
+) -> str | None:
+    """Check if a price period overlaps with existing periods.
+
+    Returns an error message if overlap exists, None otherwise.
+    """
+    existing_periods = ContractItemPrice.objects.filter(item=item)
+    if exclude_id:
+        existing_periods = existing_periods.exclude(id=exclude_id)
+
+    for period in existing_periods:
+        # Two ranges [A_start, A_end] and [B_start, B_end] overlap if:
+        # A_start <= B_end AND B_start <= A_end
+        # For open-ended (None), treat as infinity
+        a_start, a_end = period.valid_from, period.valid_to
+        b_start, b_end = valid_from, valid_to
+
+        # Check if ranges overlap
+        # a_start <= b_end (if b_end is None, always true)
+        # b_start <= a_end (if a_end is None, always true)
+        a_before_b_ends = b_end is None or a_start <= b_end
+        b_before_a_ends = a_end is None or b_start <= a_end
+
+        if a_before_b_ends and b_before_a_ends:
+            period_end = period.valid_to.isoformat() if period.valid_to else "ongoing"
+            return f"Price period overlaps with existing period ({period.valid_from.isoformat()} to {period_end})"
+
+    return None
+
+
 @strawberry.type
 class ContractMutation:
     @strawberry.mutation
@@ -1822,6 +1895,13 @@ class ContractMutation:
         if is_price_locked:
             return ContractItemPriceResult(error="Price is locked and cannot be changed")
 
+        # Check for overlapping periods
+        overlap_error = _check_price_period_overlap(
+            item, input.valid_from, input.valid_to
+        )
+        if overlap_error:
+            return ContractItemPriceResult(error=overlap_error)
+
         try:
             price_period_record = ContractItemPrice.objects.create(
                 tenant=user.tenant,
@@ -1870,6 +1950,17 @@ class ContractMutation:
         )
         if is_price_locked:
             return ContractItemPriceResult(error="Price is locked and cannot be changed")
+
+        # Determine the new date range (use existing values if not provided)
+        new_valid_from = input.valid_from if input.valid_from is not None else price_period.valid_from
+        new_valid_to = input.valid_to if input.valid_to is not None else price_period.valid_to
+
+        # Check for overlapping periods (excluding this one)
+        overlap_error = _check_price_period_overlap(
+            item, new_valid_from, new_valid_to, exclude_id=price_period.id
+        )
+        if overlap_error:
+            return ContractItemPriceResult(error=overlap_error)
 
         try:
             if input.valid_from is not None:
@@ -2019,6 +2110,73 @@ class ContractMutation:
 
         try:
             attachment.delete()  # Will also delete the file from storage
+            return DeleteResult(success=True)
+        except Exception as e:
+            return DeleteResult(error=str(e))
+
+    # =========================================================================
+    # Contract Link Mutations
+    # =========================================================================
+
+    @strawberry.mutation
+    def add_contract_link(
+        self,
+        info: Info[Context, None],
+        input: AddContractLinkInput,
+    ) -> ContractLinkResult:
+        """Add a link to a contract."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return ContractLinkResult(error="No tenant assigned")
+
+        # Verify contract belongs to tenant
+        contract = Contract.objects.filter(
+            tenant=user.tenant, id=input.contract_id
+        ).first()
+        if not contract:
+            return ContractLinkResult(error="Contract not found")
+
+        try:
+            link = ContractLink.objects.create(
+                tenant=user.tenant,
+                contract=contract,
+                name=input.name,
+                url=input.url,
+                created_by=user,
+            )
+
+            return ContractLinkResult(
+                link=ContractLinkType(
+                    id=link.id,
+                    name=link.name,
+                    url=link.url,
+                    created_at=link.created_at,
+                    created_by_name=user.email,
+                ),
+                success=True,
+            )
+        except Exception as e:
+            return ContractLinkResult(error=str(e))
+
+    @strawberry.mutation
+    def delete_contract_link(
+        self,
+        info: Info[Context, None],
+        link_id: strawberry.ID,
+    ) -> DeleteResult:
+        """Delete a contract link."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        link = ContractLink.objects.filter(
+            tenant=user.tenant, id=link_id
+        ).first()
+        if not link:
+            return DeleteResult(error="Link not found")
+
+        try:
+            link.delete()
             return DeleteResult(success=True)
         except Exception as e:
             return DeleteResult(error=str(e))

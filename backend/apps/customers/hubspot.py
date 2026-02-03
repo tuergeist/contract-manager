@@ -432,13 +432,14 @@ class HubSpotService:
 
         try:
             with httpx.Client() as client:
+                # Step 1: Sync non-archived products
                 after = None
                 has_more = True
 
                 while has_more:
                     params = {
                         "limit": 100,
-                        "properties": "name,description,price,hs_sku,hs_recurring_billing_period,createdate",
+                        "properties": "name,description,price,hs_sku,hs_recurring_billing_period,hs_status,createdate",
                     }
                     if after:
                         params["after"] = after
@@ -473,6 +474,51 @@ class HubSpotService:
                             logger.exception(f"Failed to sync product {product.get('id')}")
 
                     # Check for pagination
+                    paging = data.get("paging", {})
+                    next_page = paging.get("next", {})
+                    after = next_page.get("after")
+                    has_more = bool(after)
+
+                # Step 2: Check archived products - mark existing ones as inactive
+                after = None
+                has_more = True
+
+                while has_more:
+                    params = {
+                        "limit": 100,
+                        "archived": "true",
+                    }
+                    if after:
+                        params["after"] = after
+
+                    response = client.get(
+                        f"{HUBSPOT_API_BASE}/crm/v3/objects/products",
+                        headers=self._get_headers(),
+                        params=params,
+                        timeout=30.0,
+                    )
+
+                    if response.status_code != 200:
+                        # Non-fatal - just log and continue
+                        logger.warning(f"Failed to fetch archived products: {response.status_code}")
+                        break
+
+                    data = response.json()
+                    archived_products = data.get("results", [])
+
+                    for product in archived_products:
+                        hubspot_id = str(product["id"])
+                        # Only update if we already have this product
+                        existing = Product.objects.filter(
+                            tenant=self.tenant,
+                            hubspot_id=hubspot_id,
+                        ).first()
+                        if existing and existing.is_active:
+                            existing.is_active = False
+                            existing.synced_at = datetime.now(timezone.utc)
+                            existing.save(update_fields=["is_active", "synced_at"])
+                            updated += 1
+
                     paging = data.get("paging", {})
                     next_page = paging.get("next", {})
                     after = next_page.get("after")
@@ -529,9 +575,15 @@ class HubSpotService:
         properties = product_data.get("properties", {})
 
         # Determine product type and billing frequency based on recurring billing period
+        # If hs_recurring_billing_period is set, it's a recurring subscription
+        # Otherwise, it's a one-off product
         billing_period = properties.get("hs_recurring_billing_period")
         product_type = Product.ProductType.SUBSCRIPTION if billing_period else Product.ProductType.ONE_OFF
         billing_frequency = self._map_billing_period(billing_period)
+
+        # Determine active state: must have hs_status = "active"
+        hs_status = properties.get("hs_status") or ""
+        is_active = hs_status.lower() == "active"
 
         # Try to find existing product
         product = Product.objects.filter(
@@ -551,6 +603,7 @@ class HubSpotService:
             product.sku = sku
             product.type = product_type
             product.billing_frequency = billing_frequency
+            product.is_active = is_active
             product.synced_at = datetime.now(timezone.utc)
             product.hubspot_deleted_at = None
             product.save()
@@ -565,6 +618,7 @@ class HubSpotService:
                 sku=sku,
                 type=product_type,
                 billing_frequency=billing_frequency,
+                is_active=is_active,
                 synced_at=datetime.now(timezone.utc),
             )
             result = "created"

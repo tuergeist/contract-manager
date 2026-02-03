@@ -26,6 +26,12 @@
       "next": "Next"
     }
   },
+  "search": {
+    "customer": "Customers",
+    "contract": "Contracts",
+    "noResults": "No results found",
+    "moreResults": "+ more results..."
+  },
   "auth": {
     "signIn": "Sign in to your account",
     "signInButton": "Sign in",
@@ -36,7 +42,21 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "welcome": "Welcome to Contract Manager"
+    "welcome": "Welcome to Contract Manager",
+    "kpis": {
+      "totalActiveContracts": "Active Contracts",
+      "totalActiveContractsExplanation": "Count of contracts with status 'active'",
+      "totalContractValue": "Total Contract Value",
+      "totalContractValueExplanation": "Sum of all active contract values over their committed duration. For contracts without an end date, uses the minimum duration.",
+      "annualRecurringRevenue": "ARR",
+      "annualRecurringRevenueExplanation": "Annual Recurring Revenue: Monthly value of all recurring items from active contracts, multiplied by 12. Excludes one-off items.",
+      "yearToDateRevenue": "YTD Revenue",
+      "yearToDateRevenueExplanation": "Revenue recognized from January 1st of the current year to today.",
+      "currentYearForecast": "Current Year Forecast",
+      "currentYearForecastExplanation": "Projected total revenue for the current calendar year (January 1 - December 31).",
+      "nextYearForecast": "Next Year Forecast",
+      "nextYearForecastExplanation": "Projected total revenue for the next calendar year. Excludes contracts ending before next year."
+    }
   },
   "customers": {
     "title": "Customers",
@@ -54,7 +74,11 @@
     "total": "Customers",
     "searchPlaceholder": "Search by name or CUS ID...",
     "showOnlyActive": "Active only",
-    "activeContracts": "Active Contracts"
+    "activeContracts": "Active Contracts",
+    "totalContractValue": "Total Contract Value",
+    "totalArr": "Total ARR",
+    "activeContractsCount": "From {{count}} active contracts",
+    "annualRecurringRevenue": "Annual Recurring Revenue"
   },
   "products": {
     "title": "Products",
@@ -62,13 +86,17 @@
     "name": "Name",
     "sku": "SKU",
     "category": "Category",
+    "type": "Type",
+    "subscription": "Recurring",
+    "oneOff": "One-off",
     "price": "Price",
     "status": "Status",
     "syncedAt": "Synced At",
     "active": "Active",
     "inactive": "Inactive",
     "total": "Products",
-    "searchPlaceholder": "Search by name..."
+    "searchPlaceholder": "Search by name...",
+    "showInactive": "Show inactive"
   },
   "contracts": {
     "title": "Contracts",
@@ -159,6 +187,7 @@
       "notesPlaceholder": "Add internal notes about this contract...",
       "noNotes": "No notes",
       "invoiceText": "Invoice Text",
+      "invoiceTextHint": "This text will be displayed on generated invoices",
       "invoiceTextPlaceholder": "Optional text to show on invoices below line items...",
       "noInvoiceText": "No invoice text"
     },
@@ -421,10 +450,13 @@
   "attachments": {
     "title": "Attachments",
     "noAttachments": "No attachments",
+    "upload": "Upload",
     "uploadFile": "Upload File",
     "uploading": "Uploading...",
     "uploadFailed": "Failed to upload file",
     "readError": "Failed to read file",
+    "description": "Description",
+    "descriptionPlaceholder": "Optional description",
     "filename": "Filename",
     "size": "Size",
     "uploadedBy": "Uploaded By",
@@ -432,7 +464,23 @@
     "preview": "Preview",
     "download": "Download",
     "delete": "Delete",
-    "confirmDelete": "Delete attachment \"{{filename}}\"?"
+    "confirmDelete": "Are you sure you want to delete this attachment?"
+  },
+  "links": {
+    "title": "Links",
+    "noLinks": "No links",
+    "add": "Add",
+    "addLink": "Add Link",
+    "name": "Name",
+    "namePlaceholder": "Link name",
+    "url": "URL",
+    "urlPlaceholder": "https://...",
+    "createdBy": "Created By",
+    "createdAt": "Created At",
+    "delete": "Delete",
+    "confirmDelete": "Are you sure you want to delete this link?",
+    "addFailed": "Failed to add link",
+    "invalidUrl": "Please enter a valid URL"
   },
   "users": {
     "title": "Users",

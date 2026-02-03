@@ -1164,3 +1164,33 @@ class ContractAttachment(TenantModel):
         if self.file:
             self.file.delete(save=False)
         super().delete(*args, **kwargs)
+
+
+class ContractLink(TenantModel):
+    """A named link attached to a contract."""
+
+    contract = models.ForeignKey(
+        Contract,
+        on_delete=models.CASCADE,
+        related_name="links",
+    )
+    name = models.CharField(
+        max_length=255,
+        help_text="Display name for the link",
+    )
+    url = models.URLField(
+        max_length=2000,
+        help_text="URL of the link",
+    )
+    created_by = models.ForeignKey(
+        "tenants.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_contract_links",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.contract})"

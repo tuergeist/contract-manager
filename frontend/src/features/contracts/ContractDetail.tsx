@@ -24,6 +24,7 @@ import {
   File,
   Image,
   Eye,
+  Link2,
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear } from '@/lib/utils'
 import { getToken } from '@/lib/auth'
@@ -59,6 +60,8 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { TodoModal, type TodoContext } from '@/features/todos'
+import { ListTodo } from 'lucide-react'
 
 const CONTRACT_DETAIL_QUERY = gql`
   query ContractDetail($id: ID!) {
@@ -141,6 +144,13 @@ const CONTRACT_DETAIL_QUERY = gql`
         uploadedAt
         uploadedByName
         downloadUrl
+      }
+      links {
+        id
+        name
+        url
+        createdAt
+        createdByName
       }
     }
   }
@@ -227,6 +237,23 @@ const REMOVE_CONTRACT_ITEM_PRICE_MUTATION = gql`
   }
 `
 
+const UPDATE_CONTRACT_ITEM_PRICE_MUTATION = gql`
+  mutation UpdateContractItemPrice($input: UpdateContractItemPriceInput!) {
+    updateContractItemPrice(input: $input) {
+      success
+      error
+      pricePeriod {
+        id
+        validFrom
+        validTo
+        unitPrice
+        pricePeriod
+        source
+      }
+    }
+  }
+`
+
 const UPDATE_CONTRACT_NOTES_MUTATION = gql`
   mutation UpdateContractNotes($input: UpdateContractInput!) {
     updateContract(input: $input) {
@@ -286,6 +313,31 @@ const UPLOAD_ATTACHMENT_MUTATION = gql`
 const DELETE_ATTACHMENT_MUTATION = gql`
   mutation DeleteContractAttachment($attachmentId: ID!) {
     deleteContractAttachment(attachmentId: $attachmentId) {
+      success
+      error
+    }
+  }
+`
+
+const ADD_CONTRACT_LINK_MUTATION = gql`
+  mutation AddContractLink($input: AddContractLinkInput!) {
+    addContractLink(input: $input) {
+      success
+      error
+      link {
+        id
+        name
+        url
+        createdAt
+        createdByName
+      }
+    }
+  }
+`
+
+const DELETE_CONTRACT_LINK_MUTATION = gql`
+  mutation DeleteContractLink($linkId: ID!) {
+    deleteContractLink(linkId: $linkId) {
       success
       error
     }
@@ -355,6 +407,14 @@ interface Attachment {
   downloadUrl: string
 }
 
+interface ContractLink {
+  id: string
+  name: string
+  url: string
+  createdAt: string
+  createdByName: string | null
+}
+
 interface Contract {
   id: string
   name: string
@@ -388,6 +448,7 @@ interface Contract {
   items: ContractItem[]
   amendments: Amendment[]
   attachments: Attachment[]
+  links: ContractLink[]
 }
 
 type Tab = 'items' | 'amendments' | 'forecast' | 'attachments' | 'activity'
@@ -403,6 +464,8 @@ export function ContractDetail() {
   const [editedNotes, setEditedNotes] = useState('')
   const [isEditingInvoiceText, setIsEditingInvoiceText] = useState(false)
   const [editedInvoiceText, setEditedInvoiceText] = useState('')
+  const [todoModalOpen, setTodoModalOpen] = useState(false)
+  const [todoContext, setTodoContext] = useState<TodoContext | undefined>()
 
   const { data, loading, error, refetch } = useQuery(CONTRACT_DETAIL_QUERY, {
     variables: { id },
@@ -591,12 +654,28 @@ export function ContractDetail() {
             </div>
           </div>
         </div>
-        {/* Details Button */}
-        <Link to={`/contracts/${id}/edit`}>
-          <Button variant="outline">
-            {t('contracts.detail.details')}
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setTodoContext({
+                type: 'contract',
+                id: parseInt(id!),
+                name: contract.name || contract.customer.name,
+              })
+              setTodoModalOpen(true)
+            }}
+          >
+            <ListTodo className="mr-2 h-4 w-4" />
+            {t('todos.addTodo')}
           </Button>
-        </Link>
+          <Link to={`/contracts/${id}/edit`}>
+            <Button variant="outline">
+              {t('contracts.detail.details')}
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Overview Cards */}
@@ -973,7 +1052,7 @@ export function ContractDetail() {
 
               {/* Invoice Text */}
               <div className="rounded-lg border bg-white p-4">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-1">
                   <p className="text-sm font-medium text-gray-700">{t('contracts.detail.invoiceText')}</p>
                   {!isEditingInvoiceText && (
                     <Button
@@ -987,6 +1066,7 @@ export function ContractDetail() {
                     </Button>
                   )}
                 </div>
+                <p className="text-xs text-gray-500 mb-2">{t('contracts.detail.invoiceTextHint')}</p>
                 {isEditingInvoiceText ? (
                   <div className="space-y-2">
                     <textarea
@@ -1065,6 +1145,7 @@ export function ContractDetail() {
         <AttachmentsTab
           contractId={id!}
           attachments={contract.attachments}
+          links={contract.links}
           canEdit={contract.status !== 'cancelled' && contract.status !== 'ended'}
           onRefetch={() => refetch()}
         />
@@ -1098,6 +1179,13 @@ export function ContractDetail() {
           }}
         />
       )}
+
+      {/* Todo Modal */}
+      <TodoModal
+        open={todoModalOpen}
+        onOpenChange={setTodoModalOpen}
+        context={todoContext}
+      />
 
     </div>
   )
@@ -1528,6 +1616,15 @@ function EditItemModal({
   const [updateItem, { loading }] = useMutation(UPDATE_CONTRACT_ITEM_MUTATION)
   const [addPricePeriodMutation, { loading: addingPeriod }] = useMutation(ADD_CONTRACT_ITEM_PRICE_MUTATION)
   const [removePricePeriodMutation, { loading: removingPeriod }] = useMutation(REMOVE_CONTRACT_ITEM_PRICE_MUTATION)
+  const [updatePricePeriodMutation, { loading: updatingPeriod }] = useMutation(UPDATE_CONTRACT_ITEM_PRICE_MUTATION)
+
+  // State for editing an existing price period
+  const [editingPeriodId, setEditingPeriodId] = useState<string | null>(null)
+  const [editPeriodFrom, setEditPeriodFrom] = useState('')
+  const [editPeriodTo, setEditPeriodTo] = useState('')
+  const [editPeriodPrice, setEditPeriodPrice] = useState('')
+  const [editPeriodPricePeriod, setEditPeriodPricePeriod] = useState('monthly')
+  const [editPeriodSource, setEditPeriodSource] = useState('fixed')
 
   const formatCurrencyLocal = (value: string | null) => {
     if (!value) return '-'
@@ -1580,6 +1677,53 @@ function EditItemModal({
         setPricePeriods(pricePeriods.filter(p => p.id !== priceId))
       } else {
         setError(result.data?.removeContractItemPrice.error || 'Failed to remove price period')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    }
+  }
+
+  const startEditingPeriod = (period: PricePeriod) => {
+    setEditingPeriodId(period.id)
+    setEditPeriodFrom(period.validFrom)
+    setEditPeriodTo(period.validTo || '')
+    setEditPeriodPrice(period.unitPrice)
+    setEditPeriodPricePeriod(period.pricePeriod)
+    setEditPeriodSource(period.source)
+  }
+
+  const cancelEditingPeriod = () => {
+    setEditingPeriodId(null)
+    setEditPeriodFrom('')
+    setEditPeriodTo('')
+    setEditPeriodPrice('')
+    setEditPeriodPricePeriod('monthly')
+    setEditPeriodSource('fixed')
+  }
+
+  const handleUpdatePricePeriod = async () => {
+    if (!editingPeriodId || !editPeriodFrom || !editPeriodPrice) return
+
+    try {
+      const result = await updatePricePeriodMutation({
+        variables: {
+          input: {
+            id: editingPeriodId,
+            validFrom: editPeriodFrom,
+            validTo: editPeriodTo || null,
+            unitPrice: editPeriodPrice,
+            pricePeriod: editPeriodPricePeriod,
+            source: editPeriodSource,
+          },
+        },
+      })
+
+      if (result.data?.updateContractItemPrice.success) {
+        const updatedPeriod = result.data.updateContractItemPrice.pricePeriod
+        setPricePeriods(pricePeriods.map(p => p.id === editingPeriodId ? updatedPeriod : p))
+        cancelEditingPeriod()
+      } else {
+        setError(result.data?.updateContractItemPrice.error || 'Failed to update price period')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -1759,23 +1903,125 @@ function EditItemModal({
                 {pricePeriods.length > 0 ? (
                   <div className="space-y-2">
                     {pricePeriods.map((period) => (
-                      <div key={period.id} className="flex items-center justify-between rounded border bg-gray-50 p-2 text-sm">
-                        <div className="flex items-center gap-4">
-                          <span>{formatMonthYear(period.validFrom)}</span>
-                          <span className="text-gray-400">→</span>
-                          <span>{period.validTo ? formatMonthYear(period.validTo) : t('contracts.item.ongoing')}</span>
-                          <span className="font-medium">{formatCurrencyLocal(period.unitPrice)}</span>
-                          <span className="text-xs text-blue-600">/{t(`contracts.item.pricePeriodValues.${period.pricePeriod}`)}</span>
-                          <span className="text-xs text-gray-500">{t(`contracts.item.source${period.source.charAt(0).toUpperCase() + period.source.slice(1)}`)}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemovePricePeriod(period.id)}
-                          disabled={removingPeriod}
-                          className="text-gray-400 hover:text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                      <div key={period.id} className="rounded border bg-gray-50 p-2 text-sm">
+                        {editingPeriodId === period.id ? (
+                          /* Edit Mode */
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-5 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500">{t('contracts.item.periodFrom')}</label>
+                                <Input
+                                  type="month"
+                                  value={editPeriodFrom ? editPeriodFrom.substring(0, 7) : ''}
+                                  onChange={(e) => setEditPeriodFrom(e.target.value ? `${e.target.value}-01` : '')}
+                                  className="h-8 text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">{t('contracts.item.periodTo')}</label>
+                                <Input
+                                  type="month"
+                                  value={editPeriodTo ? editPeriodTo.substring(0, 7) : ''}
+                                  onChange={(e) => setEditPeriodTo(e.target.value ? `${e.target.value}-01` : '')}
+                                  className="h-8 text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">{t('contracts.item.periodPrice')}</label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={editPeriodPrice}
+                                  onChange={(e) => setEditPeriodPrice(e.target.value)}
+                                  className="h-8 text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">{t('contracts.item.pricePeriod')}</label>
+                                <Select value={editPeriodPricePeriod} onValueChange={setEditPeriodPricePeriod}>
+                                  <SelectTrigger className="h-8 text-sm">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="monthly">{t('contracts.item.pricePeriodValues.monthly')}</SelectItem>
+                                    <SelectItem value="bi_monthly">{t('contracts.item.pricePeriodValues.bi_monthly')}</SelectItem>
+                                    <SelectItem value="quarterly">{t('contracts.item.pricePeriodValues.quarterly')}</SelectItem>
+                                    <SelectItem value="semi_annual">{t('contracts.item.pricePeriodValues.semi_annual')}</SelectItem>
+                                    <SelectItem value="annual">{t('contracts.item.pricePeriodValues.annual')}</SelectItem>
+                                    <SelectItem value="biennial">{t('contracts.item.pricePeriodValues.biennial')}</SelectItem>
+                                    <SelectItem value="triennial">{t('contracts.item.pricePeriodValues.triennial')}</SelectItem>
+                                    <SelectItem value="quadrennial">{t('contracts.item.pricePeriodValues.quadrennial')}</SelectItem>
+                                    <SelectItem value="quinquennial">{t('contracts.item.pricePeriodValues.quinquennial')}</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">{t('contracts.item.sourceLabel')}</label>
+                                <Select value={editPeriodSource} onValueChange={setEditPeriodSource}>
+                                  <SelectTrigger className="h-8 text-sm">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="fixed">{t('contracts.item.sourceFixed')}</SelectItem>
+                                    <SelectItem value="increase">{t('contracts.item.sourceIncrease')}</SelectItem>
+                                    <SelectItem value="manual">{t('contracts.item.sourceManual')}</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={cancelEditingPeriod}
+                                disabled={updatingPeriod}
+                              >
+                                {t('common.cancel')}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={handleUpdatePricePeriod}
+                                disabled={updatingPeriod || !editPeriodFrom || !editPeriodPrice}
+                              >
+                                {updatingPeriod ? <Loader2 className="h-4 w-4 animate-spin" /> : t('common.save')}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* View Mode */
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <span>{formatMonthYear(period.validFrom)}</span>
+                              <span className="text-gray-400">→</span>
+                              <span>{period.validTo ? formatMonthYear(period.validTo) : t('contracts.item.ongoing')}</span>
+                              <span className="font-medium">{formatCurrencyLocal(period.unitPrice)}</span>
+                              <span className="text-xs text-blue-600">/{t(`contracts.item.pricePeriodValues.${period.pricePeriod}`)}</span>
+                              <span className="text-xs text-gray-500">{t(`contracts.item.source${period.source.charAt(0).toUpperCase() + period.source.slice(1)}`)}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => startEditingPeriod(period)}
+                                className="text-gray-400 hover:text-blue-600"
+                                title={t('common.edit')}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePricePeriod(period.id)}
+                                disabled={removingPeriod}
+                                className="text-gray-400 hover:text-red-600"
+                                title={t('common.delete')}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -2190,11 +2436,13 @@ function ForecastTab({ contractId }: { contractId: string }) {
 function AttachmentsTab({
   contractId,
   attachments,
+  links,
   canEdit,
   onRefetch,
 }: {
   contractId: string
   attachments: Attachment[]
+  links: ContractLink[]
   canEdit: boolean
   onRefetch: () => void
 }) {
@@ -2202,9 +2450,15 @@ function AttachmentsTab({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showAddLink, setShowAddLink] = useState(false)
+  const [linkName, setLinkName] = useState('')
+  const [linkUrl, setLinkUrl] = useState('')
+  const [addingLink, setAddingLink] = useState(false)
 
   const [uploadAttachment] = useMutation(UPLOAD_ATTACHMENT_MUTATION)
   const [deleteAttachment] = useMutation(DELETE_ATTACHMENT_MUTATION)
+  const [addLink] = useMutation(ADD_CONTRACT_LINK_MUTATION)
+  const [deleteLink] = useMutation(DELETE_CONTRACT_LINK_MUTATION)
 
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`
@@ -2335,6 +2589,64 @@ function AttachmentsTab({
     window.open(url, '_blank')
   }
 
+  const handleAddLink = async () => {
+    if (!linkName.trim() || !linkUrl.trim()) return
+
+    // Basic URL validation
+    try {
+      new URL(linkUrl)
+    } catch {
+      setError(t('links.invalidUrl'))
+      return
+    }
+
+    setAddingLink(true)
+    setError(null)
+
+    try {
+      const result = await addLink({
+        variables: {
+          input: {
+            contractId,
+            name: linkName.trim(),
+            url: linkUrl.trim(),
+          },
+        },
+      })
+
+      if (result.data?.addContractLink?.success) {
+        setLinkName('')
+        setLinkUrl('')
+        setShowAddLink(false)
+        onRefetch()
+      } else {
+        setError(result.data?.addContractLink?.error || t('links.addFailed'))
+      }
+    } catch (err) {
+      setError(t('links.addFailed'))
+    } finally {
+      setAddingLink(false)
+    }
+  }
+
+  const handleDeleteLink = async (link: ContractLink) => {
+    if (!confirm(t('links.confirmDelete', { name: link.name }))) {
+      return
+    }
+
+    try {
+      const result = await deleteLink({
+        variables: { linkId: link.id },
+      })
+
+      if (result.data?.deleteContractLink?.success) {
+        onRefetch()
+      }
+    } catch (err) {
+      console.error('Failed to delete link:', err)
+    }
+  }
+
   return (
     <div>
       {/* Upload Button */}
@@ -2456,6 +2768,141 @@ function AttachmentsTab({
           </table>
         </div>
       )}
+
+      {/* Links Section */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Link2 className="h-5 w-5 text-gray-400" />
+            <h3 className="text-lg font-semibold">{t('links.title')}</h3>
+          </div>
+          {canEdit && !showAddLink && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddLink(true)}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              {t('links.addLink')}
+            </Button>
+          )}
+        </div>
+
+        {/* Add Link Form */}
+        {showAddLink && (
+          <div className="mb-4 rounded-lg border bg-white p-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t('links.name')}</label>
+                <Input
+                  placeholder={t('links.namePlaceholder')}
+                  value={linkName}
+                  onChange={(e) => setLinkName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t('links.url')}</label>
+                <Input
+                  placeholder={t('links.urlPlaceholder')}
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowAddLink(false)
+                  setLinkName('')
+                  setLinkUrl('')
+                  setError(null)
+                }}
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleAddLink}
+                disabled={addingLink || !linkName.trim() || !linkUrl.trim()}
+              >
+                {addingLink && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {t('common.save')}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Links List */}
+        {links.length === 0 ? (
+          <div className="rounded-lg border bg-white p-8 text-center">
+            <Link2 className="mx-auto h-12 w-12 text-gray-400" />
+            <p className="mt-2 text-gray-600">{t('links.noLinks')}</p>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-lg border">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('links.name')}
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('links.url')}
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('links.createdBy')}
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('links.createdAt')}
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {/* Actions */}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {links.map((link) => (
+                  <tr key={link.id}>
+                    <td className="px-6 py-4">
+                      <span className="font-medium text-gray-900">{link.name}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        {link.url.length > 50 ? `${link.url.substring(0, 50)}...` : link.url}
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                      {link.createdByName || '-'}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                      {formatDateTime(link.createdAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-right">
+                      {canEdit && (
+                        <button
+                          onClick={() => handleDeleteLink(link)}
+                          className="text-gray-400 hover:text-red-600"
+                          title={t('links.delete')}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

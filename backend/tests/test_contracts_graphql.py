@@ -640,6 +640,211 @@ class TestPricePeriodsGraphQL:
         from apps.contracts.models import ContractItemPrice
         assert not ContractItemPrice.objects.filter(id=price_period.id).exists()
 
+    def test_add_price_period_overlap_fails(self, user, tenant, annual_contract, product):
+        """Test that adding a price period that overlaps with existing fails."""
+        from apps.contracts.models import ContractItemPrice
+
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("100.00"),
+        )
+
+        # Create existing period: 2025-01-01 to 2025-12-31
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2025, 1, 1),
+            valid_to=date(2025, 12, 31),
+            unit_price=Decimal("80.00"),
+            source="fixed",
+        )
+
+        mutation = """
+            mutation AddContractItemPrice($itemId: ID!, $input: ContractItemPriceInput!) {
+                addContractItemPrice(itemId: $itemId, input: $input) {
+                    success
+                    error
+                }
+            }
+        """
+
+        # Try to add overlapping period: 2025-06-01 to 2026-06-30
+        result = run_graphql(
+            mutation,
+            {
+                "itemId": str(item.id),
+                "input": {
+                    "validFrom": "2025-06-01",
+                    "validTo": "2026-06-30",
+                    "unitPrice": "90.00",
+                    "source": "fixed",
+                },
+            },
+            make_context(user),
+        )
+
+        assert result.errors is None
+        assert result.data["addContractItemPrice"]["success"] is False
+        assert "overlap" in result.data["addContractItemPrice"]["error"].lower()
+
+    def test_add_price_period_no_overlap_succeeds(self, user, tenant, annual_contract, product):
+        """Test that adding a non-overlapping price period succeeds."""
+        from apps.contracts.models import ContractItemPrice
+
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("100.00"),
+        )
+
+        # Create existing period: 2025-01-01 to 2025-12-31
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2025, 1, 1),
+            valid_to=date(2025, 12, 31),
+            unit_price=Decimal("80.00"),
+            source="fixed",
+        )
+
+        mutation = """
+            mutation AddContractItemPrice($itemId: ID!, $input: ContractItemPriceInput!) {
+                addContractItemPrice(itemId: $itemId, input: $input) {
+                    success
+                    error
+                }
+            }
+        """
+
+        # Add non-overlapping period: 2026-01-01 to 2026-12-31
+        result = run_graphql(
+            mutation,
+            {
+                "itemId": str(item.id),
+                "input": {
+                    "validFrom": "2026-01-01",
+                    "validTo": "2026-12-31",
+                    "unitPrice": "90.00",
+                    "source": "fixed",
+                },
+            },
+            make_context(user),
+        )
+
+        assert result.errors is None
+        assert result.data["addContractItemPrice"]["success"] is True
+
+    def test_update_price_period_overlap_fails(self, user, tenant, annual_contract, product):
+        """Test that updating a price period to overlap with another fails."""
+        from apps.contracts.models import ContractItemPrice
+
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("100.00"),
+        )
+
+        # Create two non-overlapping periods
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2025, 1, 1),
+            valid_to=date(2025, 12, 31),
+            unit_price=Decimal("80.00"),
+            source="fixed",
+        )
+
+        period2 = ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2026, 1, 1),
+            valid_to=date(2026, 12, 31),
+            unit_price=Decimal("90.00"),
+            source="fixed",
+        )
+
+        mutation = """
+            mutation UpdateContractItemPrice($input: UpdateContractItemPriceInput!) {
+                updateContractItemPrice(input: $input) {
+                    success
+                    error
+                }
+            }
+        """
+
+        # Try to update period2 to overlap with period1
+        result = run_graphql(
+            mutation,
+            {
+                "input": {
+                    "id": str(period2.id),
+                    "validFrom": "2025-06-01",  # Now overlaps with period1
+                },
+            },
+            make_context(user),
+        )
+
+        assert result.errors is None
+        assert result.data["updateContractItemPrice"]["success"] is False
+        assert "overlap" in result.data["updateContractItemPrice"]["error"].lower()
+
+    def test_add_open_ended_period_with_existing_open_ended_fails(self, user, tenant, annual_contract, product):
+        """Test that adding an open-ended period when one already exists fails."""
+        from apps.contracts.models import ContractItemPrice
+
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("100.00"),
+        )
+
+        # Create open-ended period: 2025-01-01 onwards
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2025, 1, 1),
+            valid_to=None,  # Open-ended
+            unit_price=Decimal("80.00"),
+            source="fixed",
+        )
+
+        mutation = """
+            mutation AddContractItemPrice($itemId: ID!, $input: ContractItemPriceInput!) {
+                addContractItemPrice(itemId: $itemId, input: $input) {
+                    success
+                    error
+                }
+            }
+        """
+
+        # Try to add another open-ended period starting later
+        result = run_graphql(
+            mutation,
+            {
+                "itemId": str(item.id),
+                "input": {
+                    "validFrom": "2026-01-01",
+                    "validTo": None,
+                    "unitPrice": "90.00",
+                    "source": "fixed",
+                },
+            },
+            make_context(user),
+        )
+
+        assert result.errors is None
+        assert result.data["addContractItemPrice"]["success"] is False
+        assert "overlap" in result.data["addContractItemPrice"]["error"].lower()
+
 
 class TestNoticePeriodAfterMinGraphQL:
     """Test notice_period_after_min_months in GraphQL."""
