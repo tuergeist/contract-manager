@@ -1,0 +1,81 @@
+version: "3.8"
+
+# Production Docker Compose for Contract Manager
+# Usage:
+#   curl -O https://raw.githubusercontent.com/tuergeist/contract-manager/main/docker-compose.prod.yml
+#   curl -O https://raw.githubusercontent.com/tuergeist/contract-manager/main/scripts/export-data.sh
+#   curl -O https://raw.githubusercontent.com/tuergeist/contract-manager/main/scripts/import-data.sh
+#   chmod +x *.sh
+#   docker compose -f docker-compose.prod.yml up -d
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-contract_manager}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-contract_manager}
+      POSTGRES_DB: ${POSTGRES_DB:-contract_manager}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-contract_manager}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: ghcr.io/tuergeist/contract-manager/backend:main
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-contract_manager}:${POSTGRES_PASSWORD:-contract_manager}@db:5432/${POSTGRES_DB:-contract_manager}
+      REDIS_URL: redis://redis:6379/0
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost,http://127.0.0.1}
+      DJANGO_DEBUG: "false"
+    volumes:
+      - media_data:/app/media
+
+  frontend:
+    image: ghcr.io/tuergeist/contract-manager/frontend:main
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "${PORT:-80}:80"
+    depends_on:
+      - backend
+      - frontend
+    volumes:
+      - ./nginx.prod.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+  media_data:
