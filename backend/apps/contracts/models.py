@@ -464,11 +464,16 @@ class Contract(TenantModel):
         self, events, item, align_date, end_date, from_date, to_date, interval_months,
         price_periods_list=None
     ):
-        """Add billing events after alignment (regular cycle)."""
+        """Add billing events after alignment (synced to contract's billing cycle)."""
         from decimal import Decimal
         from dateutil.relativedelta import relativedelta
 
-        billing_date = align_date
+        # Find first contract billing date on or after alignment date
+        # This ensures the item joins the contract's billing cycle
+        billing_date = self.billing_start_date
+        while billing_date < align_date:
+            billing_date += relativedelta(months=interval_months)
+
         while billing_date <= to_date:
             if billing_date >= from_date:
                 if end_date is None or billing_date <= end_date:
@@ -697,11 +702,16 @@ class Contract(TenantModel):
         self, events, item, align_date, end_date, from_date, to_date, interval_months,
         price_periods_list=None
     ):
-        """Add recognition events after alignment (regular cycle)."""
+        """Add recognition events after alignment (synced to contract's billing cycle)."""
         from decimal import Decimal
         from dateutil.relativedelta import relativedelta
 
-        recognition_date = align_date
+        # Find first contract billing date on or after alignment date
+        # This ensures the item joins the contract's billing cycle
+        recognition_date = self.billing_start_date
+        while recognition_date < align_date:
+            recognition_date += relativedelta(months=interval_months)
+
         while recognition_date <= to_date:
             if recognition_date >= from_date:
                 if end_date is None or recognition_date <= end_date:
