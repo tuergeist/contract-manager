@@ -2,6 +2,8 @@ import { Routes, Route } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Login } from './features/auth/Login'
+import { AcceptInvitation } from './features/auth/AcceptInvitation'
+import { ResetPassword } from './features/auth/ResetPassword'
 import { Dashboard } from './features/dashboard/Dashboard'
 import { CustomerList } from './features/customers/CustomerList'
 import { CustomerDetail } from './features/customers/CustomerDetail'
@@ -11,6 +13,7 @@ import { ContractForm } from './features/contracts/ContractForm'
 import { ContractDetail } from './features/contracts/ContractDetail'
 import { RevenueForecast } from './features/forecast/RevenueForecast'
 import { Settings } from './features/settings/Settings'
+import { UserManagement } from './features/settings/UserManagement'
 import { ContractImport } from './features/contracts/import/ContractImport'
 import { InvoiceExportPage } from './features/invoices/InvoiceExportPage'
 import { AuditLogPage } from './features/audit/AuditLogPage'
@@ -19,6 +22,8 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/invite/:token" element={<AcceptInvitation />} />
+      <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route
         path="/"
         element={
@@ -37,6 +42,7 @@ function App() {
         <Route path="contracts/:id/edit" element={<ContractForm />} />
         <Route path="forecast" element={<RevenueForecast />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="settings/users" element={<UserManagement />} />
         <Route path="contracts/import" element={<ContractImport />} />
         <Route path="invoices/export" element={<InvoiceExportPage />} />
         <Route path="audit-log" element={<AuditLogPage />} />

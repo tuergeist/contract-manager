@@ -10,19 +10,29 @@ import {
   LogOut,
   FileDown,
   History,
+  UserCog,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 
-const navItems = [
-  { to: '/', icon: LayoutDashboard, labelKey: 'nav.dashboard' },
+interface NavItem {
+  to: string
+  icon: typeof LayoutDashboard
+  labelKey: string
+  adminOnly?: boolean
+  end?: boolean
+}
+
+const navItems: NavItem[] = [
+  { to: '/', icon: LayoutDashboard, labelKey: 'nav.dashboard', end: true },
   { to: '/customers', icon: Users, labelKey: 'nav.customers' },
   { to: '/products', icon: Package, labelKey: 'nav.products' },
   { to: '/contracts', icon: FileText, labelKey: 'nav.contracts' },
   { to: '/invoices/export', icon: FileDown, labelKey: 'nav.invoiceExport' },
   { to: '/forecast', icon: TrendingUp, labelKey: 'nav.forecast' },
   { to: '/audit-log', icon: History, labelKey: 'nav.auditLog' },
-  { to: '/settings', icon: Settings, labelKey: 'nav.settings' },
+  { to: '/settings', icon: Settings, labelKey: 'nav.settings', end: true },
+  { to: '/settings/users', icon: UserCog, labelKey: 'users.title', adminOnly: true },
 ]
 
 export function Sidebar() {
@@ -35,24 +45,26 @@ export function Sidebar() {
         <h1 className="text-xl font-semibold">Contract Manager</h1>
       </div>
       <nav className="flex-1 space-y-1 p-4">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-gray-100 text-gray-900'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              )
-            }
-          >
-            <item.icon className="h-5 w-5" />
-            {t(item.labelKey)}
-          </NavLink>
-        ))}
+        {navItems
+          .filter((item) => !item.adminOnly || user?.isAdmin)
+          .map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-gray-100 text-gray-900'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                )
+              }
+            >
+              <item.icon className="h-5 w-5" />
+              {t(item.labelKey)}
+            </NavLink>
+          ))}
       </nav>
       <div className="border-t p-4">
         <div className="mb-2 px-3">

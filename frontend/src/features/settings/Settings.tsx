@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, gql } from '@apollo/client'
 import { RefreshCw, CheckCircle, XCircle, Loader2, Upload, Plus, X } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
+import { ProfileEdit } from './ProfileEdit'
+import { PasswordChange } from './PasswordChange'
 
 interface CompanyFilter {
   propertyName: string
@@ -605,6 +607,12 @@ export function Settings() {
             </Link>
           </div>
         </div>
+
+        {/* Profile Edit */}
+        <ProfileEdit />
+
+        {/* Password Change */}
+        <PasswordChange />
 
         {/* Language */}
         <div className="rounded-lg border bg-white p-6">

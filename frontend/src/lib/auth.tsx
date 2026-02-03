@@ -9,6 +9,7 @@ interface User {
   tenantId: number | null
   tenantName: string | null
   roleName: string | null
+  isAdmin: boolean
 }
 
 interface AuthContextType {
@@ -18,6 +19,7 @@ interface AuthContextType {
   isLoading: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => void
+  refetchUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -49,6 +51,7 @@ const ME_QUERY = gql`
       tenantId
       tenantName
       roleName
+      isAdmin
     }
   }
 `
@@ -148,6 +151,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     client.clearStore()
   }
 
+  const refetchUser = async () => {
+    const storedToken = localStorage.getItem(TOKEN_KEY)
+    if (!storedToken) return
+
+    try {
+      const { data } = await client.query({
+        query: ME_QUERY,
+        context: {
+          headers: {
+            Authorization: `Bearer ${storedToken}`,
+          },
+        },
+        fetchPolicy: 'network-only',
+      })
+
+      if (data.me) {
+        setUser(data.me)
+      }
+    } catch {
+      // Ignore errors during refetch
+    }
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -157,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         login,
         logout,
+        refetchUser,
       }}
     >
       {children}

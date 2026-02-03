@@ -39,6 +39,7 @@ class CurrentUser:
     tenant_id: int | None
     tenant_name: str | None
     role_name: str | None
+    is_admin: bool
 
 
 @strawberry.type
@@ -60,6 +61,7 @@ class CoreQuery:
             tenant_id=user.tenant_id,
             tenant_name=user.tenant.name if user.tenant else None,
             role_name=user.role.name if user.role else None,
+            is_admin=user.is_admin or user.is_super_admin,
         )
 
 

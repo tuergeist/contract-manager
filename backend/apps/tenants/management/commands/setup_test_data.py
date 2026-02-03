@@ -86,6 +86,7 @@ class Command(BaseCommand):
                 "last_name": "User",
                 "is_active": True,
                 "is_staff": True,
+                "is_admin": True,
             },
         )
 
@@ -94,7 +95,13 @@ class Command(BaseCommand):
             user.save()
             self.stdout.write(self.style.SUCCESS(f"Created admin user: {admin_email}"))
         else:
-            self.stdout.write(f"Admin user already exists: {admin_email}")
+            # Ensure existing user has is_admin set
+            if not user.is_admin:
+                user.is_admin = True
+                user.save()
+                self.stdout.write(f"Updated admin user with is_admin=True: {admin_email}")
+            else:
+                self.stdout.write(f"Admin user already exists: {admin_email}")
 
         # Summary
         self.stdout.write("")
