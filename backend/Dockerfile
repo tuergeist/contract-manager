@@ -6,17 +6,22 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # Install system dependencies and uv
-# WeasyPrint requires: libpango, libcairo, libgdk-pixbuf, libffi, libgobject
+# WeasyPrint requires full set of pango/cairo/glib dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     curl \
+    # WeasyPrint dependencies (glib2.0-dev provides libgobject symlinks)
     libpango-1.0-0 \
+    libpangoft2-1.0-0 \
     libpangocairo-1.0-0 \
     libgdk-pixbuf-2.0-0 \
     libffi-dev \
     libcairo2 \
-    libglib2.0-0 \
+    libglib2.0-dev \
+    libharfbuzz0b \
+    libfontconfig1 \
+    fonts-liberation \
     && curl -LsSf https://astral.sh/uv/install.sh | sh \
     && rm -rf /var/lib/apt/lists/*
 
