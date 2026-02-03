@@ -12,6 +12,7 @@ export default defineConfig({
   server: {
     host: true,
     port: 3000,
+    allowedHosts: ['.ngrok-free.app', '.ngrok.io', '.ngrok.app'],
     proxy: {
       '/graphql': {
         target: 'http://backend:8000',  // Internal Docker network

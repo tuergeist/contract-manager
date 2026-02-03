@@ -32,7 +32,7 @@ services:
     environment:
       DJANGO_SECRET_KEY: dev-secret-key-change-in-production
       DJANGO_DEBUG: "true"
-      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend,.ngrok.io,.ngrok-free.app,.ngrok.app
       DATABASE_URL: postgres://contract_manager:contract_manager@db:5432/contract_manager
       REDIS_URL: redis://redis:6379/0
     volumes:
@@ -56,12 +56,25 @@ services:
       dockerfile: Dockerfile
     environment:
       VITE_API_URL: http://localhost:4001/graphql
+      VITE_API_URL_RELATIVE: /graphql
     volumes:
       - ./frontend:/app
       - /app/node_modules
     ports:
       - "4000:3000"
     depends_on:
+      - backend
+
+  # Reverse proxy for ngrok access
+  # Usage: ngrok http 4002
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "4002:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
       - backend
 
 volumes:
