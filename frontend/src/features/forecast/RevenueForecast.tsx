@@ -36,6 +36,30 @@ const REVENUE_FORECAST_QUERY = gql`
   }
 `
 
+const RECOGNITION_FORECAST_QUERY = gql`
+  query RecognitionForecast($months: Int, $quarters: Int, $view: String, $proRata: Boolean) {
+    recognitionForecast(months: $months, quarters: $quarters, view: $view, proRata: $proRata) {
+      monthColumns
+      monthlyTotals {
+        month
+        amount
+      }
+      contracts {
+        contractId
+        contractName
+        customerName
+        months {
+          month
+          amount
+        }
+        total
+      }
+      grandTotal
+      error
+    }
+  }
+`
+
 interface RevenueMonthData {
   month: string
   amount: string
@@ -58,11 +82,13 @@ interface RevenueForecastResult {
 }
 
 type ViewType = 'monthly' | 'quarterly'
+type ForecastType = 'billing' | 'recognition'
 type SortField = 'contract' | 'customer' | null
 type SortOrder = 'asc' | 'desc'
 
 export function RevenueForecast() {
   const { t, i18n } = useTranslation()
+  const [forecastType, setForecastType] = useState<ForecastType>('billing')
   const [view, setView] = useState<ViewType>('monthly')
   const [periods, setPeriods] = useState('13')
   const [proRata, setProRata] = useState(false)
@@ -79,16 +105,21 @@ export function RevenueForecast() {
     }
   }
 
-  const { data, loading, error } = useQuery(REVENUE_FORECAST_QUERY, {
-    variables: {
-      months: view === 'monthly' ? parseInt(periods) : null,
-      quarters: view === 'quarterly' ? parseInt(periods) : null,
-      view,
-      proRata,
-    },
-  })
+  const { data, loading, error } = useQuery(
+    forecastType === 'billing' ? REVENUE_FORECAST_QUERY : RECOGNITION_FORECAST_QUERY,
+    {
+      variables: {
+        months: view === 'monthly' ? parseInt(periods) : null,
+        quarters: view === 'quarterly' ? parseInt(periods) : null,
+        view,
+        proRata,
+      },
+    }
+  )
 
-  const forecast = data?.revenueForecast as RevenueForecastResult | undefined
+  const forecast = (forecastType === 'billing'
+    ? data?.revenueForecast
+    : data?.recognitionForecast) as RevenueForecastResult | undefined
 
   // Sort contracts
   const sortedContracts = useMemo(() => {
@@ -183,9 +214,24 @@ export function RevenueForecast() {
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <TrendingUp className="h-8 w-8 text-blue-600" />
-          <h1 className="text-2xl font-bold">{t('forecast.title')}</h1>
+          <h1 className="text-2xl font-bold">
+            {forecastType === 'billing' ? t('forecast.title') : t('forecast.recognitionTitle')}
+          </h1>
         </div>
         <div className="flex items-center gap-4">
+          {/* Forecast Type Toggle */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium">{t('forecast.forecastType')}:</label>
+            <Select value={forecastType} onValueChange={(v) => setForecastType(v as ForecastType)}>
+              <SelectTrigger className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="billing">{t('forecast.billing')}</SelectItem>
+                <SelectItem value="recognition">{t('forecast.recognition')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           {/* View Toggle */}
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium">{t('forecast.view')}:</label>

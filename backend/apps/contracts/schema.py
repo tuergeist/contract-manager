@@ -859,6 +859,199 @@ class ContractQuery:
         )
 
     @strawberry.field
+    def recognition_forecast(
+        self,
+        info: Info[Context, None],
+        months: int | None = None,
+        quarters: int | None = None,
+        view: str = "monthly",
+        pro_rata: bool = False,
+    ) -> RevenueForecastResult:
+        """
+        Calculate recognition forecast for all active contracts.
+
+        This is similar to revenue_forecast but uses item.start_date (recognition date)
+        instead of item.billing_start_date for timing.
+
+        Args:
+            months: Number of months to forecast (for monthly view, default: 13)
+            quarters: Number of quarters to forecast (for quarterly view, default: 6)
+            view: "monthly" or "quarterly"
+            pro_rata: If True, distribute amounts evenly across periods
+
+        Returns a matrix with:
+        - Rows: contracts (name, customer, revenue per period)
+        - Columns: months or quarters
+        - First data row: period totals
+        """
+        from collections import defaultdict
+        from dateutil.relativedelta import relativedelta
+
+        user = get_current_user(info)
+        if not user.tenant:
+            return RevenueForecastResult(
+                month_columns=[],
+                monthly_totals=[],
+                contracts=[],
+                grand_total=Decimal("0"),
+                error="No tenant assigned",
+            )
+
+        today = date.today()
+        is_quarterly = view == "quarterly"
+
+        # Always start from January 1st of the current year
+        from_date = date(today.year, 1, 1)
+
+        if is_quarterly:
+            num_quarters = quarters if quarters is not None else 6
+            to_date = from_date + relativedelta(months=num_quarters * 3)
+        else:
+            num_months = months if months is not None else 13
+            to_date = from_date + relativedelta(months=num_months)
+
+        # Generate period columns starting from January
+        period_columns = []
+        period_column_set = set()
+        if is_quarterly:
+            # Start from Q1
+            current_quarter = 1
+            current_year = today.year
+            for _ in range(num_quarters):
+                key = f"{current_year}-Q{current_quarter}"
+                period_columns.append(key)
+                period_column_set.add(key)
+                current_quarter += 1
+                if current_quarter > 4:
+                    current_quarter = 1
+                    current_year += 1
+        else:
+            # Start from January
+            current = date(today.year, 1, 1)
+            while current < to_date:
+                key = current.strftime("%Y-%m")
+                period_columns.append(key)
+                period_column_set.add(key)
+                current += relativedelta(months=1)
+
+        # Get all active/paused contracts (exclude drafts - they're not committed yet)
+        contracts = Contract.objects.filter(
+            tenant=user.tenant,
+            status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
+        ).select_related("customer")
+
+        # Calculate recognition per contract per period
+        contract_rows = []
+        period_totals = defaultdict(Decimal)
+
+        def get_period_key(event_date: date) -> str:
+            if is_quarterly:
+                quarter = (event_date.month - 1) // 3 + 1
+                return f"{event_date.year}-Q{quarter}"
+            return event_date.strftime("%Y-%m")
+
+        # Billing interval to months mapping
+        interval_months = {
+            "monthly": 1,
+            "quarterly": 3,
+            "semi_annual": 6,
+            "annual": 12,
+            "biennial": 24,
+            "triennial": 36,
+            "quadrennial": 48,
+            "quinquennial": 60,
+        }
+
+        for contract in contracts:
+            # Use get_recognition_schedule instead of get_billing_schedule
+            schedule = contract.get_recognition_schedule(
+                from_date=from_date,
+                to_date=to_date,
+                include_history=False,
+            )
+
+            # Group by period
+            period_amounts = defaultdict(Decimal)
+
+            if pro_rata:
+                # Pro-rata: distribute each recognition event across the months it covers
+                billing_months = interval_months.get(contract.billing_interval, 1)
+
+                for event in schedule:
+                    event_total = event["total"]
+                    event_date = event["date"]
+
+                    if is_quarterly:
+                        # For quarterly view, distribute across quarters
+                        quarters_covered = max(1, billing_months // 3)
+                        amount_per_quarter = event_total / quarters_covered
+
+                        # Start from the recognition quarter and go forward
+                        q = (event_date.month - 1) // 3 + 1
+                        y = event_date.year
+                        for _ in range(quarters_covered):
+                            period_key = f"{y}-Q{q}"
+                            if period_key in period_column_set:
+                                period_amounts[period_key] += amount_per_quarter
+                            q += 1
+                            if q > 4:
+                                q = 1
+                                y += 1
+                    else:
+                        # For monthly view, distribute across months
+                        amount_per_month = event_total / billing_months
+
+                        # Start from the recognition month and go forward
+                        dist_date = date(event_date.year, event_date.month, 1)
+                        for _ in range(billing_months):
+                            period_key = dist_date.strftime("%Y-%m")
+                            if period_key in period_column_set:
+                                period_amounts[period_key] += amount_per_month
+                            dist_date += relativedelta(months=1)
+            else:
+                # Standard: show full amount in recognition period
+                for event in schedule:
+                    period_key = get_period_key(event["date"])
+                    period_amounts[period_key] += event["total"]
+
+            # Build period data for this contract
+            contract_periods = []
+            contract_total = Decimal("0")
+            for period in period_columns:
+                amount = period_amounts.get(period, Decimal("0"))
+                contract_periods.append(RevenueMonthData(month=period, amount=amount))
+                contract_total += amount
+                period_totals[period] += amount
+
+            # Only include contracts with revenue
+            if contract_total > 0:
+                contract_name = contract.name or f"Vertrag {contract.id}"
+                contract_rows.append(
+                    ContractRevenueRow(
+                        contract_id=contract.id,
+                        contract_name=contract_name,
+                        customer_name=contract.customer.name,
+                        months=contract_periods,
+                        total=contract_total,
+                    )
+                )
+
+        # Build period totals list
+        totals_list = [
+            RevenueMonthData(month=period, amount=period_totals[period])
+            for period in period_columns
+        ]
+
+        grand_total = sum(t.amount for t in totals_list)
+
+        return RevenueForecastResult(
+            month_columns=period_columns,
+            monthly_totals=totals_list,
+            contracts=contract_rows,
+            grand_total=grand_total,
+        )
+
+    @strawberry.field
     def contracts(
         self,
         info: Info[Context, None],

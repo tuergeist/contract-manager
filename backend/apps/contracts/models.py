@@ -496,6 +496,217 @@ class Contract(TenantModel):
             })
             events[billing_date]["total"] += amount
 
+    def get_recognition_schedule(self, from_date=None, to_date=None, include_history=False):
+        """
+        Calculate the recognition schedule for all contract items.
+
+        This is similar to get_billing_schedule but uses item.start_date (recognition date)
+        instead of item.billing_start_date for timing. Falls back to billing_start_date
+        if start_date is null.
+
+        Args:
+            from_date: Start of the forecast period (default: today)
+            to_date: End of the forecast period (default: from_date + 13 months)
+            include_history: Include past recognition periods (default: False)
+
+        Returns:
+            List of dicts with:
+            - date: recognition date
+            - items: list of items being recognized with amounts
+            - total: total amount for this recognition date
+        """
+        from datetime import date as date_type
+        from decimal import Decimal
+        from collections import defaultdict
+        from dateutil.relativedelta import relativedelta
+
+        today = date_type.today()
+        if from_date is None:
+            from_date = today if not include_history else self.billing_start_date
+        if to_date is None:
+            to_date = today + relativedelta(months=13)
+
+        # Don't go beyond contract end date
+        if self.end_date and to_date > self.end_date:
+            to_date = self.end_date
+
+        interval_months = self.get_interval_months()
+        events = defaultdict(lambda: {"items": [], "total": Decimal("0")})
+
+        # Get all active items
+        items = self.items.select_related("product").all()
+
+        for item in items:
+            # Skip descriptive-only items (no product = no billing)
+            if not item.product:
+                continue
+
+            # Use start_date for recognition, fall back to billing_start_date
+            item_recognition_start = item.start_date or item.billing_start_date or self.billing_start_date
+            item_billing_end = item.billing_end_date  # Can be None = ongoing
+
+            # Skip items that haven't started yet
+            if item_recognition_start > to_date:
+                continue
+
+            # Skip items that ended before our period
+            if item_billing_end and item_billing_end < from_date:
+                continue
+
+            # Handle one-off items separately (recognized only once)
+            if item.is_one_off:
+                self._add_one_off_recognition_event(
+                    events, item, item_recognition_start, from_date, to_date
+                )
+                continue
+
+            # Calculate recognition dates for this item
+            align_date = item.align_to_contract_at
+
+            if align_date:
+                # Item has alignment - generate dates before and after alignment
+                self._add_pre_alignment_recognition_events(
+                    events, item, item_recognition_start, align_date,
+                    from_date, to_date, interval_months
+                )
+                self._add_post_alignment_recognition_events(
+                    events, item, align_date, item_billing_end,
+                    from_date, to_date, interval_months
+                )
+            else:
+                # No alignment - item follows contract cycle from its recognition start
+                self._add_regular_recognition_events(
+                    events, item, item_recognition_start, item_billing_end,
+                    from_date, to_date, interval_months
+                )
+
+        # Convert to sorted list
+        result = []
+        for recognition_date in sorted(events.keys()):
+            event = events[recognition_date]
+            result.append({
+                "date": recognition_date,
+                "items": event["items"],
+                "total": event["total"],
+            })
+
+        return result
+
+    def _add_regular_recognition_events(
+        self, events, item, start_date, end_date, from_date, to_date, interval_months
+    ):
+        """Add recognition events for an item following the regular contract cycle."""
+        from decimal import Decimal
+        from dateutil.relativedelta import relativedelta
+
+        # Find the first recognition date on or after item start
+        recognition_date = self.billing_start_date
+        while recognition_date < start_date:
+            recognition_date += relativedelta(months=interval_months)
+
+        # Generate recognition events
+        while recognition_date <= to_date:
+            if recognition_date >= from_date:
+                if end_date is None or recognition_date <= end_date:
+                    # Use get_price_at() for date-aware pricing (falls back to unit_price)
+                    price_at_date = item.get_price_at(recognition_date)
+                    # unit_price is monthly, multiply by interval for recognition amount
+                    amount = item.quantity * price_at_date * interval_months
+                    events[recognition_date]["items"].append({
+                        "item_id": item.id,
+                        "product_name": item.product.name,
+                        "quantity": item.quantity,
+                        "unit_price": price_at_date,
+                        "amount": amount,
+                        "is_prorated": False,
+                        "prorate_factor": None,
+                    })
+                    events[recognition_date]["total"] += amount
+            recognition_date += relativedelta(months=interval_months)
+
+    def _add_pre_alignment_recognition_events(
+        self, events, item, start_date, align_date, from_date, to_date, interval_months
+    ):
+        """Add recognition events before alignment (pro-rated first period)."""
+        from decimal import Decimal
+        from dateutil.relativedelta import relativedelta
+
+        # First recognition is at start_date (pro-rated period until align_date)
+        if start_date >= from_date and start_date <= to_date:
+            # Calculate proration factor
+            days_in_period = (align_date - start_date).days
+            full_period_days = interval_months * 30  # Approximate
+            prorate_factor = Decimal(days_in_period) / Decimal(full_period_days)
+
+            # Use get_price_at() for date-aware pricing (falls back to unit_price)
+            price_at_date = item.get_price_at(start_date)
+            # unit_price is monthly, multiply by interval for recognition amount
+            amount = item.quantity * price_at_date * interval_months * prorate_factor
+            events[start_date]["items"].append({
+                "item_id": item.id,
+                "product_name": item.product.name,
+                "quantity": item.quantity,
+                "unit_price": price_at_date,
+                "amount": amount.quantize(Decimal("0.01")),
+                "is_prorated": True,
+                "prorate_factor": prorate_factor.quantize(Decimal("0.0001")),
+            })
+            events[start_date]["total"] += amount.quantize(Decimal("0.01"))
+
+    def _add_post_alignment_recognition_events(
+        self, events, item, align_date, end_date, from_date, to_date, interval_months
+    ):
+        """Add recognition events after alignment (regular cycle)."""
+        from decimal import Decimal
+        from dateutil.relativedelta import relativedelta
+
+        recognition_date = align_date
+        while recognition_date <= to_date:
+            if recognition_date >= from_date:
+                if end_date is None or recognition_date <= end_date:
+                    # Use get_price_at() for date-aware pricing (falls back to unit_price)
+                    price_at_date = item.get_price_at(recognition_date)
+                    # unit_price is monthly, multiply by interval for recognition amount
+                    amount = item.quantity * price_at_date * interval_months
+                    events[recognition_date]["items"].append({
+                        "item_id": item.id,
+                        "product_name": item.product.name,
+                        "quantity": item.quantity,
+                        "unit_price": price_at_date,
+                        "amount": amount,
+                        "is_prorated": False,
+                        "prorate_factor": None,
+                    })
+                    events[recognition_date]["total"] += amount
+            recognition_date += relativedelta(months=interval_months)
+
+    def _add_one_off_recognition_event(
+        self, events, item, recognition_start, from_date, to_date
+    ):
+        """Add a single recognition event for a one-off item."""
+        from decimal import Decimal
+
+        # One-off items are recognized once at their recognition start date
+        recognition_date = recognition_start
+
+        # Only include if within our date range
+        if recognition_date >= from_date and recognition_date <= to_date:
+            # Use get_price_at() for date-aware pricing (falls back to unit_price)
+            price_at_date = item.get_price_at(recognition_date)
+            # One-off items use the raw price (not multiplied by interval)
+            amount = item.quantity * price_at_date
+            events[recognition_date]["items"].append({
+                "item_id": item.id,
+                "product_name": item.product.name,
+                "quantity": item.quantity,
+                "unit_price": price_at_date,
+                "amount": amount,
+                "is_prorated": False,
+                "prorate_factor": None,
+                "is_one_off": True,
+            })
+            events[recognition_date]["total"] += amount
+
 
 class ContractItem(TenantModel):
     """A line item in a contract."""

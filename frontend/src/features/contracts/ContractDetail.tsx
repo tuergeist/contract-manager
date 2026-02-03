@@ -941,12 +941,7 @@ export function ContractDetail() {
                                     <Lock className="h-3 w-3 text-amber-500" />
                                   </span>
                                 )}
-                                <span>
-                                  {formatCurrency(item.effectivePrice)}
-                                  <span className="text-xs text-gray-500">
-                                    /{t(`contracts.item.pricePeriodValues.${item.effectivePricePeriod}`)}
-                                  </span>
-                                </span>
+                                <span>{formatCurrency(item.effectivePrice)}</span>
                               </div>
                             </td>
                             <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
@@ -1350,7 +1345,7 @@ function AddItemModal({
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('contracts.item.pricePeriod')}</label>
-              <Select value={pricePeriod} onValueChange={setPricePeriod}>
+              <Select value={pricePeriod} onValueChange={setPricePeriod} disabled={isOneOff}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -1415,7 +1410,10 @@ function AddItemModal({
 
           {/* Start Date (effective date) */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">{t('contracts.item.startDate')}</label>
+            <label className="text-sm font-medium">
+              {t('contracts.item.startDate')}{' '}
+              <span className="text-muted-foreground font-normal">{t('contracts.item.startDateSubtitle')}</span>
+            </label>
             <Input
               type="date"
               value={startDate}
@@ -1428,7 +1426,10 @@ function AddItemModal({
 
           {/* Billing Start Date */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">{t('contracts.item.billingStartDate')}</label>
+            <label className="text-sm font-medium">
+              {t('contracts.item.billingStartDate')}{' '}
+              <span className="text-muted-foreground font-normal">{t('contracts.item.billingStartDateSubtitle')}</span>
+            </label>
             <Input
               type="date"
               value={billingStartDate}
@@ -1669,7 +1670,7 @@ function EditItemModal({
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('contracts.item.pricePeriod')}</label>
-              <Select value={pricePeriodValue} onValueChange={setPricePeriodValue}>
+              <Select value={pricePeriodValue} onValueChange={setPricePeriodValue} disabled={isOneOff}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -1892,7 +1893,10 @@ function EditItemModal({
           {/* Start Date + Billing Start Date - 2 columns */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t('contracts.item.startDate')}</label>
+              <label className="text-sm font-medium">
+                {t('contracts.item.startDate')}{' '}
+                <span className="text-muted-foreground font-normal">{t('contracts.item.startDateSubtitle')}</span>
+              </label>
               <Input
                 type="date"
                 value={startDate}
@@ -1900,7 +1904,10 @@ function EditItemModal({
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t('contracts.item.billingStartDate')}</label>
+              <label className="text-sm font-medium">
+                {t('contracts.item.billingStartDate')}{' '}
+                <span className="text-muted-foreground font-normal">{t('contracts.item.billingStartDateSubtitle')}</span>
+              </label>
               <Input
                 type="date"
                 value={billingStartDate}

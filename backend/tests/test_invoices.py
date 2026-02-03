@@ -482,10 +482,9 @@ class TestInvoiceExcelGeneration:
         excel_bytes = service.generate_excel(invoices, 2026, 1, language="en")
 
         wb = load_workbook(io.BytesIO(excel_bytes))
-        assert len(wb.sheetnames) == 3
+        assert len(wb.sheetnames) == 2
         assert "Summary" in wb.sheetnames
-        assert "Invoices" in wb.sheetnames
-        assert "Line Items" in wb.sheetnames
+        assert "Details" in wb.sheetnames
 
     def test_excel_summary_sheet_contains_totals(
         self, tenant, monthly_contract, product
@@ -509,15 +508,18 @@ class TestInvoiceExcelGeneration:
         wb = load_workbook(io.BytesIO(excel_bytes))
         ws = wb["Summary"]
 
-        # Check total count
-        assert ws["B3"].value == 1  # 1 invoice
-        # Check total amount
-        assert ws["B4"].value == 200.0  # 2 x 100
+        # Row 3 has headers, row 4 has first data row, row 5 has totals
+        # Column J (10) has the Amount
+        assert ws["A4"].value == "Test Customer"  # Customer name
+        assert ws["J4"].value == 200.0  # Amount (2 x 100)
+        # Total row
+        assert ws["A5"].value == "Gesamtbetrag"  # Total label in German
+        assert ws["J5"].value == 200.0  # Total amount
 
-    def test_excel_invoices_sheet_contains_data(
+    def test_excel_summary_sheet_contains_contract_data(
         self, tenant, monthly_contract, product
     ):
-        """Test that Invoices sheet contains invoice data."""
+        """Test that Summary sheet contains contract data."""
         import io
         from openpyxl import load_workbook
 
@@ -534,17 +536,17 @@ class TestInvoiceExcelGeneration:
         excel_bytes = service.generate_excel(invoices, 2026, 1, language="en")
 
         wb = load_workbook(io.BytesIO(excel_bytes))
-        ws = wb["Invoices"]
+        ws = wb["Summary"]
 
-        # Row 2 should have invoice data (row 1 is header)
-        assert ws["A2"].value == "Test Customer"
-        assert ws["B2"].value == "Monthly Contract"
-        assert ws["D2"].value == 100.0
+        # Row 3 has headers, row 4 has first data row
+        # Column A: Customer, Column J: Amount
+        assert ws["A4"].value == "Test Customer"
+        assert ws["J4"].value == 100.0
 
-    def test_excel_line_items_sheet_contains_data(
+    def test_excel_details_sheet_contains_data(
         self, tenant, monthly_contract, product
     ):
-        """Test that Line Items sheet contains line item data."""
+        """Test that Details sheet contains line item data."""
         import io
         from openpyxl import load_workbook
 
@@ -561,14 +563,15 @@ class TestInvoiceExcelGeneration:
         excel_bytes = service.generate_excel(invoices, 2026, 1, language="en")
 
         wb = load_workbook(io.BytesIO(excel_bytes))
-        ws = wb["Line Items"]
+        ws = wb["Details"]
 
-        # Row 2 should have line item data
+        # Row 1 is header, row 2 has first line item
+        # Column A: Customer, F: Item, R: Quantity, S: Unit Price, T: Amount
         assert ws["A2"].value == "Test Customer"
-        assert ws["C2"].value == "Test Product"
-        assert ws["D2"].value == 3  # quantity
-        assert ws["E2"].value == 50.0  # unit price
-        assert ws["F2"].value == 150.0  # amount (3 x 50)
+        assert ws["F2"].value == "Test Product"
+        assert ws["R2"].value == 3  # quantity
+        assert ws["S2"].value == 50.0  # unit price
+        assert ws["T2"].value == 150.0  # amount (3 x 50)
 
     def test_generate_excel_empty_list(self, tenant):
         """Test that empty invoice list returns valid Excel file."""

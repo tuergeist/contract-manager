@@ -110,9 +110,15 @@ class InvoiceService:
                     contract, billing_date
                 )
 
+                # Build a lookup for contract items by ID
+                contract_items_by_id = {ci.id: ci for ci in contract.items.all()}
+
                 # Convert billing items to invoice line items
                 line_items = []
                 for item in event["items"]:
+                    # Get the actual ContractItem for additional fields
+                    contract_item = contract_items_by_id.get(item["item_id"])
+
                     line_item = InvoiceLineItem(
                         item_id=item["item_id"],
                         product_name=item["product_name"],
@@ -123,6 +129,11 @@ class InvoiceService:
                         is_prorated=item.get("is_prorated", False),
                         prorate_factor=item.get("prorate_factor"),
                         is_one_off=item.get("is_one_off", False),
+                        # Item-level fields
+                        item_start_date=contract_item.start_date if contract_item else None,
+                        item_billing_start_date=contract_item.billing_start_date if contract_item else None,
+                        item_billing_end_date=contract_item.billing_end_date if contract_item else None,
+                        order_confirmation_number=contract_item.order_confirmation_number if contract_item else None,
                     )
                     line_items.append(line_item)
 
@@ -137,6 +148,15 @@ class InvoiceService:
                     billing_period_end=period_end,
                     line_items=line_items,
                     invoice_text=contract.invoice_text or "",
+                    # Enhanced fields
+                    customer_number=contract.customer.netsuite_customer_number or "",
+                    sales_order_number=contract.netsuite_sales_order_number or "",
+                    contract_number=contract.netsuite_contract_number or "",
+                    po_number=contract.po_number or "",
+                    order_confirmation_number=contract.order_confirmation_number or "",
+                    contract_start_date=contract.start_date,
+                    contract_end_date=contract.end_date,
+                    billing_interval=contract.billing_interval,
                 )
                 invoices.append(invoice)
 
@@ -291,12 +311,11 @@ class InvoiceService:
         language: Literal["de", "en"] = "de",
     ) -> bytes:
         """
-        Generate an Excel file with all invoices.
+        Generate an Excel file with all invoices in NetSuite-compatible format.
 
-        Creates three sheets:
-        - Summary: Overview with totals and breakdown by customer
-        - Invoices: One row per invoice
-        - Line Items: One row per line item
+        Creates two sheets:
+        - Summary: Pivot-style overview grouped by customer/contract
+        - Details: Full line item details with all metadata
 
         Args:
             invoices: List of InvoiceData to include
@@ -308,7 +327,8 @@ class InvoiceService:
             Excel file as bytes.
         """
         from openpyxl import Workbook
-        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
 
         if not invoices:
             # Return empty workbook
@@ -317,109 +337,272 @@ class InvoiceService:
             wb.save(buffer)
             return buffer.getvalue()
 
-        labels = LABELS.get(language, LABELS["en"])
+        # Localized headers
+        headers_de = {
+            "customer": "Kunde",
+            "sales_order": "SO-Nummer",
+            "contract_number": "Vertrag",
+            "po_number": "Bestellnummer",
+            "ab_number": "AB-Nummer",
+            "item": "Position",
+            "item_description": "Beschreibung",
+            "invoicing_instructions": "Rechnungshinweise",
+            "contract_start": "Vertragsbeginn",
+            "contract_end": "Vertragsende",
+            "item_start": "Position gültig ab",
+            "item_billing_start": "Abrechnung ab",
+            "item_billing_end": "Abrechnung bis",
+            "billing_schedule": "Abrechnungsintervall",
+            "quantity": "Menge",
+            "unit_price": "Einzelpreis",
+            "amount": "Betrag",
+            "billing_date": "Rechnungsdatum",
+            "period_start": "Zeitraum von",
+            "period_end": "Zeitraum bis",
+            "is_prorated": "Anteilig",
+            "is_one_off": "Einmalig",
+            "total": "Gesamtbetrag",
+            "monthly_rate": "Monatliche Rate",
+            "summary_title": "Rechnungsübersicht",
+        }
+        headers_en = {
+            "customer": "Customer",
+            "sales_order": "Sales Order",
+            "contract_number": "Contract",
+            "po_number": "PO Number",
+            "ab_number": "Order Confirmation",
+            "item": "Item",
+            "item_description": "Description",
+            "invoicing_instructions": "Invoicing Instructions",
+            "contract_start": "Contract Start",
+            "contract_end": "Contract End",
+            "item_start": "Item Effective Date",
+            "item_billing_start": "Billing Start",
+            "item_billing_end": "Billing End",
+            "billing_schedule": "Billing Schedule",
+            "quantity": "Quantity",
+            "unit_price": "Unit Price",
+            "amount": "Amount",
+            "billing_date": "Billing Date",
+            "period_start": "Period Start",
+            "period_end": "Period End",
+            "is_prorated": "Prorated",
+            "is_one_off": "One-off",
+            "total": "Total",
+            "monthly_rate": "Monthly Rate",
+            "summary_title": "Invoice Summary",
+        }
+        h = headers_de if language == "de" else headers_en
+
+        # Billing interval display names
+        interval_names = {
+            "monthly": "Monthly" if language == "en" else "Monatlich",
+            "quarterly": "Quarterly" if language == "en" else "Vierteljährlich",
+            "semi_annual": "Semi-annual" if language == "en" else "Halbjährlich",
+            "annual": "Annual" if language == "en" else "Jährlich",
+            "biennial": "2 Years" if language == "en" else "2 Jahre",
+            "triennial": "3 Years" if language == "en" else "3 Jahre",
+            "quadrennial": "4 Years" if language == "en" else "4 Jahre",
+            "quinquennial": "5 Years" if language == "en" else "5 Jahre",
+        }
 
         wb = Workbook()
+        currency = self.tenant.currency
+        currency_format = f'#,##0.00 "{currency}"'
 
-        # Header style
+        # Styles
         header_font = Font(bold=True, color="FFFFFF")
         header_fill = PatternFill(start_color="2563EB", end_color="2563EB", fill_type="solid")
+        total_fill = PatternFill(start_color="E5E7EB", end_color="E5E7EB", fill_type="solid")
+        title_font = Font(bold=True, size=14)
+        thin_border = Border(
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin"),
+        )
 
-        # --- Summary Sheet ---
+        # =================================================================
+        # Summary Sheet - Pivot-style overview
+        # =================================================================
         ws_summary = wb.active
         ws_summary.title = "Summary"
 
-        # Summary header
-        ws_summary["A1"] = f"{labels['invoice']} - {year:04d}-{month:02d}"
-        ws_summary["A1"].font = Font(bold=True, size=14)
+        # Title
+        ws_summary["A1"] = f"{h['summary_title']} - {year:04d}-{month:02d}"
+        ws_summary["A1"].font = title_font
 
-        ws_summary["A3"] = "Total Invoices"
-        ws_summary["B3"] = len(invoices)
+        # Summary headers
+        summary_headers = [
+            h["customer"],
+            h["sales_order"],
+            h["contract_number"],
+            h["po_number"],
+            h["invoicing_instructions"],
+            h["contract_start"],
+            h["contract_end"],
+            h["billing_schedule"],
+            h["monthly_rate"],
+            h["amount"],
+        ]
 
-        total_amount = sum(inv.total_amount for inv in invoices)
-        ws_summary["A4"] = labels["total"]
-        ws_summary["B4"] = float(total_amount)
-        ws_summary["B4"].number_format = '#,##0.00 "' + self.tenant.currency + '"'
+        for col, header in enumerate(summary_headers, 1):
+            cell = ws_summary.cell(row=3, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.border = thin_border
 
-        # Breakdown by customer
-        ws_summary["A6"] = "Breakdown by Customer"
-        ws_summary["A6"].font = Font(bold=True)
-
-        customer_totals: dict[str, Decimal] = {}
+        # Aggregate data by contract
+        contract_data: dict[int, dict] = {}
         for inv in invoices:
-            customer_totals[inv.customer_name] = (
-                customer_totals.get(inv.customer_name, Decimal("0")) + inv.total_amount
-            )
+            if inv.contract_id not in contract_data:
+                # Calculate monthly rate (amount / interval months)
+                interval_months = {
+                    "monthly": 1, "quarterly": 3, "semi_annual": 6,
+                    "annual": 12, "biennial": 24, "triennial": 36,
+                    "quadrennial": 48, "quinquennial": 60,
+                }.get(inv.billing_interval, 1)
+                monthly_rate = inv.total_amount / Decimal(interval_months)
 
-        row = 7
-        for customer_name, amount in sorted(customer_totals.items()):
-            ws_summary[f"A{row}"] = customer_name
-            ws_summary[f"B{row}"] = float(amount)
-            ws_summary[f"B{row}"].number_format = '#,##0.00 "' + self.tenant.currency + '"'
+                contract_data[inv.contract_id] = {
+                    "customer": inv.customer_display_name,
+                    "sales_order": inv.sales_order_number,
+                    "contract_number": inv.contract_number,
+                    "po_number": inv.po_number,
+                    "invoicing_instructions": inv.invoice_text,
+                    "contract_start": inv.contract_start_date,
+                    "contract_end": inv.contract_end_date,
+                    "billing_schedule": interval_names.get(inv.billing_interval, inv.billing_interval),
+                    "monthly_rate": monthly_rate,
+                    "amount": inv.total_amount,
+                }
+            else:
+                # Accumulate amounts for same contract
+                contract_data[inv.contract_id]["amount"] += inv.total_amount
+
+        # Write summary rows
+        row = 4
+        total_amount = Decimal("0")
+        total_monthly = Decimal("0")
+        for contract_id, data in sorted(contract_data.items(), key=lambda x: x[1]["customer"].lower()):
+            ws_summary.cell(row=row, column=1, value=data["customer"])
+            ws_summary.cell(row=row, column=2, value=data["sales_order"])
+            ws_summary.cell(row=row, column=3, value=data["contract_number"])
+            ws_summary.cell(row=row, column=4, value=data["po_number"])
+            ws_summary.cell(row=row, column=5, value=data["invoicing_instructions"])
+            ws_summary.cell(row=row, column=6, value=data["contract_start"])
+            ws_summary.cell(row=row, column=7, value=data["contract_end"])
+            ws_summary.cell(row=row, column=8, value=data["billing_schedule"])
+
+            monthly_cell = ws_summary.cell(row=row, column=9, value=float(data["monthly_rate"]))
+            monthly_cell.number_format = currency_format
+
+            amount_cell = ws_summary.cell(row=row, column=10, value=float(data["amount"]))
+            amount_cell.number_format = currency_format
+
+            total_amount += data["amount"]
+            total_monthly += data["monthly_rate"]
             row += 1
 
-        # Adjust column widths
-        ws_summary.column_dimensions["A"].width = 30
-        ws_summary.column_dimensions["B"].width = 15
+        # Total row
+        ws_summary.cell(row=row, column=1, value=h["total"]).font = Font(bold=True)
+        for col in range(1, 9):
+            ws_summary.cell(row=row, column=col).fill = total_fill
 
-        # --- Invoices Sheet ---
-        ws_invoices = wb.create_sheet("Invoices")
+        monthly_total_cell = ws_summary.cell(row=row, column=9, value=float(total_monthly))
+        monthly_total_cell.number_format = currency_format
+        monthly_total_cell.font = Font(bold=True)
+        monthly_total_cell.fill = total_fill
 
-        headers = ["Customer", labels["contract"], labels["invoice_date"], labels["total"]]
-        for col, header in enumerate(headers, 1):
-            cell = ws_invoices.cell(row=1, column=col, value=header)
-            cell.font = header_font
-            cell.fill = header_fill
+        total_cell = ws_summary.cell(row=row, column=10, value=float(total_amount))
+        total_cell.number_format = currency_format
+        total_cell.font = Font(bold=True)
+        total_cell.fill = total_fill
 
-        for row_num, inv in enumerate(invoices, 2):
-            ws_invoices.cell(row=row_num, column=1, value=inv.customer_name)
-            ws_invoices.cell(row=row_num, column=2, value=inv.contract_name)
-            ws_invoices.cell(row=row_num, column=3, value=inv.billing_date)
-            total_cell = ws_invoices.cell(row=row_num, column=4, value=float(inv.total_amount))
-            total_cell.number_format = '#,##0.00 "' + self.tenant.currency + '"'
+        # Adjust column widths for Summary
+        summary_widths = [35, 18, 30, 15, 40, 14, 14, 18, 15, 15]
+        for col, width in enumerate(summary_widths, 1):
+            ws_summary.column_dimensions[get_column_letter(col)].width = width
 
-        # Adjust column widths
-        ws_invoices.column_dimensions["A"].width = 25
-        ws_invoices.column_dimensions["B"].width = 25
-        ws_invoices.column_dimensions["C"].width = 12
-        ws_invoices.column_dimensions["D"].width = 15
+        # =================================================================
+        # Details Sheet - Full line item data
+        # =================================================================
+        ws_details = wb.create_sheet("Details")
 
-        # --- Line Items Sheet ---
-        ws_items = wb.create_sheet("Line Items")
-
-        item_headers = [
-            "Customer",
-            labels["contract"],
-            labels["description"],
-            labels["quantity"],
-            labels["unit_price"],
-            labels["amount"],
+        detail_headers = [
+            h["customer"],
+            h["sales_order"],
+            h["contract_number"],
+            h["po_number"],
+            h["ab_number"],
+            h["item"],
+            h["item_description"],
+            h["invoicing_instructions"],
+            h["contract_start"],
+            h["contract_end"],
+            h["item_start"],
+            h["item_billing_start"],
+            h["item_billing_end"],
+            h["billing_schedule"],
+            h["billing_date"],
+            h["period_start"],
+            h["period_end"],
+            h["quantity"],
+            h["unit_price"],
+            h["amount"],
+            h["is_prorated"],
+            h["is_one_off"],
         ]
-        for col, header in enumerate(item_headers, 1):
-            cell = ws_items.cell(row=1, column=col, value=header)
+
+        for col, header in enumerate(detail_headers, 1):
+            cell = ws_details.cell(row=1, column=col, value=header)
             cell.font = header_font
             cell.fill = header_fill
+            cell.border = thin_border
 
-        row_num = 2
+        # Write detail rows
+        row = 2
         for inv in invoices:
-            for item in inv.line_items:
-                ws_items.cell(row=row_num, column=1, value=inv.customer_name)
-                ws_items.cell(row=row_num, column=2, value=inv.contract_name)
-                ws_items.cell(row=row_num, column=3, value=item.product_name)
-                ws_items.cell(row=row_num, column=4, value=item.quantity)
-                price_cell = ws_items.cell(row=row_num, column=5, value=float(item.unit_price))
-                price_cell.number_format = '#,##0.00 "' + self.tenant.currency + '"'
-                amount_cell = ws_items.cell(row=row_num, column=6, value=float(item.amount))
-                amount_cell.number_format = '#,##0.00 "' + self.tenant.currency + '"'
-                row_num += 1
+            billing_schedule = interval_names.get(inv.billing_interval, inv.billing_interval)
 
-        # Adjust column widths
-        ws_items.column_dimensions["A"].width = 25
-        ws_items.column_dimensions["B"].width = 25
-        ws_items.column_dimensions["C"].width = 30
-        ws_items.column_dimensions["D"].width = 10
-        ws_items.column_dimensions["E"].width = 15
-        ws_items.column_dimensions["F"].width = 15
+            for item in inv.line_items:
+                # Use item-level AB number if available, otherwise contract-level
+                ab_number = item.order_confirmation_number or inv.order_confirmation_number
+
+                ws_details.cell(row=row, column=1, value=inv.customer_display_name)
+                ws_details.cell(row=row, column=2, value=inv.sales_order_number)
+                ws_details.cell(row=row, column=3, value=inv.contract_number)
+                ws_details.cell(row=row, column=4, value=inv.po_number)
+                ws_details.cell(row=row, column=5, value=ab_number)
+                ws_details.cell(row=row, column=6, value=item.product_name)
+                ws_details.cell(row=row, column=7, value=item.description)
+                ws_details.cell(row=row, column=8, value=inv.invoice_text)
+                ws_details.cell(row=row, column=9, value=inv.contract_start_date)
+                ws_details.cell(row=row, column=10, value=inv.contract_end_date)
+                ws_details.cell(row=row, column=11, value=item.item_start_date)
+                ws_details.cell(row=row, column=12, value=item.item_billing_start_date)
+                ws_details.cell(row=row, column=13, value=item.item_billing_end_date)
+                ws_details.cell(row=row, column=14, value=billing_schedule)
+                ws_details.cell(row=row, column=15, value=inv.billing_date)
+                ws_details.cell(row=row, column=16, value=inv.billing_period_start)
+                ws_details.cell(row=row, column=17, value=inv.billing_period_end)
+                ws_details.cell(row=row, column=18, value=item.quantity)
+
+                price_cell = ws_details.cell(row=row, column=19, value=float(item.unit_price))
+                price_cell.number_format = currency_format
+
+                amount_cell = ws_details.cell(row=row, column=20, value=float(item.amount))
+                amount_cell.number_format = currency_format
+
+                ws_details.cell(row=row, column=21, value="Yes" if item.is_prorated else "")
+                ws_details.cell(row=row, column=22, value="Yes" if item.is_one_off else "")
+
+                row += 1
+
+        # Adjust column widths for Details
+        detail_widths = [35, 18, 30, 15, 15, 35, 30, 40, 14, 14, 14, 14, 14, 18, 14, 14, 14, 10, 15, 15, 10, 10]
+        for col, width in enumerate(detail_widths, 1):
+            ws_details.column_dimensions[get_column_letter(col)].width = width
 
         # Save to bytes
         buffer = io.BytesIO()
