@@ -44,6 +44,7 @@ services:
       redis:
         condition: service_healthy
     environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
       DATABASE_URL: postgres://${POSTGRES_USER:-contract_manager}:${POSTGRES_PASSWORD:-contract_manager}@db:5432/${POSTGRES_DB:-contract_manager}
       REDIS_URL: redis://redis:6379/0
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
