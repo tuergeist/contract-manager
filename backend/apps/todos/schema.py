@@ -171,8 +171,11 @@ class TodoMutation:
                 error="Exactly one of contract_id, contract_item_id, or customer_id must be provided",
             )
 
-        # Validate assigned_to is in the same tenant
-        if assigned_to_id:
+        # Default assigned_to to self if not specified
+        if assigned_to_id is None:
+            assigned_to_id = user.id
+        else:
+            # Validate assigned_to is in the same tenant
             from apps.tenants.models import User
             if not User.objects.filter(id=assigned_to_id, tenant=user.tenant, is_active=True).exists():
                 return TodoCreateResult(success=False, error="Invalid assignee")

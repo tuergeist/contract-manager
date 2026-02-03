@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, gql } from '@apollo/client'
+import { useAuth } from '@/lib/auth'
 import {
   Dialog,
   DialogContent,
@@ -128,6 +129,7 @@ interface TodoModalProps {
 
 export function TodoModal({ open, onOpenChange, context, onSuccess }: TodoModalProps) {
   const { t } = useTranslation()
+  const { user: currentUser } = useAuth()
   const [text, setText] = useState('')
   const [reminderDate, setReminderDate] = useState('')
   const [isPublic, setIsPublic] = useState(true)
@@ -137,7 +139,7 @@ export function TodoModal({ open, onOpenChange, context, onSuccess }: TodoModalP
   const { data: usersData } = useQuery(USERS_QUERY, { skip: !open })
   const [createTodo, { loading }] = useMutation(CREATE_TODO)
 
-  const users = (usersData?.users || []).filter((u: User) => u.isActive) as User[]
+  const users = (usersData?.users || []).filter((u: User) => u.isActive && u.id) as User[]
 
   // Calculate date suggestions
   const dateSuggestions = useMemo(() => {
@@ -149,16 +151,16 @@ export function TodoModal({ open, onOpenChange, context, onSuccess }: TodoModalP
     }
   }, [])
 
-  // Reset form when modal opens
+  // Reset form when modal opens - default assignee to current user
   useEffect(() => {
     if (open) {
       setText('')
       setReminderDate('')
       setIsPublic(true)
-      setAssignedToId('')
+      setAssignedToId(currentUser?.id ? String(currentUser.id) : '')
       setError(null)
     }
-  }, [open])
+  }, [open, currentUser?.id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -277,14 +279,14 @@ export function TodoModal({ open, onOpenChange, context, onSuccess }: TodoModalP
             {/* Assign to */}
             <div className="grid gap-2">
               <Label htmlFor="assigned-to">{t('todos.assignTo')}</Label>
-              <Select value={assignedToId} onValueChange={setAssignedToId}>
+              <Select value={assignedToId || '__none__'} onValueChange={(val) => setAssignedToId(val === '__none__' ? '' : val)}>
                 <SelectTrigger id="assigned-to" data-testid="todo-assigned-to">
                   <SelectValue placeholder={t('todos.assignToPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">{t('todos.unassigned')}</SelectItem>
+                  <SelectItem value="__none__">{t('todos.unassigned')}</SelectItem>
                   {users.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
+                    <SelectItem key={user.id} value={String(user.id)}>
                       {user.firstName && user.lastName
                         ? `${user.firstName} ${user.lastName}`
                         : user.email}

@@ -1316,51 +1316,47 @@ class ContractQuery:
         if sort_by == "customer_name":
             order_field = "-customer__name" if sort_order == "desc" else "customer__name"
         elif sort_by == "total_value":
-            # Annotate with total value for sorting
-            # Total value = (recurring items * duration_months) + one-off items
-            # Duration is calculated as months between start_date and end_date (or 12 if no end_date)
-            from django.db.models import Case, When, Value, DecimalField, IntegerField
-            from django.db.models.functions import Coalesce, ExtractYear, ExtractMonth
+            # Sort by total_value in Python to use the actual calculated values
+            # (which include period-specific pricing that can't be expressed in SQL)
+            all_contracts = list(queryset.prefetch_related("items"))
 
-            # Calculate duration in months:
-            # - If end_date is set: months between start_date and end_date
-            # - Otherwise: use min_duration_months if set, or default to 12 months
-            from django.db.models.functions import Greatest
+            # Calculate total_value for each contract using the same logic as the GraphQL field
+            def get_total_value(contract):
+                from decimal import Decimal
+                from datetime import date as date_type
+                today = date_type.today()
 
-            queryset = queryset.annotate(
-                _duration_months=Case(
-                    When(
-                        end_date__isnull=False,
-                        then=(
-                            (ExtractYear(F("end_date")) - ExtractYear(F("start_date"))) * 12
-                            + ExtractMonth(F("end_date")) - ExtractMonth(F("start_date"))
-                            + 1  # Include the end month
-                        ),
-                    ),
-                    When(
-                        min_duration_months__isnull=False,
-                        then=F("min_duration_months"),
-                    ),
-                    default=Value(12),
-                    output_field=IntegerField(),
-                ),
+                monthly_recurring = Decimal("0")
+                one_off_total = Decimal("0")
+
+                for item in contract.items.all():
+                    if item.is_one_off:
+                        effective_price, _ = item.get_effective_price_info(today)
+                        one_off_total += effective_price * item.quantity
+                    else:
+                        monthly_unit_price = item.get_price_at(today, normalize_to_monthly=True)
+                        monthly_recurring += monthly_unit_price * item.quantity
+
+                duration_months = contract.get_duration_months()
+                return (monthly_recurring * duration_months) + one_off_total
+
+            # Sort contracts by calculated total_value
+            reverse = sort_order == "desc"
+            all_contracts.sort(key=get_total_value, reverse=reverse)
+
+            # Apply pagination
+            total_count = len(all_contracts)
+            offset = (page - 1) * page_size
+            items = all_contracts[offset : offset + page_size]
+
+            return ContractConnection(
+                items=items,
+                total_count=total_count,
+                page=page,
+                page_size=page_size,
+                has_next_page=offset + page_size < total_count,
+                has_previous_page=page > 1,
             )
-
-            queryset = queryset.annotate(
-                _total_value=Coalesce(
-                    Sum(
-                        Case(
-                            When(items__is_one_off=False, then=F("items__quantity") * F("items__unit_price") * F("_duration_months")),
-                            When(items__is_one_off=True, then=F("items__quantity") * F("items__unit_price")),
-                            default=Value(0),
-                            output_field=DecimalField(),
-                        )
-                    ),
-                    Value(0),
-                    output_field=DecimalField(),
-                )
-            )
-            order_field = "-_total_value" if sort_order == "desc" else "_total_value"
         elif sort_by and sort_by in allowed_sort_fields:
             order_field = f"-{sort_by}" if sort_order == "desc" else sort_by
         else:
