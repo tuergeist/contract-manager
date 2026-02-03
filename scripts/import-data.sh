@@ -44,8 +44,10 @@ echo "   Database imported successfully."
 echo ""
 echo "2. Importing media files..."
 if [ -f "$BACKUP_DIR/media.tar.gz" ]; then
-    docker compose exec -T backend rm -rf /app/media/*
-    cat "$BACKUP_DIR/media.tar.gz" | docker compose exec -T backend tar xzf - -C /app
+    # Run as root to handle permissions, then fix ownership
+    docker compose exec -T --user root backend rm -rf /app/media/*
+    cat "$BACKUP_DIR/media.tar.gz" | docker compose exec -T --user root backend tar xzf - -C /app
+    docker compose exec -T --user root backend chown -R appuser:appuser /app/media
     echo "   Media files restored."
 else
     echo "   No media backup found, skipping."
