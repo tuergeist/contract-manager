@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
 import { Link } from 'react-router-dom'
@@ -174,23 +174,42 @@ export function RevenueForecast() {
     return `${month}/${year.slice(2)}`
   }
 
-  const formatCurrency = (value: string) => {
-    const num = parseFloat(value)
-    if (num === 0) return '-'
-    return new Intl.NumberFormat(i18n.language, {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(num)
-  }
+  // Memoize currency formatters to avoid creating new Intl.NumberFormat instances on every render
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(i18n.language, {
+        style: 'currency',
+        currency: 'EUR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }),
+    [i18n.language]
+  )
 
-  const formatCurrencyFull = (value: string) => {
-    return new Intl.NumberFormat(i18n.language, {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(parseFloat(value))
-  }
+  const currencyFormatterFull = useMemo(
+    () =>
+      new Intl.NumberFormat(i18n.language, {
+        style: 'currency',
+        currency: 'EUR',
+      }),
+    [i18n.language]
+  )
+
+  const formatCurrency = useCallback(
+    (value: string) => {
+      const num = parseFloat(value)
+      if (num === 0) return '-'
+      return currencyFormatter.format(num)
+    },
+    [currencyFormatter]
+  )
+
+  const formatCurrencyFull = useCallback(
+    (value: string) => {
+      return currencyFormatterFull.format(parseFloat(value))
+    },
+    [currencyFormatterFull]
+  )
 
   if (loading) {
     return (

@@ -93,6 +93,9 @@ class InvoiceService:
                 to_date=last_day,
             )
 
+            # Build items lookup once per contract (uses prefetched data, avoids N+1)
+            contract_items_by_id = {ci.id: ci for ci in contract.items.all()}
+
             # Create an invoice for each billing event in this month
             for event in billing_events:
                 billing_date = event["date"]
@@ -109,9 +112,6 @@ class InvoiceService:
                 period_start, period_end = self._calculate_billing_period(
                     contract, billing_date
                 )
-
-                # Build a lookup for contract items by ID
-                contract_items_by_id = {ci.id: ci for ci in contract.items.all()}
 
                 # Convert billing items to invoice line items
                 line_items = []

@@ -543,8 +543,157 @@ class RevenueForecastResult:
     error: str | None = None
 
 
+# =============================================================================
+# Dashboard KPIs
+# =============================================================================
+
+
+def calculate_dashboard_kpis(tenant) -> dict:
+    """
+    Calculate all dashboard KPIs for a tenant.
+
+    Returns dict with:
+    - total_active_contracts: Count of active contracts
+    - total_contract_value: TCV for all active contracts
+    - annual_recurring_revenue: ARR from recurring items
+    - year_to_date_revenue: Revenue recognized from Jan 1 to today
+    - current_year_forecast: Projected revenue for current year
+    - next_year_forecast: Projected revenue for next year
+    """
+    from dateutil.relativedelta import relativedelta
+
+    today = date.today()
+    current_year_start = date(today.year, 1, 1)
+    current_year_end = date(today.year, 12, 31)
+    next_year_start = date(today.year + 1, 1, 1)
+    next_year_end = date(today.year + 1, 12, 31)
+
+    # Get all active contracts for this tenant
+    active_contracts = Contract.objects.filter(
+        tenant=tenant,
+        status=Contract.Status.ACTIVE,
+    ).prefetch_related("items", "items__price_periods")
+
+    total_active_contracts = active_contracts.count()
+    total_contract_value = Decimal("0")
+    annual_recurring_revenue = Decimal("0")
+    year_to_date_revenue = Decimal("0")
+    current_year_forecast = Decimal("0")
+    next_year_forecast = Decimal("0")
+
+    for contract in active_contracts:
+        # TCV: monthly value × duration months
+        items = contract.items.all()
+        monthly_value = Decimal("0")
+        for item in items:
+            if not item.is_one_off:
+                monthly_unit_price = item.get_price_at(today, normalize_to_monthly=True)
+                monthly_value += monthly_unit_price * item.quantity
+
+        duration_months = contract.get_duration_months()
+        total_contract_value += monthly_value * duration_months
+
+        # Add one-off items to TCV
+        for item in items:
+            if item.is_one_off:
+                effective_price, _ = item.get_effective_price_info(today)
+                total_contract_value += effective_price * item.quantity
+
+        # ARR: annualized recurring revenue (monthly × 12)
+        annual_recurring_revenue += monthly_value * 12
+
+        # YTD Revenue: use recognition schedule from Jan 1 to today
+        ytd_schedule = contract.get_recognition_schedule(
+            from_date=current_year_start,
+            to_date=today,
+            include_history=True,
+        )
+        for event in ytd_schedule:
+            year_to_date_revenue += event["total"]
+
+        # Current Year Forecast: Jan 1 to Dec 31
+        current_year_schedule = contract.get_recognition_schedule(
+            from_date=current_year_start,
+            to_date=current_year_end,
+            include_history=True,
+        )
+        for event in current_year_schedule:
+            current_year_forecast += event["total"]
+
+        # Next Year Forecast: Jan 1 to Dec 31 of next year
+        # Only include contracts that will still be active next year
+        contract_end = contract.end_date or contract.get_effective_end_date()
+        if not contract_end or contract_end >= next_year_start:
+            next_year_schedule = contract.get_recognition_schedule(
+                from_date=next_year_start,
+                to_date=next_year_end,
+                include_history=True,
+            )
+            for event in next_year_schedule:
+                next_year_forecast += event["total"]
+
+    return {
+        "total_active_contracts": total_active_contracts,
+        "total_contract_value": total_contract_value,
+        "annual_recurring_revenue": annual_recurring_revenue,
+        "year_to_date_revenue": year_to_date_revenue,
+        "current_year_forecast": current_year_forecast,
+        "next_year_forecast": next_year_forecast,
+    }
+
+
+@strawberry.type
+class DashboardKPIsType:
+    """Dashboard KPI metrics for contract portfolio."""
+
+    total_active_contracts: int
+    total_contract_value: Decimal
+    annual_recurring_revenue: Decimal
+    year_to_date_revenue: Decimal
+    current_year_forecast: Decimal
+    next_year_forecast: Decimal
+
+
 @strawberry.type
 class ContractQuery:
+    @strawberry.field
+    def dashboard_kpis(
+        self,
+        info: Info[Context, None],
+    ) -> DashboardKPIsType:
+        """
+        Get dashboard KPI metrics for the current tenant's contract portfolio.
+
+        Returns:
+        - totalActiveContracts: Count of contracts with status=active
+        - totalContractValue: Sum of all contract values over their duration
+        - annualRecurringRevenue: Annualized value of recurring items
+        - yearToDateRevenue: Revenue recognized from Jan 1 to today
+        - currentYearForecast: Projected revenue for current year
+        - nextYearForecast: Projected revenue for next year
+        """
+        user = get_current_user(info)
+        if not user.tenant:
+            # Return zeros if no tenant
+            return DashboardKPIsType(
+                total_active_contracts=0,
+                total_contract_value=Decimal("0"),
+                annual_recurring_revenue=Decimal("0"),
+                year_to_date_revenue=Decimal("0"),
+                current_year_forecast=Decimal("0"),
+                next_year_forecast=Decimal("0"),
+            )
+
+        kpis = calculate_dashboard_kpis(user.tenant)
+        return DashboardKPIsType(
+            total_active_contracts=kpis["total_active_contracts"],
+            total_contract_value=kpis["total_contract_value"],
+            annual_recurring_revenue=kpis["annual_recurring_revenue"],
+            year_to_date_revenue=kpis["year_to_date_revenue"],
+            current_year_forecast=kpis["current_year_forecast"],
+            next_year_forecast=kpis["next_year_forecast"],
+        )
+
     @strawberry.field
     def suggested_alignment_date(
         self,
@@ -743,10 +892,11 @@ class ContractQuery:
                 current += relativedelta(months=1)
 
         # Get all active/paused contracts (exclude drafts - they're not committed yet)
+        # Prefetch items with products and price_periods to avoid N+1 queries
         contracts = Contract.objects.filter(
             tenant=user.tenant,
             status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
-        ).select_related("customer")
+        ).select_related("customer").prefetch_related("items__product", "items__price_periods")
 
         # Calculate revenue per contract per period
         contract_rows = []
@@ -935,10 +1085,11 @@ class ContractQuery:
                 current += relativedelta(months=1)
 
         # Get all active/paused contracts (exclude drafts - they're not committed yet)
+        # Prefetch items with products and price_periods to avoid N+1 queries
         contracts = Contract.objects.filter(
             tenant=user.tenant,
             status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
-        ).select_related("customer")
+        ).select_related("customer").prefetch_related("items__product", "items__price_periods")
 
         # Calculate recognition per contract per period
         contract_rows = []

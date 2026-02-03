@@ -322,13 +322,16 @@ class Contract(TenantModel):
         interval_months = self.get_interval_months()
         events = defaultdict(lambda: {"items": [], "total": Decimal("0")})
 
-        # Get all active items
-        items = self.items.select_related("product").all()
+        # Get all active items with prefetched price_periods to avoid N+1 queries
+        items = self.items.select_related("product").prefetch_related("price_periods").all()
 
         for item in items:
             # Skip descriptive-only items (no product = no billing)
             if not item.product:
                 continue
+
+            # Cache the prefetched price_periods as a list for in-memory lookups
+            item_price_periods = list(item.price_periods.all())
 
             # Determine item's billing period
             item_billing_start = item.billing_start_date or self.billing_start_date
@@ -345,28 +348,30 @@ class Contract(TenantModel):
             # Handle one-off items separately (billed only once)
             if item.is_one_off:
                 self._add_one_off_billing_event(
-                    events, item, item_billing_start, from_date, to_date
+                    events, item, item_billing_start, from_date, to_date, item_price_periods
                 )
                 continue
 
             # Calculate billing dates for this item
-            align_date = item.align_to_contract_at
+            # Use item-level alignment, or fall back to contract-level alignment
+            align_date = item.align_to_contract_at or self.billing_alignment_date
 
-            if align_date:
+            # Only use alignment if it's after the item's billing start
+            if align_date and align_date > item_billing_start:
                 # Item has alignment - generate dates before and after alignment
                 self._add_pre_alignment_events(
                     events, item, item_billing_start, align_date,
-                    from_date, to_date, interval_months
+                    from_date, to_date, interval_months, item_price_periods
                 )
                 self._add_post_alignment_events(
                     events, item, align_date, item_billing_end,
-                    from_date, to_date, interval_months
+                    from_date, to_date, interval_months, item_price_periods
                 )
             else:
                 # No alignment - item follows contract cycle from its start
                 self._add_regular_billing_events(
                     events, item, item_billing_start, item_billing_end,
-                    from_date, to_date, interval_months
+                    from_date, to_date, interval_months, item_price_periods
                 )
 
         # Convert to sorted list
@@ -382,7 +387,8 @@ class Contract(TenantModel):
         return result
 
     def _add_regular_billing_events(
-        self, events, item, start_date, end_date, from_date, to_date, interval_months
+        self, events, item, start_date, end_date, from_date, to_date, interval_months,
+        price_periods_list=None
     ):
         """Add billing events for an item following the regular contract cycle."""
         from decimal import Decimal
@@ -397,8 +403,11 @@ class Contract(TenantModel):
         while billing_date <= to_date:
             if billing_date >= from_date:
                 if end_date is None or billing_date <= end_date:
-                    # Use get_price_at() for date-aware pricing (falls back to unit_price)
-                    price_at_date = item.get_price_at(billing_date)
+                    # Use cached price lookup if price_periods provided, else fallback
+                    if price_periods_list is not None:
+                        price_at_date = item.get_price_at_cached(billing_date, price_periods_list)
+                    else:
+                        price_at_date = item.get_price_at(billing_date)
                     # unit_price is monthly, multiply by interval for billing amount
                     amount = item.quantity * price_at_date * interval_months
                     events[billing_date]["items"].append({
@@ -414,7 +423,8 @@ class Contract(TenantModel):
             billing_date += relativedelta(months=interval_months)
 
     def _add_pre_alignment_events(
-        self, events, item, start_date, align_date, from_date, to_date, interval_months
+        self, events, item, start_date, align_date, from_date, to_date, interval_months,
+        price_periods_list=None
     ):
         """Add billing events before alignment (pro-rated first period)."""
         from decimal import Decimal
@@ -422,13 +432,21 @@ class Contract(TenantModel):
 
         # First billing is at start_date (pro-rated period until align_date)
         if start_date >= from_date and start_date <= to_date:
-            # Calculate proration factor
-            days_in_period = (align_date - start_date).days
-            full_period_days = interval_months * 30  # Approximate
-            prorate_factor = Decimal(days_in_period) / Decimal(full_period_days)
+            # Calculate proration factor using months
+            # Count full months between start_date and align_date
+            months_in_period = (
+                (align_date.year - start_date.year) * 12 +
+                (align_date.month - start_date.month)
+            )
+            # If align_date.day < start_date.day, we have a partial month less
+            # But for billing alignment, we typically bill for whole months
+            prorate_factor = Decimal(months_in_period) / Decimal(interval_months)
 
-            # Use get_price_at() for date-aware pricing (falls back to unit_price)
-            price_at_date = item.get_price_at(start_date)
+            # Use cached price lookup if price_periods provided, else fallback
+            if price_periods_list is not None:
+                price_at_date = item.get_price_at_cached(start_date, price_periods_list)
+            else:
+                price_at_date = item.get_price_at(start_date)
             # unit_price is monthly, multiply by interval for billing amount
             amount = item.quantity * price_at_date * interval_months * prorate_factor
             events[start_date]["items"].append({
@@ -443,7 +461,8 @@ class Contract(TenantModel):
             events[start_date]["total"] += amount.quantize(Decimal("0.01"))
 
     def _add_post_alignment_events(
-        self, events, item, align_date, end_date, from_date, to_date, interval_months
+        self, events, item, align_date, end_date, from_date, to_date, interval_months,
+        price_periods_list=None
     ):
         """Add billing events after alignment (regular cycle)."""
         from decimal import Decimal
@@ -453,8 +472,11 @@ class Contract(TenantModel):
         while billing_date <= to_date:
             if billing_date >= from_date:
                 if end_date is None or billing_date <= end_date:
-                    # Use get_price_at() for date-aware pricing (falls back to unit_price)
-                    price_at_date = item.get_price_at(billing_date)
+                    # Use cached price lookup if price_periods provided, else fallback
+                    if price_periods_list is not None:
+                        price_at_date = item.get_price_at_cached(billing_date, price_periods_list)
+                    else:
+                        price_at_date = item.get_price_at(billing_date)
                     # unit_price is monthly, multiply by interval for billing amount
                     amount = item.quantity * price_at_date * interval_months
                     events[billing_date]["items"].append({
@@ -470,7 +492,7 @@ class Contract(TenantModel):
             billing_date += relativedelta(months=interval_months)
 
     def _add_one_off_billing_event(
-        self, events, item, billing_start, from_date, to_date
+        self, events, item, billing_start, from_date, to_date, price_periods_list=None
     ):
         """Add a single billing event for a one-off item."""
         from decimal import Decimal
@@ -480,8 +502,11 @@ class Contract(TenantModel):
 
         # Only include if within our date range
         if billing_date >= from_date and billing_date <= to_date:
-            # Use get_price_at() for date-aware pricing (falls back to unit_price)
-            price_at_date = item.get_price_at(billing_date)
+            # Use cached price lookup if price_periods provided, else fallback
+            if price_periods_list is not None:
+                price_at_date = item.get_price_at_cached(billing_date, price_periods_list)
+            else:
+                price_at_date = item.get_price_at(billing_date)
             # One-off items use the raw price (not multiplied by interval)
             amount = item.quantity * price_at_date
             events[billing_date]["items"].append({
@@ -533,13 +558,16 @@ class Contract(TenantModel):
         interval_months = self.get_interval_months()
         events = defaultdict(lambda: {"items": [], "total": Decimal("0")})
 
-        # Get all active items
-        items = self.items.select_related("product").all()
+        # Get all active items with prefetched price_periods to avoid N+1 queries
+        items = self.items.select_related("product").prefetch_related("price_periods").all()
 
         for item in items:
             # Skip descriptive-only items (no product = no billing)
             if not item.product:
                 continue
+
+            # Cache the prefetched price_periods as a list for in-memory lookups
+            item_price_periods = list(item.price_periods.all())
 
             # Use start_date for recognition, fall back to billing_start_date
             item_recognition_start = item.start_date or item.billing_start_date or self.billing_start_date
@@ -556,28 +584,30 @@ class Contract(TenantModel):
             # Handle one-off items separately (recognized only once)
             if item.is_one_off:
                 self._add_one_off_recognition_event(
-                    events, item, item_recognition_start, from_date, to_date
+                    events, item, item_recognition_start, from_date, to_date, item_price_periods
                 )
                 continue
 
             # Calculate recognition dates for this item
-            align_date = item.align_to_contract_at
+            # Use item-level alignment, or fall back to contract-level alignment
+            align_date = item.align_to_contract_at or self.billing_alignment_date
 
-            if align_date:
+            # Only use alignment if it's after the item's recognition start
+            if align_date and align_date > item_recognition_start:
                 # Item has alignment - generate dates before and after alignment
                 self._add_pre_alignment_recognition_events(
                     events, item, item_recognition_start, align_date,
-                    from_date, to_date, interval_months
+                    from_date, to_date, interval_months, item_price_periods
                 )
                 self._add_post_alignment_recognition_events(
                     events, item, align_date, item_billing_end,
-                    from_date, to_date, interval_months
+                    from_date, to_date, interval_months, item_price_periods
                 )
             else:
                 # No alignment - item follows contract cycle from its recognition start
                 self._add_regular_recognition_events(
                     events, item, item_recognition_start, item_billing_end,
-                    from_date, to_date, interval_months
+                    from_date, to_date, interval_months, item_price_periods
                 )
 
         # Convert to sorted list
@@ -593,7 +623,8 @@ class Contract(TenantModel):
         return result
 
     def _add_regular_recognition_events(
-        self, events, item, start_date, end_date, from_date, to_date, interval_months
+        self, events, item, start_date, end_date, from_date, to_date, interval_months,
+        price_periods_list=None
     ):
         """Add recognition events for an item following the regular contract cycle."""
         from decimal import Decimal
@@ -608,8 +639,11 @@ class Contract(TenantModel):
         while recognition_date <= to_date:
             if recognition_date >= from_date:
                 if end_date is None or recognition_date <= end_date:
-                    # Use get_price_at() for date-aware pricing (falls back to unit_price)
-                    price_at_date = item.get_price_at(recognition_date)
+                    # Use cached price lookup if price_periods provided, else fallback
+                    if price_periods_list is not None:
+                        price_at_date = item.get_price_at_cached(recognition_date, price_periods_list)
+                    else:
+                        price_at_date = item.get_price_at(recognition_date)
                     # unit_price is monthly, multiply by interval for recognition amount
                     amount = item.quantity * price_at_date * interval_months
                     events[recognition_date]["items"].append({
@@ -625,7 +659,8 @@ class Contract(TenantModel):
             recognition_date += relativedelta(months=interval_months)
 
     def _add_pre_alignment_recognition_events(
-        self, events, item, start_date, align_date, from_date, to_date, interval_months
+        self, events, item, start_date, align_date, from_date, to_date, interval_months,
+        price_periods_list=None
     ):
         """Add recognition events before alignment (pro-rated first period)."""
         from decimal import Decimal
@@ -633,13 +668,18 @@ class Contract(TenantModel):
 
         # First recognition is at start_date (pro-rated period until align_date)
         if start_date >= from_date and start_date <= to_date:
-            # Calculate proration factor
-            days_in_period = (align_date - start_date).days
-            full_period_days = interval_months * 30  # Approximate
-            prorate_factor = Decimal(days_in_period) / Decimal(full_period_days)
+            # Calculate proration factor using months
+            months_in_period = (
+                (align_date.year - start_date.year) * 12 +
+                (align_date.month - start_date.month)
+            )
+            prorate_factor = Decimal(months_in_period) / Decimal(interval_months)
 
-            # Use get_price_at() for date-aware pricing (falls back to unit_price)
-            price_at_date = item.get_price_at(start_date)
+            # Use cached price lookup if price_periods provided, else fallback
+            if price_periods_list is not None:
+                price_at_date = item.get_price_at_cached(start_date, price_periods_list)
+            else:
+                price_at_date = item.get_price_at(start_date)
             # unit_price is monthly, multiply by interval for recognition amount
             amount = item.quantity * price_at_date * interval_months * prorate_factor
             events[start_date]["items"].append({
@@ -654,7 +694,8 @@ class Contract(TenantModel):
             events[start_date]["total"] += amount.quantize(Decimal("0.01"))
 
     def _add_post_alignment_recognition_events(
-        self, events, item, align_date, end_date, from_date, to_date, interval_months
+        self, events, item, align_date, end_date, from_date, to_date, interval_months,
+        price_periods_list=None
     ):
         """Add recognition events after alignment (regular cycle)."""
         from decimal import Decimal
@@ -664,8 +705,11 @@ class Contract(TenantModel):
         while recognition_date <= to_date:
             if recognition_date >= from_date:
                 if end_date is None or recognition_date <= end_date:
-                    # Use get_price_at() for date-aware pricing (falls back to unit_price)
-                    price_at_date = item.get_price_at(recognition_date)
+                    # Use cached price lookup if price_periods provided, else fallback
+                    if price_periods_list is not None:
+                        price_at_date = item.get_price_at_cached(recognition_date, price_periods_list)
+                    else:
+                        price_at_date = item.get_price_at(recognition_date)
                     # unit_price is monthly, multiply by interval for recognition amount
                     amount = item.quantity * price_at_date * interval_months
                     events[recognition_date]["items"].append({
@@ -681,7 +725,7 @@ class Contract(TenantModel):
             recognition_date += relativedelta(months=interval_months)
 
     def _add_one_off_recognition_event(
-        self, events, item, recognition_start, from_date, to_date
+        self, events, item, recognition_start, from_date, to_date, price_periods_list=None
     ):
         """Add a single recognition event for a one-off item."""
         from decimal import Decimal
@@ -691,8 +735,11 @@ class Contract(TenantModel):
 
         # Only include if within our date range
         if recognition_date >= from_date and recognition_date <= to_date:
-            # Use get_price_at() for date-aware pricing (falls back to unit_price)
-            price_at_date = item.get_price_at(recognition_date)
+            # Use cached price lookup if price_periods provided, else fallback
+            if price_periods_list is not None:
+                price_at_date = item.get_price_at_cached(recognition_date, price_periods_list)
+            else:
+                price_at_date = item.get_price_at(recognition_date)
             # One-off items use the raw price (not multiplied by interval)
             amount = item.quantity * price_at_date
             events[recognition_date]["items"].append({
@@ -877,6 +924,46 @@ class ContractItem(TenantModel):
         if price_period_record:
             price = price_period_record.unit_price
             period = price_period_record.price_period
+        else:
+            # FALLBACK: Use the item's unit_price and price_period
+            price = self.unit_price
+            period = self.price_period
+
+        if normalize_to_monthly:
+            period_months = self.get_period_months(period)
+            return price / Decimal(period_months)
+
+        return price
+
+    def get_price_at_cached(self, target_date, price_periods_list, normalize_to_monthly: bool = True):
+        """
+        Get the price for this item at a specific date using pre-loaded price_periods.
+
+        This method avoids N+1 queries by accepting a pre-fetched list of price periods
+        instead of querying the database. Use this in batch operations where items
+        and their price_periods have been prefetched.
+
+        Args:
+            target_date: The date for which to get the price
+            price_periods_list: List of ContractItemPrice objects (pre-fetched)
+            normalize_to_monthly: If True, returns the monthly equivalent price
+
+        Returns:
+            Decimal: The unit price at the given date (monthly if normalized)
+        """
+        from decimal import Decimal
+
+        # Find matching price period from in-memory list
+        matching = None
+        for pp in price_periods_list:
+            if pp.valid_from <= target_date:
+                if pp.valid_to is None or pp.valid_to >= target_date:
+                    if matching is None or pp.valid_from > matching.valid_from:
+                        matching = pp
+
+        if matching:
+            price = matching.unit_price
+            period = matching.price_period
         else:
             # FALLBACK: Use the item's unit_price and price_period
             price = self.unit_price
