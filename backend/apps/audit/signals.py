@@ -62,6 +62,7 @@ def register_audit_models():
     from apps.contracts.models import Contract, ContractItem
     from apps.customers.models import Customer
     from apps.products.models import Product
+    from apps.todos.models import TodoItem
 
     # Register models with their entity type names
     AuditLogService.register_model(Contract, "contract")
@@ -73,6 +74,17 @@ def register_audit_models():
     )
     AuditLogService.register_model(Customer, "customer")
     AuditLogService.register_model(Product, "product")
+
+    # Register TodoItem with multiple possible parents
+    AuditLogService.register_model_multi_parent(
+        TodoItem,
+        "todo",
+        parent_fields=[
+            ("contract", "contract"),
+            ("contract_item", "contract_item"),
+            ("customer", "customer"),
+        ],
+    )
 
 
 # Register models when this module is imported

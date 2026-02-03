@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List
+from typing import TYPE_CHECKING, Annotated, List
 import base64
 import tempfile
 import os
@@ -12,7 +12,7 @@ from strawberry import auto, UNSET
 import strawberry_django
 from strawberry.types import Info
 from django.db import transaction
-from django.db.models import Sum, F
+from django.db.models import Sum, F, Q
 
 from apps.core.context import Context
 from apps.core.permissions import get_current_user
@@ -23,6 +23,9 @@ from apps.products.models import Product
 from apps.products.schema import ProductType
 from .models import Contract, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink
 from .services import ExcelParser, ImportService, MatchStatus
+
+if TYPE_CHECKING:
+    from apps.todos.schema import TodoItemType
 
 
 @strawberry.type
@@ -250,6 +253,25 @@ class ContractType:
             )
             for link in links
         ]
+
+    @strawberry.field
+    def todos(self, info: Info[Context, None]) -> List[Annotated["TodoItemType", strawberry.lazy("apps.todos.schema")]]:
+        """Get todos for this contract visible to the current user."""
+        from apps.todos.models import TodoItem
+        from apps.todos.schema import todo_to_type
+
+        user = get_current_user(info)
+        if not user:
+            return []
+
+        # Get todos: user's own todos OR public todos from team
+        todos = TodoItem.objects.filter(
+            contract=self,
+        ).filter(
+            Q(created_by=user) | Q(is_public=True)
+        ).select_related("created_by").order_by("-created_at")
+
+        return [todo_to_type(todo) for todo in todos]
 
     @strawberry.field
     def effective_end_date(self) -> date | None:
@@ -1295,14 +1317,40 @@ class ContractQuery:
             order_field = "-customer__name" if sort_order == "desc" else "customer__name"
         elif sort_by == "total_value":
             # Annotate with total value for sorting
-            # Total value = (recurring items * 12) + one-off items
-            from django.db.models import Case, When, Value, DecimalField
-            from django.db.models.functions import Coalesce
+            # Total value = (recurring items * duration_months) + one-off items
+            # Duration is calculated as months between start_date and end_date (or 12 if no end_date)
+            from django.db.models import Case, When, Value, DecimalField, IntegerField
+            from django.db.models.functions import Coalesce, ExtractYear, ExtractMonth
+
+            # Calculate duration in months:
+            # - If end_date is set: months between start_date and end_date
+            # - Otherwise: use min_duration_months if set, or default to 12 months
+            from django.db.models.functions import Greatest
+
+            queryset = queryset.annotate(
+                _duration_months=Case(
+                    When(
+                        end_date__isnull=False,
+                        then=(
+                            (ExtractYear(F("end_date")) - ExtractYear(F("start_date"))) * 12
+                            + ExtractMonth(F("end_date")) - ExtractMonth(F("start_date"))
+                            + 1  # Include the end month
+                        ),
+                    ),
+                    When(
+                        min_duration_months__isnull=False,
+                        then=F("min_duration_months"),
+                    ),
+                    default=Value(12),
+                    output_field=IntegerField(),
+                ),
+            )
+
             queryset = queryset.annotate(
                 _total_value=Coalesce(
                     Sum(
                         Case(
-                            When(items__is_one_off=False, then=F("items__quantity") * F("items__unit_price") * 12),
+                            When(items__is_one_off=False, then=F("items__quantity") * F("items__unit_price") * F("_duration_months")),
                             When(items__is_one_off=True, then=F("items__quantity") * F("items__unit_price")),
                             default=Value(0),
                             output_field=DecimalField(),

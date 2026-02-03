@@ -449,6 +449,7 @@
   },
   "attachments": {
     "title": "Anhänge",
+    "files": "Dateien",
     "noAttachments": "Keine Anhänge",
     "upload": "Hochladen",
     "uploadFile": "Datei hochladen",
@@ -589,5 +590,28 @@
       "selectProperty": "Eigenschaft auswählen...",
       "noPropertiesFound": "Keine Eigenschaften gefunden"
     }
+  },
+  "todos": {
+    "title": "Aufgaben",
+    "myTodos": "Meine Aufgaben",
+    "teamTodos": "Team-Aufgaben",
+    "addTodo": "Aufgabe hinzufügen",
+    "add": "Hinzufügen",
+    "noTodos": "Keine Aufgaben vorhanden",
+    "linkedTo": "Verknüpft mit",
+    "description": "Beschreibung",
+    "descriptionPlaceholder": "Was muss erledigt werden?",
+    "reminderDate": "Erinnerungsdatum",
+    "nextWeek": "Nächste Woche",
+    "nextMonth": "Nächster Monat",
+    "nextQuarter": "Nächstes Quartal",
+    "assignTo": "Zuweisen an",
+    "assignToPlaceholder": "Benutzer auswählen...",
+    "unassigned": "Nicht zugewiesen",
+    "shareWithTeam": "Mit Team teilen",
+    "confirmDelete": "Möchten Sie diese Aufgabe wirklich löschen?",
+    "errorTextRequired": "Bitte geben Sie eine Beschreibung ein",
+    "errorContextRequired": "Bitte wählen Sie einen Kontext aus",
+    "errorCreate": "Aufgabe konnte nicht erstellt werden"
   }
 }

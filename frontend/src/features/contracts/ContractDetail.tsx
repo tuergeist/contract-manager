@@ -60,7 +60,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { TodoModal, type TodoContext } from '@/features/todos'
+import { TodoModal, TodoList, type TodoContext, type TodoItem } from '@/features/todos'
 import { ListTodo } from 'lucide-react'
 
 const CONTRACT_DETAIL_QUERY = gql`
@@ -152,6 +152,23 @@ const CONTRACT_DETAIL_QUERY = gql`
         createdAt
         createdByName
       }
+      todos {
+        id
+        text
+        reminderDate
+        isPublic
+        isCompleted
+        entityType
+        entityName
+        entityId
+        createdById
+        createdByName
+        assignedToId
+        assignedToName
+        contractId
+        contractItemId
+        customerId
+      }
     }
   }
 `
@@ -164,6 +181,7 @@ const PRODUCTS_FOR_SELECT_QUERY = gql`
         id
         name
         sku
+        isActive
         currentPrice {
           price
         }
@@ -349,6 +367,7 @@ interface Product {
   id: string
   name: string
   sku: string | null
+  isActive: boolean
   currentPrice: { price: string } | null
 }
 
@@ -449,9 +468,10 @@ interface Contract {
   amendments: Amendment[]
   attachments: Attachment[]
   links: ContractLink[]
+  todos: TodoItem[]
 }
 
-type Tab = 'items' | 'amendments' | 'forecast' | 'attachments' | 'activity'
+type Tab = 'items' | 'amendments' | 'forecast' | 'attachments' | 'todos' | 'activity'
 
 export function ContractDetail() {
   const { t, i18n } = useTranslation()
@@ -624,10 +644,10 @@ export function ContractDetail() {
                     href={contract.netsuiteUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+                    className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800"
                   >
-                    SO: {contract.netsuiteSalesOrderNumber}
                     <ExternalLink className="h-3 w-3" />
+                    SO: {contract.netsuiteSalesOrderNumber}
                   </a>
                 ) : (
                   <span className="text-xs text-gray-500">
@@ -645,7 +665,7 @@ export function ContractDetail() {
                   href={contract.hubspotUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-orange-600 hover:text-orange-800"
+                  className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800"
                 >
                   <ExternalLink className="h-3 w-3" />
                   HubSpot
@@ -805,6 +825,17 @@ export function ContractDetail() {
           >
             <Paperclip className="h-4 w-4" />
             {t('attachments.title')} ({contract.attachments.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('todos')}
+            className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium ${
+              activeTab === 'todos'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            <ListTodo className="h-4 w-4" />
+            {t('todos.title')} ({contract.todos?.filter(t => !t.isCompleted).length || 0})
           </button>
           <button
             onClick={() => setActiveTab('activity')}
@@ -1151,6 +1182,35 @@ export function ContractDetail() {
         />
       )}
 
+      {/* Todos Tab */}
+      {activeTab === 'todos' && (
+        <div>
+          <div className="mb-4 flex justify-end">
+            <button
+              onClick={() => {
+                setTodoContext({
+                  type: 'contract',
+                  id: parseInt(id!),
+                  name: contract.name || contract.customer.name,
+                })
+                setTodoModalOpen(true)
+              }}
+              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              <Plus className="h-4 w-4" />
+              {t('todos.addTodo')}
+            </button>
+          </div>
+          <div className="rounded-lg border bg-white p-6">
+            <TodoList
+              todos={contract.todos || []}
+              showCreator={true}
+              onUpdate={() => refetch()}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Activity Tab */}
       {activeTab === 'activity' && (
         <ActivityTab contractId={parseInt(id!, 10)} />
@@ -1185,6 +1245,7 @@ export function ContractDetail() {
         open={todoModalOpen}
         onOpenChange={setTodoModalOpen}
         context={todoContext}
+        onSuccess={() => refetch()}
       />
 
     </div>
@@ -1230,7 +1291,11 @@ function AddItemModal({
 
   const [addItem, { loading }] = useMutation(ADD_CONTRACT_ITEM_MUTATION)
 
-  const products = (productsData?.products?.items || []) as Product[]
+  // Sort products: active first, then by name
+  const products = [...(productsData?.products?.items || []) as Product[]].sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
   const selectedProduct = products.find((p) => p.id === productId)
   const suggestedDate = suggestionData?.suggestedAlignmentDate?.suggestedDate
 
@@ -2873,10 +2938,10 @@ function AttachmentsTab({
                         href={link.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline"
+                        className="inline-flex items-center gap-1 text-red-600 hover:text-red-800"
                       >
-                        {link.url.length > 50 ? `${link.url.substring(0, 50)}...` : link.url}
                         <ExternalLink className="h-3 w-3" />
+                        {link.url.length > 50 ? `${link.url.substring(0, 50)}...` : link.url}
                       </a>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">

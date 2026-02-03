@@ -42,6 +42,10 @@ class AuditLogService:
     # Parent relationship mappings (child_type -> (parent_type, parent_field))
     PARENT_RELATIONSHIPS = {}
 
+    # Multi-parent relationship mappings for entities that can have different parent types
+    # Maps entity_type -> [(parent_type, parent_field), ...]
+    MULTI_PARENT_RELATIONSHIPS = {}
+
     @classmethod
     def register_model(cls, model_class, entity_type: str, parent_field: str = None, parent_type: str = None):
         """Register a model for audit logging.
@@ -55,6 +59,20 @@ class AuditLogService:
         cls.AUDITED_MODELS[model_class] = entity_type
         if parent_field and parent_type:
             cls.PARENT_RELATIONSHIPS[entity_type] = (parent_type, parent_field)
+
+    @classmethod
+    def register_model_multi_parent(
+        cls, model_class, entity_type: str, parent_fields: list[tuple[str, str]]
+    ):
+        """Register a model that can have different parent types.
+
+        Args:
+            model_class: The Django model class to audit
+            entity_type: The entity type name for audit logs
+            parent_fields: List of (parent_type, parent_field) tuples to check in order
+        """
+        cls.AUDITED_MODELS[model_class] = entity_type
+        cls.MULTI_PARENT_RELATIONSHIPS[entity_type] = parent_fields
 
     @classmethod
     def is_audited(cls, model_class) -> bool:
@@ -129,12 +147,20 @@ class AuditLogService:
     @classmethod
     def get_parent_info(cls, instance: models.Model, entity_type: str) -> tuple[str | None, int | None]:
         """Get parent entity information for related entities."""
-        if entity_type not in cls.PARENT_RELATIONSHIPS:
-            return None, None
+        # Check single parent relationship first
+        if entity_type in cls.PARENT_RELATIONSHIPS:
+            parent_type, parent_field = cls.PARENT_RELATIONSHIPS[entity_type]
+            parent_id = getattr(instance, f"{parent_field}_id", None)
+            return parent_type, parent_id
 
-        parent_type, parent_field = cls.PARENT_RELATIONSHIPS[entity_type]
-        parent_id = getattr(instance, f"{parent_field}_id", None)
-        return parent_type, parent_id
+        # Check multi-parent relationships (first non-null parent wins)
+        if entity_type in cls.MULTI_PARENT_RELATIONSHIPS:
+            for parent_type, parent_field in cls.MULTI_PARENT_RELATIONSHIPS[entity_type]:
+                parent_id = getattr(instance, f"{parent_field}_id", None)
+                if parent_id is not None:
+                    return parent_type, parent_id
+
+        return None, None
 
     @classmethod
     def log_create(cls, instance: models.Model) -> AuditLog | None:

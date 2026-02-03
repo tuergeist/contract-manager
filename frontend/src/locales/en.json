@@ -449,6 +449,7 @@
   },
   "attachments": {
     "title": "Attachments",
+    "files": "Files",
     "noAttachments": "No attachments",
     "upload": "Upload",
     "uploadFile": "Upload File",
@@ -589,5 +590,28 @@
       "selectProperty": "Select property...",
       "noPropertiesFound": "No properties found"
     }
+  },
+  "todos": {
+    "title": "Todos",
+    "myTodos": "My Todos",
+    "teamTodos": "Team Todos",
+    "addTodo": "Add Todo",
+    "add": "Add",
+    "noTodos": "No todos yet",
+    "linkedTo": "Linked to",
+    "description": "Description",
+    "descriptionPlaceholder": "What needs to be done?",
+    "reminderDate": "Reminder date",
+    "nextWeek": "Next week",
+    "nextMonth": "Next month",
+    "nextQuarter": "Next quarter",
+    "assignTo": "Assign to",
+    "assignToPlaceholder": "Select a user...",
+    "unassigned": "Unassigned",
+    "shareWithTeam": "Share with team",
+    "confirmDelete": "Are you sure you want to delete this todo?",
+    "errorTextRequired": "Please enter a description",
+    "errorContextRequired": "Please select a context",
+    "errorCreate": "Failed to create todo"
   }
 }

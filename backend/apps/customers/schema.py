@@ -10,6 +10,7 @@ import strawberry_django
 from strawberry.types import Info
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.db.models import Q
 
 from apps.core.context import Context
 from apps.core.permissions import get_current_user
@@ -18,6 +19,7 @@ from .models import Customer, CustomerAttachment, CustomerLink
 
 if TYPE_CHECKING:
     from apps.contracts.schema import ContractType
+    from apps.todos.schema import TodoItemType
 
 
 # =============================================================================
@@ -124,6 +126,25 @@ class CustomerType:
             )
             for link in links
         ]
+
+    @strawberry.field
+    def todos(self, info: Info[Context, None]) -> List[Annotated["TodoItemType", strawberry.lazy("apps.todos.schema")]]:
+        """Get todos for this customer visible to the current user."""
+        from apps.todos.models import TodoItem
+        from apps.todos.schema import todo_to_type
+
+        user = get_current_user(info)
+        if not user:
+            return []
+
+        # Get todos: user's own todos OR public todos from team
+        todos = TodoItem.objects.filter(
+            customer=self,
+        ).filter(
+            Q(created_by=user) | Q(is_public=True)
+        ).select_related("created_by").order_by("-created_at")
+
+        return [todo_to_type(todo) for todo in todos]
 
 
 @strawberry.type

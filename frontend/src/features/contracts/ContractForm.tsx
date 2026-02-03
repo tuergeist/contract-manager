@@ -5,7 +5,7 @@ import { useQuery, useMutation, gql } from '@apollo/client'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2, ArrowLeft, Check, ChevronsUpDown, Edit } from 'lucide-react'
+import { Loader2, ArrowLeft, Check, ChevronsUpDown, Edit, ExternalLink } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -595,8 +595,9 @@ export function ContractForm() {
                           href={field.value}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 hover:underline truncate"
+                          className="inline-flex items-center gap-1 text-red-600 hover:text-red-800 truncate"
                         >
+                          <ExternalLink className="h-3 w-3" />
                           {t('contracts.form.openInNetsuite')}
                         </a>
                       </div>

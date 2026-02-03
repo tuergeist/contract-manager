@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
 import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, History, Paperclip, Upload, Download, File, Image, Trash2, Link2, Plus, TrendingUp, DollarSign, ListTodo } from 'lucide-react'
-import { TodoModal, type TodoContext } from '@/features/todos'
+import { TodoModal, TodoList, type TodoContext, type TodoItem } from '@/features/todos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatDate } from '@/lib/utils'
@@ -11,6 +11,7 @@ import { useAuditLogs, AuditLogTable } from '@/features/audit'
 
 type SortField = 'name' | 'status' | 'startDate' | 'endDate' | 'arr' | 'totalValue' | 'remainingMonths' | null
 type SortOrder = 'asc' | 'desc'
+type Tab = 'contracts' | 'attachments' | 'activity' | 'todos'
 
 const CUSTOMER_QUERY = gql`
   query Customer($id: ID!) {
@@ -50,6 +51,23 @@ const CUSTOMER_QUERY = gql`
         url
         createdAt
         createdByName
+      }
+      todos {
+        id
+        text
+        reminderDate
+        isPublic
+        isCompleted
+        entityType
+        entityName
+        entityId
+        createdById
+        createdByName
+        assignedToId
+        assignedToName
+        contractId
+        contractItemId
+        customerId
       }
     }
   }
@@ -158,6 +176,7 @@ interface Customer {
   contracts: Contract[]
   attachments: Attachment[]
   links: CustomerLink[]
+  todos: TodoItem[]
 }
 
 interface CustomerData {
@@ -167,6 +186,7 @@ interface CustomerData {
 export function CustomerDetail() {
   const { id } = useParams<{ id: string }>()
   const { t, i18n } = useTranslation()
+  const [activeTab, setActiveTab] = useState<Tab>('contracts')
   const [sortField, setSortField] = useState<SortField>(null)
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
 
@@ -486,7 +506,7 @@ export function CustomerDetail() {
                   href={customer.hubspotUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-sm text-orange-600 hover:text-orange-800"
+                  className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-800"
                 >
                   <ExternalLink className="h-3 w-3" />
                   HubSpot
@@ -495,21 +515,6 @@ export function CustomerDetail() {
             </div>
           </div>
         </div>
-        {/* Add Todo Button */}
-        <Button
-          variant="outline"
-          onClick={() => {
-            setTodoContext({
-              type: 'customer',
-              id: parseInt(id!),
-              name: customer.name,
-            })
-            setTodoModalOpen(true)
-          }}
-        >
-          <ListTodo className="mr-2 h-4 w-4" />
-          {t('todos.addTodo')}
-        </Button>
       </div>
 
       {/* Summary Cards - 4 in a row */}
@@ -588,318 +593,391 @@ export function CustomerDetail() {
         </div>
       </div>
 
-      {/* Contracts Section */}
-      <div className="mt-8" data-testid="customer-contracts-section">
-        <div className="flex items-center gap-2 mb-4">
-          <FileText className="h-5 w-5 text-gray-400" />
-          <h2 className="text-lg font-semibold">{t('contracts.title')}</h2>
-          <span className="text-sm text-gray-500" data-testid="customer-contracts-count">
-            ({customer.contracts.length})
-          </span>
-        </div>
-
-        {customer.contracts.length === 0 ? (
-          <div className="rounded-lg border bg-white p-8 text-center">
-            <p className="text-gray-500">{t('customers.noContracts')}</p>
-            <Link
-              to="/contracts/new"
-              className="mt-4 inline-flex items-center text-blue-600 hover:text-blue-700"
-            >
-              {t('contracts.newContract')}
-            </Link>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-lg border">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('name')}
-                  >
-                    {t('contracts.form.name')}
-                    {getSortIcon('name')}
-                  </th>
-                  <th
-                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('status')}
-                  >
-                    {t('contracts.statusLabel')}
-                    {getSortIcon('status')}
-                  </th>
-                  <th
-                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('startDate')}
-                  >
-                    {t('contracts.startDate')}
-                    {getSortIcon('startDate')}
-                  </th>
-                  <th
-                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('endDate')}
-                  >
-                    {t('contracts.endDate')}
-                    {getSortIcon('endDate')}
-                  </th>
-                  <th
-                    className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('arr')}
-                  >
-                    {t('contracts.detail.arr')}
-                    {getSortIcon('arr')}
-                  </th>
-                  <th
-                    className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('totalValue')}
-                  >
-                    {t('contracts.value')}
-                    {getSortIcon('totalValue')}
-                  </th>
-                  <th
-                    className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('remainingMonths')}
-                  >
-                    {t('contracts.remainingMonths')}
-                    {getSortIcon('remainingMonths')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {sortedContracts.map((contract) => (
-                  <tr key={contract.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <Link
-                        to={`/contracts/${contract.id}`}
-                        className="font-medium text-blue-600 hover:text-blue-800"
-                      >
-                        {contract.name || '-'}
-                      </Link>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <span
-                        className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusBadgeClass(
-                          contract.status
-                        )}`}
-                      >
-                        {t(`contracts.status.${contract.status}`)}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {formatDate(contract.startDate)}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {formatDate(contract.endDate)}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
-                      {formatCurrency(contract.arr)}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
-                      {formatCurrency(contract.totalValue)}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-500">
-                      {contract.remainingMonths > 0 ? contract.remainingMonths : '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {/* Tabs */}
+      <div className="mt-6 mb-4 border-b">
+        <nav className="-mb-px flex gap-4">
+          <button
+            onClick={() => setActiveTab('contracts')}
+            className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium ${
+              activeTab === 'contracts'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            <FileText className="h-4 w-4" />
+            {t('contracts.title')} ({customer.contracts.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('attachments')}
+            className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium ${
+              activeTab === 'attachments'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            <Paperclip className="h-4 w-4" />
+            {t('attachments.title')} ({(customer.attachments?.length || 0) + (customer.links?.length || 0)})
+          </button>
+          <button
+            onClick={() => setActiveTab('todos')}
+            className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium ${
+              activeTab === 'todos'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            <ListTodo className="h-4 w-4" />
+            {t('todos.title')} ({customer.todos?.filter(t => !t.isCompleted).length || 0})
+          </button>
+          <button
+            onClick={() => setActiveTab('activity')}
+            className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium ${
+              activeTab === 'activity'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            <History className="h-4 w-4" />
+            {t('audit.activity')}
+          </button>
+        </nav>
       </div>
 
-      {/* Attachments Section */}
-      <div className="mt-8" data-testid="customer-attachments-section">
-        <div className="flex items-center gap-2 mb-4">
-          <Paperclip className="h-5 w-5 text-gray-400" />
-          <h2 className="text-lg font-semibold">{t('attachments.title')}</h2>
-          <span className="text-sm text-gray-500">
-            ({customer.attachments?.length || 0})
-          </span>
-        </div>
-
-        <div className="rounded-lg border bg-white p-6">
-          {/* Upload Form */}
-          <div className="flex items-end gap-4 mb-6">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('attachments.description')}
-              </label>
-              <Input
-                value={attachmentDescription}
-                onChange={(e) => setAttachmentDescription(e.target.value)}
-                placeholder={t('attachments.descriptionPlaceholder')}
-              />
-            </div>
-            <div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-              <Button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingFile}
+      {/* Contracts Tab */}
+      {activeTab === 'contracts' && (
+        <div data-testid="customer-contracts-section">
+          {customer.contracts.length === 0 ? (
+            <div className="rounded-lg border bg-white p-8 text-center">
+              <p className="text-gray-500">{t('customers.noContracts')}</p>
+              <Link
+                to="/contracts/new"
+                className="mt-4 inline-flex items-center text-blue-600 hover:text-blue-700"
               >
-                {uploadingFile ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4 mr-2" />
-                )}
-                {t('attachments.upload')}
-              </Button>
+                {t('contracts.newContract')}
+              </Link>
             </div>
-          </div>
+          ) : (
+            <div className="overflow-hidden rounded-lg border">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('name')}
+                    >
+                      {t('contracts.form.name')}
+                      {getSortIcon('name')}
+                    </th>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('status')}
+                    >
+                      {t('contracts.statusLabel')}
+                      {getSortIcon('status')}
+                    </th>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('startDate')}
+                    >
+                      {t('contracts.startDate')}
+                      {getSortIcon('startDate')}
+                    </th>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('endDate')}
+                    >
+                      {t('contracts.endDate')}
+                      {getSortIcon('endDate')}
+                    </th>
+                    <th
+                      className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('arr')}
+                    >
+                      {t('contracts.detail.arr')}
+                      {getSortIcon('arr')}
+                    </th>
+                    <th
+                      className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('totalValue')}
+                    >
+                      {t('contracts.value')}
+                      {getSortIcon('totalValue')}
+                    </th>
+                    <th
+                      className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('remainingMonths')}
+                    >
+                      {t('contracts.remainingMonths')}
+                      {getSortIcon('remainingMonths')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {sortedContracts.map((contract) => (
+                    <tr key={contract.id} className="hover:bg-gray-50">
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <Link
+                          to={`/contracts/${contract.id}`}
+                          className="font-medium text-blue-600 hover:text-blue-800"
+                        >
+                          {contract.name || '-'}
+                        </Link>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <span
+                          className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusBadgeClass(
+                            contract.status
+                          )}`}
+                        >
+                          {t(`contracts.status.${contract.status}`)}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                        {formatDate(contract.startDate)}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                        {formatDate(contract.endDate)}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
+                        {formatCurrency(contract.arr)}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
+                        {formatCurrency(contract.totalValue)}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-500">
+                        {contract.remainingMonths > 0 ? contract.remainingMonths : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
-          {/* Attachments List */}
-          {customer.attachments?.length > 0 ? (
-            <div className="space-y-2">
-              {customer.attachments.map((attachment) => (
-                <div
-                  key={attachment.id}
-                  className="flex items-center justify-between p-3 rounded-lg border bg-gray-50 hover:bg-gray-100"
+      {/* Attachments Tab */}
+      {activeTab === 'attachments' && (
+        <div data-testid="customer-attachments-section" className="space-y-6">
+          {/* Files Section */}
+          <div className="rounded-lg border bg-white p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Paperclip className="h-5 w-5 text-gray-400" />
+              <h3 className="text-md font-semibold">{t('attachments.files')}</h3>
+              <span className="text-sm text-gray-500">
+                ({customer.attachments?.length || 0})
+              </span>
+            </div>
+
+            {/* Upload Form */}
+            <div className="flex items-end gap-4 mb-6">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('attachments.description')}
+                </label>
+                <Input
+                  value={attachmentDescription}
+                  onChange={(e) => setAttachmentDescription(e.target.value)}
+                  placeholder={t('attachments.descriptionPlaceholder')}
+                />
+              </div>
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingFile}
                 >
-                  <div className="flex items-center gap-3">
-                    {getFileIcon(attachment.contentType)}
-                    <div>
-                      <p className="font-medium text-sm">{attachment.originalFilename}</p>
-                      <p className="text-xs text-gray-500">
-                        {formatFileSize(attachment.fileSize)}
-                        {attachment.description && ` • ${attachment.description}`}
-                        {attachment.uploadedByName && ` • ${attachment.uploadedByName}`}
-                      </p>
+                  {uploadingFile ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  {t('attachments.upload')}
+                </Button>
+              </div>
+            </div>
+
+            {/* Attachments List */}
+            {customer.attachments?.length > 0 ? (
+              <div className="space-y-2">
+                {customer.attachments.map((attachment) => (
+                  <div
+                    key={attachment.id}
+                    className="flex items-center justify-between p-3 rounded-lg border bg-gray-50 hover:bg-gray-100"
+                  >
+                    <div className="flex items-center gap-3">
+                      {getFileIcon(attachment.contentType)}
+                      <div>
+                        <p className="font-medium text-sm">{attachment.originalFilename}</p>
+                        <p className="text-xs text-gray-500">
+                          {formatFileSize(attachment.fileSize)}
+                          {attachment.description && ` • ${attachment.description}`}
+                          {attachment.uploadedByName && ` • ${attachment.uploadedByName}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={attachment.downloadUrl}
+                        className="p-2 text-gray-500 hover:text-blue-600"
+                        title={t('attachments.download')}
+                      >
+                        <Download className="h-4 w-4" />
+                      </a>
+                      <button
+                        onClick={() => handleDeleteAttachment(attachment.id)}
+                        className="p-2 text-gray-500 hover:text-red-600"
+                        title={t('attachments.delete')}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={attachment.downloadUrl}
-                      className="p-2 text-gray-500 hover:text-blue-600"
-                      title={t('attachments.download')}
-                    >
-                      <Download className="h-4 w-4" />
-                    </a>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-4">
+                {t('attachments.noAttachments')}
+              </p>
+            )}
+          </div>
+
+          {/* Links Section */}
+          <div className="rounded-lg border bg-white p-6" data-testid="customer-links-section">
+            <div className="flex items-center gap-2 mb-4">
+              <Link2 className="h-5 w-5 text-gray-400" />
+              <h3 className="text-md font-semibold">{t('links.title')}</h3>
+              <span className="text-sm text-gray-500">
+                ({customer.links?.length || 0})
+              </span>
+            </div>
+
+            {/* Add Link Form */}
+            <div className="flex items-end gap-4 mb-6">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('links.name')}
+                </label>
+                <Input
+                  value={newLinkName}
+                  onChange={(e) => setNewLinkName(e.target.value)}
+                  placeholder={t('links.namePlaceholder')}
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('links.url')}
+                </label>
+                <Input
+                  value={newLinkUrl}
+                  onChange={(e) => setNewLinkUrl(e.target.value)}
+                  placeholder="https://..."
+                />
+              </div>
+              <Button
+                onClick={handleAddLink}
+                disabled={addingLink || !newLinkName.trim() || !newLinkUrl.trim()}
+              >
+                {addingLink ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4 mr-2" />
+                )}
+                {t('links.add')}
+              </Button>
+            </div>
+
+            {/* Links List */}
+            {customer.links?.length > 0 ? (
+              <div className="space-y-2">
+                {customer.links.map((link) => (
+                  <div
+                    key={link.id}
+                    className="flex items-center justify-between p-3 rounded-lg border bg-gray-50 hover:bg-gray-100"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Link2 className="h-4 w-4 text-red-500" />
+                      <div>
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 font-medium text-sm text-red-600 hover:text-red-800"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          {link.name}
+                        </a>
+                        <p className="text-xs text-gray-500">
+                          {link.url}
+                          {link.createdByName && ` • ${link.createdByName}`}
+                        </p>
+                      </div>
+                    </div>
                     <button
-                      onClick={() => handleDeleteAttachment(attachment.id)}
+                      onClick={() => handleDeleteLink(link.id)}
                       className="p-2 text-gray-500 hover:text-red-600"
-                      title={t('attachments.delete')}
+                      title={t('links.delete')}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500 text-center py-4">
-              {t('attachments.noAttachments')}
-            </p>
-          )}
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-4">
+                {t('links.noLinks')}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Links Section */}
-      <div className="mt-8" data-testid="customer-links-section">
-        <div className="flex items-center gap-2 mb-4">
-          <Link2 className="h-5 w-5 text-gray-400" />
-          <h2 className="text-lg font-semibold">{t('links.title')}</h2>
-          <span className="text-sm text-gray-500">
-            ({customer.links?.length || 0})
-          </span>
-        </div>
-
-        <div className="rounded-lg border bg-white p-6">
-          {/* Add Link Form */}
-          <div className="flex items-end gap-4 mb-6">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('links.name')}
-              </label>
-              <Input
-                value={newLinkName}
-                onChange={(e) => setNewLinkName(e.target.value)}
-                placeholder={t('links.namePlaceholder')}
-              />
-            </div>
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('links.url')}
-              </label>
-              <Input
-                value={newLinkUrl}
-                onChange={(e) => setNewLinkUrl(e.target.value)}
-                placeholder="https://..."
-              />
-            </div>
+      {/* Todos Tab */}
+      {activeTab === 'todos' && (
+        <div data-testid="customer-todos-section">
+          <div className="mb-4 flex justify-end">
             <Button
-              onClick={handleAddLink}
-              disabled={addingLink || !newLinkName.trim() || !newLinkUrl.trim()}
+              onClick={() => {
+                setTodoContext({
+                  type: 'customer',
+                  id: parseInt(id!),
+                  name: customer.name,
+                })
+                setTodoModalOpen(true)
+              }}
             >
-              {addingLink ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4 mr-2" />
-              )}
-              {t('links.add')}
+              <Plus className="mr-2 h-4 w-4" />
+              {t('todos.addTodo')}
             </Button>
           </div>
-
-          {/* Links List */}
-          {customer.links?.length > 0 ? (
-            <div className="space-y-2">
-              {customer.links.map((link) => (
-                <div
-                  key={link.id}
-                  className="flex items-center justify-between p-3 rounded-lg border bg-gray-50 hover:bg-gray-100"
-                >
-                  <div className="flex items-center gap-3">
-                    <Link2 className="h-4 w-4 text-blue-500" />
-                    <div>
-                      <a
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-medium text-sm text-blue-600 hover:text-blue-800 hover:underline"
-                      >
-                        {link.name}
-                      </a>
-                      <p className="text-xs text-gray-500">
-                        {link.url}
-                        {link.createdByName && ` • ${link.createdByName}`}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteLink(link.id)}
-                    className="p-2 text-gray-500 hover:text-red-600"
-                    title={t('links.delete')}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500 text-center py-4">
-              {t('links.noLinks')}
-            </p>
-          )}
+          <div className="rounded-lg border bg-white p-6">
+            <TodoList
+              todos={customer.todos || []}
+              showCreator={true}
+              onUpdate={() => refetch()}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Activity Section */}
-      <div className="mt-8" data-testid="customer-activity-section">
-        <div className="flex items-center gap-2 mb-4">
-          <History className="h-5 w-5 text-gray-400" />
-          <h2 className="text-lg font-semibold">{t('audit.activity')}</h2>
+      {/* Activity Tab */}
+      {activeTab === 'activity' && (
+        <div data-testid="customer-activity-section">
+          <CustomerActivityLog customerId={parseInt(id!, 10)} />
         </div>
-        <CustomerActivityLog customerId={parseInt(id!, 10)} />
-      </div>
+      )}
 
       {/* Todo Modal */}
       <TodoModal
         open={todoModalOpen}
         onOpenChange={setTodoModalOpen}
         context={todoContext}
+        onSuccess={() => refetch()}
       />
     </div>
   )
