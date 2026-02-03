@@ -624,6 +624,10 @@ export function CustomerDetail() {
               activeTab === 'todos'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            } ${
+              (customer.todos?.filter(t => !t.isCompleted).length || 0) > 0
+                ? 'bg-yellow-100 rounded-t-md'
+                : ''
             }`}
           >
             <ListTodo className="h-4 w-4" />

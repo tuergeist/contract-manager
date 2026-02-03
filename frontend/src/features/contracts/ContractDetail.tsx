@@ -832,6 +832,10 @@ export function ContractDetail() {
               activeTab === 'todos'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            } ${
+              (contract.todos?.filter(t => !t.isCompleted).length || 0) > 0
+                ? 'bg-yellow-100 rounded-t-md'
+                : ''
             }`}
           >
             <ListTodo className="h-4 w-4" />
@@ -923,7 +927,7 @@ export function ContractDetail() {
                                 <div className="text-xs text-gray-500">{item.product.sku}</div>
                               )}
                               {item.product && item.description && (
-                                <div className="text-xs text-gray-500">{item.description}</div>
+                                <div className="text-xs text-gray-500 whitespace-pre-wrap">{item.description}</div>
                               )}
                             </td>
                             <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
@@ -1038,7 +1042,7 @@ export function ContractDetail() {
                                 <div className="text-xs text-gray-500">{item.product.sku}</div>
                               )}
                               {item.product && item.description && (
-                                <div className="text-xs text-gray-500">{item.description}</div>
+                                <div className="text-xs text-gray-500 whitespace-pre-wrap">{item.description}</div>
                               )}
                             </td>
                             <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">

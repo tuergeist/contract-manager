@@ -525,7 +525,7 @@ class TenantMutation:
 
     @strawberry.mutation
     def create_invitation(
-        self, info: Info[Context, None], email: str
+        self, info: Info[Context, None], email: str, base_url: str | None = None
     ) -> InvitationResult:
         """Create an invitation for a new user. Admin only."""
         admin = get_current_user(info)
@@ -554,8 +554,8 @@ class TenantMutation:
             email=email,
             created_by=admin,
         )
-        base_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
-        invite_url = f"{base_url}/invite/{invitation.token}"
+        url_base = base_url or getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+        invite_url = f"{url_base}/invite/{invitation.token}"
 
         return InvitationResult(
             success=True,
@@ -681,7 +681,7 @@ class TenantMutation:
 
     @strawberry.mutation
     def create_password_reset(
-        self, info: Info[Context, None], user_id: strawberry.ID
+        self, info: Info[Context, None], user_id: strawberry.ID, base_url: str | None = None
     ) -> ResetLinkResult:
         """Create a password reset link for a user. Admin only."""
         admin = get_current_user(info)
@@ -696,8 +696,8 @@ class TenantMutation:
             return ResetLinkResult(success=False, error="User not found")
 
         reset_token = PasswordResetToken.create_token(target_user)
-        base_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
-        reset_url = f"{base_url}/reset-password/{reset_token.token}"
+        url_base = base_url or getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+        reset_url = f"{url_base}/reset-password/{reset_token.token}"
 
         return ResetLinkResult(success=True, reset_url=reset_url)
 

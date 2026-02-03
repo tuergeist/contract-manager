@@ -63,8 +63,8 @@ const USERS_QUERY = gql`
 `
 
 const CREATE_INVITATION = gql`
-  mutation CreateInvitation($email: String!) {
-    createInvitation(email: $email) {
+  mutation CreateInvitation($email: String!, $baseUrl: String) {
+    createInvitation(email: $email, baseUrl: $baseUrl) {
       success
       error
       inviteUrl
@@ -100,8 +100,8 @@ const REACTIVATE_USER = gql`
 `
 
 const CREATE_PASSWORD_RESET = gql`
-  mutation CreatePasswordReset($userId: ID!) {
-    createPasswordReset(userId: $userId) {
+  mutation CreatePasswordReset($userId: ID!, $baseUrl: String) {
+    createPasswordReset(userId: $userId, baseUrl: $baseUrl) {
       success
       error
       resetUrl
@@ -139,7 +139,9 @@ export function UserManagement() {
     setError(null)
     setInviteUrl(null)
     try {
-      const result = await createInvitation({ variables: { email: inviteEmail } })
+      const result = await createInvitation({
+        variables: { email: inviteEmail, baseUrl: window.location.origin }
+      })
       if (result.data?.createInvitation?.success) {
         setInviteUrl(result.data.createInvitation.inviteUrl)
         refetch()
@@ -187,7 +189,9 @@ export function UserManagement() {
   const handleCreatePasswordReset = async (userId: string) => {
     setResetUrl(null)
     try {
-      const result = await createPasswordReset({ variables: { userId } })
+      const result = await createPasswordReset({
+        variables: { userId, baseUrl: window.location.origin }
+      })
       if (result.data?.createPasswordReset?.success) {
         setResetUrl(result.data.createPasswordReset.resetUrl)
       }
