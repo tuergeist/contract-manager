@@ -286,6 +286,76 @@ class TestRoleCRUD:
         assert data["success"] is False
         assert "assigned users" in data["error"].lower()
 
+    def test_create_role_with_invalid_permission_key_rejected(self, admin_user):
+        """Bare resource names like 'products' must be rejected."""
+        mutation = """
+            mutation CreateRole($name: String!, $permissions: JSON) {
+                createRole(name: $name, permissions: $permissions) {
+                    success error
+                }
+            }
+        """
+        result = run_graphql(
+            mutation,
+            {"name": "BadRole", "permissions": {"products": True, "contracts.read": True}},
+            make_context(admin_user),
+        )
+        data = result.data["createRole"]
+        assert data["success"] is False
+        assert "Invalid permission" in data["error"]
+        assert "products" in data["error"]
+
+    def test_update_role_with_invalid_permission_key_rejected(self, admin_user, tenant):
+        """Updating a role with bare resource names must be rejected."""
+        role = Role.objects.get(tenant=tenant, name="Viewer")
+        mutation = """
+            mutation UpdateRolePerms($roleId: ID!, $permissions: JSON!) {
+                updateRolePermissions(roleId: $roleId, permissions: $permissions) {
+                    success error
+                }
+            }
+        """
+        result = run_graphql(
+            mutation,
+            {"roleId": str(role.id), "permissions": {"customers": ["read"], "contracts.read": True}},
+            make_context(admin_user),
+        )
+        data = result.data["updateRolePermissions"]
+        assert data["success"] is False
+        assert "Invalid permission" in data["error"]
+
+    def test_update_role_with_old_format_permissions_rejected(self, admin_user, tenant):
+        """Old-format permissions (resource -> [actions]) in DB should not break update.
+
+        If a role has stale old-format keys in the DB, the update mutation should
+        still work when the client sends only valid keys (frontend filters them out).
+        """
+        role = Role.objects.create(
+            tenant=tenant,
+            name="LegacyRole",
+            permissions={"products": ["read"], "contracts": ["read", "write"]},
+            is_system=False,
+        )
+        mutation = """
+            mutation UpdateRolePerms($roleId: ID!, $permissions: JSON!) {
+                updateRolePermissions(roleId: $roleId, permissions: $permissions) {
+                    success error role { permissions }
+                }
+            }
+        """
+        # Client sends only valid keys (as the frontend now filters)
+        new_perms = {"products.read": True, "contracts.read": True, "contracts.write": True}
+        result = run_graphql(
+            mutation,
+            {"roleId": str(role.id), "permissions": new_perms},
+            make_context(admin_user),
+        )
+        data = result.data["updateRolePermissions"]
+        assert data["success"] is True
+        role.refresh_from_db()
+        assert "products" not in role.permissions
+        assert role.permissions.get("products.read") is True
+
 
 class TestInvitationRoleAssignment:
     """Test 9.4: invitation with role assignment."""

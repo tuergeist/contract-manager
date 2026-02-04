@@ -95,8 +95,12 @@ export function RoleManagement() {
   const registry: PermissionResource[] = data?.permissionRegistry || []
 
   const handleEditRole = (role: Role) => {
+    // Build set of valid keys from registry to filter out any stale/invalid keys
+    const validKeys = new Set(registry.flatMap((r) => r.actions.map((a) => `${r.resource}.${a}`)))
     setEditingRole(role)
-    setEditPermissions({ ...role.permissions })
+    setEditPermissions(
+      Object.fromEntries(Object.entries(role.permissions).filter(([key]) => validKeys.has(key)))
+    )
     setMessage(null)
   }
 
