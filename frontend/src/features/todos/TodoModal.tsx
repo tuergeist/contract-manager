@@ -181,7 +181,7 @@ export function TodoModal({ open, onOpenChange, context, onSuccess }: TodoModalP
         text: text.trim(),
         isPublic,
         reminderDate: reminderDate || null,
-        assignedToId: assignedToId ? parseInt(assignedToId) : null,
+        assignedToId: assignedToId ? parseInt(assignedToId) : (currentUser?.id ?? null),
       }
 
       // Set the appropriate entity ID based on context type
@@ -279,12 +279,11 @@ export function TodoModal({ open, onOpenChange, context, onSuccess }: TodoModalP
             {/* Assign to */}
             <div className="grid gap-2">
               <Label htmlFor="assigned-to">{t('todos.assignTo')}</Label>
-              <Select value={assignedToId || '__none__'} onValueChange={(val) => setAssignedToId(val === '__none__' ? '' : val)}>
+              <Select value={assignedToId} onValueChange={setAssignedToId}>
                 <SelectTrigger id="assigned-to" data-testid="todo-assigned-to">
                   <SelectValue placeholder={t('todos.assignToPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">{t('todos.unassigned')}</SelectItem>
                   {users.map((user) => (
                     <SelectItem key={user.id} value={String(user.id)}>
                       {user.firstName && user.lastName
