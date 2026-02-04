@@ -8,6 +8,12 @@ from .import_service import (
     MatchResult,
     MatchStatus,
 )
+from .time_tracking import (
+    TimeTrackingProject,
+    TimeTrackingProvider,
+    TimeTrackingSummary,
+    get_provider,
+)
 
 __all__ = [
     "ExcelParser",
@@ -16,4 +22,8 @@ __all__ = [
     "ImportService",
     "MatchResult",
     "MatchStatus",
+    "TimeTrackingProject",
+    "TimeTrackingProvider",
+    "TimeTrackingSummary",
+    "get_provider",
 ]

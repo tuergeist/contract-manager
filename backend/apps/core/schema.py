@@ -49,6 +49,8 @@ class CurrentUser:
     tenant_name: str | None
     role_name: str | None
     is_admin: bool
+    roles: list[str] | None = None
+    permissions: list[str] | None = None
 
 
 @strawberry.type
@@ -90,6 +92,8 @@ class CoreQuery:
         if user is None:
             return None
 
+        role_names = [r.name for r in user.roles.all()]
+        permissions = sorted(user.effective_permissions)
         return CurrentUser(
             id=user.id,
             email=user.email,
@@ -99,6 +103,8 @@ class CoreQuery:
             tenant_name=user.tenant.name if user.tenant else None,
             role_name=user.role.name if user.role else None,
             is_admin=user.is_admin or user.is_super_admin,
+            roles=role_names,
+            permissions=permissions,
         )
 
     @strawberry.field

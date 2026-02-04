@@ -10,6 +10,8 @@ interface User {
   tenantName: string | null
   roleName: string | null
   isAdmin: boolean
+  roles: string[]
+  permissions: string[]
 }
 
 interface AuthContextType {
@@ -20,6 +22,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => void
   refetchUser: () => Promise<void>
+  hasPermission: (resource: string, action: string) => boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -52,6 +55,8 @@ const ME_QUERY = gql`
       tenantName
       roleName
       isAdmin
+      roles
+      permissions
     }
   }
 `
@@ -151,6 +156,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     client.clearStore()
   }
 
+  const hasPermission = (resource: string, action: string): boolean => {
+    if (!user) return false
+    return user.permissions.includes(`${resource}.${action}`)
+  }
+
   const refetchUser = async () => {
     const storedToken = localStorage.getItem(TOKEN_KEY)
     if (!storedToken) return
@@ -184,6 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         refetchUser,
+        hasPermission,
       }}
     >
       {children}

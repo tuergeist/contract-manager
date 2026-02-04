@@ -45,7 +45,7 @@ interface NavItem {
   to: string
   icon: typeof LayoutDashboard
   labelKey: string
-  adminOnly?: boolean
+  permission?: string  // "resource.action" format
   end?: boolean
 }
 
@@ -58,12 +58,12 @@ const navItems: NavItem[] = [
   { to: '/forecast', icon: TrendingUp, labelKey: 'nav.forecast' },
   { to: '/audit-log', icon: History, labelKey: 'nav.auditLog' },
   { to: '/settings', icon: Settings, labelKey: 'nav.settings', end: true },
-  { to: '/settings/users', icon: UserCog, labelKey: 'users.title', adminOnly: true },
+  { to: '/settings/users', icon: UserCog, labelKey: 'users.title', permission: 'users.read' },
 ]
 
 export function Sidebar() {
   const { t } = useTranslation()
-  const { user, logout } = useAuth()
+  const { user, logout, hasPermission } = useAuth()
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState('')
   const [showResults, setShowResults] = useState(false)
@@ -132,7 +132,7 @@ export function Sidebar() {
   return (
     <aside className="flex w-64 flex-col border-r bg-white">
       <div className="flex h-16 items-center border-b px-6">
-        <h1 className="text-xl font-semibold">Contract Manager</h1>
+        <img src="/vsx-logo.jpg" alt="VSX Vogel Software" className="h-10" />
       </div>
       <nav className="flex-1 space-y-1 p-4">
         {/* Search Bar */}
@@ -215,7 +215,11 @@ export function Sidebar() {
         </div>
 
         {navItems
-          .filter((item) => !item.adminOnly || user?.isAdmin)
+          .filter((item) => {
+            if (!item.permission) return true
+            const [resource, action] = item.permission.split('.')
+            return hasPermission(resource, action)
+          })
           .map((item) => (
             <NavLink
               key={item.to}

@@ -6,7 +6,7 @@ from unittest.mock import Mock
 from django.utils import timezone
 
 from config.schema import schema
-from apps.tenants.models import Tenant, User, UserInvitation, PasswordResetToken
+from apps.tenants.models import Role, Tenant, User, UserInvitation, PasswordResetToken
 from apps.core.context import Context
 
 
@@ -33,23 +33,29 @@ def tenant(db):
 @pytest.fixture
 def admin_user(db, tenant):
     """Create an admin test user."""
-    return User.objects.create_user(
+    u = User.objects.create_user(
         email="admin@example.com",
         password="admin123",
         tenant=tenant,
         is_admin=True,
     )
+    admin_role = Role.objects.get(tenant=tenant, name="Admin")
+    u.roles.add(admin_role)
+    return u
 
 
 @pytest.fixture
 def regular_user(db, tenant):
     """Create a regular (non-admin) test user."""
-    return User.objects.create_user(
+    u = User.objects.create_user(
         email="user@example.com",
         password="user123",
         tenant=tenant,
         is_admin=False,
     )
+    viewer_role = Role.objects.get(tenant=tenant, name="Viewer")
+    u.roles.add(viewer_role)
+    return u
 
 
 @pytest.fixture
@@ -115,7 +121,7 @@ class TestUserInvitationFlow:
         assert result.errors is None
         data = result.data["createInvitation"]
         assert data["success"] is False
-        assert "admin" in data["error"].lower() or "access" in data["error"].lower()
+        assert "permission" in data["error"].lower() or "denied" in data["error"].lower()
 
     def test_validate_invitation_valid_token(self, pending_invitation):
         """Test validating a valid invitation token."""

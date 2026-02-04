@@ -7,7 +7,7 @@ from strawberry.types import Info
 from django.db.models import OuterRef, Subquery
 
 from apps.core.context import Context
-from apps.core.permissions import get_current_user
+from apps.core.permissions import get_current_user, require_perm
 from .models import Product, ProductCategory, ProductPrice
 
 
@@ -78,7 +78,7 @@ class ProductQuery:
         sort_by: str | None = "name",
         sort_order: str | None = "asc",
     ) -> ProductConnection:
-        user = get_current_user(info)
+        user = require_perm(info, "products", "read")
         if not user.tenant:
             return ProductConnection(
                 items=[],
@@ -131,7 +131,7 @@ class ProductQuery:
 
     @strawberry.field
     def product(self, info: Info[Context, None], id: strawberry.ID) -> ProductType | None:
-        user = get_current_user(info)
+        user = require_perm(info, "products", "read")
         if user.tenant:
             return Product.objects.filter(tenant=user.tenant, id=id).first()
         return None

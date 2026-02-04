@@ -8,7 +8,7 @@ from config.schema import schema
 from apps.contracts.models import Contract, ContractItem
 from apps.customers.models import Customer
 from apps.products.models import Product
-from apps.tenants.models import Tenant, User
+from apps.tenants.models import Role, Tenant, User
 from apps.core.context import Context
 
 
@@ -34,12 +34,15 @@ def tenant(db):
 
 @pytest.fixture
 def user(db, tenant):
-    """Create a test user."""
-    return User.objects.create_user(
+    """Create a test user with Admin role."""
+    u = User.objects.create_user(
         email="test@example.com",
         password="testpass123",
         tenant=tenant,
     )
+    admin_role = Role.objects.get(tenant=tenant, name="Admin")
+    u.roles.add(admin_role)
+    return u
 
 
 @pytest.fixture

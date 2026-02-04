@@ -24,6 +24,7 @@ interface User {
   isActive: boolean
   isAdmin: boolean
   lastLogin: string | null
+  roleNames: string[]
 }
 
 interface Invitation {
@@ -48,6 +49,7 @@ const USERS_QUERY = gql`
       isActive
       isAdmin
       lastLogin
+      roleNames
     }
     pendingInvitations {
       id
@@ -63,8 +65,8 @@ const USERS_QUERY = gql`
 `
 
 const CREATE_INVITATION = gql`
-  mutation CreateInvitation($email: String!, $baseUrl: String) {
-    createInvitation(email: $email, baseUrl: $baseUrl) {
+  mutation CreateInvitation($email: String!, $baseUrl: String, $roleIds: [ID!]) {
+    createInvitation(email: $email, baseUrl: $baseUrl, roleIds: $roleIds) {
       success
       error
       inviteUrl
@@ -109,10 +111,34 @@ const CREATE_PASSWORD_RESET = gql`
   }
 `
 
+const ROLES_QUERY = gql`
+  query RolesForAssignment {
+    roles {
+      id
+      name
+    }
+  }
+`
+
+const ASSIGN_USER_ROLES = gql`
+  mutation AssignUserRoles($userId: ID!, $roleIds: [ID!]!) {
+    assignUserRoles(userId: $userId, roleIds: $roleIds) {
+      success
+      error
+    }
+  }
+`
+
+interface RoleOption {
+  id: string
+  name: string
+}
+
 export function UserManagement() {
   const { t } = useTranslation()
-  const { user: currentUser } = useAuth()
+  const { user: currentUser, hasPermission } = useAuth()
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRoleIds, setInviteRoleIds] = useState<string[]>([])
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
   const [resetUrl, setResetUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
@@ -120,14 +146,45 @@ export function UserManagement() {
   const [showInviteModal, setShowInviteModal] = useState(false)
 
   const { data, loading, refetch } = useQuery(USERS_QUERY)
+  const { data: rolesData } = useQuery(ROLES_QUERY)
   const [createInvitation, { loading: creating }] = useMutation(CREATE_INVITATION)
   const [revokeInvitation] = useMutation(REVOKE_INVITATION)
   const [deactivateUser] = useMutation(DEACTIVATE_USER)
   const [reactivateUser] = useMutation(REACTIVATE_USER)
   const [createPasswordReset] = useMutation(CREATE_PASSWORD_RESET)
+  const [assignUserRoles] = useMutation(ASSIGN_USER_ROLES)
 
   const users: User[] = data?.users || []
   const invitations: Invitation[] = data?.pendingInvitations || []
+  const availableRoles: RoleOption[] = rolesData?.roles || []
+
+  const handleToggleRole = async (userId: string, currentRoleNames: string[], roleName: string) => {
+    const role = availableRoles.find((r) => r.name === roleName)
+    if (!role) return
+    const isAssigned = currentRoleNames.includes(roleName)
+    let newRoleIds: string[]
+    if (isAssigned) {
+      // Remove role
+      newRoleIds = availableRoles
+        .filter((r) => currentRoleNames.includes(r.name) && r.name !== roleName)
+        .map((r) => r.id)
+    } else {
+      // Add role
+      newRoleIds = availableRoles
+        .filter((r) => currentRoleNames.includes(r.name) || r.name === roleName)
+        .map((r) => r.id)
+    }
+    try {
+      const result = await assignUserRoles({ variables: { userId, roleIds: newRoleIds } })
+      if (result.data?.assignUserRoles?.success) {
+        refetch()
+      } else {
+        setError(result.data?.assignUserRoles?.error || t('settings.roles.rolesUpdateFailed'))
+      }
+    } catch {
+      setError(t('settings.roles.rolesUpdateFailed'))
+    }
+  }
 
   const handleCopy = async (text: string, id: string) => {
     await navigator.clipboard.writeText(text)
@@ -140,7 +197,11 @@ export function UserManagement() {
     setInviteUrl(null)
     try {
       const result = await createInvitation({
-        variables: { email: inviteEmail, baseUrl: window.location.origin }
+        variables: {
+          email: inviteEmail,
+          baseUrl: window.location.origin,
+          roleIds: inviteRoleIds.length > 0 ? inviteRoleIds : undefined,
+        }
       })
       if (result.data?.createInvitation?.success) {
         setInviteUrl(result.data.createInvitation.inviteUrl)
@@ -203,6 +264,7 @@ export function UserManagement() {
   const closeInviteModal = () => {
     setShowInviteModal(false)
     setInviteEmail('')
+    setInviteRoleIds([])
     setInviteUrl(null)
     setError(null)
   }
@@ -215,9 +277,8 @@ export function UserManagement() {
     )
   }
 
-  // Check if current user is admin
-  const isAdmin = currentUser?.isAdmin || currentUser?.email === 'admin@test.local'
-  if (!isAdmin) {
+  // Check if current user has user management permission
+  if (!hasPermission('users', 'read')) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-4">
         <p className="text-red-600">{t('users.accessDenied')}</p>
@@ -232,7 +293,11 @@ export function UserManagement() {
         <div className="flex items-center justify-between border-b px-6 py-4">
           <h2 className="text-lg font-medium">{t('users.title')}</h2>
           <button
-            onClick={() => setShowInviteModal(true)}
+            onClick={() => {
+              const managerRole = availableRoles.find((r) => r.name === 'Manager')
+              setInviteRoleIds(managerRole ? [managerRole.id] : [])
+              setShowInviteModal(true)
+            }}
             className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
             <UserPlus className="h-4 w-4" />
@@ -283,6 +348,9 @@ export function UserManagement() {
                 {t('users.email')}
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                {t('settings.roles.permissions')}
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                 {t('users.status')}
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -301,16 +369,51 @@ export function UserManagement() {
                     <span className="font-medium text-gray-900">
                       {user.fullName || user.email}
                     </span>
-                    {user.isAdmin && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">
-                        <Shield className="h-3 w-3" />
-                        Admin
+                    {user.roleNames?.map((role) => (
+                      <span
+                        key={role}
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                          role === 'Admin'
+                            ? 'bg-purple-100 text-purple-800'
+                            : role === 'Manager'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {role === 'Admin' && <Shield className="h-3 w-3" />}
+                        {role}
                       </span>
-                    )}
+                    ))}
                   </div>
                 </td>
                 <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                   {user.email}
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex flex-wrap gap-1">
+                    {availableRoles.map((role) => {
+                      const isAssigned = user.roleNames?.includes(role.name)
+                      return (
+                        <button
+                          key={role.id}
+                          onClick={() => hasPermission('users', 'write') ? handleToggleRole(user.id, user.roleNames || [], role.name) : undefined}
+                          disabled={!hasPermission('users', 'write')}
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
+                            isAssigned
+                              ? role.name === 'Admin'
+                                ? 'bg-purple-100 text-purple-800'
+                                : role.name === 'Manager'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-green-100 text-green-800'
+                              : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
+                          } ${hasPermission('users', 'write') ? 'cursor-pointer' : 'cursor-default'}`}
+                          title={isAssigned ? `Remove ${role.name}` : `Add ${role.name}`}
+                        >
+                          {role.name}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </td>
                 <td className="whitespace-nowrap px-6 py-4">
                   {user.isActive ? (
@@ -451,6 +554,37 @@ export function UserManagement() {
                     placeholder="user@example.com"
                     className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
+                </div>
+
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700">
+                    {t('settings.roles.assignRoles')}
+                  </label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {availableRoles.map((role) => {
+                      const isSelected = inviteRoleIds.includes(role.id)
+                      return (
+                        <button
+                          key={role.id}
+                          type="button"
+                          onClick={() => {
+                            setInviteRoleIds((prev) =>
+                              isSelected
+                                ? prev.filter((id) => id !== role.id)
+                                : [...prev, role.id]
+                            )
+                          }}
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            isSelected
+                              ? 'bg-blue-100 text-blue-800 ring-1 ring-blue-300'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          {role.name}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
 
                 {error && (

@@ -8,7 +8,7 @@ from strawberry import UNSET
 from strawberry.types import Info
 from django.db.models import Q, F
 
-from apps.core.permissions import get_current_user
+from apps.core.permissions import check_perm, get_current_user, require_perm
 from apps.core.schema import DeleteResult
 from .models import TodoItem
 
@@ -81,7 +81,7 @@ class TodoQuery:
     @strawberry.field
     def my_todos(self, info: Info, limit: int = 20) -> List[TodoItemType]:
         """Get todos created by or assigned to the current user."""
-        user = get_current_user(info)
+        user = require_perm(info, "todos", "read")
         if not user:
             return []
 
@@ -105,7 +105,7 @@ class TodoQuery:
     @strawberry.field
     def team_todos(self, info: Info, limit: int = 20) -> List[TodoItemType]:
         """Get public todos from other tenant users (not created by or assigned to current user)."""
-        user = get_current_user(info)
+        user = require_perm(info, "todos", "read")
         if not user:
             return []
 
@@ -155,9 +155,9 @@ class TodoMutation:
         customer_id: int | None = None,
     ) -> TodoCreateResult:
         """Create a new todo item."""
-        user = get_current_user(info)
-        if not user:
-            return TodoCreateResult(success=False, error="Not authenticated")
+        user, err = check_perm(info, "todos", "write")
+        if err:
+            return TodoCreateResult(success=False, error=err)
 
         # Validate exactly one entity is provided
         entity_count = sum([
@@ -216,9 +216,9 @@ class TodoMutation:
         assigned_to_id: int | None = strawberry.UNSET,
     ) -> TodoUpdateResult:
         """Update a todo item."""
-        user = get_current_user(info)
-        if not user:
-            return TodoUpdateResult(success=False, error="Not authenticated")
+        user, err = check_perm(info, "todos", "write")
+        if err:
+            return TodoUpdateResult(success=False, error=err)
 
         try:
             todo = TodoItem.objects.select_related(
@@ -286,9 +286,9 @@ class TodoMutation:
     @strawberry.mutation
     def delete_todo(self, info: Info, todo_id: int) -> DeleteResult:
         """Delete a todo item. Only the creator can delete."""
-        user = get_current_user(info)
-        if not user:
-            return DeleteResult(success=False, error="Not authenticated")
+        user, err = check_perm(info, "todos", "write")
+        if err:
+            return DeleteResult(success=False, error=err)
 
         try:
             todo = TodoItem.objects.get(pk=todo_id, tenant=user.tenant)

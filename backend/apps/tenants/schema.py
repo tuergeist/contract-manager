@@ -9,9 +9,16 @@ from django.contrib.auth.hashers import check_password
 
 from apps.core.auth import create_access_token, create_refresh_token
 from apps.core.context import Context
-from apps.core.permissions import get_current_user
+from apps.core.permissions import (
+    ADMIN_PROTECTED_PERMISSIONS,
+    ALL_PERMISSIONS,
+    PERMISSION_REGISTRY,
+    check_perm,
+    get_current_user,
+    require_perm,
+)
 from apps.customers.hubspot import HubSpotService
-from .models import PasswordResetToken, Tenant, User, UserInvitation
+from .models import PasswordResetToken, Role, Tenant, User, UserInvitation
 
 
 @strawberry_django.type(Tenant)
@@ -38,6 +45,11 @@ class UserType:
         if self.first_name or self.last_name:
             return f"{self.first_name or ''} {self.last_name or ''}".strip()
         return self.email
+
+    @strawberry.field
+    def role_names(self) -> list[str]:
+        """Return list of assigned role names."""
+        return [r.name for r in self.roles.all()]
 
 
 @strawberry_django.type(UserInvitation)
@@ -111,6 +123,31 @@ class ProfileUpdateResult:
     success: bool
     error: str | None = None
     user: UserType | None = None
+
+
+@strawberry.type
+class RoleType:
+    """A role with permissions."""
+    id: int
+    name: str
+    is_system: bool
+    permissions: strawberry.scalars.JSON
+    user_count: int
+
+
+@strawberry.type
+class RoleResult:
+    """Result of a role mutation."""
+    success: bool
+    error: str | None = None
+    role: RoleType | None = None
+
+
+@strawberry.type
+class PermissionResource:
+    """A resource in the permission registry."""
+    resource: str
+    actions: list[str]
 
 
 @strawberry.type
@@ -191,6 +228,20 @@ class HubSpotPropertiesResult:
 
 
 @strawberry.type
+class TimeTrackingSettings:
+    """Time tracking integration settings."""
+    provider: str | None
+    is_configured: bool
+
+
+@strawberry.type
+class TimeTrackingTestResult:
+    """Result of time tracking connection test."""
+    success: bool
+    error: str | None = None
+
+
+@strawberry.type
 class TenantQuery:
     @strawberry.field
     def current_user(self, info: Info[Context, None]) -> UserType | None:
@@ -204,22 +255,45 @@ class TenantQuery:
         return tenant
 
     @strawberry.field
-    def users(self, info: Info[Context, None]) -> list[UserType]:
-        """List all users in the current tenant. Admin only."""
-        user = get_current_user(info)
+    def roles(self, info: Info[Context, None]) -> list[RoleType]:
+        """List all roles for the current tenant. Requires settings.read."""
+        user = require_perm(info, "settings", "read")
         if not user.tenant:
             return []
-        if not user.is_admin and not user.is_super_admin:
+        qs = Role.objects.filter(tenant=user.tenant)
+        return [
+            RoleType(
+                id=r.id,
+                name=r.name,
+                is_system=r.is_system,
+                permissions=r.permissions or {},
+                user_count=r.users.count(),
+            )
+            for r in qs
+        ]
+
+    @strawberry.field
+    def permission_registry(self, info: Info[Context, None]) -> list[PermissionResource]:
+        """Return the full permission registry (resources + actions)."""
+        get_current_user(info)  # require auth
+        return [
+            PermissionResource(resource=resource, actions=actions)
+            for resource, actions in PERMISSION_REGISTRY.items()
+        ]
+
+    @strawberry.field
+    def users(self, info: Info[Context, None]) -> list[UserType]:
+        """List all users in the current tenant. Requires users.read."""
+        user = require_perm(info, "users", "read")
+        if not user.tenant:
             return []
-        return list(User.objects.filter(tenant=user.tenant))
+        return list(User.objects.prefetch_related("roles").filter(tenant=user.tenant))
 
     @strawberry.field
     def pending_invitations(self, info: Info[Context, None]) -> list[InvitationType]:
-        """List pending invitations for current tenant. Admin only."""
-        user = get_current_user(info)
+        """List pending invitations for current tenant. Requires users.read."""
+        user = require_perm(info, "users", "read")
         if not user.tenant:
-            return []
-        if not user.is_admin and not user.is_super_admin:
             return []
         return list(
             UserInvitation.objects.filter(
@@ -251,6 +325,17 @@ class TenantQuery:
         if reset_token.is_expired:
             return ResetTokenValidation(valid=False, error="This reset link has expired")
         return ResetTokenValidation(valid=True, email=reset_token.user.email)
+
+    @strawberry.field
+    def time_tracking_settings(self, info: Info[Context, None]) -> TimeTrackingSettings | None:
+        """Get time tracking settings for current tenant."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return None
+        config = user.tenant.time_tracking_config or {}
+        provider = config.get("provider")
+        is_configured = bool(provider and config.get("api_key"))
+        return TimeTrackingSettings(provider=provider, is_configured=is_configured)
 
     @strawberry.field
     def hubspot_settings(self, info: Info[Context, None]) -> HubSpotSettings | None:
@@ -325,6 +410,39 @@ class HubSpotCompanyFilterInput:
 
 @strawberry.type
 class TenantMutation:
+    @strawberry.mutation
+    def save_time_tracking_settings(
+        self,
+        info: Info[Context, None],
+        provider: str,
+        api_email: str = "",
+        api_key: str = "",
+    ) -> TimeTrackingTestResult:
+        """Save time tracking settings and test connection."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return TimeTrackingTestResult(success=False, error="No tenant assigned")
+
+        tenant = user.tenant
+        tenant.time_tracking_config = {
+            "provider": provider,
+            "api_email": api_email,
+            "api_key": api_key,
+        }
+        tenant.save(update_fields=["time_tracking_config"])
+
+        # Test connection
+        from apps.contracts.services.time_tracking import get_provider
+        tt_provider = get_provider(tenant)
+        if not tt_provider:
+            return TimeTrackingTestResult(success=False, error="Unknown provider")
+
+        result = tt_provider.test_connection()
+        return TimeTrackingTestResult(
+            success=result["success"],
+            error=result.get("error"),
+        )
+
     @strawberry.mutation
     def save_hubspot_settings(
         self, info: Info[Context, None], api_key: str
@@ -482,12 +600,12 @@ class TenantMutation:
     def deactivate_user(
         self, info: Info[Context, None], user_id: strawberry.ID
     ) -> OperationResult:
-        """Deactivate a user. Admin only."""
-        admin = get_current_user(info)
+        """Deactivate a user. Requires users.write."""
+        admin, err = check_perm(info, "users", "write")
+        if err:
+            return OperationResult(success=False, error=err)
         if not admin.tenant:
             return OperationResult(success=False, error="No tenant assigned")
-        if not admin.is_admin and not admin.is_super_admin:
-            return OperationResult(success=False, error="Admin access required")
 
         try:
             target_user = User.objects.get(id=user_id, tenant=admin.tenant)
@@ -505,12 +623,12 @@ class TenantMutation:
     def reactivate_user(
         self, info: Info[Context, None], user_id: strawberry.ID
     ) -> OperationResult:
-        """Reactivate a user. Admin only."""
-        admin = get_current_user(info)
+        """Reactivate a user. Requires users.write."""
+        admin, err = check_perm(info, "users", "write")
+        if err:
+            return OperationResult(success=False, error=err)
         if not admin.tenant:
             return OperationResult(success=False, error="No tenant assigned")
-        if not admin.is_admin and not admin.is_super_admin:
-            return OperationResult(success=False, error="Admin access required")
 
         try:
             target_user = User.objects.get(id=user_id, tenant=admin.tenant)
@@ -525,14 +643,18 @@ class TenantMutation:
 
     @strawberry.mutation
     def create_invitation(
-        self, info: Info[Context, None], email: str, base_url: str | None = None
+        self,
+        info: Info[Context, None],
+        email: str,
+        base_url: str | None = None,
+        role_ids: list[strawberry.ID] | None = None,
     ) -> InvitationResult:
-        """Create an invitation for a new user. Admin only."""
-        admin = get_current_user(info)
+        """Create an invitation for a new user. Requires users.write."""
+        admin, err = check_perm(info, "users", "write")
+        if err:
+            return InvitationResult(success=False, error=err)
         if not admin.tenant:
             return InvitationResult(success=False, error="No tenant assigned")
-        if not admin.is_admin and not admin.is_super_admin:
-            return InvitationResult(success=False, error="Admin access required")
 
         email = email.lower().strip()
 
@@ -549,11 +671,24 @@ class TenantMutation:
         if existing and existing.is_valid:
             return InvitationResult(success=False, error="Pending invitation already exists for this email")
 
+        # Resolve role IDs (default to Manager role if none provided)
+        if role_ids:
+            roles = list(Role.objects.filter(id__in=role_ids, tenant=admin.tenant))
+            if len(roles) != len(role_ids):
+                return InvitationResult(success=False, error="One or more roles not found")
+            stored_role_ids = [r.id for r in roles]
+        else:
+            manager_role = Role.objects.filter(tenant=admin.tenant, name="Manager").first()
+            stored_role_ids = [manager_role.id] if manager_role else []
+
         invitation = UserInvitation.create_invitation(
             tenant=admin.tenant,
             email=email,
             created_by=admin,
         )
+        invitation.role_ids = stored_role_ids
+        invitation.save(update_fields=["role_ids"])
+
         url_base = base_url or getattr(settings, "FRONTEND_URL", "http://localhost:5173")
         invite_url = f"{url_base}/invite/{invitation.token}"
 
@@ -567,12 +702,12 @@ class TenantMutation:
     def revoke_invitation(
         self, info: Info[Context, None], invitation_id: strawberry.ID
     ) -> OperationResult:
-        """Revoke a pending invitation. Admin only."""
-        admin = get_current_user(info)
+        """Revoke a pending invitation. Requires users.write."""
+        admin, err = check_perm(info, "users", "write")
+        if err:
+            return OperationResult(success=False, error=err)
         if not admin.tenant:
             return OperationResult(success=False, error="No tenant assigned")
-        if not admin.is_admin and not admin.is_super_admin:
-            return OperationResult(success=False, error="Admin access required")
 
         try:
             invitation = UserInvitation.objects.get(
@@ -608,7 +743,7 @@ class TenantMutation:
             return OperationResult(success=False, error="Password must be at least 8 characters")
 
         # Create user
-        User.objects.create_user(
+        new_user = User.objects.create_user(
             email=invitation.email,
             password=password,
             first_name=first_name,
@@ -616,6 +751,11 @@ class TenantMutation:
             tenant=invitation.tenant,
             is_active=True,
         )
+
+        # Assign roles from invitation
+        if invitation.role_ids:
+            roles = Role.objects.filter(id__in=invitation.role_ids, tenant=invitation.tenant)
+            new_user.roles.set(roles)
 
         # Mark invitation as used
         invitation.status = UserInvitation.Status.USED
@@ -683,12 +823,12 @@ class TenantMutation:
     def create_password_reset(
         self, info: Info[Context, None], user_id: strawberry.ID, base_url: str | None = None
     ) -> ResetLinkResult:
-        """Create a password reset link for a user. Admin only."""
-        admin = get_current_user(info)
+        """Create a password reset link for a user. Requires users.write."""
+        admin, err = check_perm(info, "users", "write")
+        if err:
+            return ResetLinkResult(success=False, error=err)
         if not admin.tenant:
             return ResetLinkResult(success=False, error="No tenant assigned")
-        if not admin.is_admin and not admin.is_super_admin:
-            return ResetLinkResult(success=False, error="Admin access required")
 
         try:
             target_user = User.objects.get(id=user_id, tenant=admin.tenant)
@@ -722,4 +862,154 @@ class TenantMutation:
         reset_token.used = True
         reset_token.save(update_fields=["used"])
 
+        return OperationResult(success=True)
+
+    # Role Management Mutations
+
+    @strawberry.mutation
+    def create_role(
+        self, info: Info[Context, None], name: str, permissions: strawberry.scalars.JSON | None = None
+    ) -> RoleResult:
+        """Create a new custom role. Requires settings.write."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return RoleResult(success=False, error=err)
+        if not user.tenant:
+            return RoleResult(success=False, error="No tenant assigned")
+
+        name = name.strip()
+        if not name:
+            return RoleResult(success=False, error="Role name is required")
+
+        if Role.objects.filter(tenant=user.tenant, name=name).exists():
+            return RoleResult(success=False, error="A role with this name already exists")
+
+        # Validate permission keys
+        perms = permissions or {}
+        for key in perms:
+            if key not in ALL_PERMISSIONS:
+                return RoleResult(success=False, error=f"Invalid permission: {key}")
+
+        role = Role.objects.create(
+            tenant=user.tenant,
+            name=name,
+            permissions=perms,
+            is_system=False,
+        )
+        return RoleResult(
+            success=True,
+            role=RoleType(
+                id=role.id,
+                name=role.name,
+                is_system=role.is_system,
+                permissions=role.permissions or {},
+                user_count=0,
+            ),
+        )
+
+    @strawberry.mutation
+    def update_role_permissions(
+        self, info: Info[Context, None], role_id: strawberry.ID, permissions: strawberry.scalars.JSON
+    ) -> RoleResult:
+        """Update permissions for a role. Requires settings.write."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return RoleResult(success=False, error=err)
+        if not user.tenant:
+            return RoleResult(success=False, error="No tenant assigned")
+
+        try:
+            role = Role.objects.get(id=role_id, tenant=user.tenant)
+        except Role.DoesNotExist:
+            return RoleResult(success=False, error="Role not found")
+
+        # Validate permission keys
+        for key in permissions:
+            if key not in ALL_PERMISSIONS:
+                return RoleResult(success=False, error=f"Invalid permission: {key}")
+
+        # Protect Admin role: cannot remove protected permissions
+        if role.name == "Admin" and role.is_system:
+            for perm in ADMIN_PROTECTED_PERMISSIONS:
+                if not permissions.get(perm, False):
+                    return RoleResult(
+                        success=False,
+                        error=f"Cannot remove protected permission '{perm}' from Admin role",
+                    )
+
+        role.permissions = permissions
+        role.save(update_fields=["permissions"])
+
+        return RoleResult(
+            success=True,
+            role=RoleType(
+                id=role.id,
+                name=role.name,
+                is_system=role.is_system,
+                permissions=role.permissions or {},
+                user_count=role.users.count(),
+            ),
+        )
+
+    @strawberry.mutation
+    def delete_role(
+        self, info: Info[Context, None], role_id: strawberry.ID
+    ) -> OperationResult:
+        """Delete a custom role. Requires settings.write."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return OperationResult(success=False, error=err)
+        if not user.tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        try:
+            role = Role.objects.get(id=role_id, tenant=user.tenant)
+        except Role.DoesNotExist:
+            return OperationResult(success=False, error="Role not found")
+
+        if role.is_system:
+            return OperationResult(success=False, error="Cannot delete a system role")
+
+        if role.users.exists():
+            return OperationResult(success=False, error="Cannot delete a role that has assigned users")
+
+        role.delete()
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def assign_user_roles(
+        self, info: Info[Context, None], user_id: strawberry.ID, role_ids: list[strawberry.ID]
+    ) -> OperationResult:
+        """Set roles for a user. Requires users.write."""
+        admin, err = check_perm(info, "users", "write")
+        if err:
+            return OperationResult(success=False, error=err)
+        if not admin.tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        try:
+            target_user = User.objects.prefetch_related("roles").get(id=user_id, tenant=admin.tenant)
+        except User.DoesNotExist:
+            return OperationResult(success=False, error="User not found")
+
+        # Validate all role IDs belong to the tenant
+        new_roles = list(Role.objects.filter(id__in=role_ids, tenant=admin.tenant))
+        if len(new_roles) != len(role_ids):
+            return OperationResult(success=False, error="One or more roles not found")
+
+        # Prevent removing Admin role from the last admin
+        admin_role = Role.objects.filter(tenant=admin.tenant, name="Admin", is_system=True).first()
+        if admin_role:
+            has_admin_now = target_user.roles.filter(id=admin_role.id).exists()
+            will_have_admin = admin_role.id in [r.id for r in new_roles]
+            if has_admin_now and not will_have_admin:
+                # Count other users who still have Admin role
+                other_admins = admin_role.users.exclude(id=target_user.id).filter(is_active=True).count()
+                if other_admins == 0:
+                    return OperationResult(
+                        success=False,
+                        error="Cannot remove Admin role from the last admin user",
+                    )
+
+        target_user.roles.set(new_roles)
         return OperationResult(success=True)

@@ -6,7 +6,7 @@ from typing import List
 import strawberry
 from strawberry.types import Info
 
-from apps.core.permissions import get_current_user
+from apps.core.permissions import get_current_user, require_perm
 from apps.invoices.services import InvoiceService
 from apps.invoices.types import InvoiceData, InvoiceLineItem
 
@@ -94,7 +94,7 @@ class InvoiceQuery:
         Returns:
             List of invoices with their line items.
         """
-        user = get_current_user(info)
+        user = require_perm(info, "invoices", "read")
         service = InvoiceService(user.tenant)
         invoices = service.get_invoices_for_month(year, month)
         return [_convert_invoice(inv) for inv in invoices]

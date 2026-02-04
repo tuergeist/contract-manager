@@ -15,13 +15,13 @@ from django.db import transaction
 from django.db.models import Sum, F, Q
 
 from apps.core.context import Context
-from apps.core.permissions import get_current_user
+from apps.core.permissions import check_perm, get_current_user, require_perm
 from apps.core.schema import DeleteResult
 from apps.customers.models import Customer
 from apps.customers.schema import CustomerType
 from apps.products.models import Product
 from apps.products.schema import ProductType
-from .models import Contract, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink
+from .models import Contract, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, TimeTrackingProjectMapping
 from .services import ExcelParser, ImportService, MatchStatus
 
 if TYPE_CHECKING:
@@ -716,6 +716,59 @@ class DashboardKPIsType:
 
 
 @strawberry.type
+class TimeTrackingExternalProject:
+    """A project from the external time tracking system."""
+    id: str
+    name: str
+    customer_name: str
+    active: bool
+
+
+@strawberry.type
+class TimeTrackingMappingType:
+    """A mapping between an external project and a contract."""
+    id: int
+    external_project_id: str
+    external_project_name: str
+    external_customer_name: str
+    contract_item_id: int | None
+
+
+@strawberry.type
+class ServiceBreakdown:
+    """Time breakdown by service."""
+    service_name: str
+    hours: float
+    revenue: float
+
+
+@strawberry.type
+class MonthlyBreakdown:
+    """Time breakdown by month."""
+    month: str
+    hours: float
+    revenue: float
+
+
+@strawberry.type
+class TimeTrackingSummaryType:
+    """Aggregated time tracking data for a contract."""
+    total_hours: float
+    total_revenue: float
+    by_service: list[ServiceBreakdown]
+    by_month: list[MonthlyBreakdown]
+    mappings: list[TimeTrackingMappingType]
+
+
+@strawberry.type
+class TimeTrackingMappingResult:
+    """Result of a mapping mutation."""
+    success: bool
+    error: str | None = None
+    mapping: TimeTrackingMappingType | None = None
+
+
+@strawberry.type
 class ContractQuery:
     @strawberry.field
     def dashboard_kpis(
@@ -733,7 +786,7 @@ class ContractQuery:
         - currentYearForecast: Projected revenue for current year
         - nextYearForecast: Projected revenue for next year
         """
-        user = get_current_user(info)
+        user = require_perm(info, "contracts", "read")
         if not user.tenant:
             # Return zeros if no tenant
             return DashboardKPIsType(
@@ -768,7 +821,7 @@ class ContractQuery:
         Given a contract and the item's billing start date, returns the next
         contract billing cycle date for alignment.
         """
-        user = get_current_user(info)
+        user = require_perm(info, "contracts", "read")
         if not user.tenant:
             return SuggestedAlignmentDateResult(error="No tenant assigned")
 
@@ -807,7 +860,7 @@ class ContractQuery:
         """
         from dateutil.relativedelta import relativedelta
 
-        user = get_current_user(info)
+        user = require_perm(info, "contracts", "read")
         if not user.tenant:
             return BillingScheduleResult(
                 events=[],
@@ -905,7 +958,7 @@ class ContractQuery:
         from collections import defaultdict
         from dateutil.relativedelta import relativedelta
 
-        user = get_current_user(info)
+        user = require_perm(info, "contracts", "read")
         if not user.tenant:
             return RevenueForecastResult(
                 month_columns=[],
@@ -1098,7 +1151,7 @@ class ContractQuery:
         from collections import defaultdict
         from dateutil.relativedelta import relativedelta
 
-        user = get_current_user(info)
+        user = require_perm(info, "contracts", "read")
         if not user.tenant:
             return RevenueForecastResult(
                 month_columns=[],
@@ -1275,7 +1328,7 @@ class ContractQuery:
         sort_order: str | None = "desc",
     ) -> ContractConnection:
         """Get paginated list of contracts with filtering and sorting."""
-        user = get_current_user(info)
+        user = require_perm(info, "contracts", "read")
         if not user.tenant:
             return ContractConnection(
                 items=[],
@@ -1383,10 +1436,118 @@ class ContractQuery:
         self, info: Info[Context, None], id: strawberry.ID
     ) -> ContractType | None:
         """Get a single contract by ID."""
-        user = get_current_user(info)
+        user = require_perm(info, "contracts", "read")
         if user.tenant:
             return Contract.objects.filter(tenant=user.tenant, id=id).first()
         return None
+
+    @strawberry.field
+    def time_tracking_projects(
+        self, info: Info[Context, None], search: str = ""
+    ) -> list[TimeTrackingExternalProject]:
+        """Fetch projects from the configured time tracking provider."""
+        from apps.contracts.services.time_tracking import get_provider
+
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+
+        provider = get_provider(user.tenant)
+        if not provider:
+            return []
+
+        projects = provider.get_projects()
+        if search:
+            search_lower = search.lower()
+            projects = [
+                p for p in projects
+                if search_lower in p.name.lower()
+                or search_lower in p.customer_name.lower()
+            ]
+
+        return [
+            TimeTrackingExternalProject(
+                id=p.id,
+                name=p.name,
+                customer_name=p.customer_name,
+                active=p.active,
+            )
+            for p in projects
+        ]
+
+    @strawberry.field
+    def time_tracking_summary(
+        self, info: Info[Context, None], contract_id: strawberry.ID
+    ) -> TimeTrackingSummaryType | None:
+        """Get time tracking summary for a contract's mapped projects."""
+        from apps.contracts.services.time_tracking import get_provider
+
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return None
+
+        contract = Contract.objects.filter(
+            tenant=user.tenant, id=contract_id
+        ).first()
+        if not contract:
+            return None
+
+        mappings = TimeTrackingProjectMapping.objects.filter(
+            tenant=user.tenant, contract=contract
+        )
+        mapping_types = [
+            TimeTrackingMappingType(
+                id=m.id,
+                external_project_id=m.external_project_id,
+                external_project_name=m.external_project_name,
+                external_customer_name=m.external_customer_name,
+                contract_item_id=m.contract_item_id,
+            )
+            for m in mappings
+        ]
+
+        project_ids = [m.external_project_id for m in mappings]
+        if not project_ids:
+            return TimeTrackingSummaryType(
+                total_hours=0,
+                total_revenue=0,
+                by_service=[],
+                by_month=[],
+                mappings=mapping_types,
+            )
+
+        provider = get_provider(user.tenant)
+        if not provider:
+            return TimeTrackingSummaryType(
+                total_hours=0,
+                total_revenue=0,
+                by_service=[],
+                by_month=[],
+                mappings=mapping_types,
+            )
+
+        summary = provider.get_time_summary(project_ids)
+        return TimeTrackingSummaryType(
+            total_hours=summary.total_hours,
+            total_revenue=summary.total_revenue,
+            by_service=[
+                ServiceBreakdown(
+                    service_name=s["service_name"],
+                    hours=s["hours"],
+                    revenue=s["revenue"],
+                )
+                for s in summary.by_service
+            ],
+            by_month=[
+                MonthlyBreakdown(
+                    month=m["month"],
+                    hours=m["hours"],
+                    revenue=m["revenue"],
+                )
+                for m in summary.by_month
+            ],
+            mappings=mapping_types,
+        )
 
 
 def _check_price_period_overlap(
@@ -1430,7 +1591,9 @@ class ContractMutation:
         self, info: Info[Context, None], input: CreateContractInput
     ) -> ContractResult:
         """Create a new contract."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractResult(error=err)
         if not user.tenant:
             return ContractResult(error="No tenant assigned")
 
@@ -1472,7 +1635,9 @@ class ContractMutation:
         self, info: Info[Context, None], input: UpdateContractInput
     ) -> ContractResult:
         """Update an existing contract."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractResult(error=err)
         if not user.tenant:
             return ContractResult(error="No tenant assigned")
 
@@ -1531,7 +1696,9 @@ class ContractMutation:
         input: ContractItemInput,
     ) -> ContractItemResult:
         """Add an item to a contract."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractItemResult(error=err)
         if not user.tenant:
             return ContractItemResult(error="No tenant assigned")
 
@@ -1623,7 +1790,9 @@ class ContractMutation:
         self, info: Info[Context, None], input: UpdateContractItemInput
     ) -> ContractItemResult:
         """Update a contract item."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractItemResult(error=err)
         if not user.tenant:
             return ContractItemResult(error="No tenant assigned")
 
@@ -1760,7 +1929,9 @@ class ContractMutation:
         self, info: Info[Context, None], item_id: strawberry.ID
     ) -> DeleteResult:
         """Remove an item from a contract."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "delete")
+        if err:
+            return DeleteResult(error=err)
         if not user.tenant:
             return DeleteResult(error="No tenant assigned")
 
@@ -1804,7 +1975,9 @@ class ContractMutation:
         effective_date: date,
     ) -> ContractResult:
         """Cancel a contract."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractResult(error=err)
         if not user.tenant:
             return ContractResult(error="No tenant assigned")
 
@@ -1856,7 +2029,9 @@ class ContractMutation:
         - paused -> active, cancelled
         - cancelled -> ended
         """
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractResult(error=err)
         if not user.tenant:
             return ContractResult(error="No tenant assigned")
 
@@ -1922,7 +2097,9 @@ class ContractMutation:
         input: ContractItemPriceInput,
     ) -> ContractItemPriceResult:
         """Add a price period to a contract item."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractItemPriceResult(error=err)
         if not user.tenant:
             return ContractItemPriceResult(error="No tenant assigned")
 
@@ -1977,7 +2154,9 @@ class ContractMutation:
         input: UpdateContractItemPriceInput,
     ) -> ContractItemPriceResult:
         """Update a price period."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractItemPriceResult(error=err)
         if not user.tenant:
             return ContractItemPriceResult(error="No tenant assigned")
 
@@ -2038,7 +2217,9 @@ class ContractMutation:
         self, info: Info[Context, None], price_id: strawberry.ID
     ) -> DeleteResult:
         """Remove a price period."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "delete")
+        if err:
+            return DeleteResult(error=err)
         if not user.tenant:
             return DeleteResult(error="No tenant assigned")
 
@@ -2076,7 +2257,9 @@ class ContractMutation:
         from django.conf import settings
         from django.core.files.base import ContentFile
 
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return AttachmentResult(error=err)
         if not user.tenant:
             return AttachmentResult(error="No tenant assigned")
 
@@ -2142,7 +2325,9 @@ class ContractMutation:
         attachment_id: strawberry.ID,
     ) -> DeleteResult:
         """Delete a file attachment."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "delete")
+        if err:
+            return DeleteResult(error=err)
         if not user.tenant:
             return DeleteResult(error="No tenant assigned")
 
@@ -2169,7 +2354,9 @@ class ContractMutation:
         input: AddContractLinkInput,
     ) -> ContractLinkResult:
         """Add a link to a contract."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractLinkResult(error=err)
         if not user.tenant:
             return ContractLinkResult(error="No tenant assigned")
 
@@ -2209,7 +2396,9 @@ class ContractMutation:
         link_id: strawberry.ID,
     ) -> DeleteResult:
         """Delete a contract link."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "delete")
+        if err:
+            return DeleteResult(error=err)
         if not user.tenant:
             return DeleteResult(error="No tenant assigned")
 
@@ -2224,6 +2413,76 @@ class ContractMutation:
             return DeleteResult(success=True)
         except Exception as e:
             return DeleteResult(error=str(e))
+
+    @strawberry.mutation
+    def map_time_tracking_project(
+        self,
+        info: Info[Context, None],
+        contract_id: strawberry.ID,
+        external_project_id: str,
+        external_project_name: str,
+        external_customer_name: str = "",
+    ) -> TimeTrackingMappingResult:
+        """Map an external time tracking project to a contract."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return TimeTrackingMappingResult(success=False, error=err)
+        if not user.tenant:
+            return TimeTrackingMappingResult(success=False, error="No tenant assigned")
+
+        contract = Contract.objects.filter(
+            tenant=user.tenant, id=contract_id
+        ).first()
+        if not contract:
+            return TimeTrackingMappingResult(success=False, error="Contract not found")
+
+        # Check if already mapped
+        if TimeTrackingProjectMapping.objects.filter(
+            tenant=user.tenant, external_project_id=external_project_id
+        ).exists():
+            return TimeTrackingMappingResult(
+                success=False, error="Project is already mapped"
+            )
+
+        mapping = TimeTrackingProjectMapping.objects.create(
+            tenant=user.tenant,
+            contract=contract,
+            external_project_id=external_project_id,
+            external_project_name=external_project_name,
+            external_customer_name=external_customer_name,
+        )
+        return TimeTrackingMappingResult(
+            success=True,
+            mapping=TimeTrackingMappingType(
+                id=mapping.id,
+                external_project_id=mapping.external_project_id,
+                external_project_name=mapping.external_project_name,
+                external_customer_name=mapping.external_customer_name,
+                contract_item_id=mapping.contract_item_id,
+            ),
+        )
+
+    @strawberry.mutation
+    def unmap_time_tracking_project(
+        self,
+        info: Info[Context, None],
+        mapping_id: strawberry.ID,
+    ) -> DeleteResult:
+        """Remove a time tracking project mapping."""
+        user, err = check_perm(info, "contracts", "delete")
+        if err:
+            return DeleteResult(error=err)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        mapping = TimeTrackingProjectMapping.objects.filter(
+            tenant=user.tenant, id=mapping_id
+        ).first()
+        if not mapping:
+            return DeleteResult(error="Mapping not found")
+
+        mapping.delete()
+        return DeleteResult(success=True)
 
 
 # =============================================================================
@@ -2408,7 +2667,7 @@ class ContractImportQuery:
         session_id: str,
     ) -> ImportSessionType | None:
         """Get an import session by ID."""
-        user = get_current_user(info)
+        user = require_perm(info, "contracts", "read")
         if not user.tenant:
             return None
 
@@ -2461,7 +2720,9 @@ class ContractImportMutation:
         """
         import uuid
 
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ImportUploadResult(error=err)
         if not user.tenant:
             return ImportUploadResult(error="No tenant assigned")
 
@@ -2543,7 +2804,9 @@ class ContractImportMutation:
         reviews: List[ReviewProposalInput],
     ) -> ImportUploadResult:
         """Review and approve/reject import proposals."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ImportUploadResult(error=err)
         if not user.tenant:
             return ImportUploadResult(error="No tenant assigned")
 
@@ -2601,7 +2864,9 @@ class ContractImportMutation:
         auto_create_products: bool = True,
     ) -> ImportApplyResult:
         """Apply approved import proposals and create contracts."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ImportApplyResult(error=err)
         if not user.tenant:
             return ImportApplyResult(error="No tenant assigned")
 
@@ -2642,7 +2907,9 @@ class ContractImportMutation:
         session_id: str,
     ) -> DeleteResult:
         """Cancel an import session and clean up."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return DeleteResult(error=err)
         if not user.tenant:
             return DeleteResult(error="No tenant assigned")
 

@@ -13,7 +13,7 @@ from django.core.files.base import ContentFile
 from django.db.models import Q
 
 from apps.core.context import Context
-from apps.core.permissions import get_current_user
+from apps.core.permissions import check_perm, get_current_user, require_perm
 from apps.core.schema import DeleteResult
 from .models import Customer, CustomerAttachment, CustomerLink
 
@@ -220,7 +220,7 @@ class CustomerQuery:
         sort_by: str | None = "name",
         sort_order: str | None = "asc",
     ) -> CustomerConnection:
-        user = get_current_user(info)
+        user = require_perm(info, "customers", "read")
         if not user.tenant:
             return CustomerConnection(
                 items=[],
@@ -268,7 +268,7 @@ class CustomerQuery:
 
     @strawberry.field
     def customer(self, info: Info[Context, None], id: strawberry.ID) -> CustomerType | None:
-        user = get_current_user(info)
+        user = require_perm(info, "customers", "read")
         if user.tenant:
             return Customer.objects.filter(tenant=user.tenant, id=id).first()
         return None
@@ -292,7 +292,9 @@ class CustomerMutation:
         input: UploadCustomerAttachmentInput,
     ) -> CustomerAttachmentResult:
         """Upload a file attachment to a customer."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "customers", "write")
+        if err:
+            return CustomerAttachmentResult(error=err)
         if not user.tenant:
             return CustomerAttachmentResult(error="No tenant assigned")
 
@@ -358,7 +360,9 @@ class CustomerMutation:
         attachment_id: strawberry.ID,
     ) -> DeleteResult:
         """Delete a customer file attachment."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "customers", "delete")
+        if err:
+            return DeleteResult(error=err)
         if not user.tenant:
             return DeleteResult(error="No tenant assigned")
 
@@ -385,7 +389,9 @@ class CustomerMutation:
         input: AddCustomerLinkInput,
     ) -> CustomerLinkResult:
         """Add a link to a customer."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "customers", "write")
+        if err:
+            return CustomerLinkResult(error=err)
         if not user.tenant:
             return CustomerLinkResult(error="No tenant assigned")
 
@@ -425,7 +431,9 @@ class CustomerMutation:
         link_id: strawberry.ID,
     ) -> DeleteResult:
         """Delete a customer link."""
-        user = get_current_user(info)
+        user, err = check_perm(info, "customers", "delete")
+        if err:
+            return DeleteResult(error=err)
         if not user.tenant:
             return DeleteResult(error="No tenant assigned")
 

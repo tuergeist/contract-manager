@@ -1,6 +1,7 @@
 """Tenant and User models for multi-tenant support."""
 import secrets
 from datetime import timedelta
+from functools import cached_property
 
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
@@ -15,6 +16,7 @@ class Tenant(TimestampedModel):
     name = models.CharField(max_length=255)
     currency = models.CharField(max_length=3, default="EUR")
     hubspot_config = models.JSONField(default=dict, blank=True)
+    time_tracking_config = models.JSONField(default=dict, blank=True)
     settings = models.JSONField(default=dict, blank=True)
     is_active = models.BooleanField(default=True)
 
@@ -47,6 +49,7 @@ class Role(TimestampedModel):
     name = models.CharField(max_length=100)
     permissions = models.JSONField(default=dict, blank=True)
     is_default = models.BooleanField(default=False)
+    is_system = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["tenant", "name"]
@@ -93,6 +96,11 @@ class User(AbstractUser):
         null=True,
         blank=True,
     )
+    roles = models.ManyToManyField(
+        Role,
+        blank=True,
+        related_name="users",
+    )
     is_admin = models.BooleanField(default=False)
 
     USERNAME_FIELD = "email"
@@ -110,6 +118,22 @@ class User(AbstractUser):
     def is_super_admin(self) -> bool:
         """Check if user is the super-admin."""
         return self.email == "admin@test.local"
+
+    @cached_property
+    def effective_permissions(self) -> set[str]:
+        """Compute the union of all permissions from assigned roles."""
+        perms = set()
+        for role in self.roles.all():
+            for key, granted in (role.permissions or {}).items():
+                if granted:
+                    perms.add(key)
+        return perms
+
+    def has_perm_check(self, resource: str, action: str) -> bool:
+        """Check if user has a specific permission via their roles."""
+        if self.is_super_admin:
+            return True
+        return f"{resource}.{action}" in self.effective_permissions
 
 
 class UserInvitation(TimestampedModel):
@@ -139,6 +163,7 @@ class UserInvitation(TimestampedModel):
         null=True,
         related_name="created_invitations",
     )
+    role_ids = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ["-created_at"]

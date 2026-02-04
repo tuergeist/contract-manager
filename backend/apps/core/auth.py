@@ -60,6 +60,6 @@ def get_user_from_token(token: str) -> User | None:
         user_id = payload.get("sub")
         if user_id is None:
             return None
-        return User.objects.select_related("tenant", "role").get(id=int(user_id), is_active=True)
+        return User.objects.select_related("tenant", "role").prefetch_related("roles").get(id=int(user_id), is_active=True)
     except (User.DoesNotExist, ValueError):
         return None

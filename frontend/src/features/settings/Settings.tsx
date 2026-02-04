@@ -6,6 +6,7 @@ import { RefreshCw, CheckCircle, XCircle, Loader2, Upload, Plus, X } from 'lucid
 import { formatDateTime } from '@/lib/utils'
 import { ProfileEdit } from './ProfileEdit'
 import { PasswordChange } from './PasswordChange'
+import { RoleManagement } from './RoleManagement'
 
 interface CompanyFilter {
   propertyName: string
@@ -18,6 +19,24 @@ interface HubSpotProperty {
   propertyType: string
   options: string[] | null
 }
+
+const TIME_TRACKING_SETTINGS_QUERY = gql`
+  query TimeTrackingSettings {
+    timeTrackingSettings {
+      provider
+      isConfigured
+    }
+  }
+`
+
+const SAVE_TIME_TRACKING_SETTINGS = gql`
+  mutation SaveTimeTrackingSettings($provider: String!, $apiEmail: String!, $apiKey: String!) {
+    saveTimeTrackingSettings(provider: $provider, apiEmail: $apiEmail, apiKey: $apiKey) {
+      success
+      error
+    }
+  }
+`
 
 const HUBSPOT_SETTINGS_QUERY = gql`
   query HubSpotSettings {
@@ -97,6 +116,11 @@ const SAVE_COMPANY_FILTERS = gql`
 
 export function Settings() {
   const { t, i18n } = useTranslation()
+  const [ttProvider, setTtProvider] = useState('clockodo')
+  const [ttApiEmail, setTtApiEmail] = useState('')
+  const [ttApiKey, setTtApiKey] = useState('')
+  const [ttMessage, setTtMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
   const [apiKey, setApiKey] = useState('')
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [customerSyncMessage, setCustomerSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -106,6 +130,9 @@ export function Settings() {
   const [filterMessage, setFilterMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [propertySearch, setPropertySearch] = useState('')
   const [openPropertyDropdown, setOpenPropertyDropdown] = useState<number | null>(null)
+
+  const { data: ttSettingsData, refetch: refetchTtSettings } = useQuery(TIME_TRACKING_SETTINGS_QUERY)
+  const [saveTtSettings, { loading: savingTt }] = useMutation(SAVE_TIME_TRACKING_SETTINGS)
 
   const { data: settingsData, refetch: refetchSettings } = useQuery(HUBSPOT_SETTINGS_QUERY)
   const [saveSettings, { loading: saving }] = useMutation(SAVE_HUBSPOT_SETTINGS)
@@ -192,6 +219,31 @@ export function Settings() {
       }
     } catch {
       setFilterMessage({ type: 'error', text: t('settings.hubspot.filtersSaveFailed') })
+    }
+  }
+
+  const handleSaveTtSettings = async () => {
+    setTtMessage(null)
+    try {
+      const result = await saveTtSettings({
+        variables: {
+          provider: ttProvider,
+          apiEmail: ttApiEmail,
+          apiKey: ttApiKey,
+        },
+      })
+      if (result.data?.saveTimeTrackingSettings?.success) {
+        setTtMessage({ type: 'success', text: t('settings.timeTracking.connectionSuccess') })
+        setTtApiKey('')
+        refetchTtSettings()
+      } else {
+        setTtMessage({
+          type: 'error',
+          text: result.data?.saveTimeTrackingSettings?.error || t('settings.timeTracking.connectionFailed'),
+        })
+      }
+    } catch {
+      setTtMessage({ type: 'error', text: t('settings.timeTracking.connectionFailed') })
     }
   }
 
@@ -591,6 +643,90 @@ export function Settings() {
             )}
           </div>
         </div>
+
+        {/* Time Tracking */}
+        <div className="rounded-lg border bg-white p-6">
+          <h2 className="text-lg font-medium">{t('settings.timeTracking.title')}</h2>
+          <p className="mt-1 text-sm text-gray-500">{t('settings.timeTracking.description')}</p>
+
+          <div className="mt-4 space-y-4">
+            {/* Connection Status */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">{t('settings.timeTracking.status')}:</span>
+              {ttSettingsData?.timeTrackingSettings?.isConfigured ? (
+                <span className="flex items-center gap-1 text-sm text-green-600">
+                  <CheckCircle className="h-4 w-4" />
+                  {t('settings.timeTracking.connected')}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-sm text-gray-500">
+                  <XCircle className="h-4 w-4" />
+                  {t('settings.timeTracking.notConnected')}
+                </span>
+              )}
+            </div>
+
+            {/* Provider Selector */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                {t('settings.timeTracking.provider')}
+              </label>
+              <select
+                value={ttProvider}
+                onChange={(e) => setTtProvider(e.target.value)}
+                className="mt-1 block w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="clockodo">{t('settings.timeTracking.clockodo')}</option>
+              </select>
+            </div>
+
+            {/* API Email */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                {t('settings.timeTracking.apiEmail')}
+              </label>
+              <input
+                type="email"
+                value={ttApiEmail}
+                onChange={(e) => setTtApiEmail(e.target.value)}
+                placeholder={t('settings.timeTracking.apiEmailPlaceholder')}
+                className="mt-1 block w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* API Key */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                {t('settings.timeTracking.apiKey')}
+              </label>
+              <div className="mt-1 flex gap-2">
+                <input
+                  type="password"
+                  value={ttApiKey}
+                  onChange={(e) => setTtApiKey(e.target.value)}
+                  placeholder={ttSettingsData?.timeTrackingSettings?.isConfigured ? '••••••••••••••••' : t('settings.timeTracking.apiKeyPlaceholder')}
+                  className="block w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <button
+                  onClick={handleSaveTtSettings}
+                  disabled={savingTt || !ttApiKey || !ttApiEmail}
+                  className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingTt && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {t('settings.timeTracking.saveAndTest')}
+                </button>
+              </div>
+              {ttMessage && (
+                <p className={`mt-2 text-sm ${ttMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                  {ttMessage.text}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Roles & Permissions */}
+        <RoleManagement />
 
         {/* Contract Import */}
         <div className="rounded-lg border bg-white p-6">

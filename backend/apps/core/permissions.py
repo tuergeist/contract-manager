@@ -7,6 +7,54 @@ from strawberry.types import Info
 from apps.core.context import Context
 
 
+# --- Permission Registry ---
+# Single source of truth for all grantable permissions.
+# Each key is a resource, value is a list of valid actions.
+PERMISSION_REGISTRY = {
+    "contracts": ["read", "write", "delete"],
+    "customers": ["read", "write", "delete"],
+    "products": ["read", "write", "delete"],
+    "users": ["read", "write", "delete"],
+    "settings": ["read", "write"],
+    "todos": ["read", "write"],
+    "notes": ["read", "write"],
+    "invoices": ["read", "write"],
+}
+
+# All permissions as flat "resource.action" strings
+ALL_PERMISSIONS = {
+    f"{resource}.{action}"
+    for resource, actions in PERMISSION_REGISTRY.items()
+    for action in actions
+}
+
+# Default role definitions: role name -> set of granted permissions
+DEFAULT_ROLES = {
+    "Admin": {perm: True for perm in ALL_PERMISSIONS},
+    "Manager": {
+        perm: True
+        for perm in ALL_PERMISSIONS
+        if not perm.startswith("users.") and not perm.startswith("settings.")
+    },
+    "Viewer": {
+        "contracts.read": True,
+        "customers.read": True,
+        "products.read": True,
+        "todos.read": True,
+        "todos.write": True,
+        "notes.read": True,
+        "notes.write": True,
+        "invoices.read": True,
+    },
+}
+
+# Permissions that cannot be removed from the Admin role
+ADMIN_PROTECTED_PERMISSIONS = {
+    "users.read", "users.write", "users.delete",
+    "settings.read", "settings.write",
+}
+
+
 class PermissionError(Exception):
     """Raised when user lacks required permissions."""
 
@@ -59,6 +107,30 @@ def get_current_tenant_id(info: Info[Context, None]) -> int:
     if user.tenant_id is None:
         raise PermissionError("User has no tenant assigned")
     return user.tenant_id
+
+
+def require_perm(info: Info[Context, None], resource: str, action: str):
+    """Get the current user and verify they have the required permission.
+
+    Raises PermissionError if not authenticated or permission denied.
+    Returns the user on success. Use in queries.
+    """
+    user = get_current_user(info)
+    if not user.has_perm_check(resource, action):
+        raise PermissionError(f"Permission denied: {resource}.{action}")
+    return user
+
+
+def check_perm(info: Info[Context, None], resource: str, action: str):
+    """Get the current user and check permission without raising.
+
+    Returns (user, None) on success or (None, error_string) on failure.
+    Use in mutations that return result types.
+    """
+    user = get_current_user(info)
+    if not user.has_perm_check(resource, action):
+        return None, "Permission denied"
+    return user, None
 
 
 def get_current_user_from_request(request):

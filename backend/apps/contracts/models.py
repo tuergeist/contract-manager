@@ -468,11 +468,8 @@ class Contract(TenantModel):
         from decimal import Decimal
         from dateutil.relativedelta import relativedelta
 
-        # Find first contract billing date on or after alignment date
-        # This ensures the item joins the contract's billing cycle
-        billing_date = self.billing_start_date
-        while billing_date < align_date:
-            billing_date += relativedelta(months=interval_months)
+        # After alignment, billing starts from the alignment date
+        billing_date = align_date
 
         while billing_date <= to_date:
             if billing_date >= from_date:
@@ -706,11 +703,8 @@ class Contract(TenantModel):
         from decimal import Decimal
         from dateutil.relativedelta import relativedelta
 
-        # Find first contract billing date on or after alignment date
-        # This ensures the item joins the contract's billing cycle
-        recognition_date = self.billing_start_date
-        while recognition_date < align_date:
-            recognition_date += relativedelta(months=interval_months)
+        # After alignment, recognition starts from the alignment date
+        recognition_date = align_date
 
         while recognition_date <= to_date:
             if recognition_date >= from_date:
@@ -1174,6 +1168,33 @@ class ContractAttachment(TenantModel):
         if self.file:
             self.file.delete(save=False)
         super().delete(*args, **kwargs)
+
+
+class TimeTrackingProjectMapping(TenantModel):
+    """Maps an external time tracking project to a contract."""
+
+    contract = models.ForeignKey(
+        Contract,
+        on_delete=models.CASCADE,
+        related_name="time_tracking_mappings",
+    )
+    contract_item = models.ForeignKey(
+        ContractItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="time_tracking_mappings",
+    )
+    external_project_id = models.CharField(max_length=100)
+    external_project_name = models.CharField(max_length=255)
+    external_customer_name = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        ordering = ["external_customer_name", "external_project_name"]
+        unique_together = ["tenant", "external_project_id"]
+
+    def __str__(self):
+        return f"{self.external_project_name} -> {self.contract}"
 
 
 class ContractLink(TenantModel):

@@ -25,6 +25,7 @@ import {
   Image,
   Eye,
   Link2,
+  Clock,
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear } from '@/lib/utils'
 import { getToken } from '@/lib/auth'
@@ -61,6 +62,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { TodoModal, TodoList, type TodoContext, type TodoItem } from '@/features/todos'
+import { TimeTrackingTab } from './TimeTrackingTab'
 import { ListTodo } from 'lucide-react'
 
 const CONTRACT_DETAIL_QUERY = gql`
@@ -471,7 +473,7 @@ interface Contract {
   todos: TodoItem[]
 }
 
-type Tab = 'items' | 'amendments' | 'forecast' | 'attachments' | 'todos' | 'activity'
+type Tab = 'items' | 'amendments' | 'forecast' | 'attachments' | 'todos' | 'timeTracking' | 'activity'
 
 export function ContractDetail() {
   const { t, i18n } = useTranslation()
@@ -840,6 +842,17 @@ export function ContractDetail() {
           >
             <ListTodo className="h-4 w-4" />
             {t('todos.title')} ({contract.todos?.filter(t => !t.isCompleted).length || 0})
+          </button>
+          <button
+            onClick={() => setActiveTab('timeTracking')}
+            className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium ${
+              activeTab === 'timeTracking'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            <Clock className="h-4 w-4" />
+            {t('timeTracking.title')}
           </button>
           <button
             onClick={() => setActiveTab('activity')}
@@ -1213,6 +1226,11 @@ export function ContractDetail() {
             />
           </div>
         </div>
+      )}
+
+      {/* Time Tracking Tab */}
+      {activeTab === 'timeTracking' && (
+        <TimeTrackingTab contractId={id!} customerName={contract.customer.name} />
       )}
 
       {/* Activity Tab */}
