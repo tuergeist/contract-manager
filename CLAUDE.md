@@ -15,7 +15,7 @@ Contract-Manager is an internal contract management tool for small companies. It
 - **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, Shadcn/ui
 - **Backend**: Django 5, Strawberry-GraphQL, PostgreSQL
 - **Caching**: Redis (when needed)
-- **Containerization**: Docker Compose for local development
+- **Containerization**: Docker Compose for local development, ghcr.io images for production
 
 ## Development Commands
 
@@ -110,6 +110,16 @@ contract-manager/
 - **Edit View** (`/contracts/:id/edit` editing): Form after clicking "Edit" button
 
 Status transition buttons (Activate, Pause, Cancel, etc.) appear only in Detail View 2.
+
+## Docker Files
+
+- `backend/Dockerfile` - Local development (includes dev dependencies, hot-reload)
+- `backend/Dockerfile.prod` - **Production image built by CI** (multi-stage, slim, no dev deps)
+- `frontend/Dockerfile.prod` - Production frontend image built by CI
+- `docker-compose.yml` - Local development
+- `docker-compose.prod.yml` - Production deployment with ghcr.io images
+
+When modifying Docker build for production, edit `Dockerfile.prod` files. CI (`.github/workflows/build.yml`) uses these to build and push images to ghcr.io.
 
 ## Key Conventions
 
