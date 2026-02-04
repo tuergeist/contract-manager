@@ -55,6 +55,25 @@ ADMIN_PROTECTED_PERMISSIONS = {
 }
 
 
+def normalize_permissions(raw: dict) -> dict:
+    """Normalize a permissions dict to flat {resource.action: True} format.
+
+    Handles old-format entries like {"products": ["read"]} by converting them
+    to {"products.read": True}. Strips any keys not in ALL_PERMISSIONS.
+    """
+    result = {}
+    for key, value in raw.items():
+        if key in ALL_PERMISSIONS:
+            if value:
+                result[key] = True
+        elif key in PERMISSION_REGISTRY and isinstance(value, list):
+            for action in value:
+                flat_key = f"{key}.{action}"
+                if flat_key in ALL_PERMISSIONS:
+                    result[flat_key] = True
+    return result
+
+
 class PermissionError(Exception):
     """Raised when user lacks required permissions."""
 

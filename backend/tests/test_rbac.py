@@ -10,6 +10,7 @@ from apps.core.permissions import (
     ALL_PERMISSIONS,
     DEFAULT_ROLES,
     PERMISSION_REGISTRY,
+    normalize_permissions,
 )
 
 
@@ -65,6 +66,52 @@ def no_role_user(db, tenant):
     return User.objects.create_user(
         email="norole@example.com", password="norole123", tenant=tenant
     )
+
+
+class TestNormalizePermissions:
+    """Test normalize_permissions converts old formats and strips invalid keys."""
+
+    def test_valid_flat_keys_pass_through(self):
+        raw = {"contracts.read": True, "todos.write": True}
+        assert normalize_permissions(raw) == {"contracts.read": True, "todos.write": True}
+
+    def test_old_format_list_converted(self):
+        raw = {"products": ["read", "write"], "customers": ["read"]}
+        assert normalize_permissions(raw) == {
+            "products.read": True,
+            "products.write": True,
+            "customers.read": True,
+        }
+
+    def test_mixed_format_normalized(self):
+        raw = {
+            "products": ["read"],
+            "contracts": ["read", "write"],
+            "todos.read": True,
+            "todos.write": True,
+        }
+        assert normalize_permissions(raw) == {
+            "products.read": True,
+            "contracts.read": True,
+            "contracts.write": True,
+            "todos.read": True,
+            "todos.write": True,
+        }
+
+    def test_bare_resource_true_stripped(self):
+        raw = {"products": True, "contracts.read": True}
+        assert normalize_permissions(raw) == {"contracts.read": True}
+
+    def test_false_values_stripped(self):
+        raw = {"contracts.read": True, "contracts.write": False}
+        assert normalize_permissions(raw) == {"contracts.read": True}
+
+    def test_unknown_keys_stripped(self):
+        raw = {"nonexistent.read": True, "contracts.read": True}
+        assert normalize_permissions(raw) == {"contracts.read": True}
+
+    def test_empty_dict(self):
+        assert normalize_permissions({}) == {}
 
 
 class TestDefaultRolesCreation:
@@ -286,32 +333,33 @@ class TestRoleCRUD:
         assert data["success"] is False
         assert "assigned users" in data["error"].lower()
 
-    def test_create_role_with_invalid_permission_key_rejected(self, admin_user):
-        """Bare resource names like 'products' must be rejected."""
+    def test_create_role_strips_invalid_permission_keys(self, admin_user):
+        """Bare resource names like 'products': True are silently stripped."""
         mutation = """
             mutation CreateRole($name: String!, $permissions: JSON) {
                 createRole(name: $name, permissions: $permissions) {
-                    success error
+                    success error role { permissions }
                 }
             }
         """
         result = run_graphql(
             mutation,
-            {"name": "BadRole", "permissions": {"products": True, "contracts.read": True}},
+            {"name": "StrippedRole", "permissions": {"products": True, "contracts.read": True}},
             make_context(admin_user),
         )
         data = result.data["createRole"]
-        assert data["success"] is False
-        assert "Invalid permission" in data["error"]
-        assert "products" in data["error"]
+        assert data["success"] is True
+        perms = data["role"]["permissions"]
+        assert "products" not in perms
+        assert perms.get("contracts.read") is True
 
-    def test_update_role_with_invalid_permission_key_rejected(self, admin_user, tenant):
-        """Updating a role with bare resource names must be rejected."""
+    def test_update_role_converts_old_format_permissions(self, admin_user, tenant):
+        """Old-format {"customers": ["read"]} is auto-converted to {"customers.read": true}."""
         role = Role.objects.get(tenant=tenant, name="Viewer")
         mutation = """
             mutation UpdateRolePerms($roleId: ID!, $permissions: JSON!) {
                 updateRolePermissions(roleId: $roleId, permissions: $permissions) {
-                    success error
+                    success error role { permissions }
                 }
             }
         """
@@ -321,19 +369,18 @@ class TestRoleCRUD:
             make_context(admin_user),
         )
         data = result.data["updateRolePermissions"]
-        assert data["success"] is False
-        assert "Invalid permission" in data["error"]
+        assert data["success"] is True
+        perms = data["role"]["permissions"]
+        assert perms.get("customers.read") is True
+        assert perms.get("contracts.read") is True
+        assert "customers" not in perms
 
-    def test_update_role_with_old_format_permissions_rejected(self, admin_user, tenant):
-        """Old-format permissions (resource -> [actions]) in DB should not break update.
-
-        If a role has stale old-format keys in the DB, the update mutation should
-        still work when the client sends only valid keys (frontend filters them out).
-        """
+    def test_update_role_mixed_old_and_new_format(self, admin_user, tenant):
+        """Mixed old/new format permissions are normalized correctly."""
         role = Role.objects.create(
             tenant=tenant,
-            name="LegacyRole",
-            permissions={"products": ["read"], "contracts": ["read", "write"]},
+            name="MixedRole",
+            permissions={},
             is_system=False,
         )
         mutation = """
@@ -343,18 +390,30 @@ class TestRoleCRUD:
                 }
             }
         """
-        # Client sends only valid keys (as the frontend now filters)
-        new_perms = {"products.read": True, "contracts.read": True, "contracts.write": True}
+        mixed_perms = {
+            "products": ["read"],
+            "contracts": ["read", "write"],
+            "customers": ["read"],
+            "todos.read": True,
+            "todos.write": True,
+        }
         result = run_graphql(
             mutation,
-            {"roleId": str(role.id), "permissions": new_perms},
+            {"roleId": str(role.id), "permissions": mixed_perms},
             make_context(admin_user),
         )
         data = result.data["updateRolePermissions"]
         assert data["success"] is True
-        role.refresh_from_db()
-        assert "products" not in role.permissions
-        assert role.permissions.get("products.read") is True
+        perms = data["role"]["permissions"]
+        assert perms.get("products.read") is True
+        assert perms.get("contracts.read") is True
+        assert perms.get("contracts.write") is True
+        assert perms.get("customers.read") is True
+        assert perms.get("todos.read") is True
+        assert perms.get("todos.write") is True
+        assert "products" not in perms
+        assert "contracts" not in perms
+        assert "customers" not in perms
 
 
 class TestInvitationRoleAssignment:

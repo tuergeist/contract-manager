@@ -15,6 +15,7 @@ from apps.core.permissions import (
     PERMISSION_REGISTRY,
     check_perm,
     get_current_user,
+    normalize_permissions,
     require_perm,
 )
 from apps.customers.hubspot import HubSpotService
@@ -884,11 +885,8 @@ class TenantMutation:
         if Role.objects.filter(tenant=user.tenant, name=name).exists():
             return RoleResult(success=False, error="A role with this name already exists")
 
-        # Validate permission keys
-        perms = permissions or {}
-        for key in perms:
-            if key not in ALL_PERMISSIONS:
-                return RoleResult(success=False, error=f"Invalid permission: {key}")
+        # Normalize and validate permission keys
+        perms = normalize_permissions(permissions or {})
 
         role = Role.objects.create(
             tenant=user.tenant,
@@ -923,21 +921,19 @@ class TenantMutation:
         except Role.DoesNotExist:
             return RoleResult(success=False, error="Role not found")
 
-        # Validate permission keys
-        for key in permissions:
-            if key not in ALL_PERMISSIONS:
-                return RoleResult(success=False, error=f"Invalid permission: {key}")
+        # Normalize and validate permission keys
+        perms = normalize_permissions(permissions)
 
         # Protect Admin role: cannot remove protected permissions
         if role.name == "Admin" and role.is_system:
             for perm in ADMIN_PROTECTED_PERMISSIONS:
-                if not permissions.get(perm, False):
+                if not perms.get(perm, False):
                     return RoleResult(
                         success=False,
                         error=f"Cannot remove protected permission '{perm}' from Admin role",
                     )
 
-        role.permissions = permissions
+        role.permissions = perms
         role.save(update_fields=["permissions"])
 
         return RoleResult(
