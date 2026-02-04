@@ -1,13 +1,32 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { useMutation, gql } from '@apollo/client'
+import { useMutation, useQuery, gql } from '@apollo/client'
 import { format, parseISO } from 'date-fns'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Trash2, Calendar, User, UserCheck, Pencil, X, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+const USERS_QUERY = gql`
+  query UsersForTodoEdit {
+    users {
+      id
+      email
+      firstName
+      lastName
+      isActive
+    }
+  }
+`
 
 const UPDATE_TODO = gql`
   mutation UpdateTodo(
@@ -16,6 +35,7 @@ const UPDATE_TODO = gql`
     $reminderDate: Date
     $isPublic: Boolean
     $isCompleted: Boolean
+    $assignedToId: Int
   ) {
     updateTodo(
       todoId: $todoId
@@ -23,6 +43,7 @@ const UPDATE_TODO = gql`
       reminderDate: $reminderDate
       isPublic: $isPublic
       isCompleted: $isCompleted
+      assignedToId: $assignedToId
     ) {
       success
       error
@@ -80,6 +101,10 @@ export function TodoList({ todos, showCreator = false, onUpdate, canDelete, curr
   const [editText, setEditText] = useState('')
   const [editReminderDate, setEditReminderDate] = useState('')
   const [editIsPublic, setEditIsPublic] = useState(false)
+  const [editAssignedToId, setEditAssignedToId] = useState<string>('')
+
+  const { data: usersData } = useQuery(USERS_QUERY, { skip: editingId === null })
+  const users = (usersData?.users || []).filter((u: { id: string; isActive: boolean }) => u.isActive && u.id)
 
   const [updateTodo] = useMutation(UPDATE_TODO)
   const [deleteTodo] = useMutation(DELETE_TODO)
@@ -131,6 +156,7 @@ export function TodoList({ todos, showCreator = false, onUpdate, canDelete, curr
     setEditText(todo.text)
     setEditReminderDate(todo.reminderDate || '')
     setEditIsPublic(todo.isPublic)
+    setEditAssignedToId(todo.assignedToId ? String(todo.assignedToId) : '')
   }
 
   const cancelEdit = () => {
@@ -138,6 +164,7 @@ export function TodoList({ todos, showCreator = false, onUpdate, canDelete, curr
     setEditText('')
     setEditReminderDate('')
     setEditIsPublic(false)
+    setEditAssignedToId('')
   }
 
   const handleSaveEdit = async (todo: TodoItem) => {
@@ -150,6 +177,7 @@ export function TodoList({ todos, showCreator = false, onUpdate, canDelete, curr
           text: editText.trim(),
           reminderDate: editReminderDate || null,
           isPublic: editIsPublic,
+          assignedToId: editAssignedToId ? parseInt(editAssignedToId) : null,
         },
       })
 
@@ -236,7 +264,7 @@ export function TodoList({ todos, showCreator = false, onUpdate, canDelete, curr
                     if (e.key === 'Escape') cancelEdit()
                   }}
                 />
-                <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-4 text-sm flex-wrap">
                   <div className="flex items-center gap-2">
                     <Calendar className="h-3 w-3 text-muted-foreground" />
                     <Input
@@ -245,6 +273,22 @@ export function TodoList({ todos, showCreator = false, onUpdate, canDelete, curr
                       onChange={(e) => setEditReminderDate(e.target.value)}
                       className="h-7 w-36"
                     />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="h-3 w-3 text-muted-foreground" />
+                    <Select value={editAssignedToId || '__none__'} onValueChange={(val) => setEditAssignedToId(val === '__none__' ? '' : val)}>
+                      <SelectTrigger className="h-7 w-40" data-testid={`todo-edit-assigned-to-${todo.id}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">{t('todos.unassigned')}</SelectItem>
+                        {users.map((u: { id: string; email: string; firstName: string; lastName: string }) => (
+                          <SelectItem key={u.id} value={String(u.id)}>
+                            {u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.email}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <label className="flex items-center gap-2 text-muted-foreground">
                     <Checkbox
