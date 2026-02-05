@@ -80,7 +80,7 @@ def todo_to_type(todo: TodoItem) -> TodoItemType:
 class TodoQuery:
     @strawberry.field
     def my_todos(self, info: Info, limit: int = 20) -> List[TodoItemType]:
-        """Get todos created by or assigned to the current user."""
+        """Get todos assigned to the current user, or unassigned todos created by them."""
         user = require_perm(info, "todos", "read")
         if not user:
             return []
@@ -90,7 +90,7 @@ class TodoQuery:
                 tenant=user.tenant,
             )
             .filter(
-                Q(created_by=user) | Q(assigned_to=user)
+                Q(assigned_to=user) | Q(assigned_to__isnull=True, created_by=user)
             )
             .select_related("created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer")
             .order_by(
@@ -104,7 +104,7 @@ class TodoQuery:
 
     @strawberry.field
     def team_todos(self, info: Info, limit: int = 20) -> List[TodoItemType]:
-        """Get public todos from other tenant users (not created by or assigned to current user)."""
+        """Get public todos not in the user's 'my todos' list."""
         user = require_perm(info, "todos", "read")
         if not user:
             return []
@@ -114,8 +114,9 @@ class TodoQuery:
                 tenant=user.tenant,
                 is_public=True,
             )
-            .exclude(created_by=user)
-            .exclude(assigned_to=user)
+            .exclude(
+                Q(assigned_to=user) | Q(assigned_to__isnull=True, created_by=user)
+            )
             .select_related("created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer")
             .order_by(
                 F("reminder_date").asc(nulls_last=True),
