@@ -91,7 +91,6 @@ class ImportProposal:
 
     # Line items
     items: list[ContractLineItem] = field(default_factory=list)
-    discount_amount: Decimal = Decimal("0")
 
     # Status
     approved: bool = False
@@ -103,9 +102,8 @@ class ImportProposal:
 
     @property
     def total_monthly_rate(self) -> Decimal:
-        """Calculate total monthly rate including discount."""
-        total = sum(item.monthly_rate for item in self.items)
-        return total + self.discount_amount  # discount_amount is negative
+        """Calculate total monthly rate including discounts (negative line items)."""
+        return sum(item.monthly_rate for item in self.items)
 
     @property
     def needs_review(self) -> bool:
@@ -353,8 +351,12 @@ class ImportService:
         # Add line items
         for row in rows:
             if row.item == "Sales Discount":
-                # Store discount amount (negative)
-                proposal.discount_amount += row.sum_of_list_rate
+                # Add discount as a line item with negative rate
+                item = ContractLineItem(
+                    item_name=row.item,
+                    monthly_rate=row.sum_of_list_rate,
+                    product=None,
+                )
             else:
                 # Regular item
                 item = ContractLineItem(
@@ -362,7 +364,7 @@ class ImportService:
                     monthly_rate=row.sum_of_list_rate,
                     product=self._match_product(row.item),
                 )
-                proposal.items.append(item)
+            proposal.items.append(item)
 
         return proposal
 
@@ -512,12 +514,24 @@ class ImportService:
             netsuite_sales_order_number=proposal.sales_order_number,
             netsuite_contract_number=proposal.contract_number,
             notes=proposal.invoicing_instructions,
-            discount_amount=proposal.discount_amount if proposal.discount_amount else None,
         )
 
         # Create contract items
         for item in proposal.items:
             product = item.product
+
+            if item.monthly_rate < 0:
+                # Discount line item (no product)
+                ContractItem.objects.create(
+                    tenant=self.tenant,
+                    contract=contract,
+                    product=None,
+                    description=item.item_name,
+                    quantity=1,
+                    unit_price=item.monthly_rate,
+                    price_source=ContractItem.PriceSource.CUSTOM,
+                )
+                continue
 
             # Auto-create product if needed
             if not product and auto_create_products:

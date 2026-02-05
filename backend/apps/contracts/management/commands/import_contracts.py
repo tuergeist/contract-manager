@@ -184,9 +184,6 @@ class Command(BaseCommand):
                         f"                      {alt.customer.name} ({alt.confidence:.0%})"
                     )
 
-            if p.discount_amount:
-                self.stdout.write(f"                 -> Discount: €{p.discount_amount}")
-
         self.stdout.write("-" * 100)
 
     def _process_interactive(self, proposals):

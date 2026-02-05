@@ -58,7 +58,6 @@ const UPLOAD_CONTRACT_IMPORT = gql`
             productId
             productName
           }
-          discountAmount
           totalMonthlyRate
           approved
           rejected
@@ -171,7 +170,6 @@ interface Proposal {
   matchResult: MatchResult | null
   selectedCustomerId: number | null
   items: LineItem[]
-  discountAmount: number
   totalMonthlyRate: number
   approved: boolean
   rejected: boolean
@@ -615,11 +613,6 @@ export function ContractImport() {
                           )}
                           <span className="mx-2">|</span>
                           {proposal.items.length} {t('import.items')}
-                          {proposal.discountAmount !== 0 && (
-                            <span className="ml-2 text-red-600">
-                              {t('import.discount')}: {proposal.discountAmount.toFixed(2)}
-                            </span>
-                          )}
                         </div>
                       </div>
 
@@ -816,13 +809,6 @@ export function ContractImport() {
                                   </td>
                                 </tr>
                               ))}
-                              {proposal.discountAmount !== 0 && (
-                                <tr className="border-t text-red-600">
-                                  <td className="px-2 py-1">{t('import.discount')}</td>
-                                  <td className="px-2 py-1 text-right">{proposal.discountAmount.toFixed(2)}</td>
-                                  <td className="px-2 py-1">-</td>
-                                </tr>
-                              )}
                               <tr className="border-t font-medium">
                                 <td className="px-2 py-1">{t('import.total')}</td>
                                 <td className="px-2 py-1 text-right">{proposal.totalMonthlyRate.toFixed(2)}</td>

@@ -87,13 +87,6 @@ class Contract(TenantModel):
         blank=True,
         help_text="Optional text to show on invoices below line items",
     )
-    discount_amount = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        help_text="Total discount amount for this contract (from Sales Discount rows)",
-    )
     customer = models.ForeignKey(
         "customers.Customer",
         on_delete=models.PROTECT,

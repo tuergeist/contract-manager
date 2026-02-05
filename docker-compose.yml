@@ -35,6 +35,7 @@ services:
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend,.ngrok.io,.ngrok-free.app,.ngrok.app
       DATABASE_URL: postgres://contract_manager:contract_manager@db:5432/contract_manager
       REDIS_URL: redis://redis:6379/0
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - ./backend:/app
       - ./uploads:/app/media/uploads

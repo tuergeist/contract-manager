@@ -18,3 +18,10 @@ PASSWORD_HASHERS = [
 
 # Disable audit log in tests (unless explicitly needed)
 AUDITLOG_INCLUDE_ALL_MODELS = False
+
+# Use in-memory cache for tests (no Redis dependency)
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    }
+}

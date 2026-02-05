@@ -136,6 +136,17 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Auditlog
 AUDITLOG_INCLUDE_ALL_MODELS = True
 
+# Cache
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": env("REDIS_URL", default="redis://localhost:6379/0"),
+    }
+}
+
+# Anthropic (Claude API for PDF analysis)
+ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
+
 # Strawberry GraphQL
 STRAWBERRY_DJANGO = {
     "FIELD_DESCRIPTION_FROM_HELP_TEXT": True,

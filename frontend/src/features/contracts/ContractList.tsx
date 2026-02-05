@@ -347,7 +347,7 @@ export function ContractList() {
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {formatDate(contract.endDate)}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                    <td className={`whitespace-nowrap px-6 py-4 text-sm font-medium ${contract.totalValue && parseFloat(contract.totalValue) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
                       {formatCurrency(contract.totalValue)}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">

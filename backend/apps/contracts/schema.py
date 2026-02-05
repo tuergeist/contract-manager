@@ -134,7 +134,6 @@ class ContractType:
     netsuite_url: auto
     po_number: auto
     order_confirmation_number: auto
-    discount_amount: auto
     notes: auto
     invoice_text: auto
     customer: CustomerType
@@ -766,6 +765,108 @@ class TimeTrackingMappingResult:
     success: bool
     error: str | None = None
     mapping: TimeTrackingMappingType | None = None
+
+
+# --- PDF Analysis Types ---
+
+
+@strawberry.type
+class PdfProductMatchType:
+    """A product match result from fuzzy matching."""
+
+    product_id: int
+    product_name: str
+    confidence: float
+
+
+@strawberry.type
+class PdfExtractedItemType:
+    """A line item extracted from a PDF."""
+
+    description: str
+    quantity: int
+    unit_price: Decimal
+    price_period: str
+    is_one_off: bool
+
+
+@strawberry.type
+class PdfComparisonItemType:
+    """An extracted item compared against existing contract items."""
+
+    extracted: PdfExtractedItemType
+    product_match: PdfProductMatchType | None
+    status: str  # "new" or "existing"
+    existing_item_id: int | None
+    price_differs: bool
+
+
+@strawberry.type
+class PdfMetadataComparisonType:
+    """Comparison of a single metadata field."""
+
+    field_name: str
+    extracted_value: str | None
+    current_value: str | None
+    differs: bool
+
+
+@strawberry.type
+class PdfExtractedMetadataType:
+    """Contract metadata extracted from a PDF."""
+
+    po_number: str | None
+    order_confirmation_number: str | None
+    min_duration_months: int | None
+
+
+@strawberry.type
+class PdfAnalysisResultType:
+    """Full result of analyzing a PDF attachment."""
+
+    items: list[PdfComparisonItemType]
+    metadata: PdfExtractedMetadataType
+    metadata_comparisons: list[PdfMetadataComparisonType]
+    error: str | None = None
+
+
+@strawberry.input
+class PdfImportItemInput:
+    """Input for a single item to import from PDF analysis."""
+
+    description: str
+    quantity: int
+    unit_price: Decimal
+    price_period: str
+    is_one_off: bool = False
+    product_id: strawberry.ID | None = None
+
+
+@strawberry.input
+class PdfImportMetadataInput:
+    """Input for metadata to import from PDF analysis."""
+
+    po_number: str | None = UNSET
+    order_confirmation_number: str | None = UNSET
+    min_duration_months: int | None = UNSET
+
+
+@strawberry.input
+class ImportPdfAnalysisInput:
+    """Input for importing PDF analysis results."""
+
+    contract_id: strawberry.ID
+    items: list[PdfImportItemInput]
+    metadata: PdfImportMetadataInput | None = None
+
+
+@strawberry.type
+class PdfImportResultType:
+    """Result of importing PDF analysis data."""
+
+    success: bool
+    error: str | None = None
+    created_items_count: int = 0
 
 
 @strawberry.type
@@ -1549,6 +1650,54 @@ class ContractQuery:
             mappings=mapping_types,
         )
 
+    @strawberry.field
+    def analyze_pdf_attachment(
+        self,
+        info: Info[Context, None],
+        attachment_id: strawberry.ID,
+    ) -> PdfAnalysisResultType:
+        """Analyze a PDF attachment and extract structured contract data."""
+        from apps.contracts.services.pdf_analysis import analyze_pdf_attachment as do_analyze
+
+        user, err = check_perm(info, "contracts", "read")
+        if err:
+            return PdfAnalysisResultType(
+                items=[],
+                metadata=PdfExtractedMetadataType(
+                    po_number=None, order_confirmation_number=None,
+                    min_duration_months=None,
+                ),
+                metadata_comparisons=[],
+                error=err,
+            )
+        if not user.tenant:
+            return PdfAnalysisResultType(
+                items=[],
+                metadata=PdfExtractedMetadataType(
+                    po_number=None, order_confirmation_number=None,
+                    min_duration_months=None,
+                ),
+                metadata_comparisons=[],
+                error="No tenant assigned",
+            )
+
+        attachment = ContractAttachment.objects.filter(
+            tenant=user.tenant, id=attachment_id
+        ).first()
+        if not attachment:
+            return PdfAnalysisResultType(
+                items=[],
+                metadata=PdfExtractedMetadataType(
+                    po_number=None, order_confirmation_number=None,
+                    min_duration_months=None,
+                ),
+                metadata_comparisons=[],
+                error="Attachment not found",
+            )
+
+        result = do_analyze(attachment, user.tenant)
+        return _build_pdf_analysis_result(result)
+
 
 def _check_price_period_overlap(
     item: ContractItem,
@@ -1582,6 +1731,70 @@ def _check_price_period_overlap(
             return f"Price period overlaps with existing period ({period.valid_from.isoformat()} to {period_end})"
 
     return None
+
+
+def _build_pdf_analysis_result(result):
+    """Convert pdf_analysis dataclass result to GraphQL types."""
+    from apps.contracts.services.pdf_analysis import PdfAnalysisResult as ServiceResult
+
+    if result.error:
+        return PdfAnalysisResultType(
+            items=[],
+            metadata=PdfExtractedMetadataType(
+                po_number=None,
+                order_confirmation_number=None,
+                min_duration_months=None,
+            ),
+            metadata_comparisons=[],
+            error=result.error,
+        )
+
+    items = []
+    for comp in result.items:
+        product_match = None
+        if comp.product_match:
+            product_match = PdfProductMatchType(
+                product_id=comp.product_match.product_id,
+                product_name=comp.product_match.product_name,
+                confidence=comp.product_match.confidence,
+            )
+        items.append(
+            PdfComparisonItemType(
+                extracted=PdfExtractedItemType(
+                    description=comp.extracted.description,
+                    quantity=comp.extracted.quantity,
+                    unit_price=comp.extracted.unit_price,
+                    price_period=comp.extracted.price_period,
+                    is_one_off=comp.extracted.is_one_off,
+                ),
+                product_match=product_match,
+                status=comp.status,
+                existing_item_id=comp.existing_item_id,
+                price_differs=comp.price_differs,
+            )
+        )
+
+    metadata = PdfExtractedMetadataType(
+        po_number=result.metadata.po_number,
+        order_confirmation_number=result.metadata.order_confirmation_number,
+        min_duration_months=result.metadata.min_duration_months,
+    )
+
+    metadata_comparisons = [
+        PdfMetadataComparisonType(
+            field_name=mc.field_name,
+            extracted_value=mc.extracted_value,
+            current_value=mc.current_value,
+            differs=mc.differs,
+        )
+        for mc in result.metadata_comparisons
+    ]
+
+    return PdfAnalysisResultType(
+        items=items,
+        metadata=metadata,
+        metadata_comparisons=metadata_comparisons,
+    )
 
 
 @strawberry.type
@@ -2535,7 +2748,6 @@ class ImportProposalType:
     match_result: ImportMatchResult | None
     selected_customer_id: int | None
     items: List[ImportLineItem]
-    discount_amount: float
     total_monthly_rate: float
     approved: bool
     rejected: bool
@@ -2640,7 +2852,6 @@ def _convert_proposal_to_type(proposal) -> ImportProposalType:
         match_result=match_result,
         selected_customer_id=proposal.selected_customer.id if proposal.selected_customer else None,
         items=items,
-        discount_amount=float(proposal.discount_amount),
         total_monthly_rate=float(proposal.total_monthly_rate),
         approved=proposal.approved,
         rejected=proposal.rejected,
@@ -2918,3 +3129,90 @@ class ContractImportMutation:
             del _import_sessions[session_key]
             return DeleteResult(success=True)
         return DeleteResult(error="Session not found")
+
+    @strawberry.mutation
+    def import_pdf_analysis(
+        self,
+        info: Info[Context, None],
+        input: ImportPdfAnalysisInput,
+    ) -> PdfImportResultType:
+        """Import selected items and metadata from PDF analysis into a contract."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return PdfImportResultType(success=False, error=err)
+        if not user.tenant:
+            return PdfImportResultType(success=False, error="No tenant assigned")
+
+        contract = Contract.objects.filter(
+            tenant=user.tenant, id=input.contract_id
+        ).first()
+        if not contract:
+            return PdfImportResultType(success=False, error="Contract not found")
+
+        try:
+            with transaction.atomic():
+                created_count = 0
+
+                for item_input in input.items:
+                    product = None
+                    if item_input.product_id:
+                        product = Product.objects.filter(
+                            tenant=user.tenant, id=item_input.product_id
+                        ).first()
+                        if not product:
+                            return PdfImportResultType(
+                                success=False,
+                                error=f"Product not found: {item_input.product_id}",
+                            )
+
+                    item = ContractItem.objects.create(
+                        tenant=user.tenant,
+                        contract=contract,
+                        product=product,
+                        description=item_input.description,
+                        quantity=item_input.quantity,
+                        unit_price=item_input.unit_price,
+                        price_period=item_input.price_period,
+                        price_source=ContractItem.PriceSource.CUSTOM,
+                        is_one_off=item_input.is_one_off,
+                    )
+
+                    # Create amendment for non-draft contracts
+                    if contract.status != Contract.Status.DRAFT:
+                        item_name = product.name if product else item_input.description[:50]
+                        ContractAmendment.objects.create(
+                            tenant=user.tenant,
+                            contract=contract,
+                            effective_date=date.today(),
+                            type=ContractAmendment.AmendmentType.PRODUCT_ADDED,
+                            description=f"Added {item_name} x{item_input.quantity} (PDF import)",
+                            changes={
+                                "product_id": str(product.id) if product else None,
+                                "product_name": product.name if product else None,
+                                "description": item_input.description,
+                                "quantity": item_input.quantity,
+                                "unit_price": str(item_input.unit_price),
+                                "price_period": item_input.price_period,
+                                "is_one_off": item_input.is_one_off,
+                                "source": "pdf_import",
+                            },
+                        )
+
+                    created_count += 1
+
+                # Update contract metadata
+                if input.metadata:
+                    if input.metadata.po_number is not UNSET:
+                        contract.po_number = input.metadata.po_number
+                    if input.metadata.order_confirmation_number is not UNSET:
+                        contract.order_confirmation_number = input.metadata.order_confirmation_number
+                    if input.metadata.min_duration_months is not UNSET:
+                        contract.min_duration_months = input.metadata.min_duration_months
+                    contract.save()
+
+                return PdfImportResultType(
+                    success=True,
+                    created_items_count=created_count,
+                )
+        except Exception as e:
+            return PdfImportResultType(success=False, error=str(e))

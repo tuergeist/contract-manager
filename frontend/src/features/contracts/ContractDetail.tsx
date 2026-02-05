@@ -26,6 +26,7 @@ import {
   Eye,
   Link2,
   Clock,
+  Scan,
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear } from '@/lib/utils'
 import { getToken } from '@/lib/auth'
@@ -63,6 +64,7 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { TodoModal, TodoList, type TodoContext, type TodoItem } from '@/features/todos'
 import { TimeTrackingTab } from './TimeTrackingTab'
+import { PdfAnalysisPanel } from './PdfAnalysisPanel'
 import { ListTodo } from 'lucide-react'
 
 const CONTRACT_DETAIL_QUERY = gql`
@@ -90,7 +92,6 @@ const CONTRACT_DETAIL_QUERY = gql`
       netsuiteContractNumber
       poNumber
       netsuiteUrl
-      discountAmount
       notes
       invoiceText
       customer {
@@ -459,7 +460,6 @@ interface Contract {
   netsuiteContractNumber: string | null
   poNumber: string | null
   netsuiteUrl: string | null
-  discountAmount: string | null
   notes: string
   invoiceText: string
   customer: {
@@ -724,12 +724,6 @@ export function ContractDetail() {
           <p className="text-sm text-gray-500">{t('contracts.detail.totalValue')}</p>
           <p className="text-lg font-semibold">{formatCurrency(contract.totalValue)}</p>
         </div>
-        {contract.discountAmount && parseFloat(contract.discountAmount) !== 0 && (
-          <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm text-gray-500">{t('contracts.detail.discount')}</p>
-            <p className="text-lg font-semibold text-red-600">{formatCurrency(contract.discountAmount)}</p>
-          </div>
-        )}
       </div>
 
       {/* Internal Notes */}
@@ -946,7 +940,7 @@ export function ContractDetail() {
                             <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
                               {item.quantity}
                             </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
+                            <td className={`whitespace-nowrap px-6 py-4 text-right text-sm ${parseFloat(item.effectivePrice) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
                               <div className="flex items-center justify-end gap-1">
                                 {item.priceLocked && (
                                   <span title={item.priceLockedUntil ? `${t('contracts.item.priceLockedUntil')}: ${formatDate(item.priceLockedUntil)}` : t('contracts.item.priceLocked')}>
@@ -955,7 +949,7 @@ export function ContractDetail() {
                                 )}
                                 <span>
                                   {formatCurrency(item.effectivePrice)}
-                                  <span className="text-xs text-gray-500">
+                                  <span className={`text-xs ${parseFloat(item.effectivePrice) < 0 ? 'text-red-400' : 'text-gray-500'}`}>
                                     /{t(`contracts.item.pricePeriodValues.${item.effectivePricePeriod}`)}
                                   </span>
                                 </span>
@@ -966,10 +960,10 @@ export function ContractDetail() {
                                 )}
                               </div>
                             </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
+                            <td className={`whitespace-nowrap px-6 py-4 text-right text-sm ${monthlyTotal < 0 ? 'text-red-600' : 'text-gray-900'}`}>
                               {formatCurrency(monthlyTotal.toString())}
                             </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
+                            <td className={`whitespace-nowrap px-6 py-4 text-right text-sm font-medium ${billingTotal < 0 ? 'text-red-600' : 'text-gray-900'}`}>
                               {formatCurrency(billingTotal.toString())}
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-500">
@@ -1061,7 +1055,7 @@ export function ContractDetail() {
                             <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
                               {item.quantity}
                             </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
+                            <td className={`whitespace-nowrap px-6 py-4 text-right text-sm ${parseFloat(item.effectivePrice) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
                               <div className="flex items-center justify-end gap-1">
                                 {item.priceLocked && (
                                   <span title={item.priceLockedUntil ? `${t('contracts.item.priceLockedUntil')}: ${formatDate(item.priceLockedUntil)}` : t('contracts.item.priceLocked')}>
@@ -1071,7 +1065,7 @@ export function ContractDetail() {
                                 <span>{formatCurrency(item.effectivePrice)}</span>
                               </div>
                             </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
+                            <td className={`whitespace-nowrap px-6 py-4 text-right text-sm font-medium ${oneOffTotal < 0 ? 'text-red-600' : 'text-gray-900'}`}>
                               {formatCurrency(oneOffTotal.toString())}
                             </td>
                             {contract.status !== 'cancelled' && contract.status !== 'ended' && (
@@ -1394,7 +1388,7 @@ function AddItemModal({
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[700px]">
         <DialogHeader>
           <DialogTitle>{t('contracts.detail.addItem')}</DialogTitle>
         </DialogHeader>
@@ -1406,114 +1400,111 @@ function AddItemModal({
         )}
 
         <div className="space-y-4 py-4">
-          {/* Searchable Product Selector */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">{t('contracts.item.product')}</label>
-            <Popover open={productSearchOpen} onOpenChange={setProductSearchOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={productSearchOpen}
-                  className="w-full justify-between"
-                >
-                  {selectedProduct ? (
-                    <span>
-                      {selectedProduct.name}
-                      {selectedProduct.sku && (
-                        <span className="ml-2 text-muted-foreground">({selectedProduct.sku})</span>
-                      )}
-                    </span>
-                  ) : (
-                    t('contracts.form.selectProduct')
-                  )}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[400px] p-0" align="start">
-                <Command shouldFilter={false}>
-                  <CommandInput
-                    placeholder={t('products.searchPlaceholder')}
-                    value={productSearchTerm}
-                    onValueChange={setProductSearchTerm}
-                  />
-                  <CommandList>
-                    {loadingProducts && (
-                      <div className="flex items-center justify-center py-6">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      </div>
-                    )}
-                    <CommandEmpty>{t('products.noProducts')}</CommandEmpty>
-                    <CommandGroup>
-                      {products.map((product) => (
-                        <CommandItem
-                          key={product.id}
-                          value={product.id}
-                          onSelect={() => handleProductSelect(product.id)}
-                        >
-                          <Check
-                            className={cn(
-                              'mr-2 h-4 w-4',
-                              productId === product.id ? 'opacity-100' : 'opacity-0'
-                            )}
-                          />
-                          <div className="flex flex-col">
-                            <span>{product.name}</span>
-                            {product.sku && (
-                              <span className="text-xs text-muted-foreground">{product.sku}</span>
-                            )}
-                          </div>
-                          {product.currentPrice?.price && (
-                            <span className="ml-auto text-sm text-muted-foreground">
-                              {new Intl.NumberFormat('de-DE', {
-                                style: 'currency',
-                                currency: 'EUR',
-                              }).format(parseFloat(product.currentPrice.price))}
-                            </span>
-                          )}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          {/* Description */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">{t('contracts.item.description')}</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder={t('contracts.item.descriptionPlaceholder')}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              rows={2}
-            />
-            <p className="text-xs text-muted-foreground">
-              {t('contracts.item.descriptionHint')}
-            </p>
-          </div>
-
-          {/* Quantity */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">{t('contracts.item.quantity')} *</label>
-            <Input
-              type="number"
-              min={1}
-              value={quantity}
-              onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-            />
-          </div>
-
-          {/* Unit Price and Price Period - 2 columns */}
+          {/* Product + Description - 2 columns */}
           <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('contracts.item.product')}</label>
+              <Popover open={productSearchOpen} onOpenChange={setProductSearchOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={productSearchOpen}
+                    className="w-full justify-between"
+                  >
+                    {selectedProduct ? (
+                      <span>
+                        {selectedProduct.name}
+                        {selectedProduct.sku && (
+                          <span className="ml-2 text-muted-foreground">({selectedProduct.sku})</span>
+                        )}
+                      </span>
+                    ) : (
+                      t('contracts.form.selectProduct')
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder={t('products.searchPlaceholder')}
+                      value={productSearchTerm}
+                      onValueChange={setProductSearchTerm}
+                    />
+                    <CommandList>
+                      {loadingProducts && (
+                        <div className="flex items-center justify-center py-6">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        </div>
+                      )}
+                      <CommandEmpty>{t('products.noProducts')}</CommandEmpty>
+                      <CommandGroup>
+                        {products.map((product) => (
+                          <CommandItem
+                            key={product.id}
+                            value={product.id}
+                            onSelect={() => handleProductSelect(product.id)}
+                          >
+                            <Check
+                              className={cn(
+                                'mr-2 h-4 w-4',
+                                productId === product.id ? 'opacity-100' : 'opacity-0'
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span>{product.name}</span>
+                              {product.sku && (
+                                <span className="text-xs text-muted-foreground">{product.sku}</span>
+                              )}
+                            </div>
+                            {product.currentPrice?.price && (
+                              <span className="ml-auto text-sm text-muted-foreground">
+                                {new Intl.NumberFormat('de-DE', {
+                                  style: 'currency',
+                                  currency: 'EUR',
+                                }).format(parseFloat(product.currentPrice.price))}
+                              </span>
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('contracts.item.description')}</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={t('contracts.item.descriptionPlaceholder')}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                rows={1}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('contracts.item.descriptionHint')}
+              </p>
+            </div>
+          </div>
+
+          {/* Quantity, Unit Price, Price Period, Price Source - 4 columns */}
+          <div className="grid grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('contracts.item.quantity')} *</label>
+              <Input
+                type="number"
+                min={1}
+                value={quantity}
+                onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+              />
+            </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('contracts.item.unitPrice')} *</label>
               <Input
                 type="number"
                 step="0.01"
-                min="0"
                 value={unitPrice}
                 onChange={(e) => setUnitPrice(e.target.value)}
               />
@@ -1537,82 +1528,80 @@ function AddItemModal({
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('contracts.item.priceSource')}</label>
+              <Select value={priceSource} onValueChange={setPriceSource}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="list">{t('contracts.priceSource.list')}</SelectItem>
+                  <SelectItem value="custom">{t('contracts.priceSource.custom')}</SelectItem>
+                  <SelectItem value="customer_agreement">
+                    {t('contracts.priceSource.customer_agreement')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          {/* Price Source */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">{t('contracts.item.priceSource')}</label>
-            <Select value={priceSource} onValueChange={setPriceSource}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="list">{t('contracts.priceSource.list')}</SelectItem>
-                <SelectItem value="custom">{t('contracts.priceSource.custom')}</SelectItem>
-                <SelectItem value="customer_agreement">
-                  {t('contracts.priceSource.customer_agreement')}
-                </SelectItem>
-              </SelectContent>
-            </Select>
+          {/* One-Off + Order Confirmation - 2 columns */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="isOneOff" className="text-sm font-medium">
+                  {t('contracts.item.isOneOff')}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t('contracts.item.isOneOffHint')}
+                </p>
+              </div>
+              <Switch
+                id="isOneOff"
+                checked={isOneOff}
+                onCheckedChange={setIsOneOff}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('contracts.item.orderConfirmationNumber')}</label>
+              <Input
+                placeholder={t('contracts.item.orderConfirmationNumberPlaceholder')}
+                value={orderConfirmationNumber}
+                onChange={(e) => setOrderConfirmationNumber(e.target.value)}
+              />
+            </div>
           </div>
 
-          {/* One-Off Switch */}
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <div className="space-y-0.5">
-              <Label htmlFor="isOneOff" className="text-sm font-medium">
-                {t('contracts.item.isOneOff')}
-              </Label>
+          {/* Start Date + Billing Start Date - 2 columns */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {t('contracts.item.startDate')}{' '}
+                <span className="text-muted-foreground font-normal">{t('contracts.item.startDateSubtitle')}</span>
+              </label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => handleStartDateChange(e.target.value)}
+              />
               <p className="text-xs text-muted-foreground">
-                {t('contracts.item.isOneOffHint')}
+                {t('contracts.item.startDateHint')}
               </p>
             </div>
-            <Switch
-              id="isOneOff"
-              checked={isOneOff}
-              onCheckedChange={setIsOneOff}
-            />
-          </div>
-
-          {/* Order Confirmation Number */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">{t('contracts.item.orderConfirmationNumber')}</label>
-            <Input
-              placeholder={t('contracts.item.orderConfirmationNumberPlaceholder')}
-              value={orderConfirmationNumber}
-              onChange={(e) => setOrderConfirmationNumber(e.target.value)}
-            />
-          </div>
-
-          {/* Start Date (effective date) */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">
-              {t('contracts.item.startDate')}{' '}
-              <span className="text-muted-foreground font-normal">{t('contracts.item.startDateSubtitle')}</span>
-            </label>
-            <Input
-              type="date"
-              value={startDate}
-              onChange={(e) => handleStartDateChange(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              {t('contracts.item.startDateHint')}
-            </p>
-          </div>
-
-          {/* Billing Start Date */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">
-              {t('contracts.item.billingStartDate')}{' '}
-              <span className="text-muted-foreground font-normal">{t('contracts.item.billingStartDateSubtitle')}</span>
-            </label>
-            <Input
-              type="date"
-              value={billingStartDate}
-              onChange={(e) => handleBillingStartDateManualChange(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              {t('contracts.item.billingStartDateHint')}
-            </p>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {t('contracts.item.billingStartDate')}{' '}
+                <span className="text-muted-foreground font-normal">{t('contracts.item.billingStartDateSubtitle')}</span>
+              </label>
+              <Input
+                type="date"
+                value={billingStartDate}
+                onChange={(e) => handleBillingStartDateManualChange(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('contracts.item.billingStartDateHint')}
+              </p>
+            </div>
           </div>
 
           {/* Align to Contract At */}
@@ -1894,7 +1883,6 @@ function EditItemModal({
               <Input
                 type="number"
                 step="0.01"
-                min="0"
                 value={unitPrice}
                 onChange={(e) => setUnitPrice(e.target.value)}
               />
@@ -2018,7 +2006,6 @@ function EditItemModal({
                                 <Input
                                   type="number"
                                   step="0.01"
-                                  min="0"
                                   value={editPeriodPrice}
                                   onChange={(e) => setEditPeriodPrice(e.target.value)}
                                   className="h-8 text-sm"
@@ -2141,7 +2128,6 @@ function EditItemModal({
                     <Input
                       type="number"
                       step="0.01"
-                      min="0"
                       value={newPeriodPrice}
                       onChange={(e) => setNewPeriodPrice(e.target.value)}
                       className="h-8 text-sm"
@@ -2542,6 +2528,8 @@ function AttachmentsTab({
   const [linkUrl, setLinkUrl] = useState('')
   const [addingLink, setAddingLink] = useState(false)
 
+  const [analyzingAttachmentId, setAnalyzingAttachmentId] = useState<string | null>(null)
+
   const [uploadAttachment] = useMutation(UPLOAD_ATTACHMENT_MUTATION)
   const [deleteAttachment] = useMutation(DELETE_ATTACHMENT_MUTATION)
   const [addLink] = useMutation(ADD_CONTRACT_LINK_MUTATION)
@@ -2823,6 +2811,16 @@ function AttachmentsTab({
                     {formatDateTime(attachment.uploadedAt)}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-right">
+                    {attachment.contentType === 'application/pdf' && (
+                      <button
+                        onClick={() => setAnalyzingAttachmentId(attachment.id)}
+                        className="mr-2 text-gray-400 hover:text-purple-600"
+                        title={t('pdfAnalysis.analyzeButton')}
+                        data-testid={`analyze-attachment-${attachment.id}`}
+                      >
+                        <Scan className="h-4 w-4" />
+                      </button>
+                    )}
                     {isPreviewable(attachment.contentType) && (
                       <button
                         onClick={() => handlePreview(attachment)}
@@ -2853,6 +2851,21 @@ function AttachmentsTab({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* PDF Analysis Panel */}
+      {analyzingAttachmentId && (
+        <div className="mt-6">
+          <PdfAnalysisPanel
+            contractId={contractId}
+            attachmentId={analyzingAttachmentId}
+            onClose={() => setAnalyzingAttachmentId(null)}
+            onImported={() => {
+              setAnalyzingAttachmentId(null)
+              onRefetch()
+            }}
+          />
         </div>
       )}
 

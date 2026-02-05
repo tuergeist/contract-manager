@@ -291,8 +291,8 @@ class TestImportService:
         assert len(proposals[0].items) == 2
         assert proposals[0].total_monthly_rate == Decimal("150")
 
-    def test_discount_rows_are_stored_separately(self, db, tenant, customer):
-        """Test that Sales Discount rows are stored in discount_amount."""
+    def test_discount_rows_become_line_items(self, db, tenant, customer):
+        """Test that Sales Discount rows are added as line items with negative rate."""
         rows = [
             ExcelRow(
                 name="CUS001 EBARA Corporation",
@@ -324,8 +324,9 @@ class TestImportService:
         proposals = service.generate_proposals(rows)
 
         assert len(proposals) == 1
-        assert len(proposals[0].items) == 1  # Discount not in items
-        assert proposals[0].discount_amount == Decimal("-10")
+        assert len(proposals[0].items) == 2  # Discount is a line item
+        assert proposals[0].items[1].item_name == "Sales Discount"
+        assert proposals[0].items[1].monthly_rate == Decimal("-10")
         assert proposals[0].total_monthly_rate == Decimal("90")  # 100 - 10
 
     def test_apply_proposals_creates_contracts(self, db, tenant, customer):
@@ -464,17 +465,17 @@ class TestImportProposal:
     """Tests for ImportProposal dataclass."""
 
     def test_total_monthly_rate_calculation(self):
-        """Test total monthly rate includes items and discount."""
+        """Test total monthly rate includes items and discounts."""
         from apps.contracts.services.import_service import ContractLineItem
 
         proposal = ImportProposal(
             customer_number="CUS001",
             customer_name="Test",
-            discount_amount=Decimal("-20"),
         )
         proposal.items = [
             ContractLineItem(item_name="Item 1", monthly_rate=Decimal("100")),
             ContractLineItem(item_name="Item 2", monthly_rate=Decimal("50")),
+            ContractLineItem(item_name="Sales Discount", monthly_rate=Decimal("-20")),
         ]
 
         assert proposal.total_monthly_rate == Decimal("130")  # 100 + 50 - 20
