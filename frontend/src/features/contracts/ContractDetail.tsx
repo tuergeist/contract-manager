@@ -28,6 +28,7 @@ import {
   Clock,
   Scan,
   GripVertical,
+  ChevronDown,
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear } from '@/lib/utils'
 import { getToken } from '@/lib/auth'
@@ -1693,100 +1694,109 @@ function AddItemModal({
             </div>
           </div>
 
-          {/* One-Off + Order Confirmation - 2 columns */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <div className="space-y-0.5">
-                <Label htmlFor="isOneOff" className="text-sm font-medium">
-                  {t('contracts.item.isOneOff')}
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {t('contracts.item.isOneOffHint')}
-                </p>
-              </div>
-              <Switch
-                id="isOneOff"
-                checked={isOneOff}
-                onCheckedChange={setIsOneOff}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{t('contracts.item.orderConfirmationNumber')}</label>
-              <Input
-                placeholder={t('contracts.item.orderConfirmationNumberPlaceholder')}
-                value={orderConfirmationNumber}
-                onChange={(e) => setOrderConfirmationNumber(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Start Date + Billing Start Date - 2 columns */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                {t('contracts.item.startDate')}{' '}
-                <span className="text-muted-foreground font-normal">{t('contracts.item.startDateSubtitle')}</span>
-              </label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => handleStartDateChange(e.target.value)}
-              />
+          {/* One-Off */}
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="isOneOff" className="text-sm font-medium">
+                {t('contracts.item.isOneOff')}
+              </Label>
               <p className="text-xs text-muted-foreground">
-                {t('contracts.item.startDateHint')}
+                {t('contracts.item.isOneOffHint')}
               </p>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                {t('contracts.item.billingStartDate')}{' '}
-                <span className="text-muted-foreground font-normal">{t('contracts.item.billingStartDateSubtitle')}</span>
-              </label>
-              <Input
-                type="date"
-                value={billingStartDate}
-                onChange={(e) => handleBillingStartDateManualChange(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                {t('contracts.item.billingStartDateHint')}
-              </p>
-            </div>
+            <Switch
+              id="isOneOff"
+              checked={isOneOff}
+              onCheckedChange={setIsOneOff}
+            />
           </div>
 
-          {/* Align to Contract At */}
-          {billingStartDate && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{t('contracts.item.alignToContractAt')}</label>
-              <div className="flex gap-2">
+          {/* Item-specific overrides - collapsed by default */}
+          <details className="group rounded-lg border">
+            <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground">
+              <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-0 -rotate-90" />
+              {t('contracts.item.itemOverrides')}
+            </summary>
+            <div className="space-y-4 px-4 pb-4">
+              {/* Order Confirmation Number */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t('contracts.item.orderConfirmationNumber')}</label>
                 <Input
-                  type="date"
-                  value={alignToContractAt}
-                  onChange={(e) => setAlignToContractAt(e.target.value)}
-                  className="flex-1"
+                  placeholder={t('contracts.item.orderConfirmationNumberPlaceholder')}
+                  value={orderConfirmationNumber}
+                  onChange={(e) => setOrderConfirmationNumber(e.target.value)}
                 />
-                {suggestedDate && !alignToContractAt && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={applySuggestedDate}
-                    disabled={loadingSuggestion}
-                    className="whitespace-nowrap"
-                  >
-                    {loadingSuggestion ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      formatDate(suggestedDate)
-                    )}
-                  </Button>
-                )}
               </div>
-              {suggestedDate && (
-                <p className="text-xs text-muted-foreground">
-                  {t('contracts.item.suggestedDate')}: {formatDate(suggestedDate)}
-                </p>
+
+              {/* Start Date + Billing Start Date - 2 columns */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    {t('contracts.item.startDate')}{' '}
+                    <span className="text-muted-foreground font-normal">{t('contracts.item.startDateSubtitle')}</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => handleStartDateChange(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t('contracts.item.startDateHint')}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    {t('contracts.item.billingStartDate')}{' '}
+                    <span className="text-muted-foreground font-normal">{t('contracts.item.billingStartDateSubtitle')}</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={billingStartDate}
+                    onChange={(e) => handleBillingStartDateManualChange(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t('contracts.item.billingStartDateHint')}
+                  </p>
+                </div>
+              </div>
+
+              {/* Align to Contract At */}
+              {billingStartDate && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t('contracts.item.alignToContractAt')}</label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="date"
+                      value={alignToContractAt}
+                      onChange={(e) => setAlignToContractAt(e.target.value)}
+                      className="flex-1"
+                    />
+                    {suggestedDate && !alignToContractAt && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={applySuggestedDate}
+                        disabled={loadingSuggestion}
+                        className="whitespace-nowrap"
+                      >
+                        {loadingSuggestion ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          formatDate(suggestedDate)
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                  {suggestedDate && (
+                    <p className="text-xs text-muted-foreground">
+                      {t('contracts.item.suggestedDate')}: {formatDate(suggestedDate)}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
-          )}
+          </details>
         </div>
 
         <DialogFooter>
@@ -2447,69 +2457,78 @@ function EditItemModal({
             />
           </div>
 
-          {/* Order Confirmation Number */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">{t('contracts.item.orderConfirmationNumber')}</label>
-            <Input
-              placeholder={t('contracts.item.orderConfirmationNumberPlaceholder')}
-              value={orderConfirmationNumber}
-              onChange={(e) => setOrderConfirmationNumber(e.target.value)}
-            />
-          </div>
+          {/* Item-specific overrides - auto-open if any field has a value */}
+          <details className="group rounded-lg border" open={!!(orderConfirmationNumber || startDate || billingStartDate || billingEndDate || alignToContractAt) || undefined}>
+            <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground">
+              <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-0 -rotate-90" />
+              {t('contracts.item.itemOverrides')}
+            </summary>
+            <div className="space-y-4 px-4 pb-4">
+              {/* Order Confirmation Number */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t('contracts.item.orderConfirmationNumber')}</label>
+                <Input
+                  placeholder={t('contracts.item.orderConfirmationNumberPlaceholder')}
+                  value={orderConfirmationNumber}
+                  onChange={(e) => setOrderConfirmationNumber(e.target.value)}
+                />
+              </div>
 
-          {/* Start Date + Billing Start Date - 2 columns */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                {t('contracts.item.startDate')}{' '}
-                <span className="text-muted-foreground font-normal">{t('contracts.item.startDateSubtitle')}</span>
-              </label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                {t('contracts.item.billingStartDate')}{' '}
-                <span className="text-muted-foreground font-normal">{t('contracts.item.billingStartDateSubtitle')}</span>
-              </label>
-              <Input
-                type="date"
-                value={billingStartDate}
-                onChange={(e) => setBillingStartDate(e.target.value)}
-              />
-            </div>
-          </div>
+              {/* Start Date + Billing Start Date - 2 columns */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    {t('contracts.item.startDate')}{' '}
+                    <span className="text-muted-foreground font-normal">{t('contracts.item.startDateSubtitle')}</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    {t('contracts.item.billingStartDate')}{' '}
+                    <span className="text-muted-foreground font-normal">{t('contracts.item.billingStartDateSubtitle')}</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={billingStartDate}
+                    onChange={(e) => setBillingStartDate(e.target.value)}
+                  />
+                </div>
+              </div>
 
-          {/* Billing End Date + Align to Contract At - 2 columns */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{t('contracts.item.billingEndDate')}</label>
-              <Input
-                type="date"
-                value={billingEndDate}
-                onChange={(e) => setBillingEndDate(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                {t('contracts.item.billingEndDateHint')}
-              </p>
+              {/* Billing End Date + Align to Contract At - 2 columns */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t('contracts.item.billingEndDate')}</label>
+                  <Input
+                    type="date"
+                    value={billingEndDate}
+                    onChange={(e) => setBillingEndDate(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t('contracts.item.billingEndDateHint')}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t('contracts.item.alignToContractAt')}</label>
+                  <Input
+                    type="date"
+                    value={alignToContractAt}
+                    onChange={(e) => setAlignToContractAt(e.target.value)}
+                  />
+                  {item.suggestedAlignmentDate && (
+                    <p className="text-xs text-muted-foreground">
+                      {t('contracts.item.suggestedDate')}: {formatDate(item.suggestedAlignmentDate)}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{t('contracts.item.alignToContractAt')}</label>
-              <Input
-                type="date"
-                value={alignToContractAt}
-                onChange={(e) => setAlignToContractAt(e.target.value)}
-              />
-              {item.suggestedAlignmentDate && (
-                <p className="text-xs text-muted-foreground">
-                  {t('contracts.item.suggestedDate')}: {formatDate(item.suggestedAlignmentDate)}
-                </p>
-              )}
-            </div>
-          </div>
+          </details>
         </div>
 
         <DialogFooter>

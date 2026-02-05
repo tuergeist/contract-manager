@@ -235,6 +235,7 @@
       "isOneOff": "One-off payment",
       "isOneOffHint": "Billed only once, not included in ARR",
       "oneOffBadge": "One-off",
+      "itemOverrides": "Item-specific dates & overrides (only if different from contract)",
       "orderConfirmationNumber": "Order Confirmation No.",
       "orderConfirmationNumberPlaceholder": "e.g. AB-12345",
       "priceLocked": "Price locked",

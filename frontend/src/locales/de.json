@@ -235,6 +235,7 @@
       "isOneOff": "Einmalzahlung",
       "isOneOffHint": "Wird nur einmal abgerechnet, nicht Teil des ARR",
       "oneOffBadge": "Einmalig",
+      "itemOverrides": "Positionsspezifische Daten & Abweichungen (nur wenn abweichend vom Vertrag)",
       "orderConfirmationNumber": "AB-Nummer",
       "orderConfirmationNumberPlaceholder": "z.B. AB-12345",
       "priceLocked": "Preis gesperrt",
