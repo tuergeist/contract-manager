@@ -842,6 +842,11 @@ class ContractItem(TenantModel):
         blank=True,
         help_text="Date until price is locked. After this date, price_locked becomes False.",
     )
+    sort_order = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Sort order within the contract (per recurring/one-off group)",
+    )
     added_by_amendment = models.ForeignKey(
         "ContractAmendment",
         on_delete=models.SET_NULL,
@@ -851,7 +856,7 @@ class ContractItem(TenantModel):
     )
 
     class Meta:
-        ordering = ["created_at"]
+        ordering = ["sort_order", "created_at"]
 
     def __str__(self):
         if self.product:

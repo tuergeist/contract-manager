@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, gql } from '@apollo/client'
@@ -27,6 +27,7 @@ import {
   Link2,
   Clock,
   Scan,
+  GripVertical,
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear } from '@/lib/utils'
 import { getToken } from '@/lib/auth'
@@ -63,6 +64,23 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { TodoModal, TodoList, type TodoContext, type TodoItem } from '@/features/todos'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { TimeTrackingTab } from './TimeTrackingTab'
 import { PdfAnalysisPanel } from './PdfAnalysisPanel'
 import { ListTodo } from 'lucide-react'
@@ -117,6 +135,7 @@ const CONTRACT_DETAIL_QUERY = gql`
         orderConfirmationNumber
         priceLocked
         priceLockedUntil
+        sortOrder
         pricePeriods {
           id
           validFrom
@@ -365,6 +384,15 @@ const DELETE_CONTRACT_LINK_MUTATION = gql`
   }
 `
 
+const REORDER_CONTRACT_ITEMS_MUTATION = gql`
+  mutation ReorderContractItems($input: ReorderContractItemsInput!) {
+    reorderContractItems(input: $input) {
+      success
+      error
+    }
+  }
+`
+
 
 interface Product {
   id: string
@@ -402,6 +430,7 @@ interface ContractItem {
   orderConfirmationNumber: string | null
   priceLocked: boolean
   priceLockedUntil: string | null
+  sortOrder: number | null
   pricePeriods: PricePeriod[] | null
   product: {
     id: string
@@ -473,6 +502,41 @@ interface Contract {
   todos: TodoItem[]
 }
 
+function SortableRow({
+  id,
+  children,
+  disabled,
+}: {
+  id: string
+  children: (props: { dragHandleProps: React.HTMLAttributes<HTMLElement>; style: React.CSSProperties; ref: (node: HTMLElement | null) => void; isDragging: boolean }) => React.ReactNode
+  disabled?: boolean
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    position: 'relative' as const,
+    zIndex: isDragging ? 1 : 0,
+  }
+
+  const dragHandleProps = {
+    ...attributes,
+    ...listeners,
+    style: { cursor: disabled ? 'default' : 'grab', touchAction: 'none' } as React.CSSProperties,
+  }
+
+  return <>{children({ dragHandleProps, style, ref: setNodeRef, isDragging })}</>
+}
+
 type Tab = 'items' | 'amendments' | 'forecast' | 'attachments' | 'todos' | 'timeTracking' | 'activity'
 
 export function ContractDetail() {
@@ -495,8 +559,49 @@ export function ContractDetail() {
 
   const [updateNotes, { loading: savingNotes }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
   const [updateInvoiceText, { loading: savingInvoiceText }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
+  const [reorderItems] = useMutation(REORDER_CONTRACT_ITEMS_MUTATION)
 
   const contract = data?.contract as Contract | undefined
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  const canEdit = contract ? contract.status !== 'cancelled' && contract.status !== 'ended' : false
+
+  const recurringItems = useMemo(
+    () => contract?.items.filter(item => !item.isOneOff) || [],
+    [contract?.items]
+  )
+  const oneOffItems = useMemo(
+    () => contract?.items.filter(item => item.isOneOff) || [],
+    [contract?.items]
+  )
+
+  const handleDragEnd = async (event: DragEndEvent, isOneOff: boolean) => {
+    const { active, over } = event
+    if (!over || active.id === over.id || !contract) return
+
+    const items = isOneOff ? oneOffItems : recurringItems
+    const oldIndex = items.findIndex(i => i.id === active.id)
+    const newIndex = items.findIndex(i => i.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    const reordered = arrayMove(items, oldIndex, newIndex)
+    const itemIds = reordered.map(i => i.id)
+
+    await reorderItems({
+      variables: {
+        input: {
+          contractId: contract.id,
+          itemIds,
+          isOneOff,
+        },
+      },
+    })
+    refetch()
+  }
 
   const handleSaveNotes = async () => {
     if (!contract) return
@@ -865,7 +970,7 @@ export function ContractDetail() {
       {/* Items Tab */}
       {activeTab === 'items' && (
         <div>
-          {contract.status !== 'cancelled' && contract.status !== 'ended' && (
+          {canEdit && (
             <div className="mb-4 flex justify-end">
               <button
                 onClick={() => setShowAddItemModal(true)}
@@ -885,139 +990,19 @@ export function ContractDetail() {
           ) : (
             <div className="space-y-6">
               {/* Recurring Items Table */}
-              {contract.items.filter(item => !item.isOneOff).length > 0 && (
-                <div className="overflow-hidden rounded-lg border">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                          {t('contracts.item.product')}
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                          {t('contracts.item.quantity')}
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                          {t('contracts.item.unitPrice')}
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                          {t('contracts.item.totalMonthly')}
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                          {t('contracts.item.totalBilling')}
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                          {t('contracts.item.billingPeriod')}
-                        </th>
-                        {contract.status !== 'cancelled' && contract.status !== 'ended' && (
-                          <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                            {/* Actions */}
-                          </th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 bg-white">
-                      {contract.items.filter(item => !item.isOneOff).map((item) => {
-                        // Calculate monthly total from effectivePrice (respects period-specific pricing)
-                        const effectivePrice = parseFloat(item.effectivePrice)
-                        const pricePeriodMonths = getIntervalMultiplier(item.effectivePricePeriod)
-                        const monthlyUnitPrice = effectivePrice / pricePeriodMonths
-                        const monthlyTotal = monthlyUnitPrice * item.quantity
-                        const intervalMultiplier = getIntervalMultiplier(contract.billingInterval)
-                        const billingTotal = monthlyTotal * intervalMultiplier
-                        const itemName = item.product?.name || item.description || '-'
-
-                        return (
-                          <tr key={item.id}>
-                            <td className="px-6 py-4">
-                              <span className="font-medium text-gray-900">{itemName}</span>
-                              {item.product?.sku && (
-                                <div className="text-xs text-gray-500">{item.product.sku}</div>
-                              )}
-                              {item.product && item.description && (
-                                <div className="text-xs text-gray-500 whitespace-pre-wrap">{item.description}</div>
-                              )}
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
-                              {item.quantity}
-                            </td>
-                            <td className={`whitespace-nowrap px-6 py-4 text-right text-sm ${parseFloat(item.effectivePrice) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                              <div className="flex items-center justify-end gap-1">
-                                {item.priceLocked && (
-                                  <span title={item.priceLockedUntil ? `${t('contracts.item.priceLockedUntil')}: ${formatDate(item.priceLockedUntil)}` : t('contracts.item.priceLocked')}>
-                                    <Lock className="h-3 w-3 text-amber-500" />
-                                  </span>
-                                )}
-                                <span>
-                                  {formatCurrency(item.effectivePrice)}
-                                  <span className={`text-xs ${parseFloat(item.effectivePrice) < 0 ? 'text-red-400' : 'text-gray-500'}`}>
-                                    /{t(`contracts.item.pricePeriodValues.${item.effectivePricePeriod}`)}
-                                  </span>
-                                </span>
-                                {item.pricePeriods && item.pricePeriods.length > 0 && (
-                                  <span title={t('contracts.item.yearSpecificPricing')}>
-                                    <CalendarRange className="h-3 w-3 text-blue-500" />
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className={`whitespace-nowrap px-6 py-4 text-right text-sm ${monthlyTotal < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                              {formatCurrency(monthlyTotal.toString())}
-                            </td>
-                            <td className={`whitespace-nowrap px-6 py-4 text-right text-sm font-medium ${billingTotal < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                              {formatCurrency(billingTotal.toString())}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-500">
-                              {item.billingStartDate ? (
-                                <div>
-                                  <div>
-                                    {formatDate(item.billingStartDate)} - {item.billingEndDate ? formatDate(item.billingEndDate) : t('contracts.item.ongoing')}
-                                  </div>
-                                  <div className="text-xs text-gray-400">
-                                    {t(`contracts.billingInterval.${contract.billingInterval}`)}
-                                  </div>
-                                  {item.alignToContractAt && (
-                                    <div className="text-xs text-gray-400">
-                                      {t('contracts.item.alignsAt')}: {formatDate(item.alignToContractAt)}
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            {contract.status !== 'cancelled' && contract.status !== 'ended' && (
-                              <td className="whitespace-nowrap px-6 py-4 text-right">
-                                <button
-                                  onClick={() => setEditingItem(item)}
-                                  className="mr-2 text-gray-400 hover:text-blue-600"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </button>
-                                <RemoveItemButton
-                                  itemId={item.id}
-                                  itemName={itemName}
-                                  onSuccess={() => refetch()}
-                                />
-                              </td>
-                            )}
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* One-Off Items Table */}
-              {contract.items.filter(item => item.isOneOff).length > 0 && (
-                <div>
-                  <h3 className="mb-2 text-sm font-medium text-gray-700">
-                    {t('contracts.detail.oneOffItems')}
-                  </h3>
+              {recurringItems.length > 0 && (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={(event) => handleDragEnd(event, false)}
+                >
                   <div className="overflow-hidden rounded-lg border">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
+                          {canEdit && (
+                            <th className="w-8 px-2 py-3" />
+                          )}
                           <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                             {t('contracts.item.product')}
                           </th>
@@ -1025,71 +1010,234 @@ export function ContractDetail() {
                             {t('contracts.item.quantity')}
                           </th>
                           <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                            {t('contracts.item.unitPriceShort')}
+                            {t('contracts.item.unitPrice')}
                           </th>
                           <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                            {t('contracts.item.totalPriceShort')}
+                            {t('contracts.item.totalMonthly')}
                           </th>
-                          {contract.status !== 'cancelled' && contract.status !== 'ended' && (
+                          <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                            {t('contracts.item.totalBilling')}
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                            {t('contracts.item.billingPeriod')}
+                          </th>
+                          {canEdit && (
                             <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                               {/* Actions */}
                             </th>
                           )}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200 bg-white">
-                        {contract.items.filter(item => item.isOneOff).map((item) => {
-                          const itemName = item.product?.name || item.description || '-'
-                          const oneOffTotal = parseFloat(item.effectivePrice) * item.quantity
-                          return (
-                          <tr key={item.id}>
-                            <td className="px-6 py-4">
-                              <span className="font-medium text-gray-900">{itemName}</span>
-                              {item.product?.sku && (
-                                <div className="text-xs text-gray-500">{item.product.sku}</div>
-                              )}
-                              {item.product && item.description && (
-                                <div className="text-xs text-gray-500 whitespace-pre-wrap">{item.description}</div>
-                              )}
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
-                              {item.quantity}
-                            </td>
-                            <td className={`whitespace-nowrap px-6 py-4 text-right text-sm ${parseFloat(item.effectivePrice) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                              <div className="flex items-center justify-end gap-1">
-                                {item.priceLocked && (
-                                  <span title={item.priceLockedUntil ? `${t('contracts.item.priceLockedUntil')}: ${formatDate(item.priceLockedUntil)}` : t('contracts.item.priceLocked')}>
-                                    <Lock className="h-3 w-3 text-amber-500" />
-                                  </span>
-                                )}
-                                <span>{formatCurrency(item.effectivePrice)}</span>
-                              </div>
-                            </td>
-                            <td className={`whitespace-nowrap px-6 py-4 text-right text-sm font-medium ${oneOffTotal < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                              {formatCurrency(oneOffTotal.toString())}
-                            </td>
-                            {contract.status !== 'cancelled' && contract.status !== 'ended' && (
-                              <td className="whitespace-nowrap px-6 py-4 text-right">
-                                <button
-                                  onClick={() => setEditingItem(item)}
-                                  className="mr-2 text-gray-400 hover:text-blue-600"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </button>
-                                <RemoveItemButton
-                                  itemId={item.id}
-                                  itemName={itemName}
-                                  onSuccess={() => refetch()}
-                                />
-                              </td>
-                            )}
-                          </tr>
-                        )})}
+                      <SortableContext items={recurringItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                          {recurringItems.map((item) => {
+                            const effectivePrice = parseFloat(item.effectivePrice)
+                            const pricePeriodMonths = getIntervalMultiplier(item.effectivePricePeriod)
+                            const monthlyUnitPrice = effectivePrice / pricePeriodMonths
+                            const monthlyTotal = monthlyUnitPrice * item.quantity
+                            const intervalMultiplier = getIntervalMultiplier(contract.billingInterval)
+                            const billingTotal = monthlyTotal * intervalMultiplier
+                            const itemName = item.product?.name || item.description || '-'
 
-                      </tbody>
+                            return (
+                              <SortableRow key={item.id} id={item.id} disabled={!canEdit}>
+                                {({ dragHandleProps, style, ref }) => (
+                                  <tr ref={ref} style={style}>
+                                    {canEdit && (
+                                      <td className="w-8 px-2 py-4">
+                                        <span {...dragHandleProps} className="text-gray-400 hover:text-gray-600">
+                                          <GripVertical className="h-4 w-4" />
+                                        </span>
+                                      </td>
+                                    )}
+                                    <td className="px-6 py-4">
+                                      <span className="font-medium text-gray-900">{itemName}</span>
+                                      {item.product?.sku && (
+                                        <div className="text-xs text-gray-500">{item.product.sku}</div>
+                                      )}
+                                      {item.product && item.description && (
+                                        <div className="text-xs text-gray-500 whitespace-pre-wrap">{item.description}</div>
+                                      )}
+                                    </td>
+                                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
+                                      {item.quantity}
+                                    </td>
+                                    <td className={`whitespace-nowrap px-6 py-4 text-right text-sm ${parseFloat(item.effectivePrice) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                                      <div className="flex items-center justify-end gap-1">
+                                        {item.priceLocked && (
+                                          <span title={item.priceLockedUntil ? `${t('contracts.item.priceLockedUntil')}: ${formatDate(item.priceLockedUntil)}` : t('contracts.item.priceLocked')}>
+                                            <Lock className="h-3 w-3 text-amber-500" />
+                                          </span>
+                                        )}
+                                        <span>
+                                          {formatCurrency(item.effectivePrice)}
+                                          <span className={`text-xs ${parseFloat(item.effectivePrice) < 0 ? 'text-red-400' : 'text-gray-500'}`}>
+                                            /{t(`contracts.item.pricePeriodValues.${item.effectivePricePeriod}`)}
+                                          </span>
+                                        </span>
+                                        {item.pricePeriods && item.pricePeriods.length > 0 && (
+                                          <span title={t('contracts.item.yearSpecificPricing')}>
+                                            <CalendarRange className="h-3 w-3 text-blue-500" />
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className={`whitespace-nowrap px-6 py-4 text-right text-sm ${monthlyTotal < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                                      {formatCurrency(monthlyTotal.toString())}
+                                    </td>
+                                    <td className={`whitespace-nowrap px-6 py-4 text-right text-sm font-medium ${billingTotal < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                                      {formatCurrency(billingTotal.toString())}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">
+                                      {item.billingStartDate ? (
+                                        <div>
+                                          <div>
+                                            {formatDate(item.billingStartDate)} - {item.billingEndDate ? formatDate(item.billingEndDate) : t('contracts.item.ongoing')}
+                                          </div>
+                                          <div className="text-xs text-gray-400">
+                                            {t(`contracts.billingInterval.${contract.billingInterval}`)}
+                                          </div>
+                                          {item.alignToContractAt && (
+                                            <div className="text-xs text-gray-400">
+                                              {t('contracts.item.alignsAt')}: {formatDate(item.alignToContractAt)}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-gray-400">-</span>
+                                      )}
+                                    </td>
+                                    {canEdit && (
+                                      <td className="whitespace-nowrap px-6 py-4 text-right">
+                                        <button
+                                          onClick={() => setEditingItem(item)}
+                                          className="mr-2 text-gray-400 hover:text-blue-600"
+                                        >
+                                          <Edit className="h-4 w-4" />
+                                        </button>
+                                        <RemoveItemButton
+                                          itemId={item.id}
+                                          itemName={itemName}
+                                          onSuccess={() => refetch()}
+                                        />
+                                      </td>
+                                    )}
+                                  </tr>
+                                )}
+                              </SortableRow>
+                            )
+                          })}
+                        </tbody>
+                      </SortableContext>
                     </table>
                   </div>
-                </div>
+                </DndContext>
+              )}
+
+              {/* One-Off Items Table */}
+              {oneOffItems.length > 0 && (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={(event) => handleDragEnd(event, true)}
+                >
+                  <div>
+                    <h3 className="mb-2 text-sm font-medium text-gray-700">
+                      {t('contracts.detail.oneOffItems')}
+                    </h3>
+                    <div className="overflow-hidden rounded-lg border">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            {canEdit && (
+                              <th className="w-8 px-2 py-3" />
+                            )}
+                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                              {t('contracts.item.product')}
+                            </th>
+                            <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                              {t('contracts.item.quantity')}
+                            </th>
+                            <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                              {t('contracts.item.unitPriceShort')}
+                            </th>
+                            <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                              {t('contracts.item.totalPriceShort')}
+                            </th>
+                            {canEdit && (
+                              <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                                {/* Actions */}
+                              </th>
+                            )}
+                          </tr>
+                        </thead>
+                        <SortableContext items={oneOffItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
+                          <tbody className="divide-y divide-gray-200 bg-white">
+                            {oneOffItems.map((item) => {
+                              const itemName = item.product?.name || item.description || '-'
+                              const oneOffTotal = parseFloat(item.effectivePrice) * item.quantity
+                              return (
+                                <SortableRow key={item.id} id={item.id} disabled={!canEdit}>
+                                  {({ dragHandleProps, style, ref }) => (
+                                    <tr ref={ref} style={style}>
+                                      {canEdit && (
+                                        <td className="w-8 px-2 py-4">
+                                          <span {...dragHandleProps} className="text-gray-400 hover:text-gray-600">
+                                            <GripVertical className="h-4 w-4" />
+                                          </span>
+                                        </td>
+                                      )}
+                                      <td className="px-6 py-4">
+                                        <span className="font-medium text-gray-900">{itemName}</span>
+                                        {item.product?.sku && (
+                                          <div className="text-xs text-gray-500">{item.product.sku}</div>
+                                        )}
+                                        {item.product && item.description && (
+                                          <div className="text-xs text-gray-500 whitespace-pre-wrap">{item.description}</div>
+                                        )}
+                                      </td>
+                                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
+                                        {item.quantity}
+                                      </td>
+                                      <td className={`whitespace-nowrap px-6 py-4 text-right text-sm ${parseFloat(item.effectivePrice) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                                        <div className="flex items-center justify-end gap-1">
+                                          {item.priceLocked && (
+                                            <span title={item.priceLockedUntil ? `${t('contracts.item.priceLockedUntil')}: ${formatDate(item.priceLockedUntil)}` : t('contracts.item.priceLocked')}>
+                                              <Lock className="h-3 w-3 text-amber-500" />
+                                            </span>
+                                          )}
+                                          <span>{formatCurrency(item.effectivePrice)}</span>
+                                        </div>
+                                      </td>
+                                      <td className={`whitespace-nowrap px-6 py-4 text-right text-sm font-medium ${oneOffTotal < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                                        {formatCurrency(oneOffTotal.toString())}
+                                      </td>
+                                      {canEdit && (
+                                        <td className="whitespace-nowrap px-6 py-4 text-right">
+                                          <button
+                                            onClick={() => setEditingItem(item)}
+                                            className="mr-2 text-gray-400 hover:text-blue-600"
+                                          >
+                                            <Edit className="h-4 w-4" />
+                                          </button>
+                                          <RemoveItemButton
+                                            itemId={item.id}
+                                            itemName={itemName}
+                                            onSuccess={() => refetch()}
+                                          />
+                                        </td>
+                                      )}
+                                    </tr>
+                                  )}
+                                </SortableRow>
+                              )
+                            })}
+                          </tbody>
+                        </SortableContext>
+                      </table>
+                    </div>
+                  </div>
+                </DndContext>
               )}
 
               {/* Invoice Text */}
@@ -1665,6 +1813,9 @@ function EditItemModal({
   onSuccess: () => void
 }) {
   const { t, i18n } = useTranslation()
+  const [productId, setProductId] = useState(item.product?.id || '')
+  const [productSearchOpen, setProductSearchOpen] = useState(false)
+  const [productSearchTerm, setProductSearchTerm] = useState('')
   const [description, setDescription] = useState(item.description || '')
   const [quantity, setQuantity] = useState(item.quantity)
   const [unitPrice, setUnitPrice] = useState(item.unitPrice)
@@ -1686,6 +1837,25 @@ function EditItemModal({
   const [newPeriodPricePeriod, setNewPeriodPricePeriod] = useState('monthly')
   const [newPeriodSource, setNewPeriodSource] = useState('fixed')
   const [error, setError] = useState<string | null>(null)
+
+  const { data: productsData, loading: loadingProducts } = useQuery(PRODUCTS_FOR_SELECT_QUERY, {
+    variables: { search: productSearchTerm || null },
+  })
+
+  const products = [...(productsData?.products?.items || []) as Product[]].sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
+  const selectedProduct = products.find((p) => p.id === productId) || (item.product ? { id: item.product.id, name: item.product.name, sku: item.product.sku, isActive: true, currentPrice: null } as Product : null)
+
+  const handleProductSelect = (id: string) => {
+    setProductId(id)
+    const product = products.find((p) => p.id === id)
+    if (product?.currentPrice?.price) {
+      setUnitPrice(product.currentPrice.price)
+    }
+    setProductSearchOpen(false)
+  }
 
   const itemDisplayName = item.product?.name || item.description || `Item ${item.id}`
 
@@ -1814,6 +1984,7 @@ function EditItemModal({
         variables: {
           input: {
             id: item.id,
+            productId: productId || null,
             description,
             quantity,
             unitPrice,
@@ -1855,16 +2026,93 @@ function EditItemModal({
         )}
 
         <div className="space-y-4 py-4">
-          {/* Description */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">{t('contracts.item.description')}</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder={t('contracts.item.descriptionPlaceholder')}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              rows={2}
-            />
+          {/* Product + Description - 2 columns */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('contracts.item.product')}</label>
+              <Popover open={productSearchOpen} onOpenChange={setProductSearchOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={productSearchOpen}
+                    className="w-full justify-between"
+                  >
+                    {selectedProduct ? (
+                      <span>
+                        {selectedProduct.name}
+                        {selectedProduct.sku && (
+                          <span className="ml-2 text-muted-foreground">({selectedProduct.sku})</span>
+                        )}
+                      </span>
+                    ) : (
+                      t('contracts.form.selectProduct')
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder={t('products.searchPlaceholder')}
+                      value={productSearchTerm}
+                      onValueChange={setProductSearchTerm}
+                    />
+                    <CommandList>
+                      {loadingProducts && (
+                        <div className="flex items-center justify-center py-6">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        </div>
+                      )}
+                      <CommandEmpty>{t('products.noProducts')}</CommandEmpty>
+                      <CommandGroup>
+                        {products.map((product) => (
+                          <CommandItem
+                            key={product.id}
+                            value={product.id}
+                            onSelect={() => handleProductSelect(product.id)}
+                          >
+                            <Check
+                              className={cn(
+                                'mr-2 h-4 w-4',
+                                productId === product.id ? 'opacity-100' : 'opacity-0'
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span>{product.name}</span>
+                              {product.sku && (
+                                <span className="text-xs text-muted-foreground">{product.sku}</span>
+                              )}
+                            </div>
+                            {product.currentPrice?.price && (
+                              <span className="ml-auto text-sm text-muted-foreground">
+                                {new Intl.NumberFormat('de-DE', {
+                                  style: 'currency',
+                                  currency: 'EUR',
+                                }).format(parseFloat(product.currentPrice.price))}
+                              </span>
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('contracts.item.description')}</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={t('contracts.item.descriptionPlaceholder')}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                rows={1}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('contracts.item.descriptionHint')}
+              </p>
+            </div>
           </div>
 
           {/* Quantity, Unit Price, Price Period, Price Source - 4 columns */}

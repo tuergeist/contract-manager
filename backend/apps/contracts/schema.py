@@ -105,6 +105,7 @@ class ContractItemType:
     # Price lock fields
     price_locked: bool = False
     price_locked_until: date | None = None
+    sort_order: int | None = None
     # Year-specific pricing
     price_periods: List[ContractItemPriceType] = strawberry.field(default_factory=list)
 
@@ -199,6 +200,7 @@ class ContractType:
                     order_confirmation_number=item.order_confirmation_number,
                     price_locked=item.price_locked,
                     price_locked_until=item.price_locked_until,
+                    sort_order=item.sort_order,
                     price_periods=price_periods,
                 )
             )
@@ -430,6 +432,7 @@ class ContractItemInput:
 @strawberry.input
 class UpdateContractItemInput:
     id: strawberry.ID
+    product_id: strawberry.ID | None = None
     description: str | None = None
     quantity: int | None = None
     unit_price: Decimal | None = None
@@ -849,6 +852,14 @@ class PdfImportMetadataInput:
     po_number: str | None = UNSET
     order_confirmation_number: str | None = UNSET
     min_duration_months: int | None = UNSET
+
+
+@strawberry.input
+class ReorderContractItemsInput:
+    """Input for reordering contract items."""
+    contract_id: strawberry.ID
+    item_ids: List[strawberry.ID]
+    is_one_off: bool = False
 
 
 @strawberry.input
@@ -1991,6 +2002,7 @@ class ContractMutation:
                     order_confirmation_number=item.order_confirmation_number,
                     price_locked=item.price_locked,
                     price_locked_until=item.price_locked_until,
+                    sort_order=item.sort_order,
                     price_periods=[],  # Newly created items have no price periods
                 ),
                 success=True,
@@ -2022,12 +2034,23 @@ class ContractMutation:
                     "unit_price": str(item.unit_price),
                     "price_source": item.price_source,
                     "description": item.description,
+                    "product_id": str(item.product_id) if item.product_id else None,
+                    "product_name": item.product.name if item.product else None,
                 }
 
                 # Check if price is locked
                 is_price_locked = item.price_locked and (
                     item.price_locked_until is None or item.price_locked_until >= date.today()
                 )
+
+                # Handle product change
+                if input.product_id is not None:
+                    product = Product.objects.filter(
+                        tenant=user.tenant, id=input.product_id
+                    ).first()
+                    if not product:
+                        return ContractItemResult(error="Product not found")
+                    item.product = product
 
                 if input.description is not None:
                     item.description = input.description
@@ -2064,7 +2087,10 @@ class ContractMutation:
                 if item.contract.status != Contract.Status.DRAFT:
                     # Determine amendment type
                     item_name = item.product.name if item.product else item.description[:50]
-                    if input.quantity is not None and old_values["quantity"] != input.quantity:
+                    if input.product_id is not None and old_values["product_id"] != str(input.product_id):
+                        amendment_type = ContractAmendment.AmendmentType.TERMS_CHANGED
+                        description = f"Changed product from {old_values['product_name'] or 'none'} to {item_name}"
+                    elif input.quantity is not None and old_values["quantity"] != input.quantity:
                         amendment_type = ContractAmendment.AmendmentType.QUANTITY_CHANGED
                         description = f"Changed {item_name} quantity from {old_values['quantity']} to {input.quantity}"
                     elif input.unit_price is not None:
@@ -2090,6 +2116,7 @@ class ContractMutation:
                                 "unit_price": str(item.unit_price),
                                 "price_source": item.price_source,
                                 "description": item.description,
+                                "product_id": str(item.product_id) if item.product_id else None,
                             },
                         },
                     )
@@ -2130,6 +2157,7 @@ class ContractMutation:
                     order_confirmation_number=item.order_confirmation_number,
                     price_locked=item.price_locked,
                     price_locked_until=item.price_locked_until,
+                    sort_order=item.sort_order,
                     price_periods=price_periods,
                 ),
                 success=True,
@@ -3216,3 +3244,40 @@ class ContractImportMutation:
                 )
         except Exception as e:
             return PdfImportResultType(success=False, error=str(e))
+
+    @strawberry.mutation
+    def reorder_contract_items(
+        self, info: Info[Context, None], input: ReorderContractItemsInput
+    ) -> DeleteResult:
+        """Reorder contract items by setting sort_order based on position in item_ids list."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return DeleteResult(error=err)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        contract = Contract.objects.filter(
+            tenant=user.tenant, id=input.contract_id
+        ).first()
+        if not contract:
+            return DeleteResult(error="Contract not found")
+
+        try:
+            with transaction.atomic():
+                items = ContractItem.objects.filter(
+                    tenant=user.tenant,
+                    contract=contract,
+                    is_one_off=input.is_one_off,
+                )
+                item_map = {str(item.id): item for item in items}
+
+                for position, item_id in enumerate(input.item_ids):
+                    item = item_map.get(str(item_id))
+                    if not item:
+                        return DeleteResult(error=f"Item {item_id} not found in contract")
+                    item.sort_order = position
+                    item.save(update_fields=["sort_order"])
+
+            return DeleteResult(success=True)
+        except Exception as e:
+            return DeleteResult(error=str(e))
