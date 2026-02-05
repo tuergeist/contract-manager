@@ -727,6 +727,11 @@
     "poNumber": "PO Number",
     "orderConfirmationNumber": "Order Confirmation",
     "minDurationMonths": "Min. Duration (months)",
-    "discountAmount": "Discount Amount"
+    "discountAmount": "Discount Amount",
+    "importSummaryTitle": "Import Summary",
+    "summaryAddItems": "{{count}} new line item(s) will be added to the contract.",
+    "summarySetMetadata": "{{count}} metadata field(s) will be set.",
+    "summaryOverwriteMetadata": "{{count}} metadata field(s) will be overwritten:",
+    "summaryNoDelete": "Existing line items will not be modified or deleted."
   }
 }

@@ -215,9 +215,18 @@ export function PdfAnalysisPanel({
     }
   }
 
-  const selectedCount =
-    Object.values(selectedItems).filter(Boolean).length +
-    Object.values(selectedMetadata).filter(Boolean).length
+  const selectedNewItems = analysisResult
+    ? analysisResult.items.filter((_: ComparisonItem, idx: number) => selectedItems[idx])
+    : []
+  const selectedMetadataFields = analysisResult
+    ? analysisResult.metadataComparisons.filter(
+        (mc: MetadataComparison) => selectedMetadata[mc.fieldName]
+      )
+    : []
+  const metadataOverwrites = selectedMetadataFields.filter(
+    (mc: MetadataComparison) => mc.currentValue && mc.differs
+  )
+  const selectedCount = selectedNewItems.length + selectedMetadataFields.length
 
   // Loading state
   if (loading) {
@@ -445,6 +454,41 @@ export function PdfAnalysisPanel({
             </table>
           </div>
         </div>
+
+        {/* Import Summary */}
+        {selectedCount > 0 && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm space-y-2">
+            <h4 className="font-semibold text-blue-900">{t('pdfAnalysis.importSummaryTitle')}</h4>
+            {selectedNewItems.length > 0 && (
+              <p className="text-blue-800">
+                {t('pdfAnalysis.summaryAddItems', { count: selectedNewItems.length })}
+              </p>
+            )}
+            {selectedMetadataFields.length > 0 && metadataOverwrites.length === 0 && (
+              <p className="text-blue-800">
+                {t('pdfAnalysis.summarySetMetadata', { count: selectedMetadataFields.length })}
+              </p>
+            )}
+            {metadataOverwrites.length > 0 && (
+              <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded p-3 -mx-1">
+                <p className="font-medium">
+                  {t('pdfAnalysis.summaryOverwriteMetadata', { count: metadataOverwrites.length })}
+                </p>
+                <ul className="mt-1 space-y-0.5 ml-4 list-disc">
+                  {metadataOverwrites.map((mc: MetadataComparison) => (
+                    <li key={mc.fieldName}>
+                      {t(METADATA_LABEL_KEYS[mc.fieldName] || mc.fieldName)}:{' '}
+                      <span className="line-through text-amber-600">{mc.currentValue}</span>
+                      {' → '}
+                      <span className="font-medium">{mc.extractedValue}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <p className="text-blue-700 text-xs">{t('pdfAnalysis.summaryNoDelete')}</p>
+          </div>
+        )}
 
         {/* Import Error */}
         {importError && (

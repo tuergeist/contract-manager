@@ -727,6 +727,11 @@
     "poNumber": "Bestellnummer",
     "orderConfirmationNumber": "Auftragsbestätigung",
     "minDurationMonths": "Mindestlaufzeit (Monate)",
-    "discountAmount": "Rabattbetrag"
+    "discountAmount": "Rabattbetrag",
+    "importSummaryTitle": "Import-Zusammenfassung",
+    "summaryAddItems": "{{count}} neue Position(en) werden dem Vertrag hinzugefügt.",
+    "summarySetMetadata": "{{count}} Metadatenfeld(er) werden gesetzt.",
+    "summaryOverwriteMetadata": "{{count}} Metadatenfeld(er) werden überschrieben:",
+    "summaryNoDelete": "Bestehende Positionen werden nicht verändert oder gelöscht."
   }
 }
