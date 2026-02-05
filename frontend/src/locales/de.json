@@ -730,8 +730,9 @@
     "discountAmount": "Rabattbetrag",
     "importSummaryTitle": "Import-Zusammenfassung",
     "summaryAddItems": "{{count}} neue Position(en) werden dem Vertrag hinzugefügt.",
+    "summaryUpdateItems": "{{count}} bestehende Position(en) werden überschrieben.",
     "summarySetMetadata": "{{count}} Metadatenfeld(er) werden gesetzt.",
     "summaryOverwriteMetadata": "{{count}} Metadatenfeld(er) werden überschrieben:",
-    "summaryNoDelete": "Bestehende Positionen werden nicht verändert oder gelöscht."
+    "summaryNoDeleteNote": "Nicht ausgewählte Positionen werden nicht verändert oder gelöscht."
   }
 }

@@ -843,6 +843,7 @@ class PdfImportItemInput:
     price_period: str
     is_one_off: bool = False
     product_id: strawberry.ID | None = None
+    existing_item_id: strawberry.ID | None = None
 
 
 @strawberry.input
@@ -878,6 +879,7 @@ class PdfImportResultType:
     success: bool
     error: str | None = None
     created_items_count: int = 0
+    updated_items_count: int = 0
 
 
 @strawberry.type
@@ -3180,6 +3182,7 @@ class ContractImportMutation:
         try:
             with transaction.atomic():
                 created_count = 0
+                updated_count = 0
 
                 for item_input in input.items:
                     product = None
@@ -3193,40 +3196,85 @@ class ContractImportMutation:
                                 error=f"Product not found: {item_input.product_id}",
                             )
 
-                    item = ContractItem.objects.create(
-                        tenant=user.tenant,
-                        contract=contract,
-                        product=product,
-                        description=item_input.description,
-                        quantity=item_input.quantity,
-                        unit_price=item_input.unit_price,
-                        price_period=item_input.price_period,
-                        price_source=ContractItem.PriceSource.CUSTOM,
-                        is_one_off=item_input.is_one_off,
-                    )
-
-                    # Create amendment for non-draft contracts
-                    if contract.status != Contract.Status.DRAFT:
-                        item_name = product.name if product else item_input.description[:50]
-                        ContractAmendment.objects.create(
+                    # Update existing item
+                    if item_input.existing_item_id:
+                        existing_item = ContractItem.objects.filter(
                             tenant=user.tenant,
                             contract=contract,
-                            effective_date=date.today(),
-                            type=ContractAmendment.AmendmentType.PRODUCT_ADDED,
-                            description=f"Added {item_name} x{item_input.quantity} (PDF import)",
-                            changes={
-                                "product_id": str(product.id) if product else None,
-                                "product_name": product.name if product else None,
-                                "description": item_input.description,
-                                "quantity": item_input.quantity,
-                                "unit_price": str(item_input.unit_price),
-                                "price_period": item_input.price_period,
-                                "is_one_off": item_input.is_one_off,
-                                "source": "pdf_import",
-                            },
+                            id=item_input.existing_item_id,
+                        ).first()
+                        if not existing_item:
+                            return PdfImportResultType(
+                                success=False,
+                                error=f"Existing item not found: {item_input.existing_item_id}",
+                            )
+
+                        existing_item.product = product
+                        existing_item.description = item_input.description
+                        existing_item.quantity = item_input.quantity
+                        existing_item.unit_price = item_input.unit_price
+                        existing_item.price_period = item_input.price_period
+                        existing_item.price_source = ContractItem.PriceSource.CUSTOM
+                        existing_item.is_one_off = item_input.is_one_off
+                        existing_item.save()
+
+                        if contract.status != Contract.Status.DRAFT:
+                            item_name = product.name if product else item_input.description[:50]
+                            ContractAmendment.objects.create(
+                                tenant=user.tenant,
+                                contract=contract,
+                                effective_date=date.today(),
+                                type=ContractAmendment.AmendmentType.PRICE_CHANGE,
+                                description=f"Updated {item_name} (PDF import)",
+                                changes={
+                                    "item_id": str(existing_item.id),
+                                    "product_id": str(product.id) if product else None,
+                                    "product_name": product.name if product else None,
+                                    "description": item_input.description,
+                                    "quantity": item_input.quantity,
+                                    "unit_price": str(item_input.unit_price),
+                                    "price_period": item_input.price_period,
+                                    "is_one_off": item_input.is_one_off,
+                                    "source": "pdf_import",
+                                },
+                            )
+
+                        updated_count += 1
+                    else:
+                        # Create new item
+                        ContractItem.objects.create(
+                            tenant=user.tenant,
+                            contract=contract,
+                            product=product,
+                            description=item_input.description,
+                            quantity=item_input.quantity,
+                            unit_price=item_input.unit_price,
+                            price_period=item_input.price_period,
+                            price_source=ContractItem.PriceSource.CUSTOM,
+                            is_one_off=item_input.is_one_off,
                         )
 
-                    created_count += 1
+                        if contract.status != Contract.Status.DRAFT:
+                            item_name = product.name if product else item_input.description[:50]
+                            ContractAmendment.objects.create(
+                                tenant=user.tenant,
+                                contract=contract,
+                                effective_date=date.today(),
+                                type=ContractAmendment.AmendmentType.PRODUCT_ADDED,
+                                description=f"Added {item_name} x{item_input.quantity} (PDF import)",
+                                changes={
+                                    "product_id": str(product.id) if product else None,
+                                    "product_name": product.name if product else None,
+                                    "description": item_input.description,
+                                    "quantity": item_input.quantity,
+                                    "unit_price": str(item_input.unit_price),
+                                    "price_period": item_input.price_period,
+                                    "is_one_off": item_input.is_one_off,
+                                    "source": "pdf_import",
+                                },
+                            )
+
+                        created_count += 1
 
                 # Update contract metadata
                 if input.metadata:
@@ -3241,6 +3289,7 @@ class ContractImportMutation:
                 return PdfImportResultType(
                     success=True,
                     created_items_count=created_count,
+                    updated_items_count=updated_count,
                 )
         except Exception as e:
             return PdfImportResultType(success=False, error=str(e))

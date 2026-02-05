@@ -54,6 +54,7 @@ const IMPORT_PDF_MUTATION = gql`
       success
       error
       createdItemsCount
+      updatedItemsCount
     }
   }
 `
@@ -145,8 +146,8 @@ export function PdfAnalysisPanel({
   // Initialize selection state once data loads
   if (analysisResult && !analysisResult.error && !initialized) {
     const items: Record<number, boolean> = {}
-    analysisResult.items.forEach((item: ComparisonItem, idx: number) => {
-      items[idx] = item.status === 'new'
+    analysisResult.items.forEach((_: ComparisonItem, idx: number) => {
+      items[idx] = false
     })
     setSelectedItems(items)
 
@@ -176,6 +177,7 @@ export function PdfAnalysisPanel({
           pricePeriod: item.extracted.pricePeriod,
           isOneOff: item.extracted.isOneOff,
           productId,
+          ...(item.existingItemId ? { existingItemId: String(item.existingItemId) } : {}),
         }
       })
 
@@ -216,7 +218,14 @@ export function PdfAnalysisPanel({
   }
 
   const selectedNewItems = analysisResult
-    ? analysisResult.items.filter((_: ComparisonItem, idx: number) => selectedItems[idx])
+    ? analysisResult.items.filter(
+        (item: ComparisonItem, idx: number) => selectedItems[idx] && item.status !== 'existing'
+      )
+    : []
+  const selectedExistingItems = analysisResult
+    ? analysisResult.items.filter(
+        (item: ComparisonItem, idx: number) => selectedItems[idx] && item.status === 'existing'
+      )
     : []
   const selectedMetadataFields = analysisResult
     ? analysisResult.metadataComparisons.filter(
@@ -226,7 +235,7 @@ export function PdfAnalysisPanel({
   const metadataOverwrites = selectedMetadataFields.filter(
     (mc: MetadataComparison) => mc.currentValue && mc.differs
   )
-  const selectedCount = selectedNewItems.length + selectedMetadataFields.length
+  const selectedCount = selectedNewItems.length + selectedExistingItems.length + selectedMetadataFields.length
 
   // Loading state
   if (loading) {
@@ -368,12 +377,11 @@ export function PdfAnalysisPanel({
                   return (
                     <tr
                       key={idx}
-                      className={isExisting ? 'bg-gray-50 opacity-60' : ''}
+                      className={isExisting ? 'bg-gray-50' : ''}
                     >
                       <td className="px-4 py-2">
                         <Checkbox
                           checked={selectedItems[idx] || false}
-                          disabled={isExisting}
                           onCheckedChange={(checked) =>
                             setSelectedItems((prev) => ({ ...prev, [idx]: !!checked }))
                           }
@@ -400,30 +408,24 @@ export function PdfAnalysisPanel({
                         {PERIOD_LABELS[item.extracted.pricePeriod] || item.extracted.pricePeriod}
                       </td>
                       <td className="px-4 py-2 text-sm">
-                        {isExisting ? (
-                          <span className="text-gray-500">
-                            {item.productMatch?.productName || '-'}
-                          </span>
-                        ) : (
-                          <Select
-                            value={currentProductId}
-                            onValueChange={(value) =>
-                              setProductOverrides((prev) => ({ ...prev, [idx]: value }))
-                            }
-                          >
-                            <SelectTrigger className="h-8 w-48 text-xs">
-                              <SelectValue placeholder={t('pdfAnalysis.selectProduct')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {products.map((p: { id: string; name: string }) => (
-                                <SelectItem key={p.id} value={p.id}>
-                                  {p.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-                        {item.productMatch && !isExisting && (
+                        <Select
+                          value={currentProductId}
+                          onValueChange={(value) =>
+                            setProductOverrides((prev) => ({ ...prev, [idx]: value }))
+                          }
+                        >
+                          <SelectTrigger className="h-8 w-48 text-xs">
+                            <SelectValue placeholder={t('pdfAnalysis.selectProduct')} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {products.map((p: { id: string; name: string }) => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {item.productMatch && (
                           <span className="mt-1 block text-xs text-gray-400">
                             {t('pdfAnalysis.confidence')}:{' '}
                             {Math.round(item.productMatch.confidence * 100)}%
@@ -464,6 +466,11 @@ export function PdfAnalysisPanel({
                 {t('pdfAnalysis.summaryAddItems', { count: selectedNewItems.length })}
               </p>
             )}
+            {selectedExistingItems.length > 0 && (
+              <p className="text-amber-800">
+                {t('pdfAnalysis.summaryUpdateItems', { count: selectedExistingItems.length })}
+              </p>
+            )}
             {selectedMetadataFields.length > 0 && metadataOverwrites.length === 0 && (
               <p className="text-blue-800">
                 {t('pdfAnalysis.summarySetMetadata', { count: selectedMetadataFields.length })}
@@ -486,7 +493,7 @@ export function PdfAnalysisPanel({
                 </ul>
               </div>
             )}
-            <p className="text-blue-700 text-xs">{t('pdfAnalysis.summaryNoDelete')}</p>
+            <p className="text-blue-700 text-xs">{t('pdfAnalysis.summaryNoDeleteNote')}</p>
           </div>
         )}
 
