@@ -31,6 +31,7 @@ class Contract(TenantModel):
         PAUSED = "paused", "Paused"
         CANCELLED = "cancelled", "Cancelled"
         ENDED = "ended", "Ended"
+        DELETED = "deleted", "Deleted"
 
     class BillingInterval(models.TextChoices):
         MONTHLY = "monthly", "Monthly"

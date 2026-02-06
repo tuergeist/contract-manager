@@ -118,7 +118,8 @@
       "active": "Aktiv",
       "paused": "Pausiert",
       "cancelled": "Gekündigt",
-      "ended": "Beendet"
+      "ended": "Beendet",
+      "deleted": "Gelöscht"
     },
     "billingInterval": {
       "monthly": "Monatlich",
@@ -274,6 +275,10 @@
       "delete": "Löschen",
       "edit": "Bearbeiten",
       "confirmCancel": "Möchten Sie diesen Vertrag wirklich kündigen?"
+    },
+    "deleteConfirm": {
+      "title": "Vertrag löschen",
+      "message": "Möchten Sie \"{{name}}\" wirklich löschen? Der Vertrag wird aus normalen Ansichten ausgeblendet, kann aber durch Filtern nach gelöschten Verträgen gefunden werden."
     },
     "statusTransition": {
       "activate": "Aktivieren",

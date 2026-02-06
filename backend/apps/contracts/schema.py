@@ -1437,6 +1437,7 @@ class ContractQuery:
         info: Info[Context, None],
         search: str | None = None,
         status: str | None = None,
+        include_deleted: bool = False,
         page: int = 1,
         page_size: int = 20,
         sort_by: str | None = "updated_at",
@@ -1455,6 +1456,10 @@ class ContractQuery:
             )
 
         queryset = Contract.objects.filter(tenant=user.tenant).select_related("customer")
+
+        # Exclude deleted by default unless specifically requested or filtering by deleted status
+        if not include_deleted and status != "deleted":
+            queryset = queryset.exclude(status=Contract.Status.DELETED)
 
         # Search filter (by customer name, contract name, or NetSuite IDs)
         if search:
@@ -2240,6 +2245,50 @@ class ContractMutation:
                     changes={
                         "action": "cancellation",
                         "effective_date": str(effective_date),
+                    },
+                )
+
+            return ContractResult(contract=contract, success=True)
+        except Exception as e:
+            return ContractResult(error=str(e))
+
+    @strawberry.mutation
+    def delete_contract(
+        self,
+        info: Info[Context, None],
+        contract_id: strawberry.ID,
+    ) -> ContractResult:
+        """Soft delete a contract (set status to deleted)."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractResult(error=err)
+        if not user.tenant:
+            return ContractResult(error="No tenant assigned")
+
+        contract = Contract.objects.filter(
+            tenant=user.tenant, id=contract_id
+        ).first()
+        if not contract:
+            return ContractResult(error="Contract not found")
+
+        if contract.status == Contract.Status.DELETED:
+            return ContractResult(error="Contract is already deleted")
+
+        try:
+            with transaction.atomic():
+                old_status = contract.status
+                contract.status = Contract.Status.DELETED
+                contract.save()
+
+                ContractAmendment.objects.create(
+                    tenant=user.tenant,
+                    contract=contract,
+                    effective_date=date.today(),
+                    type=ContractAmendment.AmendmentType.TERMS_CHANGED,
+                    description=f"Contract deleted (was: {old_status})",
+                    changes={
+                        "action": "deletion",
+                        "previous_status": old_status,
                     },
                 )
 

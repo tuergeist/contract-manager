@@ -395,6 +395,19 @@ const REORDER_CONTRACT_ITEMS_MUTATION = gql`
   }
 `
 
+const DELETE_CONTRACT_MUTATION = gql`
+  mutation DeleteContract($contractId: ID!) {
+    deleteContract(contractId: $contractId) {
+      success
+      error
+      contract {
+        id
+        status
+      }
+    }
+  }
+`
+
 
 interface Product {
   id: string
@@ -555,6 +568,7 @@ export function ContractDetail() {
   const [editedInvoiceText, setEditedInvoiceText] = useState('')
   const [todoModalOpen, setTodoModalOpen] = useState(false)
   const [todoContext, setTodoContext] = useState<TodoContext | undefined>()
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const { data, loading, error, refetch } = useQuery(CONTRACT_DETAIL_QUERY, {
     variables: { id },
@@ -563,6 +577,7 @@ export function ContractDetail() {
   const [updateNotes, { loading: savingNotes }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
   const [updateInvoiceText, { loading: savingInvoiceText }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
   const [reorderItems] = useMutation(REORDER_CONTRACT_ITEMS_MUTATION)
+  const [deleteContract, { loading: deletingContract }] = useMutation(DELETE_CONTRACT_MUTATION)
 
   const contract = data?.contract as Contract | undefined
 
@@ -571,7 +586,7 @@ export function ContractDetail() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
-  const canEdit = contract ? contract.status !== 'cancelled' && contract.status !== 'ended' : false
+  const canEdit = contract ? contract.status !== 'cancelled' && contract.status !== 'ended' && contract.status !== 'deleted' : false
 
   const recurringItems = useMemo(
     () => contract?.items.filter(item => !item.isOneOff) || [],
@@ -581,6 +596,17 @@ export function ContractDetail() {
     () => contract?.items.filter(item => item.isOneOff) || [],
     [contract?.items]
   )
+
+  const handleDeleteContract = async () => {
+    if (!contract) return
+    const result = await deleteContract({
+      variables: { contractId: contract.id },
+    })
+    if (result.data?.deleteContract?.success) {
+      setShowDeleteConfirm(false)
+      navigate('/contracts')
+    }
+  }
 
   const handleDragEnd = async (event: DragEndEvent, isOneOff: boolean) => {
     const { active, over } = event
@@ -695,6 +721,8 @@ export function ContractDetail() {
         return 'bg-red-100 text-red-800'
       case 'ended':
         return 'bg-gray-100 text-gray-800'
+      case 'deleted':
+        return 'bg-gray-200 text-gray-500'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -810,8 +838,43 @@ export function ContractDetail() {
               {t('contracts.detail.details')}
             </Button>
           </Link>
+          {contract.status !== 'deleted' && (
+            <Button
+              variant="outline"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              onClick={() => setShowDeleteConfirm(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {t('contracts.actions.delete')}
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('contracts.deleteConfirm.title')}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {t('contracts.deleteConfirm.message', { name: contract.name || contract.customer.name })}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+              {t('contracts.actions.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteContract}
+              disabled={deletingContract}
+            >
+              {deletingContract && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {t('contracts.actions.delete')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Overview Cards */}
       <div className="mb-6 grid gap-4 md:grid-cols-5">
@@ -1344,7 +1407,7 @@ export function ContractDetail() {
           contractId={id!}
           attachments={contract.attachments}
           links={contract.links}
-          canEdit={contract.status !== 'cancelled' && contract.status !== 'ended'}
+          canEdit={contract.status !== 'cancelled' && contract.status !== 'ended' && contract.status !== 'deleted'}
           onRefetch={() => refetch()}
         />
       )}

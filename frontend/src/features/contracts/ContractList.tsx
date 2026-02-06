@@ -87,7 +87,7 @@ type SortOrder = 'asc' | 'desc'
 
 const PAGE_SIZE = 20
 
-const CONTRACT_STATUSES = ['draft', 'active', 'paused', 'cancelled', 'ended'] as const
+const CONTRACT_STATUSES = ['draft', 'active', 'paused', 'cancelled', 'ended', 'deleted'] as const
 
 export function ContractList() {
   const { t, i18n } = useTranslation()
@@ -129,6 +129,8 @@ export function ContractList() {
         return 'bg-red-100 text-red-800'
       case 'ended':
         return 'bg-gray-100 text-gray-800'
+      case 'deleted':
+        return 'bg-gray-200 text-gray-500 line-through'
       default:
         return 'bg-gray-100 text-gray-800'
     }
