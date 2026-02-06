@@ -747,8 +747,8 @@ export function ContractDetail() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4 min-w-0">
           <button
             onClick={() => navigate('/contracts')}
             className="inline-flex items-center text-gray-600 hover:text-gray-900"
@@ -818,7 +818,7 @@ export function ContractDetail() {
           </div>
         </div>
         {/* Action Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
           <Button
             variant="outline"
             onClick={() => {
