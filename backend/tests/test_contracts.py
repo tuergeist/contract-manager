@@ -914,3 +914,177 @@ class TestContractAttachments:
         contract.delete()
 
         assert not ContractAttachment.objects.filter(id=attachment_id).exists()
+
+
+# =============================================================================
+# Contract Total Value Tests with Period-Specific Pricing
+# =============================================================================
+
+
+class TestContractTotalValueWithPricePeriods:
+    """Tests for contract total_value calculation with period-specific pricing."""
+
+    def test_total_value_with_multiple_price_periods(self, tenant, customer, product):
+        """Test total_value correctly sums values across different price periods.
+
+        Contract: 4 years (2025-2028), annual billing
+        Item: 1x Product with different prices per year
+        - Year 1 (2025): €100/month
+        - Year 2 (2026): €120/month
+        - Year 3 (2027): €140/month
+        - Year 4 (2028): €160/month
+
+        Expected: (100*12) + (120*12) + (140*12) + (160*12) = 6240
+        """
+        from apps.contracts.models import ContractItemPrice
+        from apps.contracts.schema import calculate_contract_total_value
+
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Multi-Year Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            end_date=date(2028, 12, 31),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.ANNUAL,
+        )
+
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("100.00"),  # Base price (should not be used when periods exist)
+            price_period=ContractItem.PricePeriod.MONTHLY,
+        )
+
+        # Create price periods for each year
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2025, 1, 1),
+            valid_to=date(2025, 12, 31),
+            unit_price=Decimal("100.00"),
+            price_period=ContractItemPrice.PricePeriod.MONTHLY,
+        )
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2026, 1, 1),
+            valid_to=date(2026, 12, 31),
+            unit_price=Decimal("120.00"),
+            price_period=ContractItemPrice.PricePeriod.MONTHLY,
+        )
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2027, 1, 1),
+            valid_to=date(2027, 12, 31),
+            unit_price=Decimal("140.00"),
+            price_period=ContractItemPrice.PricePeriod.MONTHLY,
+        )
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2028, 1, 1),
+            valid_to=date(2028, 12, 31),
+            unit_price=Decimal("160.00"),
+            price_period=ContractItemPrice.PricePeriod.MONTHLY,
+        )
+
+        # Calculate total value using the standalone function
+        total = calculate_contract_total_value(contract)
+
+        # Expected: (100*12) + (120*12) + (140*12) + (160*12) = 6240
+        expected = Decimal("6240.00")
+        assert total == expected, f"Expected {expected}, got {total}"
+
+    def test_total_value_uses_base_price_for_gaps(self, tenant, customer, product):
+        """Test total_value uses base price for periods without specific pricing.
+
+        Contract: 3 years (2025-2027)
+        Item: 1x Product, base price €100/month
+        - Year 1 (2025): specific price €80/month
+        - Year 2 (2026): no specific price (should use base €100/month)
+        - Year 3 (2027): specific price €120/month
+
+        Expected: (80*12) + (100*12) + (120*12) = 3600
+        """
+        from apps.contracts.models import ContractItemPrice
+        from apps.contracts.schema import calculate_contract_total_value
+
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Contract with Gaps",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            end_date=date(2027, 12, 31),
+            billing_start_date=date(2025, 1, 1),
+        )
+
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("100.00"),  # Base price used for Year 2
+            price_period=ContractItem.PricePeriod.MONTHLY,
+        )
+
+        # Year 1 specific price
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2025, 1, 1),
+            valid_to=date(2025, 12, 31),
+            unit_price=Decimal("80.00"),
+            price_period=ContractItemPrice.PricePeriod.MONTHLY,
+        )
+        # Year 2: no specific price - should use base price
+
+        # Year 3 specific price
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2027, 1, 1),
+            valid_to=date(2027, 12, 31),
+            unit_price=Decimal("120.00"),
+            price_period=ContractItemPrice.PricePeriod.MONTHLY,
+        )
+
+        total = calculate_contract_total_value(contract)
+
+        # Expected: (80*12) + (100*12) + (120*12) = 3600
+        expected = Decimal("3600.00")
+        assert total == expected, f"Expected {expected}, got {total}"
+
+    def test_total_value_without_price_periods(self, tenant, customer, product):
+        """Test total_value falls back to base price when no price periods exist."""
+        from apps.contracts.schema import calculate_contract_total_value
+
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Simple Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 12, 31),
+            billing_start_date=date(2025, 1, 1),
+        )
+
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            quantity=2,
+            unit_price=Decimal("50.00"),
+            price_period=ContractItem.PricePeriod.MONTHLY,
+        )
+
+        total = calculate_contract_total_value(contract)
+
+        # Expected: 2 quantity × €50/month × 12 months = €1200
+        expected = Decimal("1200.00")
+        assert total == expected, f"Expected {expected}, got {total}"

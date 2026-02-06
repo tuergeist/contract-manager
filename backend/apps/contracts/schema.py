@@ -28,6 +28,113 @@ if TYPE_CHECKING:
     from apps.todos.schema import TodoItemType
 
 
+# =============================================================================
+# Utility Functions for Contract Value Calculation
+# =============================================================================
+
+
+def _months_between(start: date, end: date) -> int:
+    """Calculate months between two dates (inclusive of partial months)."""
+    if end <= start:
+        return 0
+    months = (end.year - start.year) * 12 + (end.month - start.month)
+    # Add 1 if end date is not the first of the month
+    if end.day > 1:
+        months += 1
+    return max(months, 0)
+
+
+def _calculate_item_value_over_duration(
+    item: "ContractItem", start: date, end: date
+) -> Decimal:
+    """Calculate total value for a recurring item over the contract duration.
+
+    Considers period-specific pricing by iterating through price periods.
+
+    The algorithm works by iterating month by month through the contract
+    and applying the correct price for each month.
+    """
+    from dateutil.relativedelta import relativedelta
+
+    # Get all price periods for this item, sorted by valid_from
+    price_periods = list(item.price_periods.order_by("valid_from"))
+
+    if not price_periods:
+        # No specific periods: use base price for entire duration
+        monthly_price = item.monthly_unit_price
+        months = _months_between(start, end)
+        return monthly_price * item.quantity * Decimal(months)
+
+    total_value = Decimal("0")
+
+    # Iterate month by month through the contract duration
+    current_month_start = date(start.year, start.month, 1)
+    end_month_start = date(end.year, end.month, 1)
+
+    while current_month_start <= end_month_start:
+        # Find the price period that applies to this month
+        applicable_period = None
+        for pp in price_periods:
+            pp_end = pp.valid_to if pp.valid_to else end
+            if pp.valid_from <= current_month_start and current_month_start <= pp_end:
+                applicable_period = pp
+                break
+
+        if applicable_period:
+            # Use period-specific price
+            period_months = item.get_period_months(applicable_period.price_period)
+            monthly_price = applicable_period.unit_price / Decimal(period_months)
+        else:
+            # Use base price
+            monthly_price = item.monthly_unit_price
+
+        total_value += monthly_price * item.quantity
+
+        # Move to next month
+        current_month_start = current_month_start + relativedelta(months=1)
+
+    return total_value
+
+
+def calculate_contract_total_value(contract: "Contract") -> Decimal:
+    """Calculate total contract value based on duration + one-off items.
+
+    For recurring items with period-specific pricing, calculates value
+    for each price period separately and sums them up.
+
+    This is a standalone function that can be called from tests or other code.
+    """
+    from dateutil.relativedelta import relativedelta
+
+    today = date.today()
+    contract_start = contract.start_date
+    contract_end = contract.get_effective_end_date()
+
+    if not contract_end:
+        # Fallback if no end date determinable
+        contract_end = contract_start + relativedelta(months=12)
+
+    # Get items with prefetched price_periods
+    items = ContractItem.objects.filter(contract=contract).prefetch_related("price_periods")
+
+    recurring_total = Decimal("0")
+    one_off_total = Decimal("0")
+
+    for item in items:
+        if item.is_one_off:
+            # One-off items use effective price × quantity
+            effective_price, period = item.get_effective_price_info(today)
+            one_off_total += effective_price * item.quantity
+        else:
+            # Recurring items: calculate value across all price periods
+            item_value = _calculate_item_value_over_duration(
+                item, contract_start, contract_end
+            )
+            recurring_total += item_value
+
+    return recurring_total + one_off_total
+
+
 @strawberry.type
 class ContractAmendmentType:
     """A contract amendment/change record."""
@@ -304,29 +411,12 @@ class ContractType:
 
     @strawberry.field
     def total_value(self) -> Decimal:
-        """Calculate total contract value based on duration + one-off items."""
-        from datetime import date
-        today = date.today()
+        """Calculate total contract value based on duration + one-off items.
 
-        # Get items and calculate monthly-normalized totals
-        items = ContractItem.objects.filter(contract=self)
-
-        monthly_recurring = Decimal("0")
-        one_off_total = Decimal("0")
-
-        for item in items:
-            if item.is_one_off:
-                # One-off items use effective price × quantity
-                effective_price, period = item.get_effective_price_info(today)
-                one_off_total += effective_price * item.quantity
-            else:
-                # Recurring items use effective price (monthly-normalized)
-                monthly_unit_price = item.get_price_at(today, normalize_to_monthly=True)
-                monthly_recurring += monthly_unit_price * item.quantity
-
-        # Total value based on contract duration
-        duration_months = self.get_duration_months()
-        return (monthly_recurring * duration_months) + one_off_total
+        For recurring items with period-specific pricing, calculates value
+        for each price period separately and sums them up.
+        """
+        return calculate_contract_total_value(self)
 
     @strawberry.field
     def monthly_recurring_value(self) -> Decimal:

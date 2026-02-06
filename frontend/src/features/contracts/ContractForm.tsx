@@ -5,7 +5,7 @@ import { useQuery, useMutation, gql } from '@apollo/client'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2, ArrowLeft, Check, ChevronsUpDown, Edit, ExternalLink } from 'lucide-react'
+import { Loader2, ArrowLeft, Check, ChevronsUpDown, Edit, ExternalLink, Trash2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -125,6 +125,19 @@ const TRANSITION_CONTRACT_STATUS_MUTATION = gql`
   }
 `
 
+const DELETE_CONTRACT_MUTATION = gql`
+  mutation DeleteContract($contractId: ID!) {
+    deleteContract(contractId: $contractId) {
+      success
+      error
+      contract {
+        id
+        status
+      }
+    }
+  }
+`
+
 interface CustomerAddress {
   city?: string | null
 }
@@ -227,6 +240,7 @@ export function ContractForm() {
   const [error, setError] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(!isEdit) // New contracts start in edit mode
   const [statusTransition, setStatusTransition] = useState<StatusTransition | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const billingStartManuallyChanged = useRef(false)
 
   const form = useForm<FormData>({
@@ -265,6 +279,7 @@ export function ContractForm() {
 
   const [createContract, { loading: creating }] = useMutation(CREATE_CONTRACT_MUTATION)
   const [updateContract, { loading: updating }] = useMutation(UPDATE_CONTRACT_MUTATION)
+  const [deleteContract, { loading: deleting }] = useMutation(DELETE_CONTRACT_MUTATION)
 
   // Populate form when editing
   useEffect(() => {
@@ -371,6 +386,20 @@ export function ContractForm() {
   const customers = customersData?.customers?.items || []
   const isLoading = loadingContract || creating || updating
 
+  const handleDeleteContract = async () => {
+    if (!id) return
+    const result = await deleteContract({
+      variables: { contractId: id },
+    })
+    if (result.data?.deleteContract?.success) {
+      setShowDeleteConfirm(false)
+      navigate('/contracts')
+    } else {
+      setError(result.data?.deleteContract?.error || 'Delete failed')
+      setShowDeleteConfirm(false)
+    }
+  }
+
   if (isEdit && loadingContract) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -418,6 +447,16 @@ export function ContractForm() {
         </div>
         {isEdit && !isEditing && contract && (
           <div className="flex items-center gap-2">
+            {/* Delete Button - only for non-deleted/non-ended contracts */}
+            {contract.status !== 'deleted' && contract.status !== 'ended' && (
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {t('contracts.actions.delete')}
+              </Button>
+            )}
             {/* Status Transition Buttons */}
             {availableTransitions.map((transition) => (
               <Button
@@ -973,6 +1012,31 @@ export function ContractForm() {
           }}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{t('contracts.deleteConfirm.title')}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p>{t('contracts.deleteConfirm.message')}</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+              {t('contracts.actions.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteContract}
+              disabled={deleting}
+            >
+              {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {t('contracts.actions.delete')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
