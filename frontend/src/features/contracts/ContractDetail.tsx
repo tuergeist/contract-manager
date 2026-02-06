@@ -104,6 +104,7 @@ const CONTRACT_DETAIL_QUERY = gql`
       cancelledAt
       cancellationEffectiveDate
       createdAt
+      updatedAt
       totalValue
       monthlyRecurringValue
       hubspotUrl
@@ -483,6 +484,7 @@ interface Contract {
   cancelledAt: string | null
   cancellationEffectiveDate: string | null
   createdAt: string
+  updatedAt: string
   totalValue: string
   monthlyRecurringValue: string
   hubspotUrl: string | null
@@ -780,6 +782,11 @@ export function ContractDetail() {
                 </a>
               )}
             </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t('contracts.detail.createdAt')}: {formatDateTime(contract.createdAt)}
+              {' · '}
+              {t('contracts.detail.updatedAt')}: {formatDateTime(contract.updatedAt)}
+            </p>
           </div>
         </div>
         {/* Action Buttons */}

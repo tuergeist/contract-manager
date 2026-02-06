@@ -130,6 +130,7 @@ class ContractType:
     cancelled_at: auto
     cancellation_effective_date: auto
     created_at: auto
+    updated_at: auto
     netsuite_sales_order_number: auto
     netsuite_contract_number: auto
     netsuite_url: auto
@@ -1438,7 +1439,7 @@ class ContractQuery:
         status: str | None = None,
         page: int = 1,
         page_size: int = 20,
-        sort_by: str | None = "created_at",
+        sort_by: str | None = "updated_at",
         sort_order: str | None = "desc",
     ) -> ContractConnection:
         """Get paginated list of contracts with filtering and sorting."""
@@ -1473,45 +1474,35 @@ class ContractQuery:
         # Sorting
         allowed_sort_fields = {
             "created_at",
+            "updated_at",
             "start_date",
             "end_date",
             "status",
             "customer_name",
             "name",
-            "total_value",
+            "arr",
         }
         if sort_by == "customer_name":
             order_field = "-customer__name" if sort_order == "desc" else "customer__name"
-        elif sort_by == "total_value":
-            # Sort by total_value in Python to use the actual calculated values
-            # (which include period-specific pricing that can't be expressed in SQL)
+        elif sort_by == "arr":
+            # Sort by ARR in Python (monthly_recurring * 12)
             all_contracts = list(queryset.prefetch_related("items"))
 
-            # Calculate total_value for each contract using the same logic as the GraphQL field
-            def get_total_value(contract):
+            def get_arr(contract):
                 from decimal import Decimal
                 from datetime import date as date_type
                 today = date_type.today()
 
-                monthly_recurring = Decimal("0")
-                one_off_total = Decimal("0")
-
+                monthly_total = Decimal("0")
                 for item in contract.items.all():
-                    if item.is_one_off:
-                        effective_price, _ = item.get_effective_price_info(today)
-                        one_off_total += effective_price * item.quantity
-                    else:
+                    if not item.is_one_off:
                         monthly_unit_price = item.get_price_at(today, normalize_to_monthly=True)
-                        monthly_recurring += monthly_unit_price * item.quantity
+                        monthly_total += monthly_unit_price * item.quantity
+                return monthly_total * 12
 
-                duration_months = contract.get_duration_months()
-                return (monthly_recurring * duration_months) + one_off_total
-
-            # Sort contracts by calculated total_value
             reverse = sort_order == "desc"
-            all_contracts.sort(key=get_total_value, reverse=reverse)
+            all_contracts.sort(key=get_arr, reverse=reverse)
 
-            # Apply pagination
             total_count = len(all_contracts)
             offset = (page - 1) * page_size
             items = all_contracts[offset : offset + page_size]
@@ -1527,7 +1518,7 @@ class ContractQuery:
         elif sort_by and sort_by in allowed_sort_fields:
             order_field = f"-{sort_by}" if sort_order == "desc" else sort_by
         else:
-            order_field = "-created_at"
+            order_field = "-updated_at"
         queryset = queryset.order_by(order_field)
 
         total_count = queryset.count()

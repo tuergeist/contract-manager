@@ -39,8 +39,8 @@ const CONTRACTS_QUERY = gql`
         status
         startDate
         endDate
-        createdAt
-        totalValue
+        updatedAt
+        arr
         customer {
           id
           name
@@ -66,8 +66,8 @@ interface Contract {
   status: string
   startDate: string
   endDate: string | null
-  createdAt: string
-  totalValue: string
+  updatedAt: string
+  arr: string
   customer: Customer
 }
 
@@ -82,7 +82,7 @@ interface ContractsData {
   }
 }
 
-type SortField = 'name' | 'customer_name' | 'status' | 'start_date' | 'end_date' | 'total_value' | 'created_at'
+type SortField = 'name' | 'customer_name' | 'status' | 'start_date' | 'end_date' | 'arr' | 'updated_at'
 type SortOrder = 'asc' | 'desc'
 
 const PAGE_SIZE = 20
@@ -95,7 +95,7 @@ export function ContractList() {
   const [searchInput, setSearchInput] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [page, setPage] = useState(1)
-  const [sortBy, setSortBy] = usePersistedState<SortField>('contracts-sort-by', 'created_at')
+  const [sortBy, setSortBy] = usePersistedState<SortField>('contracts-sort-by', 'updated_at')
   const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('contracts-sort-order', 'desc')
 
   const { data, loading, error } = useQuery<ContractsData>(CONTRACTS_QUERY, {
@@ -293,20 +293,20 @@ export function ContractList() {
                   </th>
                   <th
                     className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
-                    onClick={() => handleSort('total_value')}
+                    onClick={() => handleSort('arr')}
                   >
                     <div className="flex items-center">
-                      {t('contracts.value')}
-                      <SortIcon field="total_value" />
+                      {t('contracts.arr')}
+                      <SortIcon field="arr" />
                     </div>
                   </th>
                   <th
                     className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
-                    onClick={() => handleSort('created_at')}
+                    onClick={() => handleSort('updated_at')}
                   >
                     <div className="flex items-center">
-                      {t('contracts.createdAt')}
-                      <SortIcon field="created_at" />
+                      {t('contracts.updatedAt')}
+                      <SortIcon field="updated_at" />
                     </div>
                   </th>
                 </tr>
@@ -347,11 +347,11 @@ export function ContractList() {
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {formatDate(contract.endDate)}
                     </td>
-                    <td className={`whitespace-nowrap px-6 py-4 text-sm font-medium ${contract.totalValue && parseFloat(contract.totalValue) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                      {formatCurrency(contract.totalValue)}
+                    <td className={`whitespace-nowrap px-6 py-4 text-sm font-medium ${contract.arr && parseFloat(contract.arr) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                      {formatCurrency(contract.arr)}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {formatDate(contract.createdAt)}
+                      {formatDate(contract.updatedAt)}
                     </td>
                   </tr>
                 ))}
