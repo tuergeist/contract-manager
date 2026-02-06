@@ -1544,7 +1544,7 @@ function AddItemModal({
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[700px]">
+      <DialogContent className="sm:max-w-[700px] max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{t('contracts.detail.addItem')}</DialogTitle>
         </DialogHeader>
@@ -1555,7 +1555,7 @@ function AddItemModal({
           </div>
         )}
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 overflow-y-auto flex-1">
           {/* Product + Description - 2 columns */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -2031,7 +2031,7 @@ function EditItemModal({
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[900px]">
+      <DialogContent className="sm:max-w-[900px] max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{t('common.edit')}: {itemDisplayName}</DialogTitle>
         </DialogHeader>
@@ -2042,7 +2042,7 @@ function EditItemModal({
           </div>
         )}
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 overflow-y-auto flex-1">
           {/* Product + Description - 2 columns */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
