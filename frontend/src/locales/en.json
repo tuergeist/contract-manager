@@ -742,5 +742,33 @@
     "summarySetMetadata": "{{count}} metadata field(s) will be set.",
     "summaryOverwriteMetadata": "{{count}} metadata field(s) will be overwritten:",
     "summaryNoDeleteNote": "Unselected line items will not be modified or deleted."
+  },
+  "feedback": {
+    "menuItem": "Send Feedback",
+    "button": "Send Feedback",
+    "title": "Send Feedback",
+    "selectType": "What type of feedback do you have?",
+    "types": {
+      "bug": "Bug Report",
+      "bugDescription": "Something isn't working correctly",
+      "feature": "Feature Request",
+      "featureDescription": "Suggest a new feature or improvement",
+      "general": "General Feedback",
+      "generalDescription": "Share your thoughts or questions"
+    },
+    "type": "Type",
+    "changeType": "Change",
+    "titleLabel": "Title",
+    "titlePlaceholder": "Brief summary of your feedback",
+    "titleRequired": "Please enter a title",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Provide more details (optional)",
+    "screenshot": "Screenshot",
+    "capturing": "Capturing screenshot...",
+    "captureScreenshot": "Capture Screenshot",
+    "retryScreenshot": "Retry",
+    "submit": "Submit Feedback",
+    "success": "Thank you!",
+    "successDescription": "Your feedback has been submitted."
   }
 }

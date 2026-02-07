@@ -1,7 +1,7 @@
 """Root GraphQL schema."""
 import strawberry
 
-from apps.core.schema import AuthMutation, CoreQuery
+from apps.core.schema import AuthMutation, CoreQuery, FeedbackMutation
 from apps.tenants.schema import TenantQuery, TenantMutation
 from apps.customers.schema import CustomerQuery, CustomerMutation
 from apps.products.schema import ProductQuery
@@ -34,7 +34,7 @@ class Query(
 
 
 @strawberry.type
-class Mutation(AuthMutation, TenantMutation, CustomerMutation, ContractMutation, ContractImportMutation, TodoMutation):
+class Mutation(AuthMutation, FeedbackMutation, TenantMutation, CustomerMutation, ContractMutation, ContractImportMutation, TodoMutation):
     pass
 
 

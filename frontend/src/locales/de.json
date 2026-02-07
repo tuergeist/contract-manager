@@ -742,5 +742,33 @@
     "summarySetMetadata": "{{count}} Metadatenfeld(er) werden gesetzt.",
     "summaryOverwriteMetadata": "{{count}} Metadatenfeld(er) werden überschrieben:",
     "summaryNoDeleteNote": "Nicht ausgewählte Positionen werden nicht verändert oder gelöscht."
+  },
+  "feedback": {
+    "menuItem": "Feedback senden",
+    "button": "Feedback senden",
+    "title": "Feedback senden",
+    "selectType": "Welche Art von Feedback haben Sie?",
+    "types": {
+      "bug": "Fehlerbericht",
+      "bugDescription": "Etwas funktioniert nicht richtig",
+      "feature": "Feature-Wunsch",
+      "featureDescription": "Neue Funktion oder Verbesserung vorschlagen",
+      "general": "Allgemeines Feedback",
+      "generalDescription": "Gedanken oder Fragen teilen"
+    },
+    "type": "Typ",
+    "changeType": "Ändern",
+    "titleLabel": "Titel",
+    "titlePlaceholder": "Kurze Zusammenfassung Ihres Feedbacks",
+    "titleRequired": "Bitte geben Sie einen Titel ein",
+    "descriptionLabel": "Beschreibung",
+    "descriptionPlaceholder": "Weitere Details angeben (optional)",
+    "screenshot": "Screenshot",
+    "capturing": "Screenshot wird aufgenommen...",
+    "captureScreenshot": "Screenshot aufnehmen",
+    "retryScreenshot": "Erneut versuchen",
+    "submit": "Feedback absenden",
+    "success": "Vielen Dank!",
+    "successDescription": "Ihr Feedback wurde übermittelt."
   }
 }

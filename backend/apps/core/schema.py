@@ -37,6 +37,40 @@ class DeleteResult:
     error: str | None = None
 
 
+import enum
+
+
+@strawberry.enum
+class FeedbackType(enum.Enum):
+    """Type of feedback being submitted."""
+
+    BUG = "bug"
+    FEATURE = "feature"
+    GENERAL = "general"
+
+
+@strawberry.input
+class FeedbackInput:
+    """Input for submitting feedback."""
+
+    type: FeedbackType
+    title: str
+    description: str | None = None
+    screenshot: str | None = None  # Base64 encoded
+    page_url: str | None = None
+    viewport: str | None = None  # e.g., "1920x1080"
+    user_agent: str | None = None
+
+
+@strawberry.type
+class FeedbackResult:
+    """Result of feedback submission."""
+
+    success: bool = False
+    error: str | None = None
+    task_url: str | None = None
+
+
 @strawberry.type
 class CurrentUser:
     """Current authenticated user info."""
@@ -84,6 +118,15 @@ class GlobalSearchResult:
 @strawberry.type
 class CoreQuery:
     """Core queries including auth status."""
+
+    @strawberry.field
+    def feedback_enabled(self) -> bool:
+        """Check if feedback submission is enabled (Todoist configured)."""
+        from django.conf import settings
+        return bool(
+            getattr(settings, "TODOIST_API_TOKEN", "")
+            and getattr(settings, "TODOIST_PROJECT_ID", "")
+        )
 
     @strawberry.field
     def me(self, info: Info[Context, None]) -> CurrentUser | None:
@@ -260,3 +303,72 @@ class AuthMutation:
             email=user.email,
             tenant_id=user.tenant_id,
         )
+
+
+@strawberry.type
+class FeedbackMutation:
+    """Feedback submission mutations."""
+
+    @strawberry.mutation
+    def submit_feedback(self, info: Info[Context, None], input: FeedbackInput) -> FeedbackResult:
+        """Submit user feedback to Todoist."""
+        from datetime import datetime
+        from apps.core.todoist import TodoistService, TodoistError, TodoistNotConfiguredError
+
+        user = info.context.user
+        if user is None:
+            return FeedbackResult(success=False, error="Authentication required")
+
+        # Build description with context
+        lines = []
+        if input.description:
+            lines.append(input.description)
+            lines.append("")
+
+        lines.append("---")
+        lines.append(f"**Submitted by:** {user.first_name} {user.last_name} ({user.email})")
+        lines.append(f"**Type:** {input.type.value}")
+        lines.append(f"**Time:** {datetime.now().isoformat()}")
+
+        if input.page_url:
+            lines.append(f"**Page:** {input.page_url}")
+        if input.viewport:
+            lines.append(f"**Viewport:** {input.viewport}")
+        if input.user_agent:
+            lines.append(f"**Browser:** {input.user_agent}")
+
+        description = "\n".join(lines)
+
+        try:
+            service = TodoistService()
+
+            # Create the task
+            task = service.create_task(
+                title=input.title,
+                description=description,
+                feedback_type=input.type.value,
+            )
+
+            # Upload screenshot if provided
+            if input.screenshot:
+                try:
+                    service.upload_screenshot_to_task(
+                        task_id=task.id,
+                        screenshot_base64=input.screenshot,
+                        filename=f"screenshot-{task.id}.png",
+                    )
+                except TodoistError as e:
+                    # Log but don't fail - task was created successfully
+                    import logging
+                    logging.getLogger(__name__).warning(f"Failed to upload screenshot: {e}")
+
+            return FeedbackResult(
+                success=True,
+                task_url=task.url,
+            )
+
+        except TodoistNotConfiguredError as e:
+            return FeedbackResult(success=False, error="Feedback system is not configured. Please contact an administrator.")
+
+        except TodoistError as e:
+            return FeedbackResult(success=False, error=str(e))

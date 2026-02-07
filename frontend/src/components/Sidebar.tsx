@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useLazyQuery, gql } from '@apollo/client'
+import { useLazyQuery, useQuery, gql } from '@apollo/client'
 import {
   LayoutDashboard,
   Users,
@@ -18,9 +18,11 @@ import {
   User,
   FileSignature,
   X,
+  MessageSquarePlus,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
+import { FeedbackModal } from './FeedbackModal'
 
 const GLOBAL_SEARCH = gql`
   query GlobalSearch($query: String!, $limit: Int) {
@@ -38,6 +40,12 @@ const GLOBAL_SEARCH = gql`
         }
       }
     }
+  }
+`
+
+const FEEDBACK_ENABLED = gql`
+  query FeedbackEnabled {
+    feedbackEnabled
   }
 `
 
@@ -67,12 +75,16 @@ export function Sidebar() {
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState('')
   const [showResults, setShowResults] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [search, { data, loading }] = useLazyQuery(GLOBAL_SEARCH, {
     fetchPolicy: 'cache-and-network',
   })
+
+  const { data: feedbackData } = useQuery(FEEDBACK_ENABLED)
+  const feedbackEnabled = feedbackData?.feedbackEnabled ?? false
 
   // Debounced search
   useEffect(() => {
@@ -245,6 +257,15 @@ export function Sidebar() {
           <p className="text-xs text-gray-500">{user?.email}</p>
           <p className="text-xs text-gray-400">{user?.tenantName}</p>
         </div>
+        {feedbackEnabled && (
+          <button
+            onClick={() => setFeedbackOpen(true)}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
+          >
+            <MessageSquarePlus className="h-5 w-5" />
+            {t('feedback.menuItem')}
+          </button>
+        )}
         <button
           onClick={logout}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
@@ -253,6 +274,8 @@ export function Sidebar() {
           {t('auth.signOut')}
         </button>
       </div>
+
+      <FeedbackModal open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     </aside>
   )
 }
