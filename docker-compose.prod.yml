@@ -48,6 +48,8 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-contract_manager}:${POSTGRES_PASSWORD:-contract_manager}@db:5432/${POSTGRES_DB:-contract_manager}
       REDIS_URL: redis://redis:6379/0
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TODOIST_API_TOKEN: ${TODOIST_API_TOKEN:-}
+      TODOIST_PROJECT_ID: ${TODOIST_PROJECT_ID:-}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost,http://127.0.0.1}
