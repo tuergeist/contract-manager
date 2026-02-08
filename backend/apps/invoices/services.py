@@ -6,7 +6,9 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
+from django.db import transaction
 from django.template.loader import render_to_string
+from django.utils import timezone
 
 try:
     from weasyprint import HTML
@@ -22,33 +24,63 @@ from apps.tenants.models import Tenant
 LABELS = {
     "de": {
         "invoice": "Rechnung",
+        "invoice_no": "Rechnungsnr.",
         "bill_to": "Rechnungsadresse",
         "invoice_date": "Rechnungsdatum",
         "billing_period": "Abrechnungszeitraum",
+        "service_period": "Leistungszeitraum",
         "contract": "Vertrag",
         "description": "Beschreibung",
         "quantity": "Menge",
         "unit_price": "Einzelpreis",
         "amount": "Betrag",
+        "net_total": "Nettobetrag",
+        "tax": "MwSt.",
+        "gross_total": "Bruttobetrag",
         "total": "Gesamtbetrag",
         "prorated": "Anteilig",
         "one_off": "Einmalig",
         "customer_id": "Kunden-Nr.",
+        "vat_id": "USt-IdNr.",
+        "tax_number": "Steuernummer",
+        "register": "Handelsregister",
+        "managing_directors": "Geschäftsführer",
+        "share_capital": "Stammkapital",
+        "bank_details": "Bankverbindung",
+        "phone": "Telefon",
+        "pos": "Pos.",
+        "date_label": "Datum",
+        "invoice_amount": "Rechnungsbetrag",
     },
     "en": {
         "invoice": "Invoice",
+        "invoice_no": "Invoice No.",
         "bill_to": "Bill To",
         "invoice_date": "Invoice Date",
         "billing_period": "Billing Period",
+        "service_period": "Service Period",
         "contract": "Contract",
         "description": "Description",
         "quantity": "Qty",
         "unit_price": "Unit Price",
         "amount": "Amount",
+        "net_total": "Net Total",
+        "tax": "VAT",
+        "gross_total": "Gross Total",
         "total": "Total",
         "prorated": "Prorated",
         "one_off": "One-time",
         "customer_id": "Customer ID",
+        "vat_id": "VAT ID",
+        "tax_number": "Tax Number",
+        "register": "Commercial Register",
+        "managing_directors": "Managing Directors",
+        "share_capital": "Share Capital",
+        "bank_details": "Bank Details",
+        "phone": "Phone",
+        "pos": "Pos.",
+        "date_label": "Date",
+        "invoice_amount": "Invoice Total",
     },
 }
 
@@ -185,6 +217,74 @@ class InvoiceService:
 
         return period_start, period_end
 
+    def _get_template_context(self) -> dict:
+        """Load template settings and legal data for PDF rendering.
+
+        Returns a dict with company, accent_color, header_text, footer_text,
+        logo_url, and tax_rate. Falls back to defaults when not configured.
+        """
+        from apps.invoices.models import CompanyLegalData, InvoiceTemplate
+
+        # Company legal data (fallback to tenant name)
+        try:
+            legal_data = self.tenant.legal_data
+            company = legal_data.to_snapshot()
+        except CompanyLegalData.DoesNotExist:
+            company = {
+                "company_name": self.tenant.name,
+                "street": "",
+                "zip_code": "",
+                "city": "",
+                "country": "",
+                "tax_number": "",
+                "vat_id": "",
+                "commercial_register_court": "",
+                "commercial_register_number": "",
+                "managing_directors": [],
+                "bank_name": "",
+                "iban": "",
+                "bic": "",
+                "phone": "",
+                "email": "",
+                "website": "",
+                "share_capital": "",
+                "default_tax_rate": "19.00",
+            }
+
+        # Template settings (fallback to defaults)
+        accent_color = "#2563eb"
+        header_text = ""
+        footer_text = ""
+        logo_url = ""
+        try:
+            template = InvoiceTemplate.objects.get(tenant=self.tenant)
+            accent_color = template.accent_color or "#2563eb"
+            header_text = template.header_text or ""
+            footer_text = template.footer_text or ""
+            if template.logo and template.logo.name:
+                # Use file:// URI so WeasyPrint can resolve the logo in PDF rendering
+                import base64
+                import mimetypes
+                try:
+                    mime_type = mimetypes.guess_type(template.logo.name)[0] or "image/png"
+                    logo_data = template.logo.read()
+                    logo_url = f"data:{mime_type};base64,{base64.b64encode(logo_data).decode()}"
+                except Exception:
+                    logo_url = ""
+        except InvoiceTemplate.DoesNotExist:
+            pass
+
+        tax_rate = Decimal(company.get("default_tax_rate", "19.00"))
+
+        return {
+            "company": company,
+            "accent_color": accent_color,
+            "header_text": header_text,
+            "footer_text": footer_text,
+            "logo_url": logo_url,
+            "tax_rate": tax_rate,
+        }
+
     def generate_pdf(
         self,
         invoices: list[InvoiceData],
@@ -193,7 +293,8 @@ class InvoiceService:
         """
         Generate a combined PDF containing all invoices.
 
-        Each invoice starts on a new page.
+        Each invoice starts on a new page. Includes company legal data,
+        tax breakdown, template customization, and GmbH legal footer.
 
         Args:
             invoices: List of InvoiceData to include in PDF
@@ -207,10 +308,16 @@ class InvoiceService:
 
         labels = LABELS.get(language, LABELS["en"])
         currency_symbol = self.tenant.currency_symbol
+        template_ctx = self._get_template_context()
+        tax_rate = template_ctx["tax_rate"]
 
         # Render each invoice as HTML
         html_parts = []
         for i, invoice in enumerate(invoices):
+            # Calculate tax for this invoice
+            total_net = invoice.total_amount
+            tax_amount, total_gross = self.calculate_tax(total_net, tax_rate)
+
             # Convert dataclass to dict for template
             invoice_dict = {
                 "contract_id": invoice.contract_id,
@@ -236,6 +343,9 @@ class InvoiceService:
                     for item in invoice.line_items
                 ],
                 "total_amount": invoice.total_amount,
+                "total_net": total_net,
+                "tax_amount": tax_amount,
+                "total_gross": total_gross,
             }
 
             html = render_to_string(
@@ -245,7 +355,9 @@ class InvoiceService:
                     "labels": labels,
                     "language": language,
                     "currency_symbol": currency_symbol,
-                    "company_name": self.tenant.name,
+                    "invoice_number": getattr(invoice, "invoice_number", ""),
+                    "tax_rate": tax_rate,
+                    **template_ctx,
                 },
             )
             html_parts.append(html)
@@ -255,6 +367,76 @@ class InvoiceService:
 
         # Generate PDF
         pdf_document = HTML(string=combined_html).render()
+        return pdf_document.write_pdf()
+
+    def generate_preview_pdf(
+        self,
+        language: Literal["de", "en"] = "de",
+    ) -> bytes:
+        """Generate a sample invoice PDF using current template settings and dummy data."""
+        labels = LABELS.get(language, LABELS["en"])
+        currency_symbol = self.tenant.currency_symbol
+        template_ctx = self._get_template_context()
+        tax_rate = template_ctx["tax_rate"]
+
+        today = date.today()
+        net = Decimal("1500.00")
+        tax_amount, gross = self.calculate_tax(net, tax_rate)
+
+        invoice_dict = {
+            "contract_name": "Mustervertrag 2025-001",
+            "customer_name": "Mustermann GmbH",
+            "customer_address": {
+                "street": "Musterstraße 1",
+                "zip_code": "12345",
+                "city": "Musterstadt",
+                "country": "Deutschland",
+            },
+            "billing_date": today,
+            "billing_period_start": today.replace(day=1),
+            "billing_period_end": today,
+            "line_items": [
+                {
+                    "product_name": "Software-Lizenz Premium",
+                    "description": "Monatliche Lizenzgebühr",
+                    "quantity": 5,
+                    "unit_price": Decimal("200.00"),
+                    "amount": Decimal("1000.00"),
+                    "is_prorated": False,
+                    "prorate_factor": None,
+                    "is_one_off": False,
+                },
+                {
+                    "product_name": "Support & Wartung",
+                    "description": "Wartungsvertrag",
+                    "quantity": 1,
+                    "unit_price": Decimal("500.00"),
+                    "amount": Decimal("500.00"),
+                    "is_prorated": False,
+                    "prorate_factor": None,
+                    "is_one_off": False,
+                },
+            ],
+            "total_amount": net,
+            "total_net": net,
+            "tax_amount": tax_amount,
+            "total_gross": gross,
+        }
+
+        html = render_to_string(
+            "invoices/invoice.html",
+            {
+                "invoice": invoice_dict,
+                "labels": labels,
+                "language": language,
+                "currency_symbol": currency_symbol,
+                "invoice_number": "PREVIEW-2025-0001",
+                "tax_rate": tax_rate,
+                **template_ctx,
+            },
+        )
+
+        pdf_document = HTML(string=html).render()
         return pdf_document.write_pdf()
 
     def generate_individual_pdfs(
@@ -608,3 +790,150 @@ class InvoiceService:
         buffer = io.BytesIO()
         wb.save(buffer)
         return buffer.getvalue()
+
+    # ----------------------------------------------------------------
+    # Tax calculation
+    # ----------------------------------------------------------------
+
+    def get_tax_rate(self) -> Decimal:
+        """Get the tenant's default tax rate."""
+        try:
+            return self.tenant.legal_data.default_tax_rate
+        except Exception:
+            return Decimal("19.00")
+
+    @staticmethod
+    def calculate_tax(
+        net_amount: Decimal, tax_rate: Decimal
+    ) -> tuple[Decimal, Decimal]:
+        """Calculate tax amount and gross from net and rate.
+
+        Returns (tax_amount, gross_amount).
+        """
+        tax_amount = (net_amount * tax_rate / Decimal("100")).quantize(Decimal("0.01"))
+        gross_amount = net_amount + tax_amount
+        return tax_amount, gross_amount
+
+    # ----------------------------------------------------------------
+    # Invoice persistence
+    # ----------------------------------------------------------------
+
+    def generate_and_persist(self, year: int, month: int) -> list:
+        """
+        Generate invoices for a month, assign numbers, and persist as records.
+
+        Returns list of created InvoiceRecord instances.
+        Skips contracts that already have a finalized invoice for the same period.
+        """
+        from apps.invoices.models import CompanyLegalData, InvoiceRecord
+        from apps.invoices.numbering import InvoiceNumberService
+
+        # Validate legal data exists
+        try:
+            legal_data = self.tenant.legal_data
+        except CompanyLegalData.DoesNotExist:
+            raise ValueError(
+                "Company legal data must be configured before generating invoices."
+            )
+
+        # Calculate invoices
+        invoices = self.get_invoices_for_month(year, month)
+        if not invoices:
+            return []
+
+        tax_rate = legal_data.default_tax_rate
+        company_snapshot = legal_data.to_snapshot()
+        numbering = InvoiceNumberService(self.tenant)
+
+        created_records = []
+
+        with transaction.atomic():
+            for invoice_data in invoices:
+                # Check for existing finalized invoice
+                exists = InvoiceRecord.objects.filter(
+                    tenant=self.tenant,
+                    contract_id=invoice_data.contract_id,
+                    billing_date=invoice_data.billing_date,
+                    period_start=invoice_data.billing_period_start,
+                    period_end=invoice_data.billing_period_end,
+                    status__in=[
+                        InvoiceRecord.Status.FINALIZED,
+                        InvoiceRecord.Status.DRAFT,
+                    ],
+                ).exists()
+                if exists:
+                    continue
+
+                # Calculate amounts
+                total_net = invoice_data.total_amount
+                tax_amount, total_gross = self.calculate_tax(total_net, tax_rate)
+
+                # Snapshot line items
+                line_items_snapshot = [
+                    {
+                        "item_id": item.item_id,
+                        "product_name": item.product_name,
+                        "description": item.description,
+                        "quantity": item.quantity,
+                        "unit_price": str(item.unit_price),
+                        "amount": str(item.amount),
+                        "is_prorated": item.is_prorated,
+                        "prorate_factor": str(item.prorate_factor) if item.prorate_factor else None,
+                        "is_one_off": item.is_one_off,
+                    }
+                    for item in invoice_data.line_items
+                ]
+
+                # Get next invoice number
+                invoice_number = numbering.get_next_number(invoice_data.billing_date)
+
+                record = InvoiceRecord.objects.create(
+                    tenant=self.tenant,
+                    contract_id=invoice_data.contract_id,
+                    customer_id=invoice_data.customer_id,
+                    invoice_number=invoice_number,
+                    billing_date=invoice_data.billing_date,
+                    period_start=invoice_data.billing_period_start,
+                    period_end=invoice_data.billing_period_end,
+                    total_net=total_net,
+                    tax_rate=tax_rate,
+                    tax_amount=tax_amount,
+                    total_gross=total_gross,
+                    line_items_snapshot=line_items_snapshot,
+                    company_data_snapshot=company_snapshot,
+                    status=InvoiceRecord.Status.FINALIZED,
+                    customer_name=invoice_data.customer_name,
+                    contract_name=invoice_data.contract_name,
+                    invoice_text=invoice_data.invoice_text,
+                )
+                created_records.append(record)
+
+        return created_records
+
+    @staticmethod
+    def cancel_invoice(invoice_record) -> None:
+        """Cancel a finalized invoice. Number is NOT reused."""
+        from apps.invoices.models import InvoiceRecord
+
+        if invoice_record.status != InvoiceRecord.Status.FINALIZED:
+            raise ValueError("Only finalized invoices can be cancelled.")
+        invoice_record.status = InvoiceRecord.Status.CANCELLED
+        invoice_record.save(update_fields=["status", "updated_at"])
+
+    def get_persisted_invoices(
+        self,
+        year: int,
+        month: int,
+        status: str | None = None,
+    ) -> list:
+        """Retrieve persisted invoice records for a month."""
+        from apps.invoices.models import InvoiceRecord
+
+        qs = InvoiceRecord.objects.filter(
+            tenant=self.tenant,
+            billing_date__year=year,
+            billing_date__month=month,
+        )
+        if status:
+            qs = qs.filter(status=status)
+        return list(qs.order_by("customer_name", "billing_date"))
