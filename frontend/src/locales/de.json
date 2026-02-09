@@ -7,6 +7,7 @@
     "invoiceExport": "Rechnungsexport",
     "forecast": "Umsatzvorschau",
     "auditLog": "Änderungsprotokoll",
+    "banking": "Bankkonten",
     "settings": "Einstellungen"
   },
   "common": {
@@ -222,6 +223,9 @@
         "quinquennial": "5 Jahre"
       },
       "priceSource": "Preisquelle",
+      "sourceLabel": "Quelle",
+      "sourceIncrease": "Preiserhöhung",
+      "sourceManual": "Manuelle Eingabe",
       "startDate": "Gültig ab",
       "startDateSubtitle": "(Recognition)",
       "startDateHint": "Wann die Position wirksam wird - Erlösrealisierung. Leer = sofort.",
@@ -669,8 +673,9 @@
   },
   "settings": {
     "tabs": {
+      "user": "Benutzer",
       "general": "Allgemein",
-      "users": "Benutzer",
+      "team": "Team",
       "invoices": "Rechnungen"
     },
     "language": "Sprache",
@@ -741,7 +746,10 @@
       "actions": {
         "read": "Lesen",
         "write": "Schreiben",
-        "delete": "Löschen"
+        "delete": "Löschen",
+        "export": "Exportieren",
+        "generate": "Generieren",
+        "settings": "Einstellungen"
       },
       "assignRoles": "Rollen zuweisen",
       "selectRoles": "Rollen für diesen Benutzer auswählen",
@@ -892,5 +900,46 @@
     "submit": "Feedback absenden",
     "success": "Vielen Dank!",
     "successDescription": "Ihr Feedback wurde übermittelt."
+  },
+  "banking": {
+    "title": "Bankkonten",
+    "description": "Bankkonten verwalten und Kontoauszüge importieren",
+    "accounts": "Konten",
+    "transactions": "Umsätze",
+    "addAccount": "Konto hinzufügen",
+    "editAccount": "Konto bearbeiten",
+    "deleteAccount": "Konto löschen",
+    "deleteConfirm": "Dieses Konto und alle zugehörigen Umsätze unwiderruflich löschen?",
+    "accountName": "Kontobezeichnung",
+    "bankCode": "BLZ",
+    "accountNumber": "Kontonummer",
+    "iban": "IBAN",
+    "bic": "BIC",
+    "uploadStatement": "Kontoauszug importieren",
+    "uploadSuccess": "{{imported}} Umsätze importiert, {{skipped}} übersprungen",
+    "uploadError": "Fehler beim Import",
+    "noAccounts": "Noch keine Bankkonten angelegt.",
+    "noTransactions": "Keine Umsätze vorhanden.",
+    "createFirst": "Legen Sie Ihr erstes Bankkonto an, um Kontoauszüge zu importieren.",
+    "date": "Datum",
+    "counterparty": "Auftraggeber/Empfänger",
+    "bookingText": "Verwendungszweck",
+    "amount": "Betrag",
+    "account": "Konto",
+    "allAccounts": "Alle Konten",
+    "debit": "Ausgaben",
+    "credit": "Einnahmen",
+    "all": "Alle",
+    "dateFrom": "Von",
+    "dateTo": "Bis",
+    "amountMin": "Betrag min",
+    "amountMax": "Betrag max",
+    "direction": "Richtung",
+    "transactionCount": "{{count}} Umsätze",
+    "saved": "Gespeichert",
+    "filters": "Filter",
+    "valueDate": "Wertstellung",
+    "reference": "Referenz",
+    "transactionType": "Typ"
   }
 }

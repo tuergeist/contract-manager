@@ -26,6 +26,7 @@ class AuthenticatedGraphQLView(GraphQLView):
 from apps.invoices.views import InvoiceExportView, InvoicePreviewView
 from apps.contracts.views import AttachmentDownloadView
 from apps.customers.views import CustomerAttachmentDownloadView
+from apps.banking.views import UploadStatementView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -35,6 +36,7 @@ urlpatterns = [
     path("api/invoices/preview/", InvoicePreviewView.as_view(), name="invoice-preview"),
     path("api/attachments/<int:attachment_id>/download/", AttachmentDownloadView.as_view(), name="attachment-download"),
     path("api/customer-attachments/<int:attachment_id>/download/", CustomerAttachmentDownloadView.as_view(), name="customer-attachment-download"),
+    path("api/banking/upload/<int:account_id>/", UploadStatementView.as_view(), name="banking-upload"),
 ]
 
 if settings.DEBUG:

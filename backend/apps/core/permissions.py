@@ -19,6 +19,7 @@ PERMISSION_REGISTRY = {
     "todos": ["read", "write"],
     "notes": ["read", "write"],
     "invoices": ["read", "export", "generate", "settings"],
+    "banking": ["read", "write"],
 }
 
 # All permissions as flat "resource.action" strings

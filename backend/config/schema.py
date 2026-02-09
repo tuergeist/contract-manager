@@ -14,6 +14,7 @@ from apps.contracts.schema import (
 from apps.invoices.schema import InvoiceQuery, InvoiceMutation
 from apps.audit.schema import AuditLogQuery
 from apps.todos.schema import TodoQuery, TodoMutation
+from apps.banking.schema import BankingQuery, BankingMutation
 
 
 @strawberry.type
@@ -27,6 +28,7 @@ class Query(
     InvoiceQuery,
     AuditLogQuery,
     TodoQuery,
+    BankingQuery,
 ):
     @strawberry.field
     def health(self) -> str:
@@ -34,7 +36,7 @@ class Query(
 
 
 @strawberry.type
-class Mutation(AuthMutation, FeedbackMutation, TenantMutation, CustomerMutation, ContractMutation, ContractImportMutation, TodoMutation, InvoiceMutation):
+class Mutation(AuthMutation, FeedbackMutation, TenantMutation, CustomerMutation, ContractMutation, ContractImportMutation, TodoMutation, InvoiceMutation, BankingMutation):
     pass
 
 

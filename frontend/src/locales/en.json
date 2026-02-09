@@ -7,6 +7,7 @@
     "invoiceExport": "Invoice Export",
     "forecast": "Revenue Forecast",
     "auditLog": "Audit Log",
+    "banking": "Banking",
     "settings": "Settings"
   },
   "common": {
@@ -222,6 +223,9 @@
         "quinquennial": "5 Years"
       },
       "priceSource": "Price Source",
+      "sourceLabel": "Source",
+      "sourceIncrease": "Price Increase",
+      "sourceManual": "Manual Entry",
       "startDate": "Effective Date",
       "startDateSubtitle": "(Recognition)",
       "startDateHint": "When item becomes effective - Revenue Recognition. Empty = immediately.",
@@ -669,8 +673,9 @@
   },
   "settings": {
     "tabs": {
+      "user": "User",
       "general": "General",
-      "users": "Users",
+      "team": "Team",
       "invoices": "Invoicing"
     },
     "language": "Language",
@@ -741,7 +746,10 @@
       "actions": {
         "read": "Read",
         "write": "Write",
-        "delete": "Delete"
+        "delete": "Delete",
+        "export": "Export",
+        "generate": "Generate",
+        "settings": "Settings"
       },
       "assignRoles": "Assign Roles",
       "selectRoles": "Select roles for this user",
@@ -892,5 +900,46 @@
     "submit": "Submit Feedback",
     "success": "Thank you!",
     "successDescription": "Your feedback has been submitted."
+  },
+  "banking": {
+    "title": "Bank Accounts",
+    "description": "Manage bank accounts and import statements",
+    "accounts": "Accounts",
+    "transactions": "Transactions",
+    "addAccount": "Add Account",
+    "editAccount": "Edit Account",
+    "deleteAccount": "Delete Account",
+    "deleteConfirm": "Permanently delete this account and all associated transactions?",
+    "accountName": "Account Name",
+    "bankCode": "Bank Code",
+    "accountNumber": "Account Number",
+    "iban": "IBAN",
+    "bic": "BIC",
+    "uploadStatement": "Import Statement",
+    "uploadSuccess": "{{imported}} transactions imported, {{skipped}} skipped",
+    "uploadError": "Import failed",
+    "noAccounts": "No bank accounts yet.",
+    "noTransactions": "No transactions found.",
+    "createFirst": "Create your first bank account to start importing statements.",
+    "date": "Date",
+    "counterparty": "Counterparty",
+    "bookingText": "Description",
+    "amount": "Amount",
+    "account": "Account",
+    "allAccounts": "All Accounts",
+    "debit": "Debit",
+    "credit": "Credit",
+    "all": "All",
+    "dateFrom": "From",
+    "dateTo": "To",
+    "amountMin": "Amount min",
+    "amountMax": "Amount max",
+    "direction": "Direction",
+    "transactionCount": "{{count}} transactions",
+    "saved": "Saved",
+    "filters": "Filters",
+    "valueDate": "Value Date",
+    "reference": "Reference",
+    "transactionType": "Type"
   }
 }

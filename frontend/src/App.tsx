@@ -16,6 +16,7 @@ import { SettingsLayout } from './features/settings/SettingsLayout'
 import { ContractImport } from './features/contracts/import/ContractImport'
 import { InvoiceExportPage } from './features/invoices/InvoiceExportPage'
 import { AuditLogPage } from './features/audit/AuditLogPage'
+import { BankingPage } from './features/banking/BankingPage'
 
 function App() {
   return (
@@ -41,12 +42,14 @@ function App() {
         <Route path="contracts/:id/edit" element={<ContractForm />} />
         <Route path="forecast" element={<RevenueForecast />} />
         <Route path="settings" element={<SettingsLayout />} />
-        <Route path="settings/users" element={<SettingsLayout />} />
+        <Route path="settings/general" element={<SettingsLayout />} />
+        <Route path="settings/team" element={<SettingsLayout />} />
         <Route path="settings/invoices" element={<SettingsLayout />} />
         <Route path="settings/invoices/numbering" element={<SettingsLayout />} />
         <Route path="settings/invoices/template" element={<SettingsLayout />} />
         <Route path="contracts/import" element={<ContractImport />} />
         <Route path="invoices/export" element={<InvoiceExportPage />} />
+        <Route path="banking" element={<BankingPage />} />
         <Route path="audit-log" element={<AuditLogPage />} />
       </Route>
     </Routes>

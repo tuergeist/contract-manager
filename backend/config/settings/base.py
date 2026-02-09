@@ -45,6 +45,7 @@ LOCAL_APPS = [
     "apps.invoices",
     "apps.audit",
     "apps.todos",
+    "apps.banking",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -124,6 +125,8 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 # File upload settings
 MAX_UPLOAD_SIZE = env.int("MAX_UPLOAD_SIZE", default=10 * 1024 * 1024)  # 10MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE
+FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE
 ALLOWED_ATTACHMENT_EXTENSIONS = [
     ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt", ".rtf",
     ".png", ".jpg", ".jpeg", ".gif",

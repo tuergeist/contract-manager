@@ -18,6 +18,7 @@ import {
   FileSignature,
   X,
   MessageSquarePlus,
+  Landmark,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
@@ -62,6 +63,7 @@ const navItems: NavItem[] = [
   { to: '/products', icon: Package, labelKey: 'nav.products' },
   { to: '/contracts', icon: FileText, labelKey: 'nav.contracts' },
   { to: '/invoices/export', icon: FileDown, labelKey: 'nav.invoiceExport', permission: 'invoices.export' },
+  { to: '/banking', icon: Landmark, labelKey: 'nav.banking', permission: 'banking.read' },
   { to: '/forecast', icon: TrendingUp, labelKey: 'nav.forecast' },
   { to: '/audit-log', icon: History, labelKey: 'nav.auditLog' },
   { to: '/settings', icon: Settings, labelKey: 'nav.settings', end: true },
