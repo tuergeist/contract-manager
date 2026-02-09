@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, gql } from '@apollo/client'
 import {
   Landmark,
@@ -51,6 +52,7 @@ const BANK_TRANSACTIONS = gql`
   query BankTransactions(
     $accountId: Int
     $search: String
+    $counterpartyName: String
     $dateFrom: Date
     $dateTo: Date
     $amountMin: Decimal
@@ -64,6 +66,7 @@ const BANK_TRANSACTIONS = gql`
     bankTransactions(
       accountId: $accountId
       search: $search
+      counterpartyName: $counterpartyName
       dateFrom: $dateFrom
       dateTo: $dateTo
       amountMin: $amountMin
@@ -141,6 +144,50 @@ const DELETE_BANK_ACCOUNT = gql`
   }
 `
 
+const BANK_COUNTERPARTIES = gql`
+  query BankCounterparties(
+    $search: String
+    $sortBy: String
+    $sortOrder: String
+    $page: Int
+    $pageSize: Int
+  ) {
+    bankCounterparties(
+      search: $search
+      sortBy: $sortBy
+      sortOrder: $sortOrder
+      page: $page
+      pageSize: $pageSize
+    ) {
+      items {
+        name
+        totalDebit
+        totalCredit
+        transactionCount
+        firstDate
+        lastDate
+      }
+      totalCount
+      page
+      pageSize
+      hasNextPage
+    }
+  }
+`
+
+const UPDATE_TRANSACTION_COUNTERPARTY = gql`
+  mutation UpdateTransactionCounterparty($input: UpdateTransactionCounterpartyInput!) {
+    updateTransactionCounterparty(input: $input) {
+      success
+      error
+      transaction {
+        id
+        counterpartyName
+      }
+    }
+  }
+`
+
 // --- Types ---
 
 interface BankAccount {
@@ -173,9 +220,25 @@ interface BankTransaction {
 export function BankingPage() {
   const { t } = useTranslation()
   const { token } = useAuth()
+  const navigate = useNavigate()
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'transactions' | 'counterparties'>('transactions')
+
+  // Counterparty list state
+  const [cpSearch, setCpSearch] = useState('')
+  const [cpDebouncedSearch, setCpDebouncedSearch] = useState('')
+  const [cpSortBy, setCpSortBy] = useState<string>('totalAmount')
+  const [cpSortOrder, setCpSortOrder] = useState<string>('desc')
+  const [cpPage, setCpPage] = useState(1)
+  const cpPageSize = 50
 
   // Expanded transaction row
   const [expandedTxId, setExpandedTxId] = useState<number | null>(null)
+
+  // Edit counterparty state
+  const [editingCounterpartyTxId, setEditingCounterpartyTxId] = useState<number | null>(null)
+  const [counterpartyEditValue, setCounterpartyEditValue] = useState('')
 
   // Account dialog state
   const [accountDialogOpen, setAccountDialogOpen] = useState(false)
@@ -216,16 +279,27 @@ export function BankingPage() {
     return () => clearTimeout(timer)
   }, [searchQuery])
 
+  // Debounce counterparty search
+  useEffect(() => {
+    const timer = setTimeout(() => setCpDebouncedSearch(cpSearch), 300)
+    return () => clearTimeout(timer)
+  }, [cpSearch])
+
   // Reset page on filter change
   useEffect(() => {
     setPage(1)
   }, [filterAccountId, debouncedSearch, dateFrom, dateTo, amountMin, amountMax, direction])
 
+  // Reset counterparty page on filter change
+  useEffect(() => {
+    setCpPage(1)
+  }, [cpDebouncedSearch])
+
   // Queries
   const { data: accountsData, loading: accountsLoading, refetch: refetchAccounts } = useQuery(BANK_ACCOUNTS)
   const accounts: BankAccount[] = accountsData?.bankAccounts ?? []
 
-  const { data: txData, loading: txLoading } = useQuery(BANK_TRANSACTIONS, {
+  const { data: txData, loading: txLoading, refetch: refetchTransactions } = useQuery(BANK_TRANSACTIONS, {
     variables: {
       accountId: filterAccountId !== 'all' ? parseInt(filterAccountId) : null,
       search: debouncedSearch || null,
@@ -247,10 +321,28 @@ export function BankingPage() {
   const hasNextPage = txData?.bankTransactions?.hasNextPage ?? false
   const totalPages = Math.ceil(totalCount / pageSize)
 
+  // Counterparties query
+  const { data: cpData, loading: cpLoading } = useQuery(BANK_COUNTERPARTIES, {
+    variables: {
+      search: cpDebouncedSearch || null,
+      sortBy: cpSortBy,
+      sortOrder: cpSortOrder,
+      page: cpPage,
+      pageSize: cpPageSize,
+    },
+    skip: activeTab !== 'counterparties',
+    fetchPolicy: 'cache-and-network',
+  })
+  const counterparties = cpData?.bankCounterparties?.items ?? []
+  const cpTotalCount = cpData?.bankCounterparties?.totalCount ?? 0
+  const cpHasNextPage = cpData?.bankCounterparties?.hasNextPage ?? false
+  const cpTotalPages = Math.ceil(cpTotalCount / cpPageSize)
+
   // Mutations
   const [createAccount, { loading: creating }] = useMutation(CREATE_BANK_ACCOUNT)
   const [updateAccount, { loading: updating }] = useMutation(UPDATE_BANK_ACCOUNT)
   const [deleteAccount, { loading: deleting }] = useMutation(DELETE_BANK_ACCOUNT)
+  const [updateCounterparty, { loading: updatingCounterparty }] = useMutation(UPDATE_TRANSACTION_COUNTERPARTY)
 
   // Handlers
 
@@ -411,6 +503,57 @@ export function BankingPage() {
     setPage(1)
   }
 
+  const startEditingCounterparty = (tx: BankTransaction, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditingCounterpartyTxId(tx.id)
+    setCounterpartyEditValue(tx.counterpartyName || '')
+  }
+
+  const cancelEditingCounterparty = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditingCounterpartyTxId(null)
+    setCounterpartyEditValue('')
+  }
+
+  const saveCounterparty = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!editingCounterpartyTxId) return
+
+    try {
+      const { data } = await updateCounterparty({
+        variables: {
+          input: {
+            transactionId: editingCounterpartyTxId,
+            counterpartyName: counterpartyEditValue.trim(),
+          },
+        },
+      })
+      if (data?.updateTransactionCounterparty?.success) {
+        setEditingCounterpartyTxId(null)
+        setCounterpartyEditValue('')
+        refetchTransactions()
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleCpSort = (field: string) => {
+    if (cpSortBy === field) {
+      setCpSortOrder(cpSortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      setCpSortBy(field)
+      setCpSortOrder('desc')
+    }
+  }
+
+  const getCpSortIcon = (field: string) => {
+    if (cpSortBy !== field) return <ArrowUpDown className="h-3.5 w-3.5 text-gray-400" />
+    return cpSortOrder === 'asc'
+      ? <ArrowUp className="h-3.5 w-3.5" />
+      : <ArrowDown className="h-3.5 w-3.5" />
+  }
+
   const hasActiveFilters = filterAccountId !== 'all' || searchQuery || dateFrom || dateTo || amountMin || amountMax || direction !== 'all'
 
   // --- Render ---
@@ -536,9 +679,173 @@ export function BankingPage() {
         onChange={handleFileChange}
       />
 
-      {/* Transactions Section */}
+      {/* Tabs + Content */}
       {accounts.length > 0 && (
         <div className="mt-6 space-y-4">
+          {/* Tab switcher */}
+          <div className="flex items-center gap-4 border-b border-gray-200">
+            <button
+              onClick={() => setActiveTab('transactions')}
+              className={`border-b-2 px-1 pb-2 text-sm font-medium ${
+                activeTab === 'transactions'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+              }`}
+            >
+              {t('banking.transactions')}
+            </button>
+            <button
+              onClick={() => setActiveTab('counterparties')}
+              className={`border-b-2 px-1 pb-2 text-sm font-medium ${
+                activeTab === 'counterparties'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+              }`}
+            >
+              {t('banking.counterparties')}
+            </button>
+          </div>
+
+          {/* Counterparties Tab */}
+          {activeTab === 'counterparties' && (
+            <div className="space-y-4">
+              {/* Search */}
+              <div className="max-w-sm">
+                <input
+                  type="text"
+                  value={cpSearch}
+                  onChange={(e) => setCpSearch(e.target.value)}
+                  placeholder={t('common.search')}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto rounded-lg border bg-white">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                      <th
+                        className="cursor-pointer px-4 py-3"
+                        onClick={() => handleCpSort('name')}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          {t('banking.counterparty')}
+                          {getCpSortIcon('name')}
+                        </span>
+                      </th>
+                      <th
+                        className="cursor-pointer whitespace-nowrap px-4 py-3 text-right"
+                        onClick={() => handleCpSort('transactionCount')}
+                      >
+                        <span className="inline-flex items-center justify-end gap-1">
+                          {t('banking.transactions')}
+                          {getCpSortIcon('transactionCount')}
+                        </span>
+                      </th>
+                      <th
+                        className="cursor-pointer whitespace-nowrap px-4 py-3 text-right"
+                        onClick={() => handleCpSort('totalAmount')}
+                      >
+                        <span className="inline-flex items-center justify-end gap-1">
+                          {t('banking.totalAmount')}
+                          {getCpSortIcon('totalAmount')}
+                        </span>
+                      </th>
+                      <th
+                        className="cursor-pointer whitespace-nowrap px-4 py-3"
+                        onClick={() => handleCpSort('lastDate')}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          {t('banking.lastTransaction')}
+                          {getCpSortIcon('lastDate')}
+                        </span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {cpLoading && counterparties.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-12 text-center text-gray-400">
+                          <Loader2 className="mx-auto h-6 w-6 animate-spin" />
+                        </td>
+                      </tr>
+                    ) : counterparties.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-12 text-center text-gray-500">
+                          {t('banking.noCounterparties')}
+                        </td>
+                      </tr>
+                    ) : (
+                      counterparties.map((cp: { name: string; transactionCount: number; totalDebit: string; totalCredit: string; lastDate: string }) => {
+                        const totalDebit = parseFloat(cp.totalDebit)
+                        const totalCredit = parseFloat(cp.totalCredit)
+                        const netAmount = totalDebit + totalCredit
+                        return (
+                          <tr
+                            key={cp.name}
+                            className="cursor-pointer hover:bg-gray-50"
+                            onClick={() => navigate(`/banking/counterparty/${encodeURIComponent(cp.name)}`)}
+                          >
+                            <td className="px-4 py-2.5 font-medium text-gray-900">
+                              {cp.name}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-2.5 text-right text-gray-600">
+                              {cp.transactionCount}
+                            </td>
+                            <td className={`whitespace-nowrap px-4 py-2.5 text-right font-medium ${netAmount < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(netAmount)}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">
+                              {formatDate(cp.lastDate)}
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {cpTotalCount > 0 && (
+                <div className="flex items-center justify-between text-sm text-gray-600">
+                  <span>
+                    {t('common.pagination.showing', {
+                      from: (cpPage - 1) * cpPageSize + 1,
+                      to: Math.min(cpPage * cpPageSize, cpTotalCount),
+                      total: cpTotalCount,
+                    })}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCpPage(cpPage - 1)}
+                      disabled={cpPage <= 1}
+                      className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      {t('common.pagination.previous')}
+                    </button>
+                    <span className="text-sm text-gray-500">
+                      {t('common.pagination.page', { page: cpPage, totalPages: cpTotalPages || 1 })}
+                    </span>
+                    <button
+                      onClick={() => setCpPage(cpPage + 1)}
+                      disabled={!cpHasNextPage}
+                      className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {t('common.pagination.next')}
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Transactions Tab */}
+          {activeTab === 'transactions' && (
+          <>
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">{t('banking.transactions')}</h2>
             {hasActiveFilters && (
@@ -717,8 +1024,67 @@ export function BankingPage() {
                         <td className="whitespace-nowrap px-4 py-2.5 text-gray-900">
                           {formatDate(tx.entryDate)}
                         </td>
-                        <td className="max-w-[220px] truncate px-4 py-2.5 text-gray-900">
-                          {tx.counterpartyName || '-'}
+                        <td className="max-w-[220px] px-4 py-2.5 text-gray-900">
+                          {isExpanded && editingCounterpartyTxId === tx.id ? (
+                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="text"
+                                value={counterpartyEditValue}
+                                onChange={(e) => setCounterpartyEditValue(e.target.value)}
+                                className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveCounterparty(e as unknown as React.MouseEvent)
+                                  if (e.key === 'Escape') {
+                                    setEditingCounterpartyTxId(null)
+                                    setCounterpartyEditValue('')
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={saveCounterparty}
+                                disabled={updatingCounterparty}
+                                className="rounded p-1 text-green-600 hover:bg-green-50"
+                                title={t('common.save')}
+                              >
+                                {updatingCounterparty ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <span className="text-sm font-medium">OK</span>
+                                )}
+                              </button>
+                              <button
+                                onClick={cancelEditingCounterparty}
+                                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                                title={t('common.cancel')}
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 truncate">
+                              {tx.counterpartyName ? (
+                                <Link
+                                  to={`/banking/counterparty/${encodeURIComponent(tx.counterpartyName)}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="truncate text-blue-600 hover:text-blue-800 hover:underline"
+                                >
+                                  {tx.counterpartyName}
+                                </Link>
+                              ) : (
+                                <span className="truncate">-</span>
+                              )}
+                              {isExpanded && (
+                                <button
+                                  onClick={(e) => startEditingCounterparty(tx, e)}
+                                  className="ml-1 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                                  title={t('banking.editCounterparty')}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-2.5 text-gray-600">
                           {isExpanded ? (
@@ -807,6 +1173,8 @@ export function BankingPage() {
                 </button>
               </div>
             </div>
+          )}
+          </>
           )}
         </div>
       )}
