@@ -985,7 +985,7 @@ export function BankingPage() {
                       {getSortIcon('counterparty')}
                     </span>
                   </th>
-                  <th className="px-4 py-3">{t('banking.bookingText')}</th>
+                  <th className="w-2/5 px-4 py-3">{t('banking.bookingText')}</th>
                   <th
                     className="cursor-pointer whitespace-nowrap px-4 py-3 text-right"
                     onClick={() => handleSort('amount')}
@@ -1086,7 +1086,7 @@ export function BankingPage() {
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-2.5 text-gray-600">
+                        <td className="w-2/5 px-4 py-2.5 text-gray-600">
                           {isExpanded ? (
                             <div className="space-y-2">
                               <div className="whitespace-pre-wrap">{tx.bookingText || '-'}</div>
@@ -1124,7 +1124,7 @@ export function BankingPage() {
                               </div>
                             </div>
                           ) : (
-                            <span className="block max-w-[300px] truncate">{tx.bookingText || '-'}</span>
+                            <span className="block truncate">{tx.bookingText || '-'}</span>
                           )}
                         </td>
                         <td className={`whitespace-nowrap px-4 py-2.5 text-right font-medium ${amount < 0 ? 'text-red-600' : 'text-green-600'}`}>

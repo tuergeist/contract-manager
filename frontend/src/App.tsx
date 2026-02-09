@@ -17,6 +17,8 @@ import { ContractImport } from './features/contracts/import/ContractImport'
 import { InvoiceExportPage } from './features/invoices/InvoiceExportPage'
 import { AuditLogPage } from './features/audit/AuditLogPage'
 import { BankingPage } from './features/banking/BankingPage'
+import { CounterpartyDetailPage } from './features/banking/CounterpartyDetailPage'
+import { LiquidityForecast } from './features/liquidity'
 
 function App() {
   return (
@@ -50,6 +52,8 @@ function App() {
         <Route path="contracts/import" element={<ContractImport />} />
         <Route path="invoices/export" element={<InvoiceExportPage />} />
         <Route path="banking" element={<BankingPage />} />
+        <Route path="banking/counterparty/:name" element={<CounterpartyDetailPage />} />
+        <Route path="liquidity-forecast" element={<LiquidityForecast />} />
         <Route path="audit-log" element={<AuditLogPage />} />
       </Route>
     </Routes>

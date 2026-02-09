@@ -831,6 +831,7 @@
     "assignToPlaceholder": "Benutzer auswählen...",
     "unassigned": "Nicht zugewiesen",
     "shareWithTeam": "Mit Team teilen",
+    "showRecentlyClosed": "Erledigte anzeigen (14 Tage)",
     "confirmDelete": "Möchten Sie diese Aufgabe wirklich löschen?",
     "errorTextRequired": "Bitte geben Sie eine Beschreibung ein",
     "errorContextRequired": "Bitte wählen Sie einen Kontext aus",

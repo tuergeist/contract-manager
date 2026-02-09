@@ -831,6 +831,7 @@
     "assignToPlaceholder": "Select a user...",
     "unassigned": "Unassigned",
     "shareWithTeam": "Share with team",
+    "showRecentlyClosed": "Show closed (14 days)",
     "confirmDelete": "Are you sure you want to delete this todo?",
     "errorTextRequired": "Please enter a description",
     "errorContextRequired": "Please select a context",

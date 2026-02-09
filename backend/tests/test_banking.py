@@ -563,3 +563,183 @@ class TestUploadEndpoint:
         ):
             response = view(request, account_id=account.id)
         assert response.status_code == 401
+
+
+# ============================================================
+# Counterparty Query Tests
+# ============================================================
+
+
+class TestBankCounterparties:
+    """Test bankCounterparties query and counterpartyName filter."""
+
+    def test_counterparties_list(self, user, account, tenant):
+        MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            query {
+              bankCounterparties {
+                items { name totalDebit totalCredit transactionCount firstDate lastDate }
+                totalCount
+                hasNextPage
+              }
+            }
+            """,
+            {},
+            ctx,
+        )
+        assert result.errors is None
+        data = result.data["bankCounterparties"]
+        assert data["totalCount"] == 3
+        names = {item["name"] for item in data["items"]}
+        assert "BMW Bank GmbH" in names
+        assert "Acme Corp GmbH" in names
+        assert "Piepenbrock GmbH" in names
+
+    def test_counterparties_aggregation(self, user, account, tenant):
+        MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            query {
+              bankCounterparties(sortBy: "name", sortOrder: "asc") {
+                items { name totalDebit totalCredit transactionCount }
+              }
+            }
+            """,
+            {},
+            ctx,
+        )
+        assert result.errors is None
+        items = result.data["bankCounterparties"]["items"]
+
+        acme = next(i for i in items if i["name"] == "Acme Corp GmbH")
+        assert float(acme["totalCredit"]) == 1500.0
+        assert float(acme["totalDebit"]) == 0.0
+        assert acme["transactionCount"] == 1
+
+        bmw = next(i for i in items if i["name"] == "BMW Bank GmbH")
+        assert float(bmw["totalDebit"]) == -985.13
+        assert float(bmw["totalCredit"]) == 0.0
+
+    def test_counterparties_search(self, user, account, tenant):
+        MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            query($search: String) {
+              bankCounterparties(search: $search) {
+                totalCount
+                items { name }
+              }
+            }
+            """,
+            {"search": "Piepen"},
+            ctx,
+        )
+        assert result.errors is None
+        assert result.data["bankCounterparties"]["totalCount"] == 1
+        assert result.data["bankCounterparties"]["items"][0]["name"] == "Piepenbrock GmbH"
+
+    def test_counterparties_sort_by_name(self, user, account, tenant):
+        MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            query {
+              bankCounterparties(sortBy: "name", sortOrder: "asc") {
+                items { name }
+              }
+            }
+            """,
+            {},
+            ctx,
+        )
+        assert result.errors is None
+        names = [i["name"] for i in result.data["bankCounterparties"]["items"]]
+        assert names == sorted(names)
+
+    def test_counterparties_pagination(self, user, account, tenant):
+        MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            query {
+              bankCounterparties(page: 1, pageSize: 2) {
+                totalCount
+                items { name }
+                hasNextPage
+              }
+            }
+            """,
+            {},
+            ctx,
+        )
+        assert result.errors is None
+        data = result.data["bankCounterparties"]
+        assert data["totalCount"] == 3
+        assert len(data["items"]) == 2
+        assert data["hasNextPage"] is True
+
+    def test_counterparty_name_filter_on_transactions(self, user, account, tenant):
+        MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            query($counterpartyName: String) {
+              bankTransactions(counterpartyName: $counterpartyName) {
+                totalCount
+                items { counterpartyName amount }
+              }
+            }
+            """,
+            {"counterpartyName": "BMW Bank GmbH"},
+            ctx,
+        )
+        assert result.errors is None
+        data = result.data["bankTransactions"]
+        assert data["totalCount"] == 1
+        assert data["items"][0]["counterpartyName"] == "BMW Bank GmbH"
+
+    def test_counterparty_name_filter_case_sensitive(self, user, account, tenant):
+        MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            query($counterpartyName: String) {
+              bankTransactions(counterpartyName: $counterpartyName) {
+                totalCount
+              }
+            }
+            """,
+            {"counterpartyName": "bmw bank gmbh"},
+            ctx,
+        )
+        assert result.errors is None
+        assert result.data["bankTransactions"]["totalCount"] == 0
+
+    def test_counterparties_empty_state(self, user):
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            query {
+              bankCounterparties {
+                totalCount
+                items { name }
+              }
+            }
+            """,
+            {},
+            ctx,
+        )
+        assert result.errors is None
+        assert result.data["bankCounterparties"]["totalCount"] == 0
+        assert result.data["bankCounterparties"]["items"] == []
