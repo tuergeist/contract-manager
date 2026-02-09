@@ -18,7 +18,7 @@ PERMISSION_REGISTRY = {
     "settings": ["read", "write"],
     "todos": ["read", "write"],
     "notes": ["read", "write"],
-    "invoices": ["read", "write"],
+    "invoices": ["read", "export", "generate", "settings"],
 }
 
 # All permissions as flat "resource.action" strings
@@ -34,7 +34,9 @@ DEFAULT_ROLES = {
     "Manager": {
         perm: True
         for perm in ALL_PERMISSIONS
-        if not perm.startswith("users.") and not perm.startswith("settings.")
+        if not perm.startswith("users.")
+        and not perm.startswith("settings.")
+        and perm != "invoices.settings"
     },
     "Viewer": {
         "contracts.read": True,

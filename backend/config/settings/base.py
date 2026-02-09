@@ -115,11 +115,11 @@ LOCALE_PATHS = [
 ]
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Media files
-MEDIA_URL = "media/"
+MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # File upload settings
@@ -129,6 +129,11 @@ ALLOWED_ATTACHMENT_EXTENSIONS = [
     ".png", ".jpg", ".jpeg", ".gif",
     ".zip", ".rar", ".7z",
 ]
+
+# Invoice file upload settings
+ALLOWED_LOGO_EXTENSIONS = [".png", ".jpg", ".jpeg", ".svg"]
+MAX_LOGO_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_REFERENCE_PDF_SIZE = 20 * 1024 * 1024  # 20MB
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

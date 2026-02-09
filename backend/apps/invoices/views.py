@@ -9,6 +9,28 @@ from apps.invoices.services import InvoiceService
 
 
 @method_decorator(csrf_exempt, name="dispatch")
+class InvoicePreviewView(View):
+    """REST endpoint for generating a sample invoice PDF with current template settings."""
+
+    def get(self, request):
+        user = get_current_user_from_request(request)
+        if not user:
+            return JsonResponse({"error": "Authentication required"}, status=401)
+
+        language = request.GET.get("language", "de")
+        if language not in ("de", "en"):
+            language = "de"
+
+        service = InvoiceService(user.tenant)
+        content = service.generate_preview_pdf(language=language)
+
+        response = HttpResponse(content, content_type="application/pdf")
+        response["Content-Disposition"] = 'inline; filename="invoice-preview.pdf"'
+        response["Content-Length"] = len(content)
+        return response
+
+
+@method_decorator(csrf_exempt, name="dispatch")
 class InvoiceExportView(View):
     """REST endpoint for exporting invoices as PDF or Excel."""
 
@@ -29,6 +51,10 @@ class InvoiceExportView(View):
         user = get_current_user_from_request(request)
         if not user:
             return JsonResponse({"error": "Authentication required"}, status=401)
+
+        # Check permission
+        if not user.has_perm_check("invoices", "export"):
+            return JsonResponse({"error": "Permission denied"}, status=403)
 
         # Parse parameters
         try:

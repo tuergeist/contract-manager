@@ -11,7 +11,7 @@ from apps.contracts.schema import (
     ContractImportQuery,
     ContractImportMutation,
 )
-from apps.invoices.schema import InvoiceQuery
+from apps.invoices.schema import InvoiceQuery, InvoiceMutation
 from apps.audit.schema import AuditLogQuery
 from apps.todos.schema import TodoQuery, TodoMutation
 
@@ -34,7 +34,7 @@ class Query(
 
 
 @strawberry.type
-class Mutation(AuthMutation, FeedbackMutation, TenantMutation, CustomerMutation, ContractMutation, ContractImportMutation, TodoMutation):
+class Mutation(AuthMutation, FeedbackMutation, TenantMutation, CustomerMutation, ContractMutation, ContractImportMutation, TodoMutation, InvoiceMutation):
     pass
 
 

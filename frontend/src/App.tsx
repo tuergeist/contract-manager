@@ -12,8 +12,7 @@ import { ContractList } from './features/contracts/ContractList'
 import { ContractForm } from './features/contracts/ContractForm'
 import { ContractDetail } from './features/contracts/ContractDetail'
 import { RevenueForecast } from './features/forecast/RevenueForecast'
-import { Settings } from './features/settings/Settings'
-import { UserManagement } from './features/settings/UserManagement'
+import { SettingsLayout } from './features/settings/SettingsLayout'
 import { ContractImport } from './features/contracts/import/ContractImport'
 import { InvoiceExportPage } from './features/invoices/InvoiceExportPage'
 import { AuditLogPage } from './features/audit/AuditLogPage'
@@ -41,8 +40,11 @@ function App() {
         <Route path="contracts/:id" element={<ContractDetail />} />
         <Route path="contracts/:id/edit" element={<ContractForm />} />
         <Route path="forecast" element={<RevenueForecast />} />
-        <Route path="settings" element={<Settings />} />
-        <Route path="settings/users" element={<UserManagement />} />
+        <Route path="settings" element={<SettingsLayout />} />
+        <Route path="settings/users" element={<SettingsLayout />} />
+        <Route path="settings/invoices" element={<SettingsLayout />} />
+        <Route path="settings/invoices/numbering" element={<SettingsLayout />} />
+        <Route path="settings/invoices/template" element={<SettingsLayout />} />
         <Route path="contracts/import" element={<ContractImport />} />
         <Route path="invoices/export" element={<InvoiceExportPage />} />
         <Route path="audit-log" element={<AuditLogPage />} />

@@ -419,7 +419,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], input: CompanyLegalDataInput
     ) -> CompanyLegalDataResult:
         """Save company legal data for the tenant."""
-        user, err = check_perm(info, "settings", "write")
+        user, err = check_perm(info, "invoices", "settings")
         if err:
             return CompanyLegalDataResult(success=False, error=err)
 
@@ -475,7 +475,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], input: InvoiceNumberSchemeInput
     ) -> InvoiceNumberSchemeResult:
         """Save invoice number scheme for the tenant."""
-        user, err = check_perm(info, "settings", "write")
+        user, err = check_perm(info, "invoices", "settings")
         if err:
             return InvoiceNumberSchemeResult(success=False, error=err)
 
@@ -533,7 +533,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], input: InvoiceTemplateInput
     ) -> InvoiceTemplateResult:
         """Save invoice template settings."""
-        user, err = check_perm(info, "settings", "write")
+        user, err = check_perm(info, "invoices", "settings")
         if err:
             return InvoiceTemplateResult(success=False, error=err)
 
@@ -557,7 +557,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], input: UploadLogoInput
     ) -> InvoiceTemplateResult:
         """Upload a logo image for invoice template."""
-        user, err = check_perm(info, "settings", "write")
+        user, err = check_perm(info, "invoices", "settings")
         if err:
             return InvoiceTemplateResult(success=False, error=err)
 
@@ -608,7 +608,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], input: UploadReferencePdfInput
     ) -> InvoiceTemplateResult:
         """Upload a reference PDF for the invoice template."""
-        user, err = check_perm(info, "settings", "write")
+        user, err = check_perm(info, "invoices", "settings")
         if err:
             return InvoiceTemplateResult(success=False, error=err)
 
@@ -661,7 +661,7 @@ class InvoiceMutation:
         self, info: Info[Context, None]
     ) -> DeleteResult:
         """Delete the invoice template logo."""
-        user, err = check_perm(info, "settings", "write")
+        user, err = check_perm(info, "invoices", "settings")
         if err:
             return DeleteResult(success=False, error=err)
 
@@ -684,7 +684,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], reference_id: int
     ) -> DeleteResult:
         """Delete a reference PDF from the template."""
-        user, err = check_perm(info, "settings", "write")
+        user, err = check_perm(info, "invoices", "settings")
         if err:
             return DeleteResult(success=False, error=err)
 
@@ -707,7 +707,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], year: int, month: int
     ) -> GenerateInvoicesResult:
         """Generate and persist invoices for a month."""
-        user, err = check_perm(info, "invoices", "write")
+        user, err = check_perm(info, "invoices", "generate")
         if err:
             return GenerateInvoicesResult(success=False, error=err)
 
@@ -728,7 +728,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], invoice_id: int
     ) -> CancelInvoiceResult:
         """Cancel a finalized invoice."""
-        user, err = check_perm(info, "invoices", "write")
+        user, err = check_perm(info, "invoices", "generate")
         if err:
             return CancelInvoiceResult(success=False, error=err)
 
@@ -757,7 +757,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], reference_id: int
     ) -> AnalyzeReferenceResult:
         """Analyze a reference invoice PDF to extract legal data, design, and layout."""
-        user, err = check_perm(info, "settings", "write")
+        user, err = check_perm(info, "invoices", "settings")
         if err:
             return AnalyzeReferenceResult(success=False, error=err)
 

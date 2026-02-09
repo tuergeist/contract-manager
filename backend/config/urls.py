@@ -1,4 +1,6 @@
 """URL configuration for contract-manager project."""
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import path
@@ -21,7 +23,7 @@ class AuthenticatedGraphQLView(GraphQLView):
         return get_context(request)
 
 
-from apps.invoices.views import InvoiceExportView
+from apps.invoices.views import InvoiceExportView, InvoicePreviewView
 from apps.contracts.views import AttachmentDownloadView
 from apps.customers.views import CustomerAttachmentDownloadView
 
@@ -30,6 +32,10 @@ urlpatterns = [
     path("graphql", csrf_exempt(AuthenticatedGraphQLView.as_view(schema=schema))),
     path("api/health", health_check),
     path("api/invoices/export/", InvoiceExportView.as_view(), name="invoice-export"),
+    path("api/invoices/preview/", InvoicePreviewView.as_view(), name="invoice-preview"),
     path("api/attachments/<int:attachment_id>/download/", AttachmentDownloadView.as_view(), name="attachment-download"),
     path("api/customer-attachments/<int:attachment_id>/download/", CustomerAttachmentDownloadView.as_view(), name="customer-attachment-download"),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

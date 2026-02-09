@@ -114,7 +114,11 @@ const SAVE_COMPANY_FILTERS = gql`
   }
 `
 
-export function Settings() {
+interface SettingsProps {
+  showHeader?: boolean
+}
+
+export function Settings({ showHeader = true }: SettingsProps) {
   const { t, i18n } = useTranslation()
   const [ttProvider, setTtProvider] = useState('clockodo')
   const [ttApiEmail, setTtApiEmail] = useState('')
@@ -356,9 +360,9 @@ export function Settings() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">{t('nav.settings')}</h1>
+      {showHeader && <h1 className="text-2xl font-bold">{t('nav.settings')}</h1>}
 
-      <div className="mt-6 space-y-6">
+      <div className={showHeader ? "mt-6 space-y-6" : "space-y-6"}>
         {/* HubSpot Integration */}
         <div className="rounded-lg border bg-white p-6">
           <h2 className="text-lg font-medium">{t('settings.hubspot.title')}</h2>

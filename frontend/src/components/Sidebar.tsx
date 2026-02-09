@@ -12,7 +12,6 @@ import {
   LogOut,
   FileDown,
   History,
-  UserCog,
   Search,
   Loader2,
   User,
@@ -62,11 +61,10 @@ const navItems: NavItem[] = [
   { to: '/customers', icon: Users, labelKey: 'nav.customers' },
   { to: '/products', icon: Package, labelKey: 'nav.products' },
   { to: '/contracts', icon: FileText, labelKey: 'nav.contracts' },
-  { to: '/invoices/export', icon: FileDown, labelKey: 'nav.invoiceExport' },
+  { to: '/invoices/export', icon: FileDown, labelKey: 'nav.invoiceExport', permission: 'invoices.export' },
   { to: '/forecast', icon: TrendingUp, labelKey: 'nav.forecast' },
   { to: '/audit-log', icon: History, labelKey: 'nav.auditLog' },
   { to: '/settings', icon: Settings, labelKey: 'nav.settings', end: true },
-  { to: '/settings/users', icon: UserCog, labelKey: 'users.title', permission: 'users.read' },
 ]
 
 export function Sidebar() {
