@@ -108,3 +108,72 @@ class BankTransaction(TenantModel):
         """Compute deterministic SHA256 hash for deduplication."""
         raw = f"{account_id}|{entry_date}|{amount}|{currency}|{reference}|{counterparty_name}"
         return hashlib.sha256(raw.encode()).hexdigest()
+
+
+class RecurringPattern(TenantModel):
+    """A detected recurring payment pattern from bank transactions."""
+
+    class Frequency(models.TextChoices):
+        MONTHLY = "monthly", "Monthly"
+        QUARTERLY = "quarterly", "Quarterly"
+        SEMI_ANNUAL = "semi_annual", "Semi-Annual"
+        ANNUAL = "annual", "Annual"
+        IRREGULAR = "irregular", "Irregular"
+
+    counterparty_name = models.CharField(max_length=255)
+    counterparty_iban = models.CharField(max_length=50, blank=True)
+    average_amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        help_text="Average transaction amount (negative for costs)",
+    )
+    frequency = models.CharField(
+        max_length=20,
+        choices=Frequency.choices,
+        default=Frequency.MONTHLY,
+    )
+    day_of_month = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Typical day of month for payment (1-31)",
+    )
+    confidence_score = models.FloatField(
+        default=0.0,
+        help_text="Detection confidence (0.0-1.0)",
+    )
+    is_confirmed = models.BooleanField(
+        default=False,
+        help_text="User has confirmed this pattern",
+    )
+    is_ignored = models.BooleanField(
+        default=False,
+        help_text="User has dismissed this pattern",
+    )
+    is_paused = models.BooleanField(
+        default=False,
+        help_text="Temporarily excluded from projections",
+    )
+    last_occurrence = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date of most recent matching transaction",
+    )
+    source_transactions = models.ManyToManyField(
+        BankTransaction,
+        related_name="recurring_patterns",
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-confidence_score", "-last_occurrence"]
+        indexes = [
+            models.Index(
+                fields=["tenant", "is_confirmed", "is_ignored"],
+                name="idx_pattern_tenant_status",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.counterparty_name} ({self.frequency}) {self.average_amount}"
