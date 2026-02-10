@@ -41,3 +41,22 @@ export function formatMonthYear(dateStr: string | null | undefined): string {
   const year = d.getFullYear()
   return `${month}.${year}`
 }
+
+/**
+ * Format number as currency (EUR)
+ */
+export function formatCurrency(
+  value: number | null | undefined,
+  options?: { compact?: boolean }
+): string {
+  if (value === null || value === undefined) return '-'
+  const formatOptions: Intl.NumberFormatOptions = {
+    style: 'currency',
+    currency: 'EUR',
+  }
+  if (options?.compact) {
+    formatOptions.notation = 'compact'
+    formatOptions.maximumFractionDigits = 1
+  }
+  return new Intl.NumberFormat('de-DE', formatOptions).format(value)
+}
