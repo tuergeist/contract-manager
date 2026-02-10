@@ -114,11 +114,24 @@ class BankAccountResult:
 
 
 @strawberry.input
+class CreateCounterpartyInput:
+    name: str
+    iban: str = ""
+    bic: str = ""
+
+
+@strawberry.input
 class UpdateCounterpartyInput:
     id: strawberry.ID
     name: str | None = None
     iban: str | None = None
     bic: str | None = None
+
+
+@strawberry.input
+class UpdateTransactionCounterpartyInput:
+    transaction_id: int
+    counterparty_id: strawberry.ID
 
 
 @strawberry.type
@@ -661,6 +674,66 @@ class BankingMutation:
             return DeleteResult(success=False, error="Account not found.")
 
         account.delete()
+        return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def create_counterparty(
+        self, info: Info[Context, None], input: CreateCounterpartyInput
+    ) -> CounterpartyResult:
+        """Create a new counterparty."""
+        user, err = check_perm(info, "banking", "write")
+        if err:
+            return CounterpartyResult(success=False, error=err)
+
+        from apps.banking.models import Counterparty
+
+        name = input.name.strip()
+        if not name:
+            return CounterpartyResult(success=False, error="Name is required.")
+
+        # Check for duplicate name
+        if Counterparty.objects.filter(tenant=user.tenant, name=name).exists():
+            return CounterpartyResult(
+                success=False,
+                error="A counterparty with this name already exists.",
+            )
+
+        cp = Counterparty.objects.create(
+            tenant=user.tenant,
+            name=name,
+            iban=input.iban.strip(),
+            bic=input.bic.strip(),
+        )
+
+        return CounterpartyResult(
+            success=True,
+            counterparty=_make_counterparty_type(cp),
+        )
+
+    @strawberry.mutation
+    def update_transaction_counterparty(
+        self, info: Info[Context, None], input: UpdateTransactionCounterpartyInput
+    ) -> DeleteResult:
+        """Update a transaction's counterparty."""
+        user, err = check_perm(info, "banking", "write")
+        if err:
+            return DeleteResult(success=False, error=err)
+
+        from apps.banking.models import BankTransaction, Counterparty
+
+        try:
+            txn = BankTransaction.objects.get(id=input.transaction_id, tenant=user.tenant)
+        except BankTransaction.DoesNotExist:
+            return DeleteResult(success=False, error="Transaction not found.")
+
+        try:
+            cp = Counterparty.objects.get(id=str(input.counterparty_id), tenant=user.tenant)
+        except Counterparty.DoesNotExist:
+            return DeleteResult(success=False, error="Counterparty not found.")
+
+        txn.counterparty = cp
+        txn.save(update_fields=["counterparty", "updated_at"])
+
         return DeleteResult(success=True)
 
     @strawberry.mutation

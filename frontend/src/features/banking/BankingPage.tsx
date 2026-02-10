@@ -30,6 +30,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from '@/components/ui/command'
 import { useAuth } from '@/lib/auth'
 
 // --- GraphQL ---
@@ -147,6 +161,42 @@ const DELETE_BANK_ACCOUNT = gql`
   }
 `
 
+const CREATE_COUNTERPARTY = gql`
+  mutation CreateCounterparty($input: CreateCounterpartyInput!) {
+    createCounterparty(input: $input) {
+      success
+      error
+      counterparty {
+        id
+        name
+        iban
+        bic
+      }
+    }
+  }
+`
+
+const UPDATE_TRANSACTION_COUNTERPARTY = gql`
+  mutation UpdateTransactionCounterparty($input: UpdateTransactionCounterpartyInput!) {
+    updateTransactionCounterparty(input: $input) {
+      success
+      error
+    }
+  }
+`
+
+const SEARCH_COUNTERPARTIES = gql`
+  query SearchCounterparties($search: String, $pageSize: Int) {
+    counterparties(search: $search, pageSize: $pageSize) {
+      items {
+        id
+        name
+        iban
+      }
+    }
+  }
+`
+
 const BANK_COUNTERPARTIES = gql`
   query BankCounterparties(
     $search: String
@@ -231,6 +281,13 @@ export function BankingPage() {
 
   // Expanded transaction row
   const [expandedTxId, setExpandedTxId] = useState<number | null>(null)
+
+  // Edit counterparty state
+  const [editingTxCounterparty, setEditingTxCounterparty] = useState<BankTransaction | null>(null)
+  const [cpSearchQuery, setCpSearchQuery] = useState('')
+  const [cpSearchDebounced, setCpSearchDebounced] = useState('')
+  const [newCpName, setNewCpName] = useState('')
+  const [showCreateCp, setShowCreateCp] = useState(false)
 
   // Account dialog state
   const [accountDialogOpen, setAccountDialogOpen] = useState(false)
@@ -334,6 +391,21 @@ export function BankingPage() {
   const [createAccount, { loading: creating }] = useMutation(CREATE_BANK_ACCOUNT)
   const [updateAccount, { loading: updating }] = useMutation(UPDATE_BANK_ACCOUNT)
   const [deleteAccount, { loading: deleting }] = useMutation(DELETE_BANK_ACCOUNT)
+  const [createCounterparty, { loading: creatingCp }] = useMutation(CREATE_COUNTERPARTY)
+  const [updateTxCounterparty, { loading: updatingTxCp }] = useMutation(UPDATE_TRANSACTION_COUNTERPARTY)
+
+  // Search counterparties for popover
+  const { data: cpSearchData } = useQuery(SEARCH_COUNTERPARTIES, {
+    variables: { search: cpSearchDebounced || null, pageSize: 20 },
+    skip: !editingTxCounterparty,
+  })
+  const searchedCounterparties: Counterparty[] = cpSearchData?.counterparties?.items ?? []
+
+  // Debounce counterparty search in popover
+  useEffect(() => {
+    const timer = setTimeout(() => setCpSearchDebounced(cpSearchQuery), 200)
+    return () => clearTimeout(timer)
+  }, [cpSearchQuery])
 
   // Handlers
 
@@ -411,6 +483,57 @@ export function BankingPage() {
       if (data?.deleteBankAccount?.success) {
         setDeleteConfirmId(null)
         refetchAccounts()
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleSelectCounterparty = async (counterpartyId: string) => {
+    if (!editingTxCounterparty) return
+    try {
+      const { data } = await updateTxCounterparty({
+        variables: {
+          input: {
+            transactionId: editingTxCounterparty.id,
+            counterpartyId,
+          },
+        },
+        refetchQueries: [{ query: BANK_TRANSACTIONS, variables: {
+          accountId: filterAccountId !== 'all' ? parseInt(filterAccountId) : null,
+          search: debouncedSearch || null,
+          dateFrom: dateFrom || null,
+          dateTo: dateTo || null,
+          amountMin: amountMin ? parseFloat(amountMin) : null,
+          amountMax: amountMax ? parseFloat(amountMax) : null,
+          direction: direction !== 'all' ? direction : null,
+          sortBy,
+          sortOrder,
+          page,
+          pageSize,
+        }}],
+      })
+      if (data?.updateTransactionCounterparty?.success) {
+        setEditingTxCounterparty(null)
+        setCpSearchQuery('')
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleCreateAndSelectCounterparty = async () => {
+    if (!editingTxCounterparty || !newCpName.trim()) return
+    try {
+      const { data } = await createCounterparty({
+        variables: {
+          input: { name: newCpName.trim() },
+        },
+      })
+      if (data?.createCounterparty?.success && data.createCounterparty.counterparty) {
+        await handleSelectCounterparty(data.createCounterparty.counterparty.id)
+        setNewCpName('')
+        setShowCreateCp(false)
       }
     } catch {
       // ignore
@@ -981,18 +1104,112 @@ export function BankingPage() {
                           {formatDate(tx.entryDate)}
                         </td>
                         <td className="max-w-[220px] px-4 py-2.5 text-gray-900">
-                          <div className="truncate">
-                            {tx.counterparty?.name ? (
-                              <Link
-                                to={`/banking/counterparty/${tx.counterparty.id}`}
+                          <div className="flex items-center gap-1">
+                            <div className="min-w-0 flex-1 truncate">
+                              {tx.counterparty?.name ? (
+                                <Link
+                                  to={`/banking/counterparty/${tx.counterparty.id}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="truncate text-blue-600 hover:text-blue-800 hover:underline"
+                                >
+                                  {tx.counterparty.name}
+                                </Link>
+                              ) : (
+                                <span className="truncate">-</span>
+                              )}
+                            </div>
+                            <Popover
+                              open={editingTxCounterparty?.id === tx.id}
+                              onOpenChange={(open) => {
+                                if (open) {
+                                  setEditingTxCounterparty(tx)
+                                  setCpSearchQuery('')
+                                  setShowCreateCp(false)
+                                  setNewCpName('')
+                                } else {
+                                  setEditingTxCounterparty(null)
+                                }
+                              }}
+                            >
+                              <PopoverTrigger asChild>
+                                <button
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="flex-shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                                  title={t('banking.editCounterparty')}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                className="w-[300px] p-0"
+                                align="start"
                                 onClick={(e) => e.stopPropagation()}
-                                className="truncate text-blue-600 hover:text-blue-800 hover:underline"
                               >
-                                {tx.counterparty.name}
-                              </Link>
-                            ) : (
-                              <span className="truncate">-</span>
-                            )}
+                                {showCreateCp ? (
+                                  <div className="p-3 space-y-3">
+                                    <div className="text-sm font-medium">{t('banking.createCounterparty')}</div>
+                                    <input
+                                      type="text"
+                                      placeholder={t('banking.counterpartyName')}
+                                      value={newCpName}
+                                      onChange={(e) => setNewCpName(e.target.value)}
+                                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                                      autoFocus
+                                    />
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => setShowCreateCp(false)}
+                                        className="flex-1 rounded border px-3 py-1.5 text-sm hover:bg-gray-50"
+                                      >
+                                        {t('common.cancel')}
+                                      </button>
+                                      <button
+                                        onClick={handleCreateAndSelectCounterparty}
+                                        disabled={!newCpName.trim() || creatingCp}
+                                        className="flex-1 rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+                                      >
+                                        {creatingCp ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : t('common.create')}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <Command shouldFilter={false}>
+                                    <CommandInput
+                                      placeholder={t('banking.searchCounterparty')}
+                                      value={cpSearchQuery}
+                                      onValueChange={setCpSearchQuery}
+                                    />
+                                    <CommandList>
+                                      <CommandEmpty>{t('banking.noCounterpartiesFound')}</CommandEmpty>
+                                      <CommandGroup>
+                                        {searchedCounterparties.map((cp) => (
+                                          <CommandItem
+                                            key={cp.id}
+                                            value={cp.id}
+                                            onSelect={() => handleSelectCounterparty(cp.id)}
+                                            disabled={updatingTxCp}
+                                          >
+                                            <div className="flex flex-col">
+                                              <span>{cp.name}</span>
+                                              {cp.iban && (
+                                                <span className="text-xs text-gray-400">{cp.iban}</span>
+                                              )}
+                                            </div>
+                                          </CommandItem>
+                                        ))}
+                                      </CommandGroup>
+                                      <CommandSeparator />
+                                      <CommandGroup>
+                                        <CommandItem onSelect={() => setShowCreateCp(true)}>
+                                          <Plus className="mr-2 h-4 w-4" />
+                                          {t('banking.createNewCounterparty')}
+                                        </CommandItem>
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                )}
+                              </PopoverContent>
+                            </Popover>
                           </div>
                         </td>
                         <td className="px-4 py-2.5 text-gray-600">

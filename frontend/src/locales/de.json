@@ -957,7 +957,12 @@
     "noCounterparties": "Keine Geschäftspartner gefunden.",
     "counterpartyNotFound": "Geschäftspartner nicht gefunden.",
     "totalAmount": "Gesamtbetrag",
-    "transactionsWithCounterparty": "Umsätze mit {{name}}"
+    "transactionsWithCounterparty": "Umsätze mit {{name}}",
+    "searchCounterparty": "Geschäftspartner suchen...",
+    "noCounterpartiesFound": "Keine Geschäftspartner gefunden.",
+    "createCounterparty": "Geschäftspartner erstellen",
+    "counterpartyName": "Name des Geschäftspartners",
+    "createNewCounterparty": "Neuen Geschäftspartner erstellen"
   },
   "liquidity": {
     "title": "Liquiditätsvorschau",

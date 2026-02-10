@@ -957,7 +957,12 @@
     "noCounterparties": "No counterparties found.",
     "counterpartyNotFound": "Counterparty not found.",
     "totalAmount": "Total Amount",
-    "transactionsWithCounterparty": "Transactions with {{name}}"
+    "transactionsWithCounterparty": "Transactions with {{name}}",
+    "searchCounterparty": "Search counterparty...",
+    "noCounterpartiesFound": "No counterparties found.",
+    "createCounterparty": "Create Counterparty",
+    "counterpartyName": "Counterparty name",
+    "createNewCounterparty": "Create new counterparty"
   },
   "liquidity": {
     "title": "Liquidity Forecast",
