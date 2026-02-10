@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 from dateutil.relativedelta import relativedelta
 
-from apps.banking.models import BankAccount, BankTransaction, RecurringPattern
+from apps.banking.models import BankAccount, BankTransaction, Counterparty, RecurringPattern
 from apps.banking.services.forecast import (
     get_current_balance,
     get_liquidity_forecast,
@@ -30,10 +30,15 @@ def transaction_with_balance(tenant, bank_account):
     """Create a transaction with closing balance."""
 
     def _create(closing_balance: Decimal, entry_date: date) -> BankTransaction:
+        counterparty, _ = Counterparty.objects.get_or_create(
+            tenant=tenant,
+            name="Test",
+            defaults={"iban": "", "bic": ""},
+        )
         return BankTransaction.objects.create(
             tenant=tenant,
             account=bank_account,
-            counterparty_name="Test",
+            counterparty=counterparty,
             amount=Decimal("0"),
             entry_date=entry_date,
             closing_balance=closing_balance,
@@ -48,16 +53,21 @@ def recurring_pattern(tenant):
     """Create a test recurring pattern."""
 
     def _create(
-        counterparty: str = "Netflix",
+        counterparty_name: str = "Netflix",
         amount: Decimal = Decimal("-12.99"),
         frequency: str = "monthly",
         day_of_month: int = 15,
         is_confirmed: bool = True,
         confidence_score: float = 0.9,
     ) -> RecurringPattern:
+        counterparty, _ = Counterparty.objects.get_or_create(
+            tenant=tenant,
+            name=counterparty_name,
+            defaults={"iban": "", "bic": ""},
+        )
         return RecurringPattern.objects.create(
             tenant=tenant,
-            counterparty_name=counterparty,
+            counterparty=counterparty,
             average_amount=amount,
             frequency=frequency,
             day_of_month=day_of_month,
@@ -94,10 +104,15 @@ class TestCurrentBalance:
             bank_code="87654321",
             account_number="0987654321",
         )
+        counterparty, _ = Counterparty.objects.get_or_create(
+            tenant=tenant,
+            name="Test",
+            defaults={"iban": "", "bic": ""},
+        )
         BankTransaction.objects.create(
             tenant=tenant,
             account=account2,
-            counterparty_name="Test",
+            counterparty=counterparty,
             amount=Decimal("0"),
             entry_date=date.today(),
             closing_balance=Decimal("3000.00"),

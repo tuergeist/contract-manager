@@ -120,7 +120,7 @@ class TestMT940Parsing:
 
         names = set(
             BankTransaction.objects.filter(account=account).values_list(
-                "counterparty_name", flat=True
+                "counterparty__name", flat=True
             )
         )
         assert "BMW Bank GmbH" in names
@@ -132,7 +132,7 @@ class TestMT940Parsing:
         service.parse_and_import(account, SAMPLE_MT940)
 
         txns = BankTransaction.objects.filter(
-            account=account, counterparty_name="Acme Corp GmbH"
+            account=account, counterparty__name="Acme Corp GmbH"
         )
         assert txns.exists()
         assert "Zahlung Rechnung INV-2025-001" in txns.first().booking_text
@@ -299,7 +299,7 @@ class TestBankingGraphQL:
             """
             query($accountId: Int) {
               bankTransactions(accountId: $accountId, page: 1, pageSize: 50) {
-                items { id entryDate amount counterpartyName bookingText accountName }
+                items { id entryDate amount counterparty { name } bookingText accountName }
                 totalCount
                 hasNextPage
               }
@@ -322,7 +322,7 @@ class TestBankingGraphQL:
             query($search: String) {
               bankTransactions(search: $search) {
                 totalCount
-                items { counterpartyName }
+                items { counterparty { name } }
               }
             }
             """,
@@ -331,7 +331,7 @@ class TestBankingGraphQL:
         )
         assert result.errors is None
         assert result.data["bankTransactions"]["totalCount"] == 1
-        assert result.data["bankTransactions"]["items"][0]["counterpartyName"] == "Piepenbrock GmbH"
+        assert result.data["bankTransactions"]["items"][0]["counterparty"]["name"] == "Piepenbrock GmbH"
 
     def test_bank_transactions_direction_filter(self, user, account, tenant):
         MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
@@ -571,7 +571,7 @@ class TestUploadEndpoint:
 
 
 class TestBankCounterparties:
-    """Test bankCounterparties query and counterpartyName filter."""
+    """Test counterparties query and counterpartyId filter."""
 
     def test_counterparties_list(self, user, account, tenant):
         MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
@@ -580,8 +580,8 @@ class TestBankCounterparties:
         result = run_graphql(
             """
             query {
-              bankCounterparties {
-                items { name totalDebit totalCredit transactionCount firstDate lastDate }
+              counterparties {
+                items { id name totalDebit totalCredit transactionCount firstDate lastDate }
                 totalCount
                 hasNextPage
               }
@@ -591,7 +591,7 @@ class TestBankCounterparties:
             ctx,
         )
         assert result.errors is None
-        data = result.data["bankCounterparties"]
+        data = result.data["counterparties"]
         assert data["totalCount"] == 3
         names = {item["name"] for item in data["items"]}
         assert "BMW Bank GmbH" in names
@@ -605,7 +605,7 @@ class TestBankCounterparties:
         result = run_graphql(
             """
             query {
-              bankCounterparties(sortBy: "name", sortOrder: "asc") {
+              counterparties(sortBy: "name", sortOrder: "asc") {
                 items { name totalDebit totalCredit transactionCount }
               }
             }
@@ -614,7 +614,7 @@ class TestBankCounterparties:
             ctx,
         )
         assert result.errors is None
-        items = result.data["bankCounterparties"]["items"]
+        items = result.data["counterparties"]["items"]
 
         acme = next(i for i in items if i["name"] == "Acme Corp GmbH")
         assert float(acme["totalCredit"]) == 1500.0
@@ -632,7 +632,7 @@ class TestBankCounterparties:
         result = run_graphql(
             """
             query($search: String) {
-              bankCounterparties(search: $search) {
+              counterparties(search: $search) {
                 totalCount
                 items { name }
               }
@@ -642,8 +642,8 @@ class TestBankCounterparties:
             ctx,
         )
         assert result.errors is None
-        assert result.data["bankCounterparties"]["totalCount"] == 1
-        assert result.data["bankCounterparties"]["items"][0]["name"] == "Piepenbrock GmbH"
+        assert result.data["counterparties"]["totalCount"] == 1
+        assert result.data["counterparties"]["items"][0]["name"] == "Piepenbrock GmbH"
 
     def test_counterparties_sort_by_name(self, user, account, tenant):
         MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
@@ -652,7 +652,7 @@ class TestBankCounterparties:
         result = run_graphql(
             """
             query {
-              bankCounterparties(sortBy: "name", sortOrder: "asc") {
+              counterparties(sortBy: "name", sortOrder: "asc") {
                 items { name }
               }
             }
@@ -661,7 +661,7 @@ class TestBankCounterparties:
             ctx,
         )
         assert result.errors is None
-        names = [i["name"] for i in result.data["bankCounterparties"]["items"]]
+        names = [i["name"] for i in result.data["counterparties"]["items"]]
         assert names == sorted(names)
 
     def test_counterparties_pagination(self, user, account, tenant):
@@ -671,7 +671,7 @@ class TestBankCounterparties:
         result = run_graphql(
             """
             query {
-              bankCounterparties(page: 1, pageSize: 2) {
+              counterparties(page: 1, pageSize: 2) {
                 totalCount
                 items { name }
                 hasNextPage
@@ -682,56 +682,73 @@ class TestBankCounterparties:
             ctx,
         )
         assert result.errors is None
-        data = result.data["bankCounterparties"]
+        data = result.data["counterparties"]
         assert data["totalCount"] == 3
         assert len(data["items"]) == 2
         assert data["hasNextPage"] is True
 
-    def test_counterparty_name_filter_on_transactions(self, user, account, tenant):
+    def test_counterparty_id_filter_on_transactions(self, user, account, tenant):
+        from apps.banking.models import Counterparty
+
         MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+
+        # Get the counterparty ID for BMW Bank GmbH
+        bmw_cp = Counterparty.objects.get(tenant=tenant, name="BMW Bank GmbH")
 
         ctx = make_context(user)
         result = run_graphql(
             """
-            query($counterpartyName: String) {
-              bankTransactions(counterpartyName: $counterpartyName) {
+            query($counterpartyId: ID) {
+              bankTransactions(counterpartyId: $counterpartyId) {
                 totalCount
-                items { counterpartyName amount }
+                items { counterparty { name } amount }
               }
             }
             """,
-            {"counterpartyName": "BMW Bank GmbH"},
+            {"counterpartyId": str(bmw_cp.id)},
             ctx,
         )
         assert result.errors is None
         data = result.data["bankTransactions"]
         assert data["totalCount"] == 1
-        assert data["items"][0]["counterpartyName"] == "BMW Bank GmbH"
+        assert data["items"][0]["counterparty"]["name"] == "BMW Bank GmbH"
 
-    def test_counterparty_name_filter_case_sensitive(self, user, account, tenant):
+    def test_counterparty_query_by_id(self, user, account, tenant):
+        from apps.banking.models import Counterparty
+
         MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+
+        # Get the counterparty ID for Acme Corp GmbH
+        acme_cp = Counterparty.objects.get(tenant=tenant, name="Acme Corp GmbH")
 
         ctx = make_context(user)
         result = run_graphql(
             """
-            query($counterpartyName: String) {
-              bankTransactions(counterpartyName: $counterpartyName) {
-                totalCount
+            query($id: ID!) {
+              counterparty(id: $id) {
+                id
+                name
+                totalDebit
+                totalCredit
+                transactionCount
               }
             }
             """,
-            {"counterpartyName": "bmw bank gmbh"},
+            {"id": str(acme_cp.id)},
             ctx,
         )
         assert result.errors is None
-        assert result.data["bankTransactions"]["totalCount"] == 0
+        data = result.data["counterparty"]
+        assert data["name"] == "Acme Corp GmbH"
+        assert float(data["totalCredit"]) == 1500.0
+        assert data["transactionCount"] == 1
 
     def test_counterparties_empty_state(self, user):
         ctx = make_context(user)
         result = run_graphql(
             """
             query {
-              bankCounterparties {
+              counterparties {
                 totalCount
                 items { name }
               }
@@ -741,5 +758,5 @@ class TestBankCounterparties:
             ctx,
         )
         assert result.errors is None
-        assert result.data["bankCounterparties"]["totalCount"] == 0
-        assert result.data["bankCounterparties"]["items"] == []
+        assert result.data["counterparties"]["totalCount"] == 0
+        assert result.data["counterparties"]["items"] == []

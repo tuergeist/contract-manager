@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from apps.banking.models import BankAccount, BankTransaction, RecurringPattern
+from apps.banking.models import BankAccount, BankTransaction, Counterparty, RecurringPattern
 from apps.banking.services.pattern_detection import (
     calculate_confidence,
     calculate_similarity,
@@ -34,11 +34,16 @@ def create_transaction(tenant, bank_account):
         entry_date: date,
         counterparty_iban: str = "",
     ) -> BankTransaction:
+        # Get or create the Counterparty
+        counterparty, _ = Counterparty.objects.get_or_create(
+            tenant=tenant,
+            name=counterparty_name,
+            defaults={"iban": counterparty_iban, "bic": ""},
+        )
         return BankTransaction.objects.create(
             tenant=tenant,
             account=bank_account,
-            counterparty_name=counterparty_name,
-            counterparty_iban=counterparty_iban,
+            counterparty=counterparty,
             amount=amount,
             entry_date=entry_date,
             import_hash=BankTransaction.compute_hash(
@@ -204,7 +209,7 @@ class TestPatternDetection:
 
         assert len(patterns) == 1
         pattern = patterns[0]
-        assert pattern.counterparty_name == "Netflix"
+        assert pattern.counterparty.name == "Netflix"
         assert pattern.average_amount == Decimal("-12.99")
         assert pattern.frequency == "monthly"
         assert pattern.confidence_score > 0.5
@@ -252,5 +257,5 @@ class TestPatternDetection:
         patterns = detect_recurring_patterns(tenant)
 
         # Should not create a pattern since similarity < 2
-        misc_patterns = [p for p in patterns if "Misc Vendor" in p.counterparty_name]
+        misc_patterns = [p for p in patterns if "Misc Vendor" in p.counterparty.name]
         assert len(misc_patterns) == 0
