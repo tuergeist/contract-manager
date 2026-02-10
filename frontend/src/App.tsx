@@ -46,6 +46,7 @@ function App() {
         <Route path="settings" element={<SettingsLayout />} />
         <Route path="settings/general" element={<SettingsLayout />} />
         <Route path="settings/team" element={<SettingsLayout />} />
+        <Route path="settings/team/roles" element={<SettingsLayout />} />
         <Route path="settings/invoices" element={<SettingsLayout />} />
         <Route path="settings/invoices/numbering" element={<SettingsLayout />} />
         <Route path="settings/invoices/template" element={<SettingsLayout />} />

@@ -679,6 +679,10 @@
       "team": "Team",
       "invoices": "Invoicing"
     },
+    "team": {
+      "users": "Users",
+      "roles": "Roles & Permissions"
+    },
     "language": "Language",
     "languageDescription": "Choose your preferred language",
     "changePassword": "Change Password",

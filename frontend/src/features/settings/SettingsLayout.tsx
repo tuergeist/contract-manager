@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useAuth } from '@/lib/auth'
 import { Settings } from './Settings'
-import { UserManagement } from './UserManagement'
+import { UserSettings } from './UserSettings'
+import { TeamSettingsTabs } from './TeamSettingsTabs'
 import { InvoiceSettingsTabs } from './InvoiceSettingsTabs'
 
 export function SettingsLayout() {
@@ -14,17 +15,21 @@ export function SettingsLayout() {
 
   // Determine active tab from URL
   const getActiveTab = () => {
-    if (location.pathname.startsWith('/settings/users')) return 'users'
+    if (location.pathname.startsWith('/settings/team')) return 'team'
     if (location.pathname.startsWith('/settings/invoices')) return 'invoices'
-    return 'general'
+    if (location.pathname.startsWith('/settings/general')) return 'general'
+    return 'user'
   }
 
   const activeTab = getActiveTab()
 
   const handleTabChange = (value: string) => {
     switch (value) {
-      case 'users':
-        navigate('/settings/users')
+      case 'general':
+        navigate('/settings/general')
+        break
+      case 'team':
+        navigate('/settings/team')
         break
       case 'invoices':
         navigate('/settings/invoices')
@@ -43,22 +48,27 @@ export function SettingsLayout() {
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="mt-6">
         <TabsList className="mb-6">
+          <TabsTrigger value="user">{t('settings.tabs.user')}</TabsTrigger>
           <TabsTrigger value="general">{t('settings.tabs.general')}</TabsTrigger>
           {canViewUsers && (
-            <TabsTrigger value="users">{t('settings.tabs.users')}</TabsTrigger>
+            <TabsTrigger value="team">{t('settings.tabs.team')}</TabsTrigger>
           )}
           {canViewInvoiceSettings && (
             <TabsTrigger value="invoices">{t('settings.tabs.invoices')}</TabsTrigger>
           )}
         </TabsList>
 
+        <TabsContent value="user">
+          <UserSettings />
+        </TabsContent>
+
         <TabsContent value="general">
           <Settings showHeader={false} />
         </TabsContent>
 
         {canViewUsers && (
-          <TabsContent value="users">
-            <UserManagement />
+          <TabsContent value="team">
+            <TeamSettingsTabs />
           </TabsContent>
         )}
 

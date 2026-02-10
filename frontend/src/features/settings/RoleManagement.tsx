@@ -84,12 +84,12 @@ export function RoleManagement() {
   const [newRolePermissions, setNewRolePermissions] = useState<Record<string, boolean>>({})
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const { data, loading, refetch } = useQuery(ROLES_QUERY)
+  const { data, loading, error, refetch } = useQuery(ROLES_QUERY)
   const [createRole, { loading: creating }] = useMutation(CREATE_ROLE)
   const [updatePermissions, { loading: updating }] = useMutation(UPDATE_ROLE_PERMISSIONS)
   const [deleteRole, { loading: deleting }] = useMutation(DELETE_ROLE)
 
-  const canWrite = hasPermission('settings', 'write')
+  const canWrite = hasPermission('users', 'write')
 
   const roles: Role[] = data?.roles || []
   const registry: PermissionResource[] = data?.permissionRegistry || []
@@ -174,8 +174,8 @@ export function RoleManagement() {
     setPerms({ ...perms, [key]: !perms[key] })
   }
 
-  if (!hasPermission('settings', 'read')) return null
   if (loading) return <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin" /></div>
+  if (error) return <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-600">Error loading roles: {error.message}</div>
 
   return (
     <div className="rounded-lg border bg-white p-6">
@@ -382,11 +382,18 @@ function PermissionMatrix({
   t: (key: string) => string
 }) {
   // Collect all unique actions across resources
+  // Common actions first, invoice-specific actions last
   const allActions = Array.from(
     new Set(registry.flatMap((r) => r.actions))
   ).sort((a, b) => {
-    const order = ['read', 'write', 'delete']
-    return order.indexOf(a) - order.indexOf(b)
+    const order = ['read', 'write', 'delete', 'export', 'generate', 'settings']
+    const aIdx = order.indexOf(a)
+    const bIdx = order.indexOf(b)
+    // Unknown actions go to the end
+    if (aIdx === -1 && bIdx === -1) return a.localeCompare(b)
+    if (aIdx === -1) return 1
+    if (bIdx === -1) return -1
+    return aIdx - bIdx
   })
 
   return (
