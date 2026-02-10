@@ -298,42 +298,40 @@ export function CounterpartyDetailPage() {
         {t('banking.backToBanking')}
       </button>
 
-      {/* Summary Header */}
-      <div className="rounded-lg border bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-gray-900">{counterpartyName}</h1>
-        {summary ? (
-          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div>
-              <p className="text-xs font-medium uppercase text-gray-500">{t('banking.transactions')}</p>
-              <p className="mt-1 text-lg font-semibold text-gray-900">{summary.transactionCount}</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase text-gray-500">{t('banking.totalDebit')}</p>
-              <p className="mt-1 text-lg font-semibold text-red-600">
-                {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(parseFloat(summary.totalDebit))}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase text-gray-500">{t('banking.totalCredit')}</p>
-              <p className="mt-1 text-lg font-semibold text-green-600">
-                {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(parseFloat(summary.totalCredit))}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase text-gray-500">
-                {t('banking.firstTransaction')} &ndash; {t('banking.lastTransaction')}
-              </p>
-              <p className="mt-1 text-lg font-semibold text-gray-900">
-                {formatDate(summary.firstDate)} &ndash; {formatDate(summary.lastDate)}
-              </p>
-            </div>
+      {/* Page Title */}
+      <h1 className="text-2xl font-bold text-gray-900">{counterpartyName}</h1>
+
+      {/* Summary Cards - 4 in a row */}
+      {summary ? (
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-lg border bg-white p-4">
+            <p className="text-sm font-medium text-gray-500">{t('banking.transactions')}</p>
+            <p className="mt-1 text-xl font-semibold text-gray-900">{summary.transactionCount}</p>
           </div>
-        ) : (
-          !summaryLoading && (
-            <p className="mt-2 text-sm text-gray-500">{t('banking.noTransactions')}</p>
-          )
-        )}
-      </div>
+          <div className="rounded-lg border bg-white p-4">
+            <p className="text-sm font-medium text-gray-500">{t('banking.totalDebit')}</p>
+            <p className="mt-1 text-xl font-semibold text-red-600">
+              {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(parseFloat(summary.totalDebit))}
+            </p>
+          </div>
+          <div className="rounded-lg border bg-white p-4">
+            <p className="text-sm font-medium text-gray-500">{t('banking.totalCredit')}</p>
+            <p className="mt-1 text-xl font-semibold text-green-600">
+              {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(parseFloat(summary.totalCredit))}
+            </p>
+          </div>
+          <div className="rounded-lg border bg-white p-4">
+            <p className="text-sm font-medium text-gray-500">{t('banking.period')}</p>
+            <p className="mt-1 text-xl font-semibold text-gray-900">
+              {formatDate(summary.firstDate)} &ndash; {formatDate(summary.lastDate)}
+            </p>
+          </div>
+        </div>
+      ) : (
+        !summaryLoading && (
+          <p className="mt-4 text-sm text-gray-500">{t('banking.noTransactions')}</p>
+        )
+      )}
 
       {/* Transaction Table */}
       <div className="mt-6 space-y-4">
