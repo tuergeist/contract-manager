@@ -12,9 +12,16 @@ const UPDATE_PATTERN = gql`
   }
 `
 
+interface Counterparty {
+  id: string
+  name: string
+  iban: string
+  bic: string
+}
+
 interface Pattern {
   id: number
-  counterpartyName: string
+  counterparty: Counterparty
   averageAmount: number
   frequency: string
   dayOfMonth: number | null
@@ -92,7 +99,7 @@ export function EditPatternModal({ pattern, onClose, onSave }: EditPatternModalP
             <label className="block text-sm font-medium text-gray-700">
               {t('liquidity.counterparty')}
             </label>
-            <p className="mt-1 text-sm text-gray-900">{pattern.counterpartyName}</p>
+            <p className="mt-1 text-sm text-gray-900">{pattern.counterparty.name}</p>
           </div>
 
           <div>

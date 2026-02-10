@@ -955,6 +955,7 @@
     "lastTransaction": "Last Transaction",
     "backToBanking": "Back to Banking",
     "noCounterparties": "No counterparties found.",
+    "counterpartyNotFound": "Counterparty not found.",
     "totalAmount": "Total Amount",
     "transactionsWithCounterparty": "Transactions with {{name}}"
   },

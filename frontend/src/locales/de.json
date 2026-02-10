@@ -955,6 +955,7 @@
     "lastTransaction": "Letzte Buchung",
     "backToBanking": "Zurück zu Bankkonten",
     "noCounterparties": "Keine Geschäftspartner gefunden.",
+    "counterpartyNotFound": "Geschäftspartner nicht gefunden.",
     "totalAmount": "Gesamtbetrag",
     "transactionsWithCounterparty": "Umsätze mit {{name}}"
   },

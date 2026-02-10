@@ -2,6 +2,7 @@
 from datetime import date
 from decimal import Decimal
 from typing import List, Optional
+from uuid import UUID
 
 import strawberry
 from django.db.models import Count, Max, Min, Q, Sum
@@ -31,6 +32,41 @@ class BankAccountType:
 
 
 @strawberry.type
+class CounterpartyType:
+    """A counterparty entity with UUID identifier."""
+
+    id: strawberry.ID
+    name: str
+    iban: str
+    bic: str
+    transaction_count: int
+
+
+@strawberry.type
+class CounterpartySummaryType:
+    """Summary stats for a counterparty (used in detail views)."""
+
+    id: strawberry.ID
+    name: str
+    iban: str
+    bic: str
+    total_debit: Decimal
+    total_credit: Decimal
+    transaction_count: int
+    first_date: date | None
+    last_date: date | None
+
+
+@strawberry.type
+class CounterpartyPage:
+    items: List[CounterpartySummaryType]
+    total_count: int
+    page: int
+    page_size: int
+    has_next_page: bool
+
+
+@strawberry.type
 class BankTransactionType:
     id: int
     entry_date: date
@@ -38,9 +74,7 @@ class BankTransactionType:
     amount: Decimal
     currency: str
     transaction_type: str
-    counterparty_name: str
-    counterparty_iban: str
-    counterparty_bic: str
+    counterparty: CounterpartyType
     booking_text: str
     reference: str
     account_name: str
@@ -49,25 +83,6 @@ class BankTransactionType:
 @strawberry.type
 class BankTransactionPage:
     items: List[BankTransactionType]
-    total_count: int
-    page: int
-    page_size: int
-    has_next_page: bool
-
-
-@strawberry.type
-class BankCounterpartyType:
-    name: str
-    total_debit: Decimal
-    total_credit: Decimal
-    transaction_count: int
-    first_date: date
-    last_date: date
-
-
-@strawberry.type
-class BankCounterpartyPage:
-    items: List[BankCounterpartyType]
     total_count: int
     page: int
     page_size: int
@@ -99,23 +114,32 @@ class BankAccountResult:
 
 
 @strawberry.input
-class UpdateTransactionCounterpartyInput:
-    transaction_id: int
-    counterparty_name: str
+class UpdateCounterpartyInput:
+    id: strawberry.ID
+    name: str | None = None
+    iban: str | None = None
+    bic: str | None = None
 
 
 @strawberry.type
-class TransactionResult:
+class CounterpartyResult:
     success: bool
     error: str | None = None
-    transaction: BankTransactionType | None = None
+    counterparty: CounterpartyType | None = None
+
+
+@strawberry.type
+class MergeCounterpartiesResult:
+    success: bool
+    error: str | None = None
+    target: CounterpartyType | None = None
+    merged_transaction_count: int = 0
 
 
 @strawberry.type
 class RecurringPatternType:
     id: int
-    counterparty_name: str
-    counterparty_iban: str
+    counterparty: CounterpartyType
     average_amount: Decimal
     frequency: str
     day_of_month: int | None
@@ -131,7 +155,7 @@ class RecurringPatternType:
 @strawberry.type
 class ProjectedTransactionType:
     pattern_id: int
-    counterparty_name: str
+    counterparty: CounterpartyType
     amount: Decimal
     projected_date: date
     is_confirmed: bool
@@ -176,6 +200,38 @@ class UpdatePatternInput:
     day_of_month: int | None = None
 
 
+# --- Helper functions ---
+
+
+def _make_counterparty_type(cp) -> CounterpartyType:
+    """Convert a Counterparty model to CounterpartyType."""
+    return CounterpartyType(
+        id=strawberry.ID(str(cp.id)),
+        name=cp.name,
+        iban=cp.iban,
+        bic=cp.bic,
+        transaction_count=getattr(cp, "txn_count", cp.transactions.count()),
+    )
+
+
+def _make_pattern_type(pattern) -> RecurringPatternType:
+    """Convert a RecurringPattern model to RecurringPatternType."""
+    return RecurringPatternType(
+        id=pattern.id,
+        counterparty=_make_counterparty_type(pattern.counterparty),
+        average_amount=pattern.average_amount,
+        frequency=pattern.frequency,
+        day_of_month=pattern.day_of_month,
+        confidence_score=pattern.confidence_score,
+        is_confirmed=pattern.is_confirmed,
+        is_ignored=pattern.is_ignored,
+        is_paused=pattern.is_paused,
+        last_occurrence=pattern.last_occurrence,
+        projected_next_date=get_pattern_next_date(pattern),
+        source_transaction_count=pattern.source_transactions.count(),
+    )
+
+
 # --- Queries ---
 
 
@@ -210,7 +266,7 @@ class BankingQuery:
         info: Info[Context, None],
         account_id: int | None = None,
         search: str | None = None,
-        counterparty_name: str | None = None,
+        counterparty_id: strawberry.ID | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
         amount_min: Decimal | None = None,
@@ -226,16 +282,16 @@ class BankingQuery:
 
         qs = BankTransaction.objects.filter(
             tenant=user.tenant
-        ).select_related("account")
+        ).select_related("account", "counterparty")
 
         # Filters
         if account_id:
             qs = qs.filter(account_id=account_id)
-        if counterparty_name is not None:
-            qs = qs.filter(counterparty_name=counterparty_name)
+        if counterparty_id is not None:
+            qs = qs.filter(counterparty_id=str(counterparty_id))
         if search:
             qs = qs.filter(
-                Q(counterparty_name__icontains=search)
+                Q(counterparty__name__icontains=search)
                 | Q(booking_text__icontains=search)
             )
         if date_from:
@@ -262,7 +318,7 @@ class BankingQuery:
         elif sort_by == "amount":
             sort_field = "amount"
         elif sort_by in ("counterparty", "counterparty_name"):
-            sort_field = "counterparty_name"
+            sort_field = "counterparty__name"
 
         if sort_order == "asc":
             qs = qs.order_by(sort_field, "id")
@@ -283,9 +339,7 @@ class BankingQuery:
                     amount=t.amount,
                     currency=t.currency,
                     transaction_type=t.transaction_type,
-                    counterparty_name=t.counterparty_name,
-                    counterparty_iban=t.counterparty_iban,
-                    counterparty_bic=t.counterparty_bic,
+                    counterparty=_make_counterparty_type(t.counterparty),
                     booking_text=t.booking_text,
                     reference=t.reference,
                     account_name=t.account.name,
@@ -299,7 +353,52 @@ class BankingQuery:
         )
 
     @strawberry.field
-    def bank_counterparties(
+    def counterparty(
+        self,
+        info: Info[Context, None],
+        id: strawberry.ID,
+    ) -> CounterpartySummaryType | None:
+        """Get a single counterparty by ID with summary stats."""
+        user = require_perm(info, "banking", "read")
+        from apps.banking.models import Counterparty
+
+        try:
+            cp = (
+                Counterparty.objects.filter(tenant=user.tenant, id=str(id))
+                .annotate(
+                    total_debit=Sum(
+                        "transactions__amount",
+                        filter=Q(transactions__amount__lt=0),
+                        default=Decimal("0"),
+                    ),
+                    total_credit=Sum(
+                        "transactions__amount",
+                        filter=Q(transactions__amount__gt=0),
+                        default=Decimal("0"),
+                    ),
+                    txn_count=Count("transactions"),
+                    first_date=Min("transactions__entry_date"),
+                    last_date=Max("transactions__entry_date"),
+                )
+                .get()
+            )
+        except Counterparty.DoesNotExist:
+            return None
+
+        return CounterpartySummaryType(
+            id=strawberry.ID(str(cp.id)),
+            name=cp.name,
+            iban=cp.iban,
+            bic=cp.bic,
+            total_debit=cp.total_debit,
+            total_credit=cp.total_credit,
+            transaction_count=cp.txn_count,
+            first_date=cp.first_date,
+            last_date=cp.last_date,
+        )
+
+    @strawberry.field
+    def counterparties(
         self,
         info: Info[Context, None],
         search: str | None = None,
@@ -307,31 +406,38 @@ class BankingQuery:
         sort_order: str | None = None,
         page: int = 1,
         page_size: int = 50,
-    ) -> BankCounterpartyPage:
+    ) -> CounterpartyPage:
+        """List all counterparties with summary stats."""
         user = require_perm(info, "banking", "read")
-        from apps.banking.models import BankTransaction
+        from apps.banking.models import Counterparty
 
         qs = (
-            BankTransaction.objects.filter(tenant=user.tenant)
-            .exclude(counterparty_name="")
-            .values("counterparty_name")
+            Counterparty.objects.filter(tenant=user.tenant)
             .annotate(
-                total_debit=Sum("amount", filter=Q(amount__lt=0), default=Decimal("0")),
-                total_credit=Sum("amount", filter=Q(amount__gt=0), default=Decimal("0")),
-                txn_count=Count("id"),
-                first_date=Min("entry_date"),
-                last_date=Max("entry_date"),
-                abs_total=Abs(Sum("amount", default=Decimal("0"))),
+                total_debit=Sum(
+                    "transactions__amount",
+                    filter=Q(transactions__amount__lt=0),
+                    default=Decimal("0"),
+                ),
+                total_credit=Sum(
+                    "transactions__amount",
+                    filter=Q(transactions__amount__gt=0),
+                    default=Decimal("0"),
+                ),
+                txn_count=Count("transactions"),
+                first_date=Min("transactions__entry_date"),
+                last_date=Max("transactions__entry_date"),
+                abs_total=Abs(Sum("transactions__amount", default=Decimal("0"))),
             )
         )
 
         if search:
-            qs = qs.filter(counterparty_name__icontains=search)
+            qs = qs.filter(name__icontains=search)
 
         # Sorting
         sort_field = "-abs_total"
         if sort_by == "name":
-            sort_field = "counterparty_name"
+            sort_field = "name"
         elif sort_by == "totalAmount":
             sort_field = "abs_total"
         elif sort_by == "transactionCount":
@@ -346,23 +452,26 @@ class BankingQuery:
             if not sort_field.startswith("-"):
                 sort_field = f"-{sort_field}"
 
-        qs = qs.order_by(sort_field, "counterparty_name")
+        qs = qs.order_by(sort_field, "name")
 
         total_count = qs.count()
         offset = (page - 1) * page_size
         items = qs[offset : offset + page_size]
 
-        return BankCounterpartyPage(
+        return CounterpartyPage(
             items=[
-                BankCounterpartyType(
-                    name=row["counterparty_name"],
-                    total_debit=row["total_debit"],
-                    total_credit=row["total_credit"],
-                    transaction_count=row["txn_count"],
-                    first_date=row["first_date"],
-                    last_date=row["last_date"],
+                CounterpartySummaryType(
+                    id=strawberry.ID(str(cp.id)),
+                    name=cp.name,
+                    iban=cp.iban,
+                    bic=cp.bic,
+                    total_debit=cp.total_debit,
+                    total_credit=cp.total_credit,
+                    transaction_count=cp.txn_count,
+                    first_date=cp.first_date,
+                    last_date=cp.last_date,
                 )
-                for row in items
+                for cp in items
             ],
             total_count=total_count,
             page=page,
@@ -381,7 +490,9 @@ class BankingQuery:
         user = require_perm(info, "banking", "read")
         from apps.banking.models import RecurringPattern
 
-        qs = RecurringPattern.objects.filter(tenant=user.tenant)
+        qs = RecurringPattern.objects.filter(tenant=user.tenant).select_related(
+            "counterparty"
+        )
 
         if not include_ignored:
             qs = qs.filter(is_ignored=False)
@@ -397,24 +508,7 @@ class BankingQuery:
 
         patterns = qs.order_by("-confidence_score", "-last_occurrence")
 
-        return [
-            RecurringPatternType(
-                id=p.id,
-                counterparty_name=p.counterparty_name,
-                counterparty_iban=p.counterparty_iban,
-                average_amount=p.average_amount,
-                frequency=p.frequency,
-                day_of_month=p.day_of_month,
-                confidence_score=p.confidence_score,
-                is_confirmed=p.is_confirmed,
-                is_ignored=p.is_ignored,
-                is_paused=p.is_paused,
-                last_occurrence=p.last_occurrence,
-                projected_next_date=get_pattern_next_date(p),
-                source_transaction_count=p.source_transactions.count(),
-            )
-            for p in patterns
-        ]
+        return [_make_pattern_type(p) for p in patterns]
 
     @strawberry.field
     def liquidity_forecast(
@@ -423,9 +517,21 @@ class BankingQuery:
         months: int = 12,
     ) -> LiquidityForecastType:
         user = require_perm(info, "banking", "read")
+        from apps.banking.models import RecurringPattern
 
         current_balance, balance_date = get_current_balance(user.tenant)
         forecast = get_liquidity_forecast(user.tenant, months)
+
+        # Build a cache of counterparties for the patterns
+        pattern_ids = set()
+        for m in forecast:
+            for t in m.transactions:
+                pattern_ids.add(t.pattern_id)
+
+        patterns = RecurringPattern.objects.filter(id__in=pattern_ids).select_related(
+            "counterparty"
+        )
+        pattern_map = {p.id: p for p in patterns}
 
         return LiquidityForecastType(
             current_balance=current_balance,
@@ -440,12 +546,15 @@ class BankingQuery:
                     transactions=[
                         ProjectedTransactionType(
                             pattern_id=t.pattern_id,
-                            counterparty_name=t.counterparty_name,
+                            counterparty=_make_counterparty_type(
+                                pattern_map[t.pattern_id].counterparty
+                            ),
                             amount=t.amount,
                             projected_date=t.projected_date,
                             is_confirmed=t.is_confirmed,
                         )
                         for t in m.transactions
+                        if t.pattern_id in pattern_map
                     ],
                 )
                 for m in forecast
@@ -555,6 +664,97 @@ class BankingMutation:
         return DeleteResult(success=True)
 
     @strawberry.mutation
+    def update_counterparty(
+        self, info: Info[Context, None], input: UpdateCounterpartyInput
+    ) -> CounterpartyResult:
+        """Update a counterparty's name, IBAN, or BIC."""
+        user, err = check_perm(info, "banking", "write")
+        if err:
+            return CounterpartyResult(success=False, error=err)
+
+        from apps.banking.models import Counterparty
+
+        try:
+            cp = Counterparty.objects.get(id=str(input.id), tenant=user.tenant)
+        except Counterparty.DoesNotExist:
+            return CounterpartyResult(success=False, error="Counterparty not found.")
+
+        update_fields = ["updated_at"]
+
+        if input.name is not None:
+            # Check for duplicate name
+            if (
+                Counterparty.objects.filter(tenant=user.tenant, name=input.name)
+                .exclude(id=cp.id)
+                .exists()
+            ):
+                return CounterpartyResult(
+                    success=False,
+                    error="A counterparty with this name already exists.",
+                )
+            cp.name = input.name
+            update_fields.append("name")
+
+        if input.iban is not None:
+            cp.iban = input.iban
+            update_fields.append("iban")
+
+        if input.bic is not None:
+            cp.bic = input.bic
+            update_fields.append("bic")
+
+        cp.save(update_fields=update_fields)
+
+        return CounterpartyResult(
+            success=True,
+            counterparty=_make_counterparty_type(cp),
+        )
+
+    @strawberry.mutation
+    def merge_counterparties(
+        self,
+        info: Info[Context, None],
+        source_id: strawberry.ID,
+        target_id: strawberry.ID,
+    ) -> MergeCounterpartiesResult:
+        """Merge source counterparty into target. All transactions move to target."""
+        user, err = check_perm(info, "banking", "write")
+        if err:
+            return MergeCounterpartiesResult(success=False, error=err)
+
+        from apps.banking.models import Counterparty, BankTransaction, RecurringPattern
+
+        if str(source_id) == str(target_id):
+            return MergeCounterpartiesResult(
+                success=False, error="Cannot merge a counterparty into itself."
+            )
+
+        try:
+            source = Counterparty.objects.get(id=str(source_id), tenant=user.tenant)
+            target = Counterparty.objects.get(id=str(target_id), tenant=user.tenant)
+        except Counterparty.DoesNotExist:
+            return MergeCounterpartiesResult(
+                success=False, error="Counterparty not found."
+            )
+
+        # Move all transactions from source to target
+        txn_count = BankTransaction.objects.filter(counterparty=source).update(
+            counterparty=target
+        )
+
+        # Move all patterns from source to target
+        RecurringPattern.objects.filter(counterparty=source).update(counterparty=target)
+
+        # Delete source
+        source.delete()
+
+        return MergeCounterpartiesResult(
+            success=True,
+            target=_make_counterparty_type(target),
+            merged_transaction_count=txn_count,
+        )
+
+    @strawberry.mutation
     def detect_patterns(self, info: Info[Context, None]) -> DetectPatternsResult:
         user, err = check_perm(info, "banking", "write")
         if err:
@@ -574,31 +774,16 @@ class BankingMutation:
         from apps.banking.models import RecurringPattern
 
         try:
-            pattern = RecurringPattern.objects.get(id=pattern_id, tenant=user.tenant)
+            pattern = RecurringPattern.objects.select_related("counterparty").get(
+                id=pattern_id, tenant=user.tenant
+            )
         except RecurringPattern.DoesNotExist:
             return RecurringPatternResult(success=False, error="Pattern not found.")
 
         pattern.is_confirmed = True
         pattern.save(update_fields=["is_confirmed", "updated_at"])
 
-        return RecurringPatternResult(
-            success=True,
-            pattern=RecurringPatternType(
-                id=pattern.id,
-                counterparty_name=pattern.counterparty_name,
-                counterparty_iban=pattern.counterparty_iban,
-                average_amount=pattern.average_amount,
-                frequency=pattern.frequency,
-                day_of_month=pattern.day_of_month,
-                confidence_score=pattern.confidence_score,
-                is_confirmed=pattern.is_confirmed,
-                is_ignored=pattern.is_ignored,
-                is_paused=pattern.is_paused,
-                last_occurrence=pattern.last_occurrence,
-                projected_next_date=get_pattern_next_date(pattern),
-                source_transaction_count=pattern.source_transactions.count(),
-            ),
-        )
+        return RecurringPatternResult(success=True, pattern=_make_pattern_type(pattern))
 
     @strawberry.mutation
     def ignore_pattern(
@@ -611,31 +796,16 @@ class BankingMutation:
         from apps.banking.models import RecurringPattern
 
         try:
-            pattern = RecurringPattern.objects.get(id=pattern_id, tenant=user.tenant)
+            pattern = RecurringPattern.objects.select_related("counterparty").get(
+                id=pattern_id, tenant=user.tenant
+            )
         except RecurringPattern.DoesNotExist:
             return RecurringPatternResult(success=False, error="Pattern not found.")
 
         pattern.is_ignored = True
         pattern.save(update_fields=["is_ignored", "updated_at"])
 
-        return RecurringPatternResult(
-            success=True,
-            pattern=RecurringPatternType(
-                id=pattern.id,
-                counterparty_name=pattern.counterparty_name,
-                counterparty_iban=pattern.counterparty_iban,
-                average_amount=pattern.average_amount,
-                frequency=pattern.frequency,
-                day_of_month=pattern.day_of_month,
-                confidence_score=pattern.confidence_score,
-                is_confirmed=pattern.is_confirmed,
-                is_ignored=pattern.is_ignored,
-                is_paused=pattern.is_paused,
-                last_occurrence=pattern.last_occurrence,
-                projected_next_date=get_pattern_next_date(pattern),
-                source_transaction_count=pattern.source_transactions.count(),
-            ),
-        )
+        return RecurringPatternResult(success=True, pattern=_make_pattern_type(pattern))
 
     @strawberry.mutation
     def restore_pattern(
@@ -648,31 +818,16 @@ class BankingMutation:
         from apps.banking.models import RecurringPattern
 
         try:
-            pattern = RecurringPattern.objects.get(id=pattern_id, tenant=user.tenant)
+            pattern = RecurringPattern.objects.select_related("counterparty").get(
+                id=pattern_id, tenant=user.tenant
+            )
         except RecurringPattern.DoesNotExist:
             return RecurringPatternResult(success=False, error="Pattern not found.")
 
         pattern.is_ignored = False
         pattern.save(update_fields=["is_ignored", "updated_at"])
 
-        return RecurringPatternResult(
-            success=True,
-            pattern=RecurringPatternType(
-                id=pattern.id,
-                counterparty_name=pattern.counterparty_name,
-                counterparty_iban=pattern.counterparty_iban,
-                average_amount=pattern.average_amount,
-                frequency=pattern.frequency,
-                day_of_month=pattern.day_of_month,
-                confidence_score=pattern.confidence_score,
-                is_confirmed=pattern.is_confirmed,
-                is_ignored=pattern.is_ignored,
-                is_paused=pattern.is_paused,
-                last_occurrence=pattern.last_occurrence,
-                projected_next_date=get_pattern_next_date(pattern),
-                source_transaction_count=pattern.source_transactions.count(),
-            ),
-        )
+        return RecurringPatternResult(success=True, pattern=_make_pattern_type(pattern))
 
     @strawberry.mutation
     def update_pattern(
@@ -685,7 +840,9 @@ class BankingMutation:
         from apps.banking.models import RecurringPattern
 
         try:
-            pattern = RecurringPattern.objects.get(id=input.id, tenant=user.tenant)
+            pattern = RecurringPattern.objects.select_related("counterparty").get(
+                id=input.id, tenant=user.tenant
+            )
         except RecurringPattern.DoesNotExist:
             return RecurringPatternResult(success=False, error="Pattern not found.")
 
@@ -702,24 +859,7 @@ class BankingMutation:
 
         pattern.save(update_fields=update_fields)
 
-        return RecurringPatternResult(
-            success=True,
-            pattern=RecurringPatternType(
-                id=pattern.id,
-                counterparty_name=pattern.counterparty_name,
-                counterparty_iban=pattern.counterparty_iban,
-                average_amount=pattern.average_amount,
-                frequency=pattern.frequency,
-                day_of_month=pattern.day_of_month,
-                confidence_score=pattern.confidence_score,
-                is_confirmed=pattern.is_confirmed,
-                is_ignored=pattern.is_ignored,
-                is_paused=pattern.is_paused,
-                last_occurrence=pattern.last_occurrence,
-                projected_next_date=get_pattern_next_date(pattern),
-                source_transaction_count=pattern.source_transactions.count(),
-            ),
-        )
+        return RecurringPatternResult(success=True, pattern=_make_pattern_type(pattern))
 
     @strawberry.mutation
     def pause_pattern(
@@ -732,31 +872,16 @@ class BankingMutation:
         from apps.banking.models import RecurringPattern
 
         try:
-            pattern = RecurringPattern.objects.get(id=pattern_id, tenant=user.tenant)
+            pattern = RecurringPattern.objects.select_related("counterparty").get(
+                id=pattern_id, tenant=user.tenant
+            )
         except RecurringPattern.DoesNotExist:
             return RecurringPatternResult(success=False, error="Pattern not found.")
 
         pattern.is_paused = True
         pattern.save(update_fields=["is_paused", "updated_at"])
 
-        return RecurringPatternResult(
-            success=True,
-            pattern=RecurringPatternType(
-                id=pattern.id,
-                counterparty_name=pattern.counterparty_name,
-                counterparty_iban=pattern.counterparty_iban,
-                average_amount=pattern.average_amount,
-                frequency=pattern.frequency,
-                day_of_month=pattern.day_of_month,
-                confidence_score=pattern.confidence_score,
-                is_confirmed=pattern.is_confirmed,
-                is_ignored=pattern.is_ignored,
-                is_paused=pattern.is_paused,
-                last_occurrence=pattern.last_occurrence,
-                projected_next_date=get_pattern_next_date(pattern),
-                source_transaction_count=pattern.source_transactions.count(),
-            ),
-        )
+        return RecurringPatternResult(success=True, pattern=_make_pattern_type(pattern))
 
     @strawberry.mutation
     def resume_pattern(
@@ -769,67 +894,13 @@ class BankingMutation:
         from apps.banking.models import RecurringPattern
 
         try:
-            pattern = RecurringPattern.objects.get(id=pattern_id, tenant=user.tenant)
+            pattern = RecurringPattern.objects.select_related("counterparty").get(
+                id=pattern_id, tenant=user.tenant
+            )
         except RecurringPattern.DoesNotExist:
             return RecurringPatternResult(success=False, error="Pattern not found.")
 
         pattern.is_paused = False
         pattern.save(update_fields=["is_paused", "updated_at"])
 
-        return RecurringPatternResult(
-            success=True,
-            pattern=RecurringPatternType(
-                id=pattern.id,
-                counterparty_name=pattern.counterparty_name,
-                counterparty_iban=pattern.counterparty_iban,
-                average_amount=pattern.average_amount,
-                frequency=pattern.frequency,
-                day_of_month=pattern.day_of_month,
-                confidence_score=pattern.confidence_score,
-                is_confirmed=pattern.is_confirmed,
-                is_ignored=pattern.is_ignored,
-                is_paused=pattern.is_paused,
-                last_occurrence=pattern.last_occurrence,
-                projected_next_date=get_pattern_next_date(pattern),
-                source_transaction_count=pattern.source_transactions.count(),
-            ),
-        )
-
-    @strawberry.mutation
-    def update_transaction_counterparty(
-        self, info: Info[Context, None], input: UpdateTransactionCounterpartyInput
-    ) -> TransactionResult:
-        """Update the counterparty name on a bank transaction."""
-        user, err = check_perm(info, "banking", "write")
-        if err:
-            return TransactionResult(success=False, error=err)
-
-        from apps.banking.models import BankTransaction
-
-        try:
-            txn = BankTransaction.objects.select_related("account").get(
-                id=input.transaction_id, tenant=user.tenant
-            )
-        except BankTransaction.DoesNotExist:
-            return TransactionResult(success=False, error="Transaction not found.")
-
-        txn.counterparty_name = input.counterparty_name
-        txn.save(update_fields=["counterparty_name", "updated_at"])
-
-        return TransactionResult(
-            success=True,
-            transaction=BankTransactionType(
-                id=txn.id,
-                entry_date=txn.entry_date,
-                value_date=txn.value_date,
-                amount=txn.amount,
-                currency=txn.currency,
-                transaction_type=txn.transaction_type,
-                counterparty_name=txn.counterparty_name,
-                counterparty_iban=txn.counterparty_iban,
-                counterparty_bic=txn.counterparty_bic,
-                booking_text=txn.booking_text,
-                reference=txn.reference,
-                account_name=txn.account.name,
-            ),
-        )
+        return RecurringPatternResult(success=True, pattern=_make_pattern_type(pattern))

@@ -108,7 +108,7 @@ def project_pattern(pattern: RecurringPattern, months: int = 12) -> list[Project
         projections.append(
             ProjectedTransaction(
                 pattern_id=pattern.id,
-                counterparty_name=pattern.counterparty_name,
+                counterparty_name=pattern.counterparty.name,
                 amount=pattern.average_amount,
                 projected_date=current,
                 is_confirmed=pattern.is_confirmed,

@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import mt940
 
-from apps.banking.models import BankAccount, BankTransaction
+from apps.banking.models import BankAccount, BankTransaction, Counterparty
 from apps.tenants.models import Tenant
 
 
@@ -23,6 +23,56 @@ class MT940Service:
 
     def __init__(self, tenant: Tenant):
         self.tenant = tenant
+        self._counterparty_cache: dict[str, Counterparty] = {}
+
+    def _get_or_create_counterparty(
+        self,
+        name: str,
+        iban: str = "",
+        bic: str = "",
+    ) -> Counterparty:
+        """Find or create a Counterparty for the given name.
+
+        Uses a cache to avoid repeated lookups within a single import.
+        Updates IBAN/BIC if the existing record has empty values and new ones are provided.
+        """
+        if not name:
+            name = "(Bank Fees / Unknown)"
+
+        if name in self._counterparty_cache:
+            cp = self._counterparty_cache[name]
+            # Update IBAN/BIC if we have new data and old is empty
+            update_fields = []
+            if iban and not cp.iban:
+                cp.iban = iban
+                update_fields.append("iban")
+            if bic and not cp.bic:
+                cp.bic = bic
+                update_fields.append("bic")
+            if update_fields:
+                cp.save(update_fields=update_fields)
+            return cp
+
+        cp, created = Counterparty.objects.get_or_create(
+            tenant=self.tenant,
+            name=name,
+            defaults={"iban": iban, "bic": bic},
+        )
+
+        if not created:
+            # Update IBAN/BIC if we have new data and old is empty
+            update_fields = []
+            if iban and not cp.iban:
+                cp.iban = iban
+                update_fields.append("iban")
+            if bic and not cp.bic:
+                cp.bic = bic
+                update_fields.append("bic")
+            if update_fields:
+                cp.save(update_fields=update_fields)
+
+        self._counterparty_cache[name] = cp
+        return cp
 
     def parse_and_import(
         self,
@@ -33,6 +83,9 @@ class MT940Service:
 
         Deduplicates using import_hash. Returns stats about the import.
         """
+        # Clear the cache for each new import
+        self._counterparty_cache = {}
+
         # Parse the MT940 content
         if isinstance(file_content, bytes):
             # Try UTF-8 first, fall back to latin-1 (common for German banks)
@@ -100,10 +153,17 @@ class MT940Service:
                 if value_date:
                     value_date = date(value_date.year, value_date.month, value_date.day)
 
-                # Extract counterparty
+                # Extract counterparty info
                 counterparty_name = data.get("applicant_name") or ""
                 counterparty_iban = data.get("applicant_iban") or ""
                 counterparty_bic = data.get("applicant_bin") or ""
+
+                # Get or create the Counterparty entity
+                counterparty = self._get_or_create_counterparty(
+                    name=counterparty_name,
+                    iban=counterparty_iban,
+                    bic=counterparty_bic,
+                )
 
                 # Extract booking text (purpose + additional_purpose)
                 purpose = data.get("purpose") or ""
@@ -133,7 +193,7 @@ class MT940Service:
                     raw_parts.append(f"additional: {additional}")
                 raw_data = "; ".join(raw_parts)
 
-                # Compute dedup hash
+                # Compute dedup hash (still uses counterparty_name for backwards compat)
                 import_hash = BankTransaction.compute_hash(
                     account_id=account.id,
                     entry_date=entry_date,
@@ -152,9 +212,7 @@ class MT940Service:
                         amount=amount,
                         currency=currency,
                         transaction_type=tx_type,
-                        counterparty_name=counterparty_name,
-                        counterparty_iban=counterparty_iban,
-                        counterparty_bic=counterparty_bic,
+                        counterparty=counterparty,
                         booking_text=booking_text,
                         reference=reference,
                         raw_data=raw_data,

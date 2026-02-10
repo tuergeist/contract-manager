@@ -1,10 +1,36 @@
 """Banking models for bank account and transaction management."""
 import hashlib
+import uuid
 from decimal import Decimal
 
 from django.db import models
 
 from apps.core.models import TenantModel
+
+
+class Counterparty(TenantModel):
+    """A counterparty (business partner) that appears in bank transactions."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    iban = models.CharField(max_length=50, blank=True)
+    bic = models.CharField(max_length=20, blank=True)
+
+    class Meta:
+        verbose_name_plural = "counterparties"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "name"],
+                name="unique_counterparty_name_per_tenant",
+            ),
+        ]
+        ordering = ["name"]
+        indexes = [
+            models.Index(fields=["tenant", "name"], name="idx_counterparty_tenant_name"),
+        ]
+
+    def __str__(self):
+        return self.name
 
 
 class BankAccount(TenantModel):
@@ -54,9 +80,12 @@ class BankTransaction(TenantModel):
     transaction_type = models.CharField(
         max_length=10, blank=True, help_text="SWIFT type code (e.g. NTRF, NDDT)"
     )
-    counterparty_name = models.CharField(max_length=255, blank=True)
-    counterparty_iban = models.CharField(max_length=50, blank=True)
-    counterparty_bic = models.CharField(max_length=20, blank=True)
+    counterparty = models.ForeignKey(
+        Counterparty,
+        on_delete=models.PROTECT,
+        related_name="transactions",
+        help_text="Reference to counterparty entity",
+    )
     booking_text = models.TextField(
         blank=True, help_text="Verwendungszweck from :86: ?20-?29 subfields"
     )
@@ -89,12 +118,12 @@ class BankTransaction(TenantModel):
                 name="idx_txn_tenant_account_date",
             ),
             models.Index(fields=["amount"], name="idx_txn_amount"),
-            models.Index(fields=["counterparty_name"], name="idx_txn_counterparty"),
+            models.Index(fields=["counterparty"], name="idx_txn_counterparty"),
         ]
         ordering = ["-entry_date", "-id"]
 
     def __str__(self):
-        return f"{self.entry_date} {self.counterparty_name} {self.amount}"
+        return f"{self.entry_date} {self.counterparty.name} {self.amount}"
 
     @staticmethod
     def compute_hash(
@@ -120,8 +149,12 @@ class RecurringPattern(TenantModel):
         ANNUAL = "annual", "Annual"
         IRREGULAR = "irregular", "Irregular"
 
-    counterparty_name = models.CharField(max_length=255)
-    counterparty_iban = models.CharField(max_length=50, blank=True)
+    counterparty = models.ForeignKey(
+        Counterparty,
+        on_delete=models.PROTECT,
+        related_name="recurring_patterns",
+        help_text="Reference to counterparty entity",
+    )
     average_amount = models.DecimalField(
         max_digits=14,
         decimal_places=2,
@@ -176,4 +209,4 @@ class RecurringPattern(TenantModel):
         ]
 
     def __str__(self):
-        return f"{self.counterparty_name} ({self.frequency}) {self.average_amount}"
+        return f"{self.counterparty.name} ({self.frequency}) {self.average_amount}"

@@ -53,7 +53,7 @@ function App() {
         <Route path="contracts/import" element={<ContractImport />} />
         <Route path="invoices/export" element={<InvoiceExportPage />} />
         <Route path="banking" element={<BankingPage />} />
-        <Route path="banking/counterparty/:name" element={<CounterpartyDetailPage />} />
+        <Route path="banking/counterparty/:id" element={<CounterpartyDetailPage />} />
         <Route path="liquidity-forecast" element={<LiquidityForecast />} />
         <Route path="audit-log" element={<AuditLogPage />} />
       </Route>

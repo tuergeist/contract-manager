@@ -9,7 +9,7 @@ from typing import Optional
 
 from django.db.models import QuerySet
 
-from apps.banking.models import BankTransaction, RecurringPattern
+from apps.banking.models import BankTransaction, Counterparty, RecurringPattern
 from apps.tenants.models import Tenant
 
 
@@ -51,7 +51,7 @@ def calculate_similarity(
     Calculate similarity score between two transactions.
 
     Scoring:
-    - Counterparty match (name or IBAN): +1
+    - Counterparty match (same counterparty FK or IBAN): +1
     - Amount match (within 5%, or 30% if lenient_amount): +1
     - Timing pattern (same day-of-month ±3 days): +1
 
@@ -59,14 +59,16 @@ def calculate_similarity(
     """
     score = 0
 
-    # Counterparty match: name or IBAN
+    # Counterparty match: same counterparty FK or IBAN
     counterparty_match = False
-    if txn1.counterparty_name and txn2.counterparty_name:
-        if txn1.counterparty_name.lower() == txn2.counterparty_name.lower():
+    if txn1.counterparty_id and txn2.counterparty_id:
+        if txn1.counterparty_id == txn2.counterparty_id:
             counterparty_match = True
-    if txn1.counterparty_iban and txn2.counterparty_iban:
-        if txn1.counterparty_iban == txn2.counterparty_iban:
-            counterparty_match = True
+    if not counterparty_match:
+        # Fall back to IBAN match if available
+        if txn1.counterparty.iban and txn2.counterparty.iban:
+            if txn1.counterparty.iban == txn2.counterparty.iban:
+                counterparty_match = True
     if counterparty_match:
         score += 1
 
@@ -189,6 +191,18 @@ def calculate_confidence(
     return min(score, 1.0)
 
 
+def _get_or_create_counterparty(tenant: Tenant, name: str, iban: str = "") -> Counterparty:
+    """Get or create a counterparty by name."""
+    if not name:
+        name = "(Unknown Pattern)"
+    cp, _ = Counterparty.objects.get_or_create(
+        tenant=tenant,
+        name=name,
+        defaults={"iban": iban, "bic": ""},
+    )
+    return cp
+
+
 def detect_recurring_patterns(tenant: Tenant) -> list[RecurringPattern]:
     """
     Analyze transactions from the last 18 months and detect recurring patterns.
@@ -203,41 +217,44 @@ def detect_recurring_patterns(tenant: Tenant) -> list[RecurringPattern]:
         BankTransaction.objects.filter(
             tenant=tenant,
             entry_date__gte=cutoff_date,
-        ).order_by("entry_date")
+        )
+        .select_related("counterparty")
+        .order_by("entry_date")
     )
 
     if not transactions:
         return []
 
     # Group transactions by counterparty (primary grouping key)
-    # For transactions without counterparty, try to extract pattern from booking_text
-    by_group_key: dict[str, tuple[list[BankTransaction], bool]] = defaultdict(
-        lambda: ([], False)
-    )  # (transactions, is_batch_payment)
+    # For transactions without counterparty name, try to extract pattern from booking_text
+    by_group_key: dict[str, tuple[list[BankTransaction], bool, Counterparty | None]] = (
+        defaultdict(lambda: ([], False, None))
+    )  # (transactions, is_batch_payment, counterparty)
 
     for txn in transactions:
-        counterparty = txn.counterparty_name.strip() if txn.counterparty_name else ""
+        counterparty = txn.counterparty
+        counterparty_name = counterparty.name.strip() if counterparty else ""
         # Check if booking_text indicates a batch payment (e.g., Sammelüberweisung)
         is_batch = extract_booking_pattern(txn.booking_text) is not None
 
-        if counterparty:
-            key = f"counterparty:{counterparty.lower()}"
-            txns, existing_is_batch = by_group_key[key]
+        if counterparty_name and counterparty_name != "(Bank Fees / Unknown)":
+            key = f"counterparty:{counterparty.id}"
+            txns, existing_is_batch, _ = by_group_key[key]
             txns.append(txn)
             # Mark as batch payment if ANY transaction in group is a batch payment
-            by_group_key[key] = (txns, existing_is_batch or is_batch)
+            by_group_key[key] = (txns, existing_is_batch or is_batch, counterparty)
         else:
-            # No counterparty - try to extract pattern from booking_text
+            # No meaningful counterparty - try to extract pattern from booking_text
             pattern_name = extract_booking_pattern(txn.booking_text)
             if pattern_name:
                 key = f"booking:{pattern_name.lower()}"
-                txns, _ = by_group_key[key]
+                txns, _, _ = by_group_key[key]
                 txns.append(txn)
-                by_group_key[key] = (txns, True)  # Mark as batch payment
+                by_group_key[key] = (txns, True, None)  # Mark as batch payment
 
     detected_patterns = []
 
-    for group_key, (txns, is_batch_payment) in by_group_key.items():
+    for group_key, (txns, is_batch_payment, counterparty) in by_group_key.items():
         if len(txns) < 2:
             continue
 
@@ -269,24 +286,20 @@ def detect_recurring_patterns(tenant: Tenant) -> list[RecurringPattern]:
             # Calculate average amount
             avg_amount = Decimal(str(mean([float(t.amount) for t in group])))
 
-            # Get counterparty name or booking pattern
-            if group_key.startswith("counterparty:"):
-                pattern_name = group[0].counterparty_name
+            # Get or create counterparty for the pattern
+            if counterparty:
+                pattern_counterparty = counterparty
             else:
-                # Use the booking pattern as the name
-                pattern_name = extract_booking_pattern(group[0].booking_text) or "Unknown"
+                # Use the booking pattern as the counterparty name
+                pattern_name = (
+                    extract_booking_pattern(group[0].booking_text) or "Unknown Pattern"
+                )
+                pattern_counterparty = _get_or_create_counterparty(tenant, pattern_name)
 
-            # Get counterparty IBAN if available
-            counterparty_iban = ""
-            for t in group:
-                if t.counterparty_iban:
-                    counterparty_iban = t.counterparty_iban
-                    break
-
-            # Check if pattern already exists (same name with same sign of amount)
+            # Check if pattern already exists (same counterparty with same sign of amount)
             existing_qs = RecurringPattern.objects.filter(
                 tenant=tenant,
-                counterparty_name__iexact=pattern_name,
+                counterparty=pattern_counterparty,
             )
             if avg_amount > 0:
                 existing_qs = existing_qs.filter(average_amount__gt=0)
@@ -308,8 +321,7 @@ def detect_recurring_patterns(tenant: Tenant) -> list[RecurringPattern]:
                 # Create new pattern
                 pattern = RecurringPattern.objects.create(
                     tenant=tenant,
-                    counterparty_name=pattern_name,
-                    counterparty_iban=counterparty_iban,
+                    counterparty=pattern_counterparty,
                     average_amount=avg_amount.quantize(Decimal("0.01")),
                     frequency=frequency,
                     day_of_month=day_of_month,

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { useQuery, useMutation, gql } from '@apollo/client'
+import { useQuery, gql } from '@apollo/client'
 import {
   ArrowLeft,
   Loader2,
@@ -11,7 +11,6 @@ import {
   ArrowUp,
   ArrowDown,
   X,
-  Pencil,
 } from 'lucide-react'
 import {
   Select,
@@ -21,18 +20,18 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-const BANK_COUNTERPARTY_SUMMARY = gql`
-  query BankCounterpartySummary($search: String, $page: Int, $pageSize: Int) {
-    bankCounterparties(search: $search, page: $page, pageSize: $pageSize) {
-      items {
-        name
-        totalDebit
-        totalCredit
-        transactionCount
-        firstDate
-        lastDate
-      }
-      totalCount
+const COUNTERPARTY_DETAIL = gql`
+  query CounterpartyDetail($id: ID!) {
+    counterparty(id: $id) {
+      id
+      name
+      iban
+      bic
+      totalDebit
+      totalCredit
+      transactionCount
+      firstDate
+      lastDate
     }
   }
 `
@@ -41,7 +40,7 @@ const BANK_TRANSACTIONS = gql`
   query BankTransactions(
     $accountId: Int
     $search: String
-    $counterpartyName: String
+    $counterpartyId: ID
     $dateFrom: Date
     $dateTo: Date
     $amountMin: Decimal
@@ -55,7 +54,7 @@ const BANK_TRANSACTIONS = gql`
     bankTransactions(
       accountId: $accountId
       search: $search
-      counterpartyName: $counterpartyName
+      counterpartyId: $counterpartyId
       dateFrom: $dateFrom
       dateTo: $dateTo
       amountMin: $amountMin
@@ -73,9 +72,12 @@ const BANK_TRANSACTIONS = gql`
         amount
         currency
         transactionType
-        counterpartyName
-        counterpartyIban
-        counterpartyBic
+        counterparty {
+          id
+          name
+          iban
+          bic
+        }
         bookingText
         reference
         accountName
@@ -97,18 +99,12 @@ const BANK_ACCOUNTS = gql`
   }
 `
 
-const UPDATE_TRANSACTION_COUNTERPARTY = gql`
-  mutation UpdateTransactionCounterparty($input: UpdateTransactionCounterpartyInput!) {
-    updateTransactionCounterparty(input: $input) {
-      success
-      error
-      transaction {
-        id
-        counterpartyName
-      }
-    }
-  }
-`
+interface Counterparty {
+  id: string
+  name: string
+  iban: string
+  bic: string
+}
 
 interface BankTransaction {
   id: number
@@ -117,26 +113,31 @@ interface BankTransaction {
   amount: string
   currency: string
   transactionType: string
-  counterpartyName: string
-  counterpartyIban: string
-  counterpartyBic: string
+  counterparty: Counterparty
   bookingText: string
   reference: string
   accountName: string
 }
 
+interface CounterpartySummary {
+  id: string
+  name: string
+  iban: string
+  bic: string
+  totalDebit: string
+  totalCredit: string
+  transactionCount: number
+  firstDate: string
+  lastDate: string
+}
+
 export function CounterpartyDetailPage() {
   const { t } = useTranslation()
-  const { name } = useParams<{ name: string }>()
+  const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const counterpartyName = decodeURIComponent(name || '')
 
   // Expanded transaction row
   const [expandedTxId, setExpandedTxId] = useState<number | null>(null)
-
-  // Edit counterparty state
-  const [editingCounterpartyTxId, setEditingCounterpartyTxId] = useState<number | null>(null)
-  const [counterpartyEditValue, setCounterpartyEditValue] = useState('')
 
   // Filters
   const [filterAccountId, setFilterAccountId] = useState<string>('all')
@@ -161,23 +162,20 @@ export function CounterpartyDetailPage() {
     setPage(1)
   }, [filterAccountId, debouncedSearch, dateFrom, dateTo, amountMin, amountMax, direction])
 
-  // Summary query - fetch the specific counterparty stats
-  const { data: summaryData, loading: summaryLoading } = useQuery(BANK_COUNTERPARTY_SUMMARY, {
-    variables: { search: counterpartyName, page: 1, pageSize: 1 },
-    skip: !counterpartyName,
+  // Counterparty detail query
+  const { data: cpData, loading: cpLoading } = useQuery(COUNTERPARTY_DETAIL, {
+    variables: { id },
+    skip: !id,
   })
 
-  // Find exact match from results
-  const summary = summaryData?.bankCounterparties?.items?.find(
-    (item: { name: string }) => item.name === counterpartyName
-  ) || null
+  const summary: CounterpartySummary | null = cpData?.counterparty || null
 
   // Transactions query
-  const { data: txData, loading: txLoading, refetch: refetchTransactions } = useQuery(BANK_TRANSACTIONS, {
+  const { data: txData, loading: txLoading } = useQuery(BANK_TRANSACTIONS, {
     variables: {
       accountId: filterAccountId !== 'all' ? parseInt(filterAccountId) : null,
       search: debouncedSearch || null,
-      counterpartyName,
+      counterpartyId: id,
       dateFrom: dateFrom || null,
       dateTo: dateTo || null,
       amountMin: amountMin ? parseFloat(amountMin) : null,
@@ -188,7 +186,7 @@ export function CounterpartyDetailPage() {
       page,
       pageSize,
     },
-    skip: !counterpartyName,
+    skip: !id,
     fetchPolicy: 'cache-and-network',
   })
 
@@ -200,8 +198,6 @@ export function CounterpartyDetailPage() {
   // Accounts for filter dropdown
   const { data: accountsData } = useQuery(BANK_ACCOUNTS)
   const accounts = accountsData?.bankAccounts ?? []
-
-  const [updateCounterparty, { loading: updatingCounterparty }] = useMutation(UPDATE_TRANSACTION_COUNTERPARTY)
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -242,47 +238,27 @@ export function CounterpartyDetailPage() {
     setPage(1)
   }
 
-  const startEditingCounterparty = (tx: BankTransaction, e: React.MouseEvent) => {
-    e.stopPropagation()
-    setEditingCounterpartyTxId(tx.id)
-    setCounterpartyEditValue(tx.counterpartyName || '')
-  }
-
-  const cancelEditingCounterparty = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setEditingCounterpartyTxId(null)
-    setCounterpartyEditValue('')
-  }
-
-  const saveCounterparty = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!editingCounterpartyTxId) return
-
-    try {
-      const { data } = await updateCounterparty({
-        variables: {
-          input: {
-            transactionId: editingCounterpartyTxId,
-            counterpartyName: counterpartyEditValue.trim(),
-          },
-        },
-      })
-      if (data?.updateTransactionCounterparty?.success) {
-        setEditingCounterpartyTxId(null)
-        setCounterpartyEditValue('')
-        refetchTransactions()
-      }
-    } catch {
-      // ignore
-    }
-  }
-
   const hasActiveFilters = filterAccountId !== 'all' || searchQuery || dateFrom || dateTo || amountMin || amountMax || direction !== 'all'
 
-  if (summaryLoading && !summaryData) {
+  if (cpLoading && !cpData) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
+    )
+  }
+
+  if (!summary && !cpLoading) {
+    return (
+      <div>
+        <button
+          onClick={() => navigate('/banking')}
+          className="mb-4 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {t('banking.backToBanking')}
+        </button>
+        <p className="text-gray-500">{t('banking.counterpartyNotFound')}</p>
       </div>
     )
   }
@@ -299,10 +275,19 @@ export function CounterpartyDetailPage() {
       </button>
 
       {/* Page Title */}
-      <h1 className="text-2xl font-bold text-gray-900">{counterpartyName}</h1>
+      <h1 className="text-2xl font-bold text-gray-900">{summary?.name}</h1>
+
+      {/* IBAN/BIC if available */}
+      {(summary?.iban || summary?.bic) && (
+        <p className="mt-1 text-sm text-gray-500">
+          {summary?.iban && <span>{summary.iban}</span>}
+          {summary?.iban && summary?.bic && <span> / </span>}
+          {summary?.bic && <span>{summary.bic}</span>}
+        </p>
+      )}
 
       {/* Summary Cards - 4 in a row */}
-      {summary ? (
+      {summary && (
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg border bg-white p-4">
             <p className="text-sm font-medium text-gray-500">{t('banking.transactions')}</p>
@@ -323,14 +308,12 @@ export function CounterpartyDetailPage() {
           <div className="rounded-lg border bg-white p-4">
             <p className="text-sm font-medium text-gray-500">{t('banking.period')}</p>
             <p className="mt-1 text-xl font-semibold text-gray-900">
-              {formatDate(summary.firstDate)} &ndash; {formatDate(summary.lastDate)}
+              {summary.firstDate && summary.lastDate
+                ? `${formatDate(summary.firstDate)} – ${formatDate(summary.lastDate)}`
+                : '-'}
             </p>
           </div>
         </div>
-      ) : (
-        !summaryLoading && (
-          <p className="mt-4 text-sm text-gray-500">{t('banking.noTransactions')}</p>
-        )
       )}
 
       {/* Transaction Table */}
@@ -509,62 +492,19 @@ export function CounterpartyDetailPage() {
                         {formatDate(tx.entryDate)}
                       </td>
                       <td className="max-w-[220px] px-4 py-2.5 text-gray-900">
-                        {isExpanded && editingCounterpartyTxId === tx.id ? (
-                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="text"
-                              value={counterpartyEditValue}
-                              onChange={(e) => setCounterpartyEditValue(e.target.value)}
-                              className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') saveCounterparty(e as unknown as React.MouseEvent)
-                                if (e.key === 'Escape') {
-                                  setEditingCounterpartyTxId(null)
-                                  setCounterpartyEditValue('')
-                                }
-                              }}
-                            />
-                            <button
-                              onClick={saveCounterparty}
-                              disabled={updatingCounterparty}
-                              className="rounded p-1 text-green-600 hover:bg-green-50"
-                              title={t('common.save')}
-                            >
-                              {updatingCounterparty ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <span className="text-sm font-medium">OK</span>
-                              )}
-                            </button>
-                            <button
-                              onClick={cancelEditingCounterparty}
-                              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                              title={t('common.cancel')}
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1 truncate">
+                        <div className="truncate">
+                          {tx.counterparty?.name ? (
                             <Link
-                              to={`/banking/counterparty/${encodeURIComponent(tx.counterpartyName)}`}
+                              to={`/banking/counterparty/${tx.counterparty.id}`}
                               onClick={(e) => e.stopPropagation()}
                               className="truncate text-blue-600 hover:text-blue-800 hover:underline"
                             >
-                              {tx.counterpartyName || '-'}
+                              {tx.counterparty.name}
                             </Link>
-                            {isExpanded && (
-                              <button
-                                onClick={(e) => startEditingCounterparty(tx, e)}
-                                className="ml-1 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                                title={t('banking.editCounterparty')}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        )}
+                          ) : (
+                            <span>-</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-2.5 text-gray-600">
                         {isExpanded ? (
@@ -583,16 +523,16 @@ export function CounterpartyDetailPage() {
                                   <span className="break-all text-gray-600">{tx.reference}</span>
                                 </>
                               )}
-                              {tx.counterpartyIban && (
+                              {tx.counterparty?.iban && (
                                 <>
                                   <span className="text-gray-400">{t('banking.iban')}</span>
-                                  <span className="text-gray-600">{tx.counterpartyIban}</span>
+                                  <span className="text-gray-600">{tx.counterparty.iban}</span>
                                 </>
                               )}
-                              {tx.counterpartyBic && (
+                              {tx.counterparty?.bic && (
                                 <>
                                   <span className="text-gray-400">{t('banking.bic')}</span>
-                                  <span className="text-gray-600">{tx.counterpartyBic}</span>
+                                  <span className="text-gray-600">{tx.counterparty.bic}</span>
                                 </>
                               )}
                               {tx.transactionType && (

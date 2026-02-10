@@ -19,7 +19,12 @@ const LIQUIDITY_FORECAST_QUERY = gql`
         endingBalance
         transactions {
           patternId
-          counterpartyName
+          counterparty {
+            id
+            name
+            iban
+            bic
+          }
           amount
           projectedDate
           isConfirmed
@@ -28,8 +33,12 @@ const LIQUIDITY_FORECAST_QUERY = gql`
     }
     recurringPatterns(includeIgnored: false) {
       id
-      counterpartyName
-      counterpartyIban
+      counterparty {
+        id
+        name
+        iban
+        bic
+      }
       averageAmount
       frequency
       dayOfMonth
@@ -90,10 +99,16 @@ const RESUME_PATTERN = gql`
   }
 `
 
+interface Counterparty {
+  id: string
+  name: string
+  iban: string
+  bic: string
+}
+
 interface RecurringPattern {
   id: number
-  counterpartyName: string
-  counterpartyIban: string
+  counterparty: Counterparty
   averageAmount: number
   frequency: string
   dayOfMonth: number | null
@@ -108,7 +123,7 @@ interface RecurringPattern {
 
 interface ProjectedTransaction {
   patternId: number
-  counterpartyName: string
+  counterparty: Counterparty
   amount: number
   projectedDate: string
   isConfirmed: boolean
@@ -191,7 +206,7 @@ export function LiquidityForecast() {
       // Search filter
       if (searchQuery) {
         const query = searchQuery.toLowerCase()
-        if (!p.counterpartyName.toLowerCase().includes(query)) return false
+        if (!p.counterparty.name.toLowerCase().includes(query)) return false
       }
 
       return true
@@ -202,7 +217,7 @@ export function LiquidityForecast() {
       let cmp = 0
       switch (sortColumn) {
         case 'counterparty':
-          cmp = a.counterpartyName.localeCompare(b.counterpartyName)
+          cmp = a.counterparty.name.localeCompare(b.counterparty.name)
           break
         case 'amount':
           cmp = Math.abs(a.averageAmount) - Math.abs(b.averageAmount)
@@ -497,7 +512,7 @@ export function LiquidityForecast() {
                     )}
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{pattern.counterpartyName}</span>
+                        <span className="font-medium">{pattern.counterparty.name}</span>
                         {pattern.isConfirmed && (
                           <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
                             {t('liquidity.confirmed')}
@@ -639,7 +654,7 @@ export function LiquidityForecast() {
                                 txn.isConfirmed ? 'text-gray-900' : 'text-gray-500 italic'
                               }
                             >
-                              {txn.counterpartyName}
+                              {txn.counterparty.name}
                             </span>
                             {!txn.isConfirmed && (
                               <span className="text-xs text-gray-400">
