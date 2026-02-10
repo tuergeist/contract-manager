@@ -65,6 +65,19 @@ def populate_counterparties(apps, schema_editor):
             txn.counterparty = counterparty_map[key]
             txn.save(update_fields=["counterparty"])
 
+    # Handle transactions with empty counterparty_name - create "Unknown" counterparty per tenant
+    unknown_counterparties = {}  # tenant_id -> Counterparty
+    for txn in BankTransaction.objects.filter(counterparty__isnull=True, counterparty_name=""):
+        if txn.tenant_id not in unknown_counterparties:
+            unknown_cp, _ = Counterparty.objects.get_or_create(
+                tenant_id=txn.tenant_id,
+                name="(Unknown)",
+                defaults={"iban": "", "bic": ""},
+            )
+            unknown_counterparties[txn.tenant_id] = unknown_cp
+        txn.counterparty = unknown_counterparties[txn.tenant_id]
+        txn.save(update_fields=["counterparty"])
+
     # Update all RecurringPatterns to reference their Counterparty
     for pattern in RecurringPattern.objects.filter(counterparty__isnull=True).exclude(
         counterparty_name=""
@@ -73,6 +86,18 @@ def populate_counterparties(apps, schema_editor):
         if key in counterparty_map:
             pattern.counterparty = counterparty_map[key]
             pattern.save(update_fields=["counterparty"])
+
+    # Handle patterns with empty counterparty_name
+    for pattern in RecurringPattern.objects.filter(counterparty__isnull=True, counterparty_name=""):
+        if pattern.tenant_id not in unknown_counterparties:
+            unknown_cp, _ = Counterparty.objects.get_or_create(
+                tenant_id=pattern.tenant_id,
+                name="(Unknown)",
+                defaults={"iban": "", "bic": ""},
+            )
+            unknown_counterparties[pattern.tenant_id] = unknown_cp
+        pattern.counterparty = unknown_counterparties[pattern.tenant_id]
+        pattern.save(update_fields=["counterparty"])
 
 
 def reverse_populate(apps, schema_editor):
