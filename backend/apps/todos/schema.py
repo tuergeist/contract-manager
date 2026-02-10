@@ -22,6 +22,7 @@ class TodoItemType:
     reminder_date: date | None
     is_public: bool
     is_completed: bool
+    completed_at: datetime | None
     created_at: datetime
 
     # Entity info
@@ -62,6 +63,7 @@ def todo_to_type(todo: TodoItem) -> TodoItemType:
         reminder_date=todo.reminder_date,
         is_public=todo.is_public,
         is_completed=todo.is_completed,
+        completed_at=todo.completed_at,
         created_at=todo.created_at,
         entity_type=todo.entity_type or "",
         entity_name=todo.entity_name or "",
@@ -269,6 +271,14 @@ class TodoMutation:
             if is_completed is not None:
                 todo.is_completed = is_completed
                 update_fields.append("is_completed")
+                # Set or clear completed_at timestamp
+                if is_completed and not todo.completed_at:
+                    from django.utils import timezone
+                    todo.completed_at = timezone.now()
+                    update_fields.append("completed_at")
+                elif not is_completed and todo.completed_at:
+                    todo.completed_at = None
+                    update_fields.append("completed_at")
 
             if len(update_fields) > 1:
                 todo.save(update_fields=update_fields)

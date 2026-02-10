@@ -22,6 +22,10 @@ export default defineConfig({
         target: 'http://backend:8000',  // Internal Docker network
         changeOrigin: true,
       },
+      '/media': {
+        target: 'http://backend:8000',  // Internal Docker network
+        changeOrigin: true,
+      },
     },
   },
 })

@@ -4,9 +4,6 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, gql } from '@apollo/client'
 import { RefreshCw, CheckCircle, XCircle, Loader2, Upload, Plus, X } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
-import { ProfileEdit } from './ProfileEdit'
-import { PasswordChange } from './PasswordChange'
-import { RoleManagement } from './RoleManagement'
 
 interface CompanyFilter {
   propertyName: string
@@ -119,7 +116,7 @@ interface SettingsProps {
 }
 
 export function Settings({ showHeader = true }: SettingsProps) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const [ttProvider, setTtProvider] = useState('clockodo')
   const [ttApiEmail, setTtApiEmail] = useState('')
   const [ttApiKey, setTtApiKey] = useState('')
@@ -156,10 +153,6 @@ export function Settings({ showHeader = true }: SettingsProps) {
       )
     }
   }, [settingsData?.hubspotSettings?.companyFilters])
-
-  const changeLanguage = (lang: string) => {
-    i18n.changeLanguage(lang)
-  }
 
   const addFilter = () => {
     setCompanyFilters([...companyFilters, { propertyName: '', values: [] }])
@@ -729,9 +722,6 @@ export function Settings({ showHeader = true }: SettingsProps) {
           </div>
         </div>
 
-        {/* Roles & Permissions */}
-        <RoleManagement />
-
         {/* Contract Import */}
         <div className="rounded-lg border bg-white p-6">
           <h2 className="text-lg font-medium">{t('import.title')}</h2>
@@ -745,41 +735,6 @@ export function Settings({ showHeader = true }: SettingsProps) {
               <Upload className="h-4 w-4" />
               {t('import.title')}
             </Link>
-          </div>
-        </div>
-
-        {/* Profile Edit */}
-        <ProfileEdit />
-
-        {/* Password Change */}
-        <PasswordChange />
-
-        {/* Language */}
-        <div className="rounded-lg border bg-white p-6">
-          <h2 className="text-lg font-medium">{t('settings.language')}</h2>
-          <p className="mt-1 text-sm text-gray-500">{t('settings.languageDescription')}</p>
-
-          <div className="mt-4 flex gap-2">
-            <button
-              onClick={() => changeLanguage('de')}
-              className={`rounded-md px-4 py-2 text-sm font-medium ${
-                i18n.language === 'de'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Deutsch
-            </button>
-            <button
-              onClick={() => changeLanguage('en')}
-              className={`rounded-md px-4 py-2 text-sm font-medium ${
-                i18n.language === 'en'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              English
-            </button>
           </div>
         </div>
       </div>

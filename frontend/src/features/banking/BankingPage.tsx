@@ -964,11 +964,11 @@ export function BankingPage() {
 
           {/* Transaction Table */}
           <div className="overflow-x-auto rounded-lg border bg-white">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
               <thead>
                 <tr className="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                   <th
-                    className="cursor-pointer whitespace-nowrap px-4 py-3"
+                    className="w-[100px] cursor-pointer whitespace-nowrap px-4 py-3"
                     onClick={() => handleSort('date')}
                   >
                     <span className="inline-flex items-center gap-1">
@@ -977,7 +977,7 @@ export function BankingPage() {
                     </span>
                   </th>
                   <th
-                    className="cursor-pointer px-4 py-3"
+                    className="w-[200px] cursor-pointer px-4 py-3"
                     onClick={() => handleSort('counterparty')}
                   >
                     <span className="inline-flex items-center gap-1">
@@ -985,9 +985,9 @@ export function BankingPage() {
                       {getSortIcon('counterparty')}
                     </span>
                   </th>
-                  <th className="w-2/5 px-4 py-3">{t('banking.bookingText')}</th>
+                  <th className="px-4 py-3">{t('banking.bookingText')}</th>
                   <th
-                    className="cursor-pointer whitespace-nowrap px-4 py-3 text-right"
+                    className="w-[120px] cursor-pointer whitespace-nowrap px-4 py-3 text-right"
                     onClick={() => handleSort('amount')}
                   >
                     <span className="inline-flex items-center justify-end gap-1">
@@ -995,7 +995,7 @@ export function BankingPage() {
                       {getSortIcon('amount')}
                     </span>
                   </th>
-                  <th className="px-4 py-3">{t('banking.account')}</th>
+                  <th className="w-[110px] px-4 py-3">{t('banking.account')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -1086,7 +1086,7 @@ export function BankingPage() {
                             </div>
                           )}
                         </td>
-                        <td className="w-2/5 px-4 py-2.5 text-gray-600">
+                        <td className="px-4 py-2.5 text-gray-600">
                           {isExpanded ? (
                             <div className="space-y-2">
                               <div className="whitespace-pre-wrap">{tx.bookingText || '-'}</div>

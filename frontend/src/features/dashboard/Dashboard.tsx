@@ -1,8 +1,10 @@
+import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { KPICard } from './KPICard'
 import { TodoList, type TodoItem } from '@/features/todos'
+import { Checkbox } from '@/components/ui/checkbox'
 
 const DASHBOARD_KPIS_QUERY = gql`
   query DashboardKPIs {
@@ -25,6 +27,7 @@ const MY_TODOS_QUERY = gql`
       reminderDate
       isPublic
       isCompleted
+      completedAt
       entityType
       entityName
       entityId
@@ -47,6 +50,7 @@ const TEAM_TODOS_QUERY = gql`
       reminderDate
       isPublic
       isCompleted
+      completedAt
       entityType
       entityName
       entityId
@@ -81,19 +85,56 @@ interface TodosData {
 
 export function Dashboard() {
   const { t } = useTranslation()
+  const [showMyRecentlyClosed, setShowMyRecentlyClosed] = useState(false)
+  const [showTeamRecentlyClosed, setShowTeamRecentlyClosed] = useState(false)
 
   const { data: kpisData, loading: kpisLoading, error: kpisError } = useQuery<DashboardKPIsData>(DASHBOARD_KPIS_QUERY)
   const { data: myTodosData, loading: myTodosLoading, refetch: refetchMyTodos } = useQuery<TodosData>(MY_TODOS_QUERY, {
-    variables: { limit: 10 },
+    variables: { limit: 50 },  // Fetch more to account for filtering
   })
   const { data: teamTodosData, loading: teamTodosLoading, refetch: refetchTeamTodos } = useQuery<TodosData>(TEAM_TODOS_QUERY, {
-    variables: { limit: 10 },
+    variables: { limit: 50 },  // Fetch more to account for filtering
   })
 
   const handleTodoUpdate = () => {
     refetchMyTodos()
     refetchTeamTodos()
   }
+
+  // Filter todos: hide completed > 2 days ago, unless showing recently closed (up to 14 days)
+  const myTodos = useMemo(() => {
+    const todos = myTodosData?.myTodos || []
+    const now = new Date()
+    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000)
+    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
+
+    return todos.filter((todo) => {
+      if (!todo.isCompleted) return true
+      if (!todo.completedAt) return true
+      const completedDate = new Date(todo.completedAt)
+      if (showMyRecentlyClosed) {
+        return completedDate >= fourteenDaysAgo
+      }
+      return completedDate >= twoDaysAgo
+    })
+  }, [myTodosData, showMyRecentlyClosed])
+
+  const teamTodos = useMemo(() => {
+    const todos = teamTodosData?.teamTodos || []
+    const now = new Date()
+    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000)
+    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
+
+    return todos.filter((todo) => {
+      if (!todo.isCompleted) return true
+      if (!todo.completedAt) return true
+      const completedDate = new Date(todo.completedAt)
+      if (showTeamRecentlyClosed) {
+        return completedDate >= fourteenDaysAgo
+      }
+      return completedDate >= twoDaysAgo
+    })
+  }, [teamTodosData, showTeamRecentlyClosed])
 
   if (kpisLoading) {
     return (
@@ -113,8 +154,6 @@ export function Dashboard() {
   }
 
   const kpis = kpisData?.dashboardKpis
-  const myTodos = myTodosData?.myTodos || []
-  const teamTodos = teamTodosData?.teamTodos || []
 
   return (
     <div>
@@ -165,6 +204,13 @@ export function Dashboard() {
         <div className="rounded-lg border bg-card p-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{t('todos.myTodos')}</h2>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+              <Checkbox
+                checked={showMyRecentlyClosed}
+                onCheckedChange={(checked) => setShowMyRecentlyClosed(checked === true)}
+              />
+              {t('todos.showRecentlyClosed')}
+            </label>
           </div>
           {myTodosLoading ? (
             <div className="flex items-center justify-center py-8">
@@ -183,6 +229,13 @@ export function Dashboard() {
         <div className="rounded-lg border bg-card p-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{t('todos.teamTodos')}</h2>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+              <Checkbox
+                checked={showTeamRecentlyClosed}
+                onCheckedChange={(checked) => setShowTeamRecentlyClosed(checked === true)}
+              />
+              {t('todos.showRecentlyClosed')}
+            </label>
           </div>
           {teamTodosLoading ? (
             <div className="flex items-center justify-center py-8">

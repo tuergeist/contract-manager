@@ -23,6 +23,11 @@ class TodoItem(TenantModel):
         default=False,
         help_text="Whether this todo has been completed",
     )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this todo was marked as completed",
+    )
     created_by = models.ForeignKey(
         "tenants.User",
         on_delete=models.CASCADE,

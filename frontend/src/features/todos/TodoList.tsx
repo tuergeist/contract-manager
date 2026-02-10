@@ -75,6 +75,7 @@ export interface TodoItem {
   reminderDate: string | null
   isPublic: boolean
   isCompleted: boolean
+  completedAt: string | null
   entityType: string
   entityName: string
   entityId: number
