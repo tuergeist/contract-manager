@@ -63,7 +63,7 @@ export function ExtractionReviewPanel({ data, onClose, onApplyTemplate }: Extrac
   const layout = data.layout
 
   const handleApplyCompanyData = () => {
-    navigate('/settings/company-data', { state: { extractedLegalData: ld } })
+    navigate('/settings/invoices', { state: { extractedLegalData: ld } })
   }
 
   const handleApplyTemplate = () => {

@@ -326,7 +326,7 @@ export function InvoiceExportPage() {
         <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
           <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
           <div className="flex-1 text-sm text-amber-800">{t('invoices.legalDataIncomplete')}</div>
-          <Link to="/settings/company-data" className="text-sm font-medium text-amber-700 hover:text-amber-900 whitespace-nowrap">
+          <Link to="/settings/invoices" className="text-sm font-medium text-amber-700 hover:text-amber-900 whitespace-nowrap">
             {t('invoices.goToSettings')} &rarr;
           </Link>
         </div>
