@@ -1,6 +1,7 @@
 {
   "nav": {
     "dashboard": "Dashboard",
+    "todos": "Aufgaben",
     "customers": "Kunden",
     "products": "Produkte",
     "contracts": "Verträge",
@@ -820,10 +821,12 @@
   },
   "todos": {
     "title": "Aufgaben",
+    "board": "Aufgaben-Board",
     "myTodos": "Meine Aufgaben",
     "teamTodos": "Team-Aufgaben",
     "addTodo": "Aufgabe hinzufügen",
     "add": "Hinzufügen",
+    "editTodo": "Aufgabe bearbeiten",
     "noTodos": "Keine Aufgaben vorhanden",
     "linkedTo": "Verknüpft mit",
     "description": "Beschreibung",
@@ -833,16 +836,24 @@
     "nextMonth": "Nächster Monat",
     "nextQuarter": "Nächstes Quartal",
     "assignTo": "Zuweisen an",
+    "assignee": "Zugewiesen an",
     "assignToPlaceholder": "Benutzer auswählen...",
     "unassigned": "Nicht zugewiesen",
+    "me": "Ich",
     "shareWithTeam": "Mit Team teilen",
-    "showCompleted": "Erledigte",
+    "showCompleted": "Erledigte anzeigen",
     "closedNone": "Nein",
     "closedDays": "{{days}} Tage",
     "confirmDelete": "Möchten Sie diese Aufgabe wirklich löschen?",
     "errorTextRequired": "Bitte geben Sie eine Beschreibung ein",
     "errorContextRequired": "Bitte wählen Sie einen Kontext aus",
-    "errorCreate": "Aufgabe konnte nicht erstellt werden"
+    "errorCreate": "Aufgabe konnte nicht erstellt werden",
+    "public": "Öffentlich (sichtbar für Team)",
+    "private": "Privat",
+    "comments": "Kommentare",
+    "noComments": "Noch keine Kommentare",
+    "addCommentPlaceholder": "Kommentar hinzufügen...",
+    "todoText": "Aufgabe"
   },
   "pdfAnalysis": {
     "analyzeButton": "Analysieren",

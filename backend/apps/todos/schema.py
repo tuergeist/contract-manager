@@ -10,7 +10,30 @@ from django.db.models import Q, F
 
 from apps.core.permissions import check_perm, get_current_user, require_perm
 from apps.core.schema import DeleteResult
-from .models import TodoItem
+from .models import TodoItem, TodoComment
+
+
+@strawberry.type
+class TodoCommentType:
+    """A comment on a todo item."""
+
+    id: int
+    text: str
+    author_id: int
+    author_name: str
+    created_at: datetime
+
+
+def comment_to_type(comment: TodoComment) -> TodoCommentType:
+    """Convert a TodoComment model to TodoCommentType."""
+    author_name = comment.author.get_full_name() or comment.author.email
+    return TodoCommentType(
+        id=comment.id,
+        text=comment.text,
+        author_id=comment.author_id,
+        author_name=author_name,
+        created_at=comment.created_at,
+    )
 
 
 @strawberry.type
@@ -43,8 +66,12 @@ class TodoItemType:
     contract_item_id: int | None
     customer_id: int | None
 
+    # Comments
+    comment_count: int
+    comments: List[TodoCommentType]
 
-def todo_to_type(todo: TodoItem) -> TodoItemType:
+
+def todo_to_type(todo: TodoItem, include_comments: bool = True) -> TodoItemType:
     """Convert a TodoItem model to TodoItemType."""
     # Determine entity_id based on which entity is set
     entity_id = todo.contract_id or todo.contract_item_id or todo.customer_id
@@ -56,6 +83,11 @@ def todo_to_type(todo: TodoItem) -> TodoItemType:
     assigned_to_name = None
     if todo.assigned_to:
         assigned_to_name = todo.assigned_to.get_full_name() or todo.assigned_to.email
+
+    # Get comments
+    comments = []
+    if include_comments:
+        comments = [comment_to_type(c) for c in todo.comments.select_related("author").all()]
 
     return TodoItemType(
         id=todo.id,
@@ -75,32 +107,45 @@ def todo_to_type(todo: TodoItem) -> TodoItemType:
         contract_id=todo.contract_id,
         contract_item_id=todo.contract_item_id,
         customer_id=todo.customer_id,
+        comment_count=todo.comment_count,
+        comments=comments,
     )
 
 
 @strawberry.type
 class TodoQuery:
     @strawberry.field
-    def my_todos(self, info: Info, limit: int = 20) -> List[TodoItemType]:
-        """Get todos assigned to the current user, or unassigned todos created by them."""
+    def my_todos(
+        self,
+        info: Info,
+        is_completed: bool | None = None,
+        limit: int = 100,
+    ) -> List[TodoItemType]:
+        """Get todos where the current user is assignee OR creator.
+
+        Includes todos from contracts, contract items, and customers.
+        """
         user = require_perm(info, "todos", "read")
         if not user:
             return []
 
-        todos = (
-            TodoItem.objects.filter(
-                tenant=user.tenant,
-            )
-            .filter(
-                Q(assigned_to=user) | Q(assigned_to__isnull=True, created_by=user)
-            )
-            .select_related("created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer")
-            .order_by(
-                # Null reminder dates last
-                F("reminder_date").asc(nulls_last=True),
-                "-created_at",
-            )[:limit]
+        queryset = TodoItem.objects.filter(
+            tenant=user.tenant,
+        ).filter(
+            Q(assigned_to=user) | Q(created_by=user)
         )
+
+        # Optional filter by completion status
+        if is_completed is not None:
+            queryset = queryset.filter(is_completed=is_completed)
+
+        todos = queryset.select_related(
+            "created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer"
+        ).order_by(
+            # Null reminder dates last
+            F("reminder_date").asc(nulls_last=True),
+            "-created_at",
+        )[:limit]
 
         return [todo_to_type(todo) for todo in todos]
 
@@ -128,6 +173,88 @@ class TodoQuery:
 
         return [todo_to_type(todo) for todo in todos]
 
+    @strawberry.field
+    def todos_by_assignee(
+        self,
+        info: Info,
+        include_completed: bool = False,
+    ) -> List["AssigneeColumn"]:
+        """Get todos grouped by assignee for board view."""
+        user = require_perm(info, "todos", "read")
+        if not user:
+            return []
+
+        # Get all visible todos
+        base_query = TodoItem.objects.filter(
+            tenant=user.tenant,
+        ).filter(
+            Q(is_public=True) | Q(created_by=user) | Q(assigned_to=user)
+        )
+
+        if not include_completed:
+            base_query = base_query.filter(is_completed=False)
+
+        todos = base_query.select_related(
+            "created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer"
+        ).order_by(
+            F("reminder_date").asc(nulls_last=True),
+            "-created_at",
+        )
+
+        # Group by assignee
+        from collections import defaultdict
+        grouped: dict[int | None, list[TodoItem]] = defaultdict(list)
+        for todo in todos:
+            grouped[todo.assigned_to_id].append(todo)
+
+        # Build columns with current user first
+        columns = []
+
+        # Current user's column (even if empty)
+        user_todos = grouped.pop(user.id, [])
+        columns.append(AssigneeColumn(
+            assignee_id=user.id,
+            assignee_name=user.get_full_name() or user.email,
+            is_current_user=True,
+            todos=[todo_to_type(t, include_comments=False) for t in user_todos],
+        ))
+
+        # Other assignees
+        from apps.tenants.models import User as TenantUser
+        assignee_ids = [aid for aid in grouped.keys() if aid is not None]
+        assignees_by_id = {u.id: u for u in TenantUser.objects.filter(id__in=assignee_ids)}
+
+        for assignee_id in sorted(assignee_ids, key=lambda x: assignees_by_id.get(x, TenantUser()).email or ""):
+            assignee = assignees_by_id.get(assignee_id)
+            if assignee:
+                columns.append(AssigneeColumn(
+                    assignee_id=assignee_id,
+                    assignee_name=assignee.get_full_name() or assignee.email,
+                    is_current_user=False,
+                    todos=[todo_to_type(t, include_comments=False) for t in grouped[assignee_id]],
+                ))
+
+        # Unassigned column last
+        unassigned = grouped.get(None, [])
+        if unassigned:
+            columns.append(AssigneeColumn(
+                assignee_id=None,
+                assignee_name="Unassigned",
+                is_current_user=False,
+                todos=[todo_to_type(t, include_comments=False) for t in unassigned],
+            ))
+
+        return columns
+
+
+@strawberry.type
+class AssigneeColumn:
+    """A column in the todo board representing an assignee."""
+    assignee_id: int | None
+    assignee_name: str
+    is_current_user: bool
+    todos: List[TodoItemType]
+
 
 @strawberry.type
 class TodoCreateResult:
@@ -138,6 +265,20 @@ class TodoCreateResult:
 
 @strawberry.type
 class TodoUpdateResult:
+    success: bool
+    todo: TodoItemType | None = None
+    error: str | None = None
+
+
+@strawberry.type
+class TodoCommentResult:
+    success: bool
+    comment: TodoCommentType | None = None
+    error: str | None = None
+
+
+@strawberry.type
+class ReassignResult:
     success: bool
     todo: TodoItemType | None = None
     error: str | None = None
@@ -314,3 +455,69 @@ class TodoMutation:
             return DeleteResult(success=False, error="Todo not found")
         except Exception as e:
             return DeleteResult(success=False, error=str(e))
+
+    @strawberry.mutation
+    def add_todo_comment(
+        self,
+        info: Info,
+        todo_id: int,
+        text: str,
+    ) -> TodoCommentResult:
+        """Add an immutable comment to a todo."""
+        user, err = check_perm(info, "todos", "write")
+        if err:
+            return TodoCommentResult(success=False, error=err)
+
+        # Validate text
+        text = text.strip()
+        if not text:
+            return TodoCommentResult(success=False, error="Comment text is required")
+
+        try:
+            todo = TodoItem.objects.get(pk=todo_id, tenant=user.tenant)
+
+            # Check if user can view this todo (public or creator or assignee)
+            if not todo.is_public and todo.created_by_id != user.id and todo.assigned_to_id != user.id:
+                return TodoCommentResult(success=False, error="Todo not found")
+
+            comment = TodoComment.objects.create(
+                tenant=user.tenant,
+                todo=todo,
+                text=text,
+                author=user,
+            )
+
+            return TodoCommentResult(success=True, comment=comment_to_type(comment))
+        except TodoItem.DoesNotExist:
+            return TodoCommentResult(success=False, error="Todo not found")
+        except Exception as e:
+            return TodoCommentResult(success=False, error=str(e))
+
+    @strawberry.mutation
+    def reassign_todo_to_self(self, info: Info, todo_id: int) -> ReassignResult:
+        """Reassign a todo to the current user (take over)."""
+        user, err = check_perm(info, "todos", "write")
+        if err:
+            return ReassignResult(success=False, error=err)
+
+        try:
+            todo = TodoItem.objects.select_related(
+                "created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer"
+            ).get(pk=todo_id, tenant=user.tenant)
+
+            # Can only reassign public todos or todos you created/are assigned to
+            if not todo.is_public and todo.created_by_id != user.id and todo.assigned_to_id != user.id:
+                return ReassignResult(success=False, error="Cannot reassign private todo")
+
+            # Already assigned to self - no-op
+            if todo.assigned_to_id == user.id:
+                return ReassignResult(success=True, todo=todo_to_type(todo))
+
+            todo.assigned_to = user
+            todo.save(update_fields=["assigned_to", "updated_at"])
+
+            return ReassignResult(success=True, todo=todo_to_type(todo))
+        except TodoItem.DoesNotExist:
+            return ReassignResult(success=False, error="Todo not found")
+        except Exception as e:
+            return ReassignResult(success=False, error=str(e))

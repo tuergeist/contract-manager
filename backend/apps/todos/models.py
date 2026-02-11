@@ -120,3 +120,34 @@ class TodoItem(TenantModel):
         if self.customer:
             return self.customer.name
         return None
+
+    @property
+    def comment_count(self):
+        """Return the number of comments on this todo."""
+        return self.comments.count()
+
+
+class TodoComment(TenantModel):
+    """An immutable comment on a todo item."""
+
+    todo = models.ForeignKey(
+        TodoItem,
+        on_delete=models.CASCADE,
+        related_name="comments",
+        help_text="The todo this comment belongs to",
+    )
+    text = models.TextField(
+        help_text="The comment text",
+    )
+    author = models.ForeignKey(
+        "tenants.User",
+        on_delete=models.CASCADE,
+        related_name="todo_comments",
+        help_text="The user who wrote this comment",
+    )
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"Comment by {self.author} on {self.todo}"

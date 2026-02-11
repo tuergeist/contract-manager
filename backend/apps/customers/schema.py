@@ -129,20 +129,28 @@ class CustomerType:
 
     @strawberry.field
     def todos(self, info: Info[Context, None]) -> List[Annotated["TodoItemType", strawberry.lazy("apps.todos.schema")]]:
-        """Get todos for this customer visible to the current user."""
+        """Get todos for this customer visible to the current user.
+
+        Includes both direct customer todos and todos from the customer's contracts.
+        """
         from apps.todos.models import TodoItem
         from apps.todos.schema import todo_to_type
+        from apps.contracts.models import Contract
 
         user = get_current_user(info)
         if not user:
             return []
 
-        # Get todos: user's own todos OR public todos from team
+        # Get customer's contract IDs
+        contract_ids = list(Contract.objects.filter(customer=self).values_list("id", flat=True))
+
+        # Get todos: direct customer todos OR todos from customer's contracts
+        # Filtered by visibility: user's own todos OR public todos
         todos = TodoItem.objects.filter(
-            customer=self,
+            Q(customer=self) | Q(contract_id__in=contract_ids)
         ).filter(
             Q(created_by=user) | Q(is_public=True)
-        ).select_related("created_by").order_by("-created_at")
+        ).select_related("created_by", "contract").order_by("-created_at")
 
         return [todo_to_type(todo) for todo in todos]
 

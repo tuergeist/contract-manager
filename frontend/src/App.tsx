@@ -19,6 +19,7 @@ import { AuditLogPage } from './features/audit/AuditLogPage'
 import { BankingPage } from './features/banking/BankingPage'
 import { CounterpartyDetailPage } from './features/banking/CounterpartyDetailPage'
 import { LiquidityForecast } from './features/liquidity'
+import { TodoBoard } from './features/todos/TodoBoard'
 
 function App() {
   return (
@@ -56,6 +57,7 @@ function App() {
         <Route path="banking/counterparty/:id" element={<CounterpartyDetailPage />} />
         <Route path="liquidity-forecast" element={<LiquidityForecast />} />
         <Route path="audit-log" element={<AuditLogPage />} />
+        <Route path="todos" element={<TodoBoard />} />
       </Route>
     </Routes>
   )

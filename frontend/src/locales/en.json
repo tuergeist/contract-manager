@@ -1,6 +1,7 @@
 {
   "nav": {
     "dashboard": "Dashboard",
+    "todos": "Todos",
     "customers": "Customers",
     "products": "Products",
     "contracts": "Contracts",
@@ -820,10 +821,12 @@
   },
   "todos": {
     "title": "Todos",
+    "board": "Todo Board",
     "myTodos": "My Todos",
     "teamTodos": "Team Todos",
     "addTodo": "Add Todo",
     "add": "Add",
+    "editTodo": "Edit Todo",
     "noTodos": "No todos yet",
     "linkedTo": "Linked to",
     "description": "Description",
@@ -833,16 +836,24 @@
     "nextMonth": "Next month",
     "nextQuarter": "Next quarter",
     "assignTo": "Assign to",
+    "assignee": "Assignee",
     "assignToPlaceholder": "Select a user...",
     "unassigned": "Unassigned",
+    "me": "Me",
     "shareWithTeam": "Share with team",
-    "showCompleted": "Completed",
+    "showCompleted": "Show completed",
     "closedNone": "No",
     "closedDays": "{{days}} days",
     "confirmDelete": "Are you sure you want to delete this todo?",
     "errorTextRequired": "Please enter a description",
     "errorContextRequired": "Please select a context",
-    "errorCreate": "Failed to create todo"
+    "errorCreate": "Failed to create todo",
+    "public": "Public (visible to team)",
+    "private": "Private",
+    "comments": "Comments",
+    "noComments": "No comments yet",
+    "addCommentPlaceholder": "Add a comment...",
+    "todoText": "Todo"
   },
   "pdfAnalysis": {
     "analyzeButton": "Analyze",

@@ -20,6 +20,7 @@ import {
   MessageSquarePlus,
   Landmark,
   Wallet,
+  ListTodo,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
@@ -60,6 +61,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { to: '/', icon: LayoutDashboard, labelKey: 'nav.dashboard', end: true },
+  { to: '/todos', icon: ListTodo, labelKey: 'nav.todos' },
   { to: '/customers', icon: Users, labelKey: 'nav.customers' },
   { to: '/products', icon: Package, labelKey: 'nav.products' },
   { to: '/contracts', icon: FileText, labelKey: 'nav.contracts' },
