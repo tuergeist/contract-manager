@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 
 from django.conf import settings
+from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.core.management.base import BaseCommand
 
@@ -139,7 +140,7 @@ class Command(BaseCommand):
             content = f.read()
 
         # Upload to S3
-        default_storage.save(file_path, content)
+        default_storage.save(file_path, ContentFile(content))
 
         # Record migration
         StorageMigration.objects.create(
