@@ -21,6 +21,7 @@
     "create": "Create",
     "back": "Back",
     "error": "Error",
+    "rename": "Rename",
     "pagination": {
       "showing": "Showing {{from}} to {{to}} of {{total}}",
       "page": "Page {{page}} of {{totalPages}}",
@@ -964,7 +965,13 @@
     "noCounterpartiesFound": "No counterparties found.",
     "createCounterparty": "Create Counterparty",
     "counterpartyName": "Counterparty name",
-    "createNewCounterparty": "Create new counterparty"
+    "createNewCounterparty": "Create new counterparty",
+    "mergeCounterparty": "Merge Counterparty",
+    "mergeDescription": "Merge \"{{name}}\" into another counterparty. All transactions will be moved to the target.",
+    "mergeTarget": "Merge into",
+    "selectCounterparty": "Select counterparty...",
+    "merge": "Merge",
+    "period": "Period"
   },
   "liquidity": {
     "title": "Liquidity Forecast",

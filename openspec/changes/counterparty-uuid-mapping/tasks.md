@@ -36,7 +36,7 @@
 
 - [x] 5.1 Update MT940 parser to find-or-create Counterparty on transaction import
 - [x] 5.2 Update import hash computation to use counterparty name (for backwards compatibility)
-- [ ] 5.3 Add tests for counterparty creation during import
+- [x] 5.3 Add tests for counterparty creation during import
 
 ## 6. Frontend Route & Navigation
 
@@ -47,8 +47,8 @@
 ## 7. Frontend Counterparty Detail Page
 
 - [x] 7.1 Update GraphQL query to use counterparty(id: ID!)
-- [ ] 7.2 Add rename functionality with inline edit or modal
-- [ ] 7.3 Add merge functionality UI (select target counterparty)
+- [x] 7.2 Add rename functionality with inline edit or modal
+- [x] 7.3 Add merge functionality UI (select target counterparty)
 - [x] 7.4 Update transaction table to show counterparty.name from FK
 
 ## 8. Frontend Transaction & Pattern Display
@@ -59,8 +59,8 @@
 
 ## 9. Testing
 
-- [ ] 9.1 Add backend tests for Counterparty CRUD operations
-- [ ] 9.2 Add backend tests for merge functionality
-- [ ] 9.3 Add backend tests for data migration
+- [x] 9.1 Add backend tests for Counterparty CRUD operations
+- [x] 9.2 Add backend tests for merge functionality
+- [x] 9.3 Add backend tests for data migration
 - [x] 9.4 Add frontend type checks pass (npx tsc --noEmit)
-- [ ] 9.5 Verify existing banking E2E tests still pass
+- [x] 9.5 Verify existing banking E2E tests still pass (N/A - no banking E2E tests exist)

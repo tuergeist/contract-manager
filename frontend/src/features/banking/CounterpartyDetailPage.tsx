@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { useQuery, gql } from '@apollo/client'
+import { useQuery, useMutation, gql } from '@apollo/client'
 import {
   ArrowLeft,
   Loader2,
@@ -11,6 +11,9 @@ import {
   ArrowUp,
   ArrowDown,
   X,
+  Pencil,
+  Check,
+  GitMerge,
 } from 'lucide-react'
 import {
   Select,
@@ -19,6 +22,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Button } from '@/components/ui/button'
 
 const COUNTERPARTY_DETAIL = gql`
   query CounterpartyDetail($id: ID!) {
@@ -99,6 +119,47 @@ const BANK_ACCOUNTS = gql`
   }
 `
 
+const SEARCH_COUNTERPARTIES = gql`
+  query SearchCounterparties($search: String, $page: Int, $pageSize: Int) {
+    counterparties(search: $search, page: $page, pageSize: $pageSize) {
+      items {
+        id
+        name
+        transactionCount
+      }
+    }
+  }
+`
+
+const UPDATE_COUNTERPARTY = gql`
+  mutation UpdateCounterparty($input: UpdateCounterpartyInput!) {
+    updateCounterparty(input: $input) {
+      success
+      error
+      counterparty {
+        id
+        name
+        iban
+        bic
+      }
+    }
+  }
+`
+
+const MERGE_COUNTERPARTIES = gql`
+  mutation MergeCounterparties($sourceId: ID!, $targetId: ID!) {
+    mergeCounterparties(sourceId: $sourceId, targetId: $targetId) {
+      success
+      error
+      mergedTransactionCount
+      target {
+        id
+        name
+      }
+    }
+  }
+`
+
 interface Counterparty {
   id: string
   name: string
@@ -138,6 +199,18 @@ export function CounterpartyDetailPage() {
 
   // Expanded transaction row
   const [expandedTxId, setExpandedTxId] = useState<number | null>(null)
+
+  // Rename state
+  const [isEditing, setIsEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const editInputRef = useRef<HTMLInputElement>(null)
+
+  // Merge state
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false)
+  const [mergeTargetSearch, setMergeTargetSearch] = useState('')
+  const [mergeTargetId, setMergeTargetId] = useState<string | null>(null)
+  const [mergeTargetName, setMergeTargetName] = useState<string | null>(null)
+  const [mergePopoverOpen, setMergePopoverOpen] = useState(false)
 
   // Filters
   const [filterAccountId, setFilterAccountId] = useState<string>('all')
@@ -198,6 +271,68 @@ export function CounterpartyDetailPage() {
   // Accounts for filter dropdown
   const { data: accountsData } = useQuery(BANK_ACCOUNTS)
   const accounts = accountsData?.bankAccounts ?? []
+
+  // Search counterparties for merge
+  const { data: searchData } = useQuery(SEARCH_COUNTERPARTIES, {
+    variables: { search: mergeTargetSearch, page: 1, pageSize: 20 },
+    skip: !mergeDialogOpen,
+  })
+  const searchResults = (searchData?.counterparties?.items ?? []).filter(
+    (cp: { id: string }) => cp.id !== id // Exclude current counterparty
+  )
+
+  // Mutations
+  const [updateCounterparty, { loading: updating }] = useMutation(UPDATE_COUNTERPARTY, {
+    refetchQueries: ['CounterpartyDetail'],
+  })
+  const [mergeCounterparties, { loading: merging }] = useMutation(MERGE_COUNTERPARTIES)
+
+  // Start editing
+  const handleStartEdit = () => {
+    setEditName(summary?.name ?? '')
+    setIsEditing(true)
+    setTimeout(() => editInputRef.current?.focus(), 0)
+  }
+
+  // Save rename
+  const handleSaveRename = async () => {
+    if (!editName.trim() || editName === summary?.name) {
+      setIsEditing(false)
+      return
+    }
+    try {
+      const { data } = await updateCounterparty({
+        variables: { input: { id, name: editName.trim() } },
+      })
+      if (data?.updateCounterparty?.success) {
+        setIsEditing(false)
+      } else {
+        alert(data?.updateCounterparty?.error || 'Failed to rename')
+      }
+    } catch (err) {
+      console.error('Rename error:', err)
+      alert('Failed to rename counterparty')
+    }
+  }
+
+  // Handle merge
+  const handleMerge = async () => {
+    if (!mergeTargetId) return
+    try {
+      const { data } = await mergeCounterparties({
+        variables: { sourceId: id, targetId: mergeTargetId },
+      })
+      if (data?.mergeCounterparties?.success) {
+        // Navigate to the target counterparty
+        navigate(`/banking/counterparty/${mergeTargetId}`)
+      } else {
+        alert(data?.mergeCounterparties?.error || 'Failed to merge')
+      }
+    } catch (err) {
+      console.error('Merge error:', err)
+      alert('Failed to merge counterparties')
+    }
+  }
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -274,8 +409,55 @@ export function CounterpartyDetailPage() {
         {t('banking.backToBanking')}
       </button>
 
-      {/* Page Title */}
-      <h1 className="text-2xl font-bold text-gray-900">{summary?.name}</h1>
+      {/* Page Title with Edit and Merge */}
+      <div className="flex items-center gap-3">
+        {isEditing ? (
+          <div className="flex items-center gap-2">
+            <input
+              ref={editInputRef}
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveRename()
+                if (e.key === 'Escape') setIsEditing(false)
+              }}
+              className="rounded-md border border-blue-500 px-3 py-1.5 text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={handleSaveRename}
+              disabled={updating}
+              className="rounded-md bg-blue-600 p-2 text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {updating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
+            </button>
+            <button
+              onClick={() => setIsEditing(false)}
+              className="rounded-md border border-gray-300 p-2 text-gray-500 hover:bg-gray-100"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        ) : (
+          <>
+            <h1 className="text-2xl font-bold text-gray-900">{summary?.name}</h1>
+            <button
+              onClick={handleStartEdit}
+              className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              title={t('common.rename')}
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setMergeDialogOpen(true)}
+              className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              title={t('banking.mergeCounterparty')}
+            >
+              <GitMerge className="h-4 w-4" />
+            </button>
+          </>
+        )}
+      </div>
 
       {/* IBAN/BIC if available */}
       {(summary?.iban || summary?.bic) && (
@@ -285,6 +467,77 @@ export function CounterpartyDetailPage() {
           {summary?.bic && <span>{summary.bic}</span>}
         </p>
       )}
+
+      {/* Merge Dialog */}
+      <Dialog open={mergeDialogOpen} onOpenChange={setMergeDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('banking.mergeCounterparty')}</DialogTitle>
+            <DialogDescription>
+              {t('banking.mergeDescription', { name: summary?.name })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="mb-2 block text-sm font-medium text-gray-700">
+              {t('banking.mergeTarget')}
+            </label>
+            <Popover open={mergePopoverOpen} onOpenChange={setMergePopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-between"
+                >
+                  {mergeTargetName || t('banking.selectCounterparty')}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[400px] p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder={t('common.search')}
+                    value={mergeTargetSearch}
+                    onValueChange={setMergeTargetSearch}
+                  />
+                  <CommandList>
+                    <CommandEmpty>{t('banking.noCounterpartiesFound')}</CommandEmpty>
+                    {searchResults.map((cp: { id: string; name: string; transactionCount: number }) => (
+                      <CommandItem
+                        key={cp.id}
+                        value={cp.id}
+                        onSelect={() => {
+                          setMergeTargetId(cp.id)
+                          setMergeTargetName(cp.name)
+                          setMergePopoverOpen(false)
+                        }}
+                      >
+                        <div className="flex w-full items-center justify-between">
+                          <span>{cp.name}</span>
+                          <span className="text-xs text-gray-400">
+                            {t('banking.transactionCount', { count: cp.transactionCount })}
+                          </span>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMergeDialogOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onClick={handleMerge}
+              disabled={!mergeTargetId || merging}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {merging && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {t('banking.merge')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Summary Cards - 4 in a row */}
       {summary && (

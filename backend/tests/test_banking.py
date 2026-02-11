@@ -760,3 +760,321 @@ class TestBankCounterparties:
         assert result.errors is None
         assert result.data["counterparties"]["totalCount"] == 0
         assert result.data["counterparties"]["items"] == []
+
+
+# ============================================================
+# Counterparty CRUD & Merge Tests
+# ============================================================
+
+
+class TestCounterpartyCRUD:
+    """Test counterparty create, update, and merge mutations."""
+
+    def test_create_counterparty(self, user):
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            mutation($input: CreateCounterpartyInput!) {
+              createCounterparty(input: $input) {
+                success
+                error
+                counterparty { id name iban bic }
+              }
+            }
+            """,
+            {"input": {"name": "New Company GmbH", "iban": "DE123456", "bic": "COBADEFF"}},
+            ctx,
+        )
+        assert result.errors is None
+        data = result.data["createCounterparty"]
+        assert data["success"] is True
+        assert data["counterparty"]["name"] == "New Company GmbH"
+        assert data["counterparty"]["iban"] == "DE123456"
+        assert data["counterparty"]["bic"] == "COBADEFF"
+
+    def test_create_counterparty_minimal(self, user):
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            mutation($input: CreateCounterpartyInput!) {
+              createCounterparty(input: $input) {
+                success
+                counterparty { name iban bic }
+              }
+            }
+            """,
+            {"input": {"name": "Simple Corp"}},
+            ctx,
+        )
+        assert result.errors is None
+        data = result.data["createCounterparty"]
+        assert data["success"] is True
+        assert data["counterparty"]["name"] == "Simple Corp"
+        assert data["counterparty"]["iban"] == ""
+        assert data["counterparty"]["bic"] == ""
+
+    def test_create_counterparty_duplicate_fails(self, user, account, tenant):
+        MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            mutation($input: CreateCounterpartyInput!) {
+              createCounterparty(input: $input) {
+                success
+                error
+              }
+            }
+            """,
+            {"input": {"name": "BMW Bank GmbH"}},
+            ctx,
+        )
+        assert result.errors is None
+        data = result.data["createCounterparty"]
+        assert data["success"] is False
+        assert "already exists" in data["error"]
+
+    def test_create_counterparty_empty_name_fails(self, user):
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            mutation($input: CreateCounterpartyInput!) {
+              createCounterparty(input: $input) {
+                success
+                error
+              }
+            }
+            """,
+            {"input": {"name": "  "}},
+            ctx,
+        )
+        assert result.errors is None
+        data = result.data["createCounterparty"]
+        assert data["success"] is False
+        assert "required" in data["error"].lower()
+
+    def test_update_counterparty_rename(self, user, account, tenant):
+        from apps.banking.models import Counterparty
+
+        MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+        cp = Counterparty.objects.get(tenant=tenant, name="BMW Bank GmbH")
+
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            mutation($input: UpdateCounterpartyInput!) {
+              updateCounterparty(input: $input) {
+                success
+                counterparty { name }
+              }
+            }
+            """,
+            {"input": {"id": str(cp.id), "name": "BMW Financial Services"}},
+            ctx,
+        )
+        assert result.errors is None
+        data = result.data["updateCounterparty"]
+        assert data["success"] is True
+        assert data["counterparty"]["name"] == "BMW Financial Services"
+
+        # Verify in DB
+        cp.refresh_from_db()
+        assert cp.name == "BMW Financial Services"
+
+    def test_update_counterparty_iban_bic(self, user, account, tenant):
+        from apps.banking.models import Counterparty
+
+        MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+        cp = Counterparty.objects.get(tenant=tenant, name="Acme Corp GmbH")
+
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            mutation($input: UpdateCounterpartyInput!) {
+              updateCounterparty(input: $input) {
+                success
+                counterparty { iban bic }
+              }
+            }
+            """,
+            {"input": {"id": str(cp.id), "iban": "DE999999999", "bic": "NEWBIC123"}},
+            ctx,
+        )
+        assert result.errors is None
+        data = result.data["updateCounterparty"]
+        assert data["success"] is True
+        assert data["counterparty"]["iban"] == "DE999999999"
+        assert data["counterparty"]["bic"] == "NEWBIC123"
+
+    def test_update_counterparty_not_found(self, user):
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            mutation($input: UpdateCounterpartyInput!) {
+              updateCounterparty(input: $input) {
+                success
+                error
+              }
+            }
+            """,
+            {"input": {"id": "00000000-0000-0000-0000-000000000000", "name": "Test"}},
+            ctx,
+        )
+        assert result.errors is None
+        data = result.data["updateCounterparty"]
+        assert data["success"] is False
+        assert "not found" in data["error"].lower()
+
+    def test_merge_counterparties(self, user, account, tenant):
+        from apps.banking.models import Counterparty, BankTransaction
+
+        MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+
+        source = Counterparty.objects.get(tenant=tenant, name="BMW Bank GmbH")
+        target = Counterparty.objects.get(tenant=tenant, name="Acme Corp GmbH")
+
+        # Verify initial state
+        assert BankTransaction.objects.filter(counterparty=source).count() == 1
+        assert BankTransaction.objects.filter(counterparty=target).count() == 1
+
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            mutation($sourceId: ID!, $targetId: ID!) {
+              mergeCounterparties(sourceId: $sourceId, targetId: $targetId) {
+                success
+                mergedTransactionCount
+                target { name }
+              }
+            }
+            """,
+            {"sourceId": str(source.id), "targetId": str(target.id)},
+            ctx,
+        )
+        assert result.errors is None
+        data = result.data["mergeCounterparties"]
+        assert data["success"] is True
+        assert data["mergedTransactionCount"] == 1
+        assert data["target"]["name"] == "Acme Corp GmbH"
+
+        # Verify source deleted and transactions moved
+        assert not Counterparty.objects.filter(id=source.id).exists()
+        assert BankTransaction.objects.filter(counterparty=target).count() == 2
+
+    def test_merge_counterparties_into_self_fails(self, user, account, tenant):
+        from apps.banking.models import Counterparty
+
+        MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+        cp = Counterparty.objects.get(tenant=tenant, name="BMW Bank GmbH")
+
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            mutation($sourceId: ID!, $targetId: ID!) {
+              mergeCounterparties(sourceId: $sourceId, targetId: $targetId) {
+                success
+                error
+              }
+            }
+            """,
+            {"sourceId": str(cp.id), "targetId": str(cp.id)},
+            ctx,
+        )
+        assert result.errors is None
+        data = result.data["mergeCounterparties"]
+        assert data["success"] is False
+        assert "itself" in data["error"].lower()
+
+    def test_merge_counterparties_not_found(self, user):
+        ctx = make_context(user)
+        result = run_graphql(
+            """
+            mutation($sourceId: ID!, $targetId: ID!) {
+              mergeCounterparties(sourceId: $sourceId, targetId: $targetId) {
+                success
+                error
+              }
+            }
+            """,
+            {
+                "sourceId": "00000000-0000-0000-0000-000000000000",
+                "targetId": "00000000-0000-0000-0000-000000000001",
+            },
+            ctx,
+        )
+        assert result.errors is None
+        data = result.data["mergeCounterparties"]
+        assert data["success"] is False
+        assert "not found" in data["error"].lower()
+
+
+# ============================================================
+# MT940 Counterparty Creation Tests
+# ============================================================
+
+
+class TestMT940CounterpartyCreation:
+    """Test that MT940 import correctly creates counterparties."""
+
+    def test_import_creates_counterparties(self, tenant, account):
+        from apps.banking.models import Counterparty
+
+        assert Counterparty.objects.filter(tenant=tenant).count() == 0
+
+        service = MT940Service(tenant)
+        service.parse_and_import(account, SAMPLE_MT940)
+
+        # Should have created 3 counterparties
+        assert Counterparty.objects.filter(tenant=tenant).count() == 3
+        names = set(Counterparty.objects.filter(tenant=tenant).values_list("name", flat=True))
+        assert names == {"BMW Bank GmbH", "Acme Corp GmbH", "Piepenbrock GmbH"}
+
+    def test_import_reuses_existing_counterparties(self, tenant, account):
+        from apps.banking.models import Counterparty
+
+        # Pre-create one counterparty
+        existing = Counterparty.objects.create(
+            tenant=tenant, name="BMW Bank GmbH", iban="DE111111", bic="EXISTING"
+        )
+
+        service = MT940Service(tenant)
+        service.parse_and_import(account, SAMPLE_MT940)
+
+        # Should have reused the existing one and created 2 new
+        assert Counterparty.objects.filter(tenant=tenant).count() == 3
+
+        # The existing one should be unchanged
+        existing.refresh_from_db()
+        assert existing.iban == "DE111111"
+        assert existing.bic == "EXISTING"
+
+        # Transaction should be linked to existing counterparty
+        txn = BankTransaction.objects.get(counterparty=existing)
+        assert txn.counterparty_id == existing.id
+
+    def test_import_links_transactions_to_counterparties(self, tenant, account):
+        from apps.banking.models import Counterparty
+
+        service = MT940Service(tenant)
+        service.parse_and_import(account, SAMPLE_MT940)
+
+        # Each transaction should have a counterparty FK
+        for txn in BankTransaction.objects.filter(account=account):
+            assert txn.counterparty is not None
+            assert txn.counterparty.tenant == tenant
+
+    def test_reimport_uses_same_counterparties(self, tenant, account):
+        from apps.banking.models import Counterparty
+
+        service = MT940Service(tenant)
+        service.parse_and_import(account, SAMPLE_MT940)
+
+        cp_ids_before = set(Counterparty.objects.filter(tenant=tenant).values_list("id", flat=True))
+
+        # Import again (transactions will be skipped due to dedup)
+        service.parse_and_import(account, SAMPLE_MT940)
+
+        cp_ids_after = set(Counterparty.objects.filter(tenant=tenant).values_list("id", flat=True))
+
+        # Same counterparties, no new ones created
+        assert cp_ids_before == cp_ids_after

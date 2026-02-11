@@ -21,6 +21,7 @@
     "create": "Erstellen",
     "back": "Zurück",
     "error": "Fehler",
+    "rename": "Umbenennen",
     "pagination": {
       "showing": "{{from}} bis {{to}} von {{total}}",
       "page": "Seite {{page}} von {{totalPages}}",
@@ -964,7 +965,13 @@
     "noCounterpartiesFound": "Keine Geschäftspartner gefunden.",
     "createCounterparty": "Geschäftspartner erstellen",
     "counterpartyName": "Name des Geschäftspartners",
-    "createNewCounterparty": "Neuen Geschäftspartner erstellen"
+    "createNewCounterparty": "Neuen Geschäftspartner erstellen",
+    "mergeCounterparty": "Geschäftspartner zusammenführen",
+    "mergeDescription": "\"{{name}}\" mit einem anderen Geschäftspartner zusammenführen. Alle Umsätze werden zum Ziel verschoben.",
+    "mergeTarget": "Zusammenführen mit",
+    "selectCounterparty": "Geschäftspartner auswählen...",
+    "merge": "Zusammenführen",
+    "period": "Zeitraum"
   },
   "liquidity": {
     "title": "Liquiditätsvorschau",
