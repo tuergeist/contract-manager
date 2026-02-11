@@ -138,6 +138,40 @@ ALLOWED_LOGO_EXTENSIONS = [".png", ".jpg", ".jpeg", ".svg"]
 MAX_LOGO_SIZE = 5 * 1024 * 1024  # 5MB
 MAX_REFERENCE_PDF_SIZE = 20 * 1024 * 1024  # 20MB
 
+# S3-compatible Object Storage (Scaleway)
+# Uses native django-storages setting names
+AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL", default="")
+AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default="")
+AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default="")
+AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="")
+AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME", default="fr-par")
+
+# Storage backend - use S3 if configured, otherwise local filesystem
+if AWS_S3_ENDPOINT_URL:
+    # S3Boto3Storage settings for Scaleway (S3-compatible)
+    AWS_S3_ADDRESSING_STYLE = "path"  # Required for Scaleway
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_DEFAULT_ACL = None  # Use bucket default ACL
+    AWS_QUERYSTRING_AUTH = True  # Generate signed URLs
+
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+else:
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

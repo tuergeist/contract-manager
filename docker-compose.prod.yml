@@ -57,6 +57,18 @@ services:
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost,http://127.0.0.1}
       DJANGO_DEBUG: "false"
+      # Object Storage (Scaleway S3-compatible) - optional
+      # Set these to enable S3 storage and automatic file migration:
+      # AWS_S3_ENDPOINT_URL: https://s3.fr-par.scw.cloud
+      # AWS_ACCESS_KEY_ID: your-access-key
+      # AWS_SECRET_ACCESS_KEY: your-secret-key
+      # AWS_STORAGE_BUCKET_NAME: your-bucket-name
+      # AWS_S3_REGION_NAME: fr-par
+      AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-}
+      AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME:-fr-par}
     volumes:
       - media_data:/app/media
 
