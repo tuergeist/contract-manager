@@ -4,7 +4,6 @@ import { useQuery, gql } from '@apollo/client'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { KPICard } from './KPICard'
 import { TodoList, type TodoItem } from '@/features/todos'
-import { Checkbox } from '@/components/ui/checkbox'
 
 const DASHBOARD_KPIS_QUERY = gql`
   query DashboardKPIs {
@@ -85,8 +84,8 @@ interface TodosData {
 
 export function Dashboard() {
   const { t } = useTranslation()
-  const [showMyRecentlyClosed, setShowMyRecentlyClosed] = useState(false)
-  const [showTeamRecentlyClosed, setShowTeamRecentlyClosed] = useState(false)
+  const [myClosedDays, setMyClosedDays] = useState<'none' | '2' | '14'>('2')
+  const [teamClosedDays, setTeamClosedDays] = useState<'none' | '2' | '14'>('2')
 
   const { data: kpisData, loading: kpisLoading, error: kpisError } = useQuery<DashboardKPIsData>(DASHBOARD_KPIS_QUERY)
   const { data: myTodosData, loading: myTodosLoading, refetch: refetchMyTodos } = useQuery<TodosData>(MY_TODOS_QUERY, {
@@ -101,40 +100,27 @@ export function Dashboard() {
     refetchTeamTodos()
   }
 
-  // Filter todos: hide completed > 2 days ago, unless showing recently closed (up to 14 days)
-  const myTodos = useMemo(() => {
-    const todos = myTodosData?.myTodos || []
+  // Filter todos: show completed based on selected days window
+  const filterTodos = (todos: TodoItem[], closedDays: 'none' | '2' | '14') => {
     const now = new Date()
-    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000)
-    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
-
     return todos.filter((todo) => {
       if (!todo.isCompleted) return true
-      if (!todo.completedAt) return true
-      const completedDate = new Date(todo.completedAt)
-      if (showMyRecentlyClosed) {
-        return completedDate >= fourteenDaysAgo
-      }
-      return completedDate >= twoDaysAgo
-    })
-  }, [myTodosData, showMyRecentlyClosed])
+      if (closedDays === 'none') return false
+      if (!todo.completedAt) return false
+      const cutoff = new Date(now.getTime() - parseInt(closedDays) * 24 * 60 * 60 * 1000)
+      return new Date(todo.completedAt) >= cutoff
+    }).sort((a, b) => Number(a.isCompleted) - Number(b.isCompleted))
+  }
 
-  const teamTodos = useMemo(() => {
-    const todos = teamTodosData?.teamTodos || []
-    const now = new Date()
-    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000)
-    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
+  const myTodos = useMemo(
+    () => filterTodos(myTodosData?.myTodos || [], myClosedDays),
+    [myTodosData, myClosedDays]
+  )
 
-    return todos.filter((todo) => {
-      if (!todo.isCompleted) return true
-      if (!todo.completedAt) return true
-      const completedDate = new Date(todo.completedAt)
-      if (showTeamRecentlyClosed) {
-        return completedDate >= fourteenDaysAgo
-      }
-      return completedDate >= twoDaysAgo
-    })
-  }, [teamTodosData, showTeamRecentlyClosed])
+  const teamTodos = useMemo(
+    () => filterTodos(teamTodosData?.teamTodos || [], teamClosedDays),
+    [teamTodosData, teamClosedDays]
+  )
 
   if (kpisLoading) {
     return (
@@ -204,13 +190,20 @@ export function Dashboard() {
         <div className="rounded-lg border bg-card p-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{t('todos.myTodos')}</h2>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-              <Checkbox
-                checked={showMyRecentlyClosed}
-                onCheckedChange={(checked) => setShowMyRecentlyClosed(checked === true)}
-              />
-              {t('todos.showRecentlyClosed')}
-            </label>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{t('todos.showCompleted')}</span>
+              <div className="inline-flex rounded-md border">
+                {(['none', '2', '14'] as const).map((val) => (
+                  <button
+                    key={val}
+                    onClick={() => setMyClosedDays(val)}
+                    className={`px-2 py-1 text-xs first:rounded-l-md last:rounded-r-md ${myClosedDays === val ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                  >
+                    {val === 'none' ? t('todos.closedNone') : t('todos.closedDays', { days: val })}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           {myTodosLoading ? (
             <div className="flex items-center justify-center py-8">
@@ -229,13 +222,20 @@ export function Dashboard() {
         <div className="rounded-lg border bg-card p-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{t('todos.teamTodos')}</h2>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-              <Checkbox
-                checked={showTeamRecentlyClosed}
-                onCheckedChange={(checked) => setShowTeamRecentlyClosed(checked === true)}
-              />
-              {t('todos.showRecentlyClosed')}
-            </label>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{t('todos.showCompleted')}</span>
+              <div className="inline-flex rounded-md border">
+                {(['none', '2', '14'] as const).map((val) => (
+                  <button
+                    key={val}
+                    onClick={() => setTeamClosedDays(val)}
+                    className={`px-2 py-1 text-xs first:rounded-l-md last:rounded-r-md ${teamClosedDays === val ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                  >
+                    {val === 'none' ? t('todos.closedNone') : t('todos.closedDays', { days: val })}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           {teamTodosLoading ? (
             <div className="flex items-center justify-center py-8">

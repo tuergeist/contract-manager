@@ -49,10 +49,10 @@ fi
 
 if [ -f "$BACKUP_DIR/database.sql.gz" ]; then
     echo "   Decompressing and importing database.sql.gz..."
-    gunzip -c "$BACKUP_DIR/database.sql.gz" | kubectl exec -i -n "$NAMESPACE" "$DB_POD" -- psql -U postgres -d contract_manager
+    gunzip -c "$BACKUP_DIR/database.sql.gz" | kubectl exec -i -n "$NAMESPACE" "$DB_POD" -- psql -U contract_manager -d contract_manager
 elif [ -f "$BACKUP_DIR/database.sql" ]; then
     echo "   Importing database.sql..."
-    kubectl exec -i -n "$NAMESPACE" "$DB_POD" -- psql -U postgres -d contract_manager < "$BACKUP_DIR/database.sql"
+    kubectl exec -i -n "$NAMESPACE" "$DB_POD" -- psql -U contract_manager -d contract_manager < "$BACKUP_DIR/database.sql"
 fi
 echo "   Database imported successfully."
 
