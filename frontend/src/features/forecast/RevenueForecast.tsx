@@ -23,6 +23,7 @@ const REVENUE_FORECAST_QUERY = gql`
       contracts {
         contractId
         contractName
+        customerId
         customerName
         months {
           month
@@ -47,6 +48,7 @@ const RECOGNITION_FORECAST_QUERY = gql`
       contracts {
         contractId
         contractName
+        customerId
         customerName
         months {
           month
@@ -68,6 +70,7 @@ interface RevenueMonthData {
 interface ContractRevenueRow {
   contractId: number
   contractName: string
+  customerId: number
   customerName: string
   months: RevenueMonthData[]
   total: string
@@ -377,8 +380,13 @@ export function RevenueForecast() {
                       {contract.contractName}
                     </Link>
                   </td>
-                  <td className="min-w-[180px] px-4 py-3 text-sm text-gray-600">
-                    {contract.customerName}
+                  <td className="min-w-[180px] px-4 py-3 text-sm">
+                    <Link
+                      to={`/customers/${contract.customerId}`}
+                      className="text-blue-600 hover:underline"
+                    >
+                      {contract.customerName}
+                    </Link>
                   </td>
                   {contract.months.map((periodData) => (
                     <td

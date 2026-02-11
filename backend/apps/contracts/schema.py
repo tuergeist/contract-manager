@@ -681,6 +681,7 @@ class ContractRevenueRow:
 
     contract_id: int
     contract_name: str
+    customer_id: int
     customer_name: str
     months: List[RevenueMonthData]
     total: Decimal
@@ -1306,6 +1307,7 @@ class ContractQuery:
                     ContractRevenueRow(
                         contract_id=contract.id,
                         contract_name=contract_name,
+                        customer_id=contract.customer.id,
                         customer_name=contract.customer.name,
                         months=contract_periods,
                         total=contract_total,
@@ -1500,6 +1502,7 @@ class ContractQuery:
                     ContractRevenueRow(
                         contract_id=contract.id,
                         contract_name=contract_name,
+                        customer_id=contract.customer.id,
                         customer_name=contract.customer.name,
                         months=contract_periods,
                         total=contract_total,
