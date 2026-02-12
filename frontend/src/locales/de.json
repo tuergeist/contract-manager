@@ -730,7 +730,8 @@
       "saveAndTest": "Speichern & Testen",
       "connectionSuccess": "Verbindung erfolgreich",
       "connectionFailed": "Verbindung fehlgeschlagen",
-      "notConfigured": "Nicht konfiguriert"
+      "notConfigured": "Nicht konfiguriert",
+      "showRevenue": "Umsatz in Zeiterfassung anzeigen"
     },
     "roles": {
       "title": "Rollen & Berechtigungen",

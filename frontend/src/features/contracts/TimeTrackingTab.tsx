@@ -35,6 +35,7 @@ const TIME_TRACKING_SUMMARY_QUERY = gql`
     timeTrackingSettings {
       provider
       isConfigured
+      showRevenue
     }
   }
 `
@@ -110,6 +111,7 @@ export function TimeTrackingTab({ contractId, customerName }: TimeTrackingTabPro
 
   const summary = data?.timeTrackingSummary
   const isConfigured = data?.timeTrackingSettings?.isConfigured
+  const showRevenue = data?.timeTrackingSettings?.showRevenue ?? true
 
   const handleUnlink = async (mappingId: number) => {
     if (!confirm(t('timeTracking.unlinkConfirm'))) return
@@ -202,17 +204,19 @@ export function TimeTrackingTab({ contractId, customerName }: TimeTrackingTabPro
       {mappings.length > 0 && summary && (
         <>
           {/* KPI Cards */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className={`grid gap-4 ${showRevenue ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <div className="rounded-lg border bg-white p-4">
               <p className="text-sm text-gray-500">{t('timeTracking.totalHours')}</p>
               <p className="mt-1 text-2xl font-semibold">{summary.totalHours.toFixed(1)}h</p>
             </div>
-            <div className="rounded-lg border bg-white p-4">
-              <p className="text-sm text-gray-500">{t('timeTracking.totalRevenue')}</p>
-              <p className="mt-1 text-2xl font-semibold">
-                {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(summary.totalRevenue)}
-              </p>
-            </div>
+            {showRevenue && (
+              <div className="rounded-lg border bg-white p-4">
+                <p className="text-sm text-gray-500">{t('timeTracking.totalRevenue')}</p>
+                <p className="mt-1 text-2xl font-semibold">
+                  {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(summary.totalRevenue)}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* By Service */}
@@ -224,7 +228,7 @@ export function TimeTrackingTab({ contractId, customerName }: TimeTrackingTabPro
                   <tr className="border-b text-left text-gray-500">
                     <th className="pb-2 font-medium">{t('timeTracking.serviceName')}</th>
                     <th className="pb-2 text-right font-medium">{t('timeTracking.hours')}</th>
-                    <th className="pb-2 text-right font-medium">{t('timeTracking.revenue')}</th>
+                    {showRevenue && <th className="pb-2 text-right font-medium">{t('timeTracking.revenue')}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -232,9 +236,11 @@ export function TimeTrackingTab({ contractId, customerName }: TimeTrackingTabPro
                     <tr key={s.serviceName} className="border-b last:border-0">
                       <td className="py-2">{s.serviceName}</td>
                       <td className="py-2 text-right">{s.hours.toFixed(1)}h</td>
-                      <td className="py-2 text-right">
-                        {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(s.revenue)}
-                      </td>
+                      {showRevenue && (
+                        <td className="py-2 text-right">
+                          {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(s.revenue)}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -251,7 +257,7 @@ export function TimeTrackingTab({ contractId, customerName }: TimeTrackingTabPro
                   <tr className="border-b text-left text-gray-500">
                     <th className="pb-2 font-medium">{t('timeTracking.month')}</th>
                     <th className="pb-2 text-right font-medium">{t('timeTracking.hours')}</th>
-                    <th className="pb-2 text-right font-medium">{t('timeTracking.revenue')}</th>
+                    {showRevenue && <th className="pb-2 text-right font-medium">{t('timeTracking.revenue')}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -259,9 +265,11 @@ export function TimeTrackingTab({ contractId, customerName }: TimeTrackingTabPro
                     <tr key={m.month} className="border-b last:border-0">
                       <td className="py-2">{m.month}</td>
                       <td className="py-2 text-right">{m.hours.toFixed(1)}h</td>
-                      <td className="py-2 text-right">
-                        {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(m.revenue)}
-                      </td>
+                      {showRevenue && (
+                        <td className="py-2 text-right">
+                          {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(m.revenue)}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

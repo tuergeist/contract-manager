@@ -730,7 +730,8 @@
       "saveAndTest": "Save & Test",
       "connectionSuccess": "Connection successful",
       "connectionFailed": "Connection failed",
-      "notConfigured": "Not configured"
+      "notConfigured": "Not configured",
+      "showRevenue": "Show revenue in time tracking"
     },
     "roles": {
       "title": "Roles & Permissions",

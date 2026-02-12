@@ -22,13 +22,14 @@ const TIME_TRACKING_SETTINGS_QUERY = gql`
     timeTrackingSettings {
       provider
       isConfigured
+      showRevenue
     }
   }
 `
 
 const SAVE_TIME_TRACKING_SETTINGS = gql`
-  mutation SaveTimeTrackingSettings($provider: String!, $apiEmail: String!, $apiKey: String!) {
-    saveTimeTrackingSettings(provider: $provider, apiEmail: $apiEmail, apiKey: $apiKey) {
+  mutation SaveTimeTrackingSettings($provider: String!, $apiEmail: String!, $apiKey: String!, $showRevenue: Boolean!) {
+    saveTimeTrackingSettings(provider: $provider, apiEmail: $apiEmail, apiKey: $apiKey, showRevenue: $showRevenue) {
       success
       error
     }
@@ -120,6 +121,7 @@ export function Settings({ showHeader = true }: SettingsProps) {
   const [ttProvider, setTtProvider] = useState('clockodo')
   const [ttApiEmail, setTtApiEmail] = useState('')
   const [ttApiKey, setTtApiKey] = useState('')
+  const [ttShowRevenue, setTtShowRevenue] = useState(true)
   const [ttMessage, setTtMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const [apiKey, setApiKey] = useState('')
@@ -141,6 +143,13 @@ export function Settings({ showHeader = true }: SettingsProps) {
   const [syncProducts, { loading: syncingProducts }] = useMutation(SYNC_HUBSPOT_PRODUCTS)
   const [syncDeals, { loading: syncingDeals }] = useMutation(SYNC_HUBSPOT_DEALS)
   const [saveFilters, { loading: savingFilters }] = useMutation(SAVE_COMPANY_FILTERS)
+
+  // Initialize time tracking show revenue from settings
+  useEffect(() => {
+    if (ttSettingsData?.timeTrackingSettings?.showRevenue !== undefined) {
+      setTtShowRevenue(ttSettingsData.timeTrackingSettings.showRevenue)
+    }
+  }, [ttSettingsData?.timeTrackingSettings?.showRevenue])
 
   // Initialize filters from settings
   useEffect(() => {
@@ -227,6 +236,7 @@ export function Settings({ showHeader = true }: SettingsProps) {
           provider: ttProvider,
           apiEmail: ttApiEmail,
           apiKey: ttApiKey,
+          showRevenue: ttShowRevenue,
         },
       })
       if (result.data?.saveTimeTrackingSettings?.success) {
@@ -718,6 +728,20 @@ export function Settings({ showHeader = true }: SettingsProps) {
                   {ttMessage.text}
                 </p>
               )}
+            </div>
+
+            {/* Show Revenue Toggle */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="ttShowRevenue"
+                checked={ttShowRevenue}
+                onChange={(e) => setTtShowRevenue(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="ttShowRevenue" className="text-sm text-gray-700">
+                {t('settings.timeTracking.showRevenue')}
+              </label>
             </div>
           </div>
         </div>

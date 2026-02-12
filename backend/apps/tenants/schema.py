@@ -233,6 +233,7 @@ class TimeTrackingSettings:
     """Time tracking integration settings."""
     provider: str | None
     is_configured: bool
+    show_revenue: bool = True
 
 
 @strawberry.type
@@ -336,7 +337,8 @@ class TenantQuery:
         config = user.tenant.time_tracking_config or {}
         provider = config.get("provider")
         is_configured = bool(provider and config.get("api_key"))
-        return TimeTrackingSettings(provider=provider, is_configured=is_configured)
+        show_revenue = config.get("show_revenue", True)
+        return TimeTrackingSettings(provider=provider, is_configured=is_configured, show_revenue=show_revenue)
 
     @strawberry.field
     def hubspot_settings(self, info: Info[Context, None]) -> HubSpotSettings | None:
@@ -418,6 +420,7 @@ class TenantMutation:
         provider: str,
         api_email: str = "",
         api_key: str = "",
+        show_revenue: bool = True,
     ) -> TimeTrackingTestResult:
         """Save time tracking settings and test connection."""
         user = get_current_user(info)
@@ -429,6 +432,7 @@ class TenantMutation:
             "provider": provider,
             "api_email": api_email,
             "api_key": api_key,
+            "show_revenue": show_revenue,
         }
         tenant.save(update_fields=["time_tracking_config"])
 
