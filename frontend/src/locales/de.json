@@ -562,6 +562,7 @@
       "statusExtracting": "Wird extrahiert...",
       "statusExtracted": "Extrahiert",
       "statusFailed": "Fehlgeschlagen",
+      "statusDuplicate": "Duplikat",
       "statusConfirmed": "Bestätigt",
       "paid": "Bezahlt",
       "unpaid": "Unbezahlt",

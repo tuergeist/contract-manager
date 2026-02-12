@@ -562,6 +562,7 @@
       "statusExtracting": "Extracting...",
       "statusExtracted": "Extracted",
       "statusFailed": "Failed",
+      "statusDuplicate": "Duplicate",
       "statusConfirmed": "Confirmed",
       "paid": "Paid",
       "unpaid": "Unpaid",

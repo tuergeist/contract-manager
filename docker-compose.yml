@@ -53,6 +53,28 @@ services:
              python manage.py migrate --noinput &&
              gunicorn config.wsgi:application --bind 0.0.0.0:8000 --reload"
 
+  celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DJANGO_SECRET_KEY: dev-secret-key-change-in-production
+      DJANGO_DEBUG: "true"
+      DATABASE_URL: postgres://contract_manager:contract_manager@db:5432/contract_manager
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+      - ./uploads:/app/media/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A config worker -l INFO
+
   frontend:
     build:
       context: ./frontend

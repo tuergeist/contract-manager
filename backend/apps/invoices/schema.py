@@ -1287,11 +1287,15 @@ class InvoiceMutation:
             tenant=user.tenant,
             original_filename=input.filename,
             file_size=len(file_bytes),
-            extraction_status=ImportedInvoice.ExtractionStatus.PENDING,
+            extraction_status=ImportedInvoice.ExtractionStatus.EXTRACTING,
             created_by=user,
         )
         invoice.pdf_file.save(input.filename, ContentFile(file_bytes), save=False)
         invoice.save()
+
+        # Trigger background extraction
+        from apps.invoices.tasks import extract_invoice_task
+        extract_invoice_task.delay(invoice.id)
 
         return ImportedInvoiceResult(
             success=True,
@@ -1860,7 +1864,7 @@ class InvoiceMutation:
                 invoice.pdf_file.save(inp.filename, ContentFile(file_bytes), save=False)
                 invoice.file_size = len(file_bytes)
                 invoice.upload_status = UploadStatus.UPLOADED
-                invoice.extraction_status = ImportedInvoice.ExtractionStatus.PENDING
+                invoice.extraction_status = ImportedInvoice.ExtractionStatus.EXTRACTING
                 invoice.save()
 
                 # Update batch counts
@@ -1873,11 +1877,15 @@ class InvoiceMutation:
                     original_filename=inp.filename,
                     file_size=len(file_bytes),
                     upload_status=UploadStatus.UPLOADED,
-                    extraction_status=ImportedInvoice.ExtractionStatus.PENDING,
+                    extraction_status=ImportedInvoice.ExtractionStatus.EXTRACTING,
                     created_by=user,
                 )
                 invoice.pdf_file.save(inp.filename, ContentFile(file_bytes), save=False)
                 invoice.save()
+
+            # Trigger background extraction
+            from apps.invoices.tasks import extract_invoice_task
+            extract_invoice_task.delay(invoice.id)
 
             results.append(BulkUploadItemResult(
                 filename=inp.filename,

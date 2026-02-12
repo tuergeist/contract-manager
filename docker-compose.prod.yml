@@ -72,6 +72,32 @@ services:
     volumes:
       - media_data:/app/media
 
+  celery:
+    image: ghcr.io/tuergeist/contract-manager/backend:main
+    restart: unless-stopped
+    command: celery -A config worker -l INFO
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      DATABASE_URL: postgres://${POSTGRES_USER:-contract_manager}:${POSTGRES_PASSWORD:-contract_manager}@db:5432/${POSTGRES_DB:-contract_manager}
+      REDIS_URL: redis://redis:6379/0
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
+      AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-}
+      AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME:-fr-par}
+    volumes:
+      - media_data:/app/media
+
   frontend:
     image: ghcr.io/tuergeist/contract-manager/frontend:main
     restart: unless-stopped

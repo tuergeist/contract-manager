@@ -383,6 +383,7 @@ class ImportedInvoice(TenantModel):
         EXTRACTING = "extracting", "Extracting"
         EXTRACTED = "extracted", "Extracted"
         EXTRACTION_FAILED = "extraction_failed", "Extraction Failed"
+        DUPLICATE = "duplicate", "Duplicate"
         CONFIRMED = "confirmed", "Confirmed"
 
     # Invoice identification (from extraction)

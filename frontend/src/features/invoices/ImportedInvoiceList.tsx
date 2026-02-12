@@ -413,7 +413,7 @@ export function ImportedInvoiceList() {
   const [uploadProgress, setUploadProgress] = useState<{ filename: string; status: 'pending' | 'success' | 'error'; error?: string }[]>([])
 
   // Queries & Mutations
-  const { data, loading, refetch } = useQuery(IMPORTED_INVOICES, {
+  const { data, loading, refetch, startPolling, stopPolling } = useQuery(IMPORTED_INVOICES, {
     variables: {
       search: search || null,
       paymentStatus: paymentStatus === 'ALL' ? null : paymentStatus,
@@ -425,6 +425,22 @@ export function ImportedInvoiceList() {
     },
     fetchPolicy: 'cache-and-network',
   })
+
+  // Poll for updates when any invoice is being extracted
+  useEffect(() => {
+    const items = data?.importedInvoices?.items || []
+    const hasExtracting = items.some(
+      (inv: ImportedInvoice) => inv.extractionStatus === 'extracting'
+    )
+
+    if (hasExtracting) {
+      startPolling(2000) // Poll every 2 seconds
+    } else {
+      stopPolling()
+    }
+
+    return () => stopPolling()
+  }, [data?.importedInvoices?.items, startPolling, stopPolling])
 
   const { data: batchData, refetch: refetchBatches } = useQuery(IMPORT_BATCHES, {
     variables: { offset: 0, limit: 10 },
@@ -704,6 +720,8 @@ export function ImportedInvoiceList() {
         return <Badge variant="default">{t('invoices.import.statusExtracted')}</Badge>
       case 'extraction_failed':
         return <Badge variant="destructive">{t('invoices.import.statusFailed')}</Badge>
+      case 'duplicate':
+        return <Badge variant="outline" className="text-orange-600 border-orange-600">{t('invoices.import.statusDuplicate')}</Badge>
       case 'confirmed':
         return <Badge variant="default" className="bg-green-500">{t('invoices.import.statusConfirmed')}</Badge>
       default:
@@ -1360,7 +1378,7 @@ export function ImportedInvoiceList() {
                         >
                           <div className="min-w-0 flex-1">
                             <div className="font-medium">{match.counterpartyName}</div>
-                            <div className="text-sm text-gray-500 truncate">
+                            <div className="text-sm text-gray-500 break-words">
                               {formatDate(match.transactionDate)} - {match.bookingText}
                             </div>
                           </div>

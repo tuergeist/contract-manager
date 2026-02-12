@@ -129,6 +129,28 @@ def run_extraction(invoice: ImportedInvoice) -> bool:
         invoice.save(update_fields=["extraction_status", "extraction_error", "updated_at"])
         return False
 
+    # Check for duplicate invoice number before applying results
+    extracted_number = data.get("invoice_number")
+    if extracted_number:
+        existing = ImportedInvoice.objects.filter(
+            tenant=invoice.tenant,
+            invoice_number=extracted_number,
+        ).exclude(id=invoice.id).first()
+
+        if existing:
+            logger.info(
+                "Duplicate invoice number %s found (existing invoice %s), skipping invoice %s",
+                extracted_number, existing.id, invoice.id
+            )
+            # Delete the PDF file to save storage
+            if invoice.pdf_file:
+                invoice.pdf_file.delete(save=False)
+            invoice.extraction_status = ImportedInvoice.ExtractionStatus.DUPLICATE
+            invoice.extraction_error = f"Duplicate of invoice #{existing.id} ({extracted_number})"
+            invoice.invoice_number = extracted_number  # Store for reference
+            invoice.save(update_fields=["extraction_status", "extraction_error", "invoice_number", "pdf_file", "updated_at"])
+            return True  # Not a failure, just a duplicate
+
     # Parse and store results
     try:
         _apply_extraction_results(invoice, data)
