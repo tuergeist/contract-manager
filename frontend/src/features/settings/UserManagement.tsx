@@ -7,7 +7,6 @@ import {
   Copy,
   Check,
   X,
-  Shield,
   UserX,
   UserCheck,
   Key,
@@ -365,26 +364,9 @@ export function UserManagement() {
             {users.map((user) => (
               <tr key={user.id}>
                 <td className="whitespace-nowrap px-6 py-4">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900">
-                      {user.fullName || user.email}
-                    </span>
-                    {user.roleNames?.map((role) => (
-                      <span
-                        key={role}
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                          role === 'Admin'
-                            ? 'bg-purple-100 text-purple-800'
-                            : role === 'Manager'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {role === 'Admin' && <Shield className="h-3 w-3" />}
-                        {role}
-                      </span>
-                    ))}
-                  </div>
+                  <span className="font-medium text-gray-900">
+                    {user.fullName || user.email}
+                  </span>
                 </td>
                 <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                   {user.email}
