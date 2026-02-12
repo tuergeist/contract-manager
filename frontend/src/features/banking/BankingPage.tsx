@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, gql } from '@apollo/client'
 import {
   Landmark,
@@ -15,6 +15,7 @@ import {
   ArrowUp,
   ArrowDown,
   X,
+  FileText,
 } from 'lucide-react'
 import {
   Dialog,
@@ -72,10 +73,12 @@ const BANK_TRANSACTIONS = gql`
     $amountMin: Decimal
     $amountMax: Decimal
     $direction: String
+    $unmatchedCreditsOnly: Boolean
     $sortBy: String
     $sortOrder: String
     $page: Int
     $pageSize: Int
+    $centerOnId: Int
   ) {
     bankTransactions(
       accountId: $accountId
@@ -86,10 +89,12 @@ const BANK_TRANSACTIONS = gql`
       amountMin: $amountMin
       amountMax: $amountMax
       direction: $direction
+      unmatchedCreditsOnly: $unmatchedCreditsOnly
       sortBy: $sortBy
       sortOrder: $sortOrder
       page: $page
       pageSize: $pageSize
+      centerOnId: $centerOnId
     ) {
       items {
         id
@@ -107,6 +112,12 @@ const BANK_TRANSACTIONS = gql`
         bookingText
         reference
         accountName
+        matchedInvoice {
+          invoiceId
+          invoiceNumber
+          contractId
+          customerId
+        }
       }
       totalCount
       page
@@ -259,6 +270,7 @@ interface BankTransaction {
   bookingText: string
   reference: string
   accountName: string
+  matchedInvoice: { invoiceId: string; invoiceNumber: string; contractId: number | null; customerId: number | null } | null
 }
 
 // --- Component ---
@@ -267,6 +279,7 @@ export function BankingPage() {
   const { t } = useTranslation()
   const { token } = useAuth()
   const navigate = useNavigate()
+  const [, setSearchParams] = useSearchParams()
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'transactions' | 'counterparties'>('transactions')
@@ -317,6 +330,7 @@ export function BankingPage() {
   const [amountMin, setAmountMin] = useState('')
   const [amountMax, setAmountMax] = useState('')
   const [direction, setDirection] = useState<string>('all')
+  const [unmatchedCredits, setUnmatchedCredits] = useState(false)
   const [sortBy, setSortBy] = useState('date')
   const [sortOrder, setSortOrder] = useState('desc')
   const [page, setPage] = useState(1)
@@ -337,12 +351,34 @@ export function BankingPage() {
   // Reset page on filter change
   useEffect(() => {
     setPage(1)
-  }, [filterAccountId, debouncedSearch, dateFrom, dateTo, amountMin, amountMax, direction])
+  }, [filterAccountId, debouncedSearch, dateFrom, dateTo, amountMin, amountMax, direction, unmatchedCredits])
 
   // Reset counterparty page on filter change
   useEffect(() => {
     setCpPage(1)
   }, [cpDebouncedSearch])
+
+  // Track target transaction from URL
+  const [targetTxId, setTargetTxId] = useState<number | null>(() => {
+    const txParam = new URLSearchParams(window.location.search).get('tx')
+    return txParam ? parseInt(txParam, 10) : null
+  })
+
+  // Clear filters when we have a target transaction to maximize chance of finding it
+  useEffect(() => {
+    if (targetTxId) {
+      // Reset all filters so centerOnId can find the transaction
+      setFilterAccountId('all')
+      setSearchQuery('')
+      setDebouncedSearch('')
+      setDateFrom('')
+      setDateTo('')
+      setAmountMin('')
+      setAmountMax('')
+      setDirection('all')
+      setUnmatchedCredits(false)
+    }
+  }, []) // Only run once on mount
 
   // Queries
   const { data: accountsData, loading: accountsLoading, refetch: refetchAccounts } = useQuery(BANK_ACCOUNTS)
@@ -357,10 +393,12 @@ export function BankingPage() {
       amountMin: amountMin ? parseFloat(amountMin) : null,
       amountMax: amountMax ? parseFloat(amountMax) : null,
       direction: direction !== 'all' ? direction : null,
+      unmatchedCreditsOnly: unmatchedCredits,
       sortBy,
       sortOrder,
       page,
       pageSize,
+      centerOnId: targetTxId,
     },
     fetchPolicy: 'cache-and-network',
   })
@@ -368,7 +406,35 @@ export function BankingPage() {
   const transactions: BankTransaction[] = txData?.bankTransactions?.items ?? []
   const totalCount = txData?.bankTransactions?.totalCount ?? 0
   const hasNextPage = txData?.bankTransactions?.hasNextPage ?? false
+  const returnedPage = txData?.bankTransactions?.page ?? page
   const totalPages = Math.ceil(totalCount / pageSize)
+
+  // Handle URL parameter for transaction expansion - wait for data to load
+  useEffect(() => {
+    if (targetTxId && !txLoading && transactions.length > 0) {
+      const txExists = transactions.some(tx => tx.id === targetTxId)
+      if (txExists) {
+        setExpandedTxId(targetTxId)
+        // Sync page state with what backend returned (may be different due to centerOnId)
+        if (returnedPage !== page) {
+          setPage(returnedPage)
+        }
+        // Clear the param from URL after successfully finding transaction
+        setSearchParams((prev) => {
+          prev.delete('tx')
+          return prev
+        }, { replace: true })
+        setTargetTxId(null)
+        // Scroll to the transaction row after a brief delay
+        setTimeout(() => {
+          const row = document.querySelector(`[data-tx-id="${targetTxId}"]`)
+          if (row) {
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+        }, 100)
+      }
+    }
+  }, [targetTxId, txLoading, transactions, returnedPage, page, setSearchParams])
 
   // Counterparties query
   const { data: cpData, loading: cpLoading } = useQuery(BANK_COUNTERPARTIES, {
@@ -614,6 +680,7 @@ export function BankingPage() {
     setAmountMin('')
     setAmountMax('')
     setDirection('all')
+    setUnmatchedCredits(false)
     setPage(1)
   }
 
@@ -633,7 +700,7 @@ export function BankingPage() {
       : <ArrowDown className="h-3.5 w-3.5" />
   }
 
-  const hasActiveFilters = filterAccountId !== 'all' || searchQuery || dateFrom || dateTo || amountMin || amountMax || direction !== 'all'
+  const hasActiveFilters = filterAccountId !== 'all' || searchQuery || dateFrom || dateTo || amountMin || amountMax || direction !== 'all' || unmatchedCredits
 
   // --- Render ---
 
@@ -1039,6 +1106,19 @@ export function BankingPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Unmatched Credits */}
+            <div className="flex items-end pb-1">
+              <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={unmatchedCredits}
+                  onChange={(e) => setUnmatchedCredits(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                {t('banking.unmatchedCredits')}
+              </label>
+            </div>
           </div>
 
           {/* Transaction Table */}
@@ -1097,7 +1177,8 @@ export function BankingPage() {
                     return (
                       <tr
                         key={tx.id}
-                        className="cursor-pointer hover:bg-gray-50"
+                        data-tx-id={tx.id}
+                        className={`cursor-pointer hover:bg-gray-50 ${isExpanded ? 'bg-blue-50' : ''}`}
                         onClick={() => setExpandedTxId(isExpanded ? null : tx.id)}
                       >
                         <td className="whitespace-nowrap px-4 py-2.5 text-gray-900">
@@ -1254,7 +1335,25 @@ export function BankingPage() {
                           )}
                         </td>
                         <td className={`whitespace-nowrap px-4 py-2.5 text-right font-medium ${amount < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                          {formatAmount(tx.amount, tx.currency)}
+                          <div className="flex items-center justify-end gap-2">
+                            {tx.matchedInvoice && (
+                              <Link
+                                to={
+                                  tx.matchedInvoice.contractId
+                                    ? `/contracts/${tx.matchedInvoice.contractId}`
+                                    : tx.matchedInvoice.customerId
+                                    ? `/customers/${tx.matchedInvoice.customerId}`
+                                    : '/invoices/imported'
+                                }
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-blue-600 hover:text-blue-800"
+                                title={`${t('banking.matchedInvoice')}: ${tx.matchedInvoice.invoiceNumber}`}
+                              >
+                                <FileText className="h-4 w-4" />
+                              </Link>
+                            )}
+                            {formatAmount(tx.amount, tx.currency)}
+                          </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-2.5 text-gray-500">
                           {tx.accountName}

@@ -648,12 +648,76 @@ class BillingScheduleItem:
 
 
 @strawberry.type
+class MatchedInvoiceType:
+    """Invoice matched to a billing event."""
+
+    id: strawberry.ID
+    invoice_number: str
+    is_paid: bool
+    pdf_url: str | None
+
+
+def find_matching_invoice_for_billing_event(
+    contract_id: int, billing_date: date, invoices: list
+) -> "MatchedInvoiceType | None":
+    """
+    Find a matching imported invoice for a billing event.
+
+    Matching criteria:
+    1. Invoice is linked to the same contract
+    2. Invoice date is within ±15 days of the billing event date
+
+    If multiple invoices match, returns the one with the closest date.
+
+    Args:
+        contract_id: The contract ID to match against
+        billing_date: The billing event date
+        invoices: List of ImportedInvoice objects (pre-filtered by contract)
+
+    Returns:
+        MatchedInvoiceType if a match is found, None otherwise
+    """
+    from datetime import timedelta
+
+    MATCH_WINDOW_DAYS = 15
+
+    # Filter invoices that match within the date window
+    matching_invoices = []
+    for inv in invoices:
+        if inv.invoice_date is None:
+            continue
+        days_diff = abs((inv.invoice_date - billing_date).days)
+        if days_diff <= MATCH_WINDOW_DAYS:
+            matching_invoices.append((inv, days_diff))
+
+    if not matching_invoices:
+        return None
+
+    # Sort by date proximity (closest first)
+    matching_invoices.sort(key=lambda x: x[1])
+    best_match = matching_invoices[0][0]
+
+    # Build PDF URL if file exists
+    pdf_url = None
+    if best_match.pdf_file:
+        pdf_url = best_match.pdf_file.url
+
+    return MatchedInvoiceType(
+        id=strawberry.ID(str(best_match.id)),
+        invoice_number=best_match.invoice_number or "",
+        is_paid=best_match.is_paid,
+        pdf_url=pdf_url,
+    )
+
+
+@strawberry.type
 class BillingEvent:
     """A billing event on a specific date."""
 
     date: date
     items: List[BillingScheduleItem]
     total: Decimal
+    matched_invoice: MatchedInvoiceType | None = None
 
 
 @strawberry.type
@@ -1107,27 +1171,45 @@ class ContractQuery:
             include_history=include_history,
         )
 
-        # Convert to GraphQL types
-        events = [
-            BillingEvent(
-                date=event["date"],
-                items=[
-                    BillingScheduleItem(
-                        item_id=item["item_id"],
-                        product_name=item["product_name"],
-                        quantity=item["quantity"],
-                        unit_price=item["unit_price"],
-                        amount=item["amount"],
-                        is_prorated=item["is_prorated"],
-                        prorate_factor=item["prorate_factor"],
-                        is_one_off=item.get("is_one_off", False),
-                    )
-                    for item in event["items"]
-                ],
-                total=event["total"],
+        # Fetch invoices linked to this contract for matching
+        from apps.invoices.models import ImportedInvoice
+
+        contract_invoices = list(
+            ImportedInvoice.objects.filter(
+                tenant=user.tenant,
+                contract_id=contract_id,
+                invoice_date__isnull=False,
+            ).select_related()
+        )
+
+        # Convert to GraphQL types with invoice matching
+        events = []
+        for event in schedule:
+            matched_invoice = find_matching_invoice_for_billing_event(
+                contract_id=int(contract_id),
+                billing_date=event["date"],
+                invoices=contract_invoices,
             )
-            for event in schedule
-        ]
+            events.append(
+                BillingEvent(
+                    date=event["date"],
+                    items=[
+                        BillingScheduleItem(
+                            item_id=item["item_id"],
+                            product_name=item["product_name"],
+                            quantity=item["quantity"],
+                            unit_price=item["unit_price"],
+                            amount=item["amount"],
+                            is_prorated=item["is_prorated"],
+                            prorate_factor=item["prorate_factor"],
+                            is_one_off=item.get("is_one_off", False),
+                        )
+                        for item in event["items"]
+                    ],
+                    total=event["total"],
+                    matched_invoice=matched_invoice,
+                )
+            )
 
         total_forecast = sum(event.total for event in events)
 

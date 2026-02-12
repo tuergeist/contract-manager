@@ -40,6 +40,16 @@ class CounterpartyType:
     iban: str
     bic: str
     transaction_count: int
+    customer_id: int | None = None
+    customer_name: str | None = None
+
+
+@strawberry.type
+class LinkedCustomerType:
+    """Basic customer info for counterparty linking."""
+
+    id: int
+    name: str
 
 
 @strawberry.type
@@ -55,6 +65,7 @@ class CounterpartySummaryType:
     transaction_count: int
     first_date: date | None
     last_date: date | None
+    customer: LinkedCustomerType | None = None
 
 
 @strawberry.type
@@ -64,6 +75,18 @@ class CounterpartyPage:
     page: int
     page_size: int
     has_next_page: bool
+
+
+@strawberry.type
+class InvoiceMatchInfoType:
+    """Info about an invoice matched to a transaction."""
+
+    invoice_id: strawberry.ID
+    invoice_number: str
+    match_type: str
+    confidence: Decimal
+    contract_id: int | None
+    customer_id: int | None
 
 
 @strawberry.type
@@ -78,6 +101,7 @@ class BankTransactionType:
     booking_text: str
     reference: str
     account_name: str
+    matched_invoice: InvoiceMatchInfoType | None = None
 
 
 @strawberry.type
@@ -224,6 +248,41 @@ def _make_counterparty_type(cp) -> CounterpartyType:
         iban=cp.iban,
         bic=cp.bic,
         transaction_count=getattr(cp, "txn_count", cp.transactions.count()),
+        customer_id=cp.customer_id,
+        customer_name=cp.customer.name if cp.customer_id and hasattr(cp, "customer") and cp.customer else None,
+    )
+
+
+def _make_transaction_type(t, include_invoice_match: bool = True) -> BankTransactionType:
+    """Convert a BankTransaction model to BankTransactionType."""
+    matched_invoice = None
+    if include_invoice_match:
+        # Check for invoice matches
+        match = getattr(t, "first_invoice_match", None)
+        if match is None and hasattr(t, "invoice_matches"):
+            match = t.invoice_matches.first()
+        if match:
+            matched_invoice = InvoiceMatchInfoType(
+                invoice_id=strawberry.ID(str(match.invoice_id)),
+                invoice_number=match.invoice.invoice_number or "",
+                match_type=match.match_type,
+                confidence=match.confidence,
+                contract_id=match.invoice.contract_id,
+                customer_id=match.invoice.customer_id,
+            )
+
+    return BankTransactionType(
+        id=t.id,
+        entry_date=t.entry_date,
+        value_date=t.value_date,
+        amount=t.amount,
+        currency=t.currency,
+        transaction_type=t.transaction_type,
+        counterparty=_make_counterparty_type(t.counterparty),
+        booking_text=t.booking_text,
+        reference=t.reference,
+        account_name=t.account.name,
+        matched_invoice=matched_invoice,
     )
 
 
@@ -285,17 +344,21 @@ class BankingQuery:
         amount_min: Decimal | None = None,
         amount_max: Decimal | None = None,
         direction: str | None = None,
+        unmatched_credits_only: bool = False,
         sort_by: str | None = None,
         sort_order: str | None = None,
         page: int = 1,
         page_size: int = 50,
+        center_on_id: int | None = None,
     ) -> BankTransactionPage:
         user = require_perm(info, "banking", "read")
         from apps.banking.models import BankTransaction
 
         qs = BankTransaction.objects.filter(
             tenant=user.tenant
-        ).select_related("account", "counterparty")
+        ).select_related("account", "counterparty", "counterparty__customer").prefetch_related(
+            "invoice_matches__invoice"
+        )
 
         # Filters
         if account_id:
@@ -324,6 +387,10 @@ class BankingQuery:
         elif direction == "credit":
             qs = qs.filter(amount__gt=0)
 
+        # Filter for unmatched credits (incoming payments without invoice match)
+        if unmatched_credits_only:
+            qs = qs.filter(amount__gt=0).exclude(invoice_matches__isnull=False)
+
         # Sorting
         sort_field = "entry_date"
         if sort_by in ("date", "entry_date"):
@@ -338,27 +405,30 @@ class BankingQuery:
         else:
             qs = qs.order_by(f"-{sort_field}", "-id")
 
-        # Pagination
         total_count = qs.count()
-        offset = (page - 1) * page_size
-        items = qs[offset : offset + page_size]
+
+        # If centering on a specific transaction, find its position and adjust page
+        if center_on_id is not None:
+            # Get list of IDs in sort order to find position
+            all_ids = list(qs.values_list("id", flat=True))
+            try:
+                position = all_ids.index(center_on_id)
+                # Calculate page that contains this transaction (centered)
+                # Put the target transaction roughly in the middle of the page
+                offset = max(0, position - page_size // 2)
+                # Align to page boundary for cleaner pagination
+                page = (offset // page_size) + 1
+                offset = (page - 1) * page_size
+            except ValueError:
+                # Transaction not found, use default pagination
+                offset = (page - 1) * page_size
+        else:
+            offset = (page - 1) * page_size
+
+        items = list(qs[offset : offset + page_size])
 
         return BankTransactionPage(
-            items=[
-                BankTransactionType(
-                    id=t.id,
-                    entry_date=t.entry_date,
-                    value_date=t.value_date,
-                    amount=t.amount,
-                    currency=t.currency,
-                    transaction_type=t.transaction_type,
-                    counterparty=_make_counterparty_type(t.counterparty),
-                    booking_text=t.booking_text,
-                    reference=t.reference,
-                    account_name=t.account.name,
-                )
-                for t in items
-            ],
+            items=[_make_transaction_type(t) for t in items],
             total_count=total_count,
             page=page,
             page_size=page_size,
@@ -378,6 +448,7 @@ class BankingQuery:
         try:
             cp = (
                 Counterparty.objects.filter(tenant=user.tenant, id=str(id))
+                .select_related("customer")
                 .annotate(
                     total_debit=Sum(
                         "transactions__amount",
@@ -408,6 +479,7 @@ class BankingQuery:
             transaction_count=cp.txn_count,
             first_date=cp.first_date,
             last_date=cp.last_date,
+            customer=LinkedCustomerType(id=cp.customer.id, name=cp.customer.name) if cp.customer else None,
         )
 
     @strawberry.field
@@ -977,3 +1049,60 @@ class BankingMutation:
         pattern.save(update_fields=["is_paused", "updated_at"])
 
         return RecurringPatternResult(success=True, pattern=_make_pattern_type(pattern))
+
+    @strawberry.mutation
+    def link_counterparty_to_customer(
+        self, info: Info[Context, None], counterparty_id: strawberry.ID, customer_id: int
+    ) -> CounterpartyResult:
+        """Link a counterparty to a customer for payment matching."""
+        user, err = check_perm(info, "banking", "write")
+        if err:
+            return CounterpartyResult(success=False, error=err)
+
+        from apps.banking.models import Counterparty
+        from apps.customers.models import Customer
+
+        try:
+            cp = Counterparty.objects.get(id=str(counterparty_id), tenant=user.tenant)
+        except Counterparty.DoesNotExist:
+            return CounterpartyResult(success=False, error="Counterparty not found.")
+
+        try:
+            customer = Customer.objects.get(id=customer_id, tenant=user.tenant)
+        except Customer.DoesNotExist:
+            return CounterpartyResult(success=False, error="Customer not found.")
+
+        cp.customer = customer
+        cp.save(update_fields=["customer", "updated_at"])
+
+        # Reload to get customer name
+        cp = Counterparty.objects.select_related("customer").get(id=str(counterparty_id))
+
+        return CounterpartyResult(
+            success=True,
+            counterparty=_make_counterparty_type(cp),
+        )
+
+    @strawberry.mutation
+    def unlink_counterparty_from_customer(
+        self, info: Info[Context, None], counterparty_id: strawberry.ID
+    ) -> CounterpartyResult:
+        """Remove the customer link from a counterparty."""
+        user, err = check_perm(info, "banking", "write")
+        if err:
+            return CounterpartyResult(success=False, error=err)
+
+        from apps.banking.models import Counterparty
+
+        try:
+            cp = Counterparty.objects.get(id=str(counterparty_id), tenant=user.tenant)
+        except Counterparty.DoesNotExist:
+            return CounterpartyResult(success=False, error="Counterparty not found.")
+
+        cp.customer = None
+        cp.save(update_fields=["customer", "updated_at"])
+
+        return CounterpartyResult(
+            success=True,
+            counterparty=_make_counterparty_type(cp),
+        )

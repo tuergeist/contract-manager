@@ -84,7 +84,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { TimeTrackingTab } from './TimeTrackingTab'
 import { PdfAnalysisPanel } from './PdfAnalysisPanel'
-import { ListTodo } from 'lucide-react'
+import { ListTodo, Receipt } from 'lucide-react'
 
 const CONTRACT_DETAIL_QUERY = gql`
   query ContractDetail($id: ID!) {
@@ -197,6 +197,25 @@ const CONTRACT_DETAIL_QUERY = gql`
   }
 `
 
+const CONTRACT_INVOICES_QUERY = gql`
+  query ContractInvoices($contractId: Int!) {
+    importedInvoices(contractId: $contractId, limit: 100) {
+      items {
+        id
+        invoiceNumber
+        invoiceDate
+        totalAmount
+        currency
+        isPaid
+        paidAt
+        firstPaymentTransactionId
+        extractionStatus
+        pdfUrl
+      }
+      totalCount
+    }
+  }
+`
 
 const PRODUCTS_FOR_SELECT_QUERY = gql`
   query ProductsForSelect($search: String) {
@@ -324,6 +343,12 @@ const BILLING_SCHEDULE_QUERY = gql`
           prorateFactor
         }
         total
+        matchedInvoice {
+          id
+          invoiceNumber
+          isPaid
+          pdfUrl
+        }
       }
       totalForecast
       periodStart
@@ -541,7 +566,7 @@ function SortableRow({
   return <>{children({ dragHandleProps, style, ref: setNodeRef, isDragging })}</>
 }
 
-type Tab = 'items' | 'amendments' | 'forecast' | 'attachments' | 'todos' | 'timeTracking' | 'activity'
+type Tab = 'items' | 'amendments' | 'forecast' | 'attachments' | 'invoices' | 'todos' | 'timeTracking' | 'activity'
 
 export function ContractDetail() {
   const { t, i18n } = useTranslation()
@@ -559,6 +584,12 @@ export function ContractDetail() {
 
   const { data, loading, error, refetch } = useQuery(CONTRACT_DETAIL_QUERY, {
     variables: { id },
+  })
+
+  // Invoices query - always fetch to show count in tab
+  const { data: invoicesData, loading: invoicesLoading } = useQuery(CONTRACT_INVOICES_QUERY, {
+    variables: { contractId: parseInt(id!, 10) },
+    skip: !id,
   })
 
   const [updateNotes, { loading: savingNotes }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
@@ -904,6 +935,17 @@ export function ContractDetail() {
           >
             <Package className="h-4 w-4" />
             {t('contracts.detail.items')} ({contract.items.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('invoices')}
+            className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium ${
+              activeTab === 'invoices'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            <Receipt className="h-4 w-4" />
+            {t('nav.importedInvoices')} ({invoicesData?.importedInvoices?.totalCount || 0})
           </button>
           <button
             onClick={() => setActiveTab('amendments')}
@@ -1350,6 +1392,104 @@ export function ContractDetail() {
           canEdit={contract.status !== 'cancelled' && contract.status !== 'ended' && contract.status !== 'deleted'}
           onRefetch={() => refetch()}
         />
+      )}
+
+      {/* Invoices Tab */}
+      {activeTab === 'invoices' && (
+        <div>
+          {invoicesLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+            </div>
+          ) : (invoicesData?.importedInvoices?.items?.length || 0) === 0 ? (
+            <div className="rounded-lg border bg-white p-8 text-center">
+              <p className="text-gray-500">{t('contracts.noInvoices')}</p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-lg border">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('invoices.import.colInvoiceNumber')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('invoices.import.colDate')}
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('invoices.import.colAmount')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('invoices.import.colPayment')}
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('common.actions')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {invoicesData?.importedInvoices?.items?.map((invoice: { id: string; invoiceNumber: string; invoiceDate: string | null; totalAmount: string | null; currency: string; isPaid: boolean; paidAt: string | null; firstPaymentTransactionId: number | null; pdfUrl: string | null }) => (
+                    <tr key={invoice.id} className="hover:bg-gray-50">
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <span className="font-medium">
+                          {invoice.invoiceNumber || '-'}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                        {invoice.invoiceDate ? formatDate(invoice.invoiceDate) : '-'}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
+                        {invoice.totalAmount
+                          ? new Intl.NumberFormat(i18n.language, { style: 'currency', currency: invoice.currency || 'EUR' }).format(parseFloat(invoice.totalAmount))
+                          : '-'}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        {invoice.isPaid ? (
+                          <div className="flex flex-col">
+                            <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-green-100 text-green-800 w-fit">
+                              {t('invoices.import.paid')}
+                            </span>
+                            {invoice.paidAt && (
+                              invoice.firstPaymentTransactionId ? (
+                                <Link
+                                  to={`/banking?tx=${invoice.firstPaymentTransactionId}`}
+                                  className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                                >
+                                  {formatDate(invoice.paidAt)}
+                                </Link>
+                              ) : (
+                                <span className="text-xs text-gray-500 mt-1">
+                                  {formatDate(invoice.paidAt)}
+                                </span>
+                              )
+                            )}
+                          </div>
+                        ) : (
+                          <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-gray-100 text-gray-600">
+                            {t('invoices.import.unpaid')}
+                          </span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right">
+                        {invoice.pdfUrl && (
+                          <a
+                            href={invoice.pdfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800"
+                            title={t('invoices.import.viewPdf')}
+                          >
+                            <FileText className="h-4 w-4 inline" />
+                          </a>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Todos Tab */}
@@ -2606,10 +2746,18 @@ interface BillingScheduleItem {
   prorateFactor: string | null
 }
 
+interface MatchedInvoice {
+  id: string
+  invoiceNumber: string
+  isPaid: boolean
+  pdfUrl: string | null
+}
+
 interface BillingEvent {
   date: string
   items: BillingScheduleItem[]
   total: string
+  matchedInvoice: MatchedInvoice | null
 }
 
 interface BillingScheduleResult {
@@ -2720,6 +2868,9 @@ function ForecastTab({ contractId }: { contractId: string }) {
                   <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                     {t('contracts.forecast.amount')}
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('contracts.forecast.invoice')}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -2756,6 +2907,37 @@ function ForecastTab({ contractId }: { contractId: string }) {
                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
                       {formatCurrency(event.total)}
                     </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm">
+                      {event.matchedInvoice ? (
+                        <div className="flex items-center gap-2">
+                          {event.matchedInvoice.pdfUrl ? (
+                            <a
+                              href={event.matchedInvoice.pdfUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 hover:underline"
+                            >
+                              {event.matchedInvoice.invoiceNumber}
+                            </a>
+                          ) : (
+                            <span className="text-gray-900">
+                              {event.matchedInvoice.invoiceNumber}
+                            </span>
+                          )}
+                          {event.matchedInvoice.isPaid ? (
+                            <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                              {t('invoices.paid')}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                              {t('invoices.unpaid')}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
                   </tr>
                   )
                 })}
@@ -2768,6 +2950,7 @@ function ForecastTab({ contractId }: { contractId: string }) {
                   <td className="whitespace-nowrap px-6 py-3 text-right text-sm font-bold text-gray-900">
                     {formatCurrency(schedule.totalForecast)}
                   </td>
+                  <td></td>
                 </tr>
               </tfoot>
             </table>

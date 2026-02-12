@@ -2,16 +2,23 @@ import { useState, useMemo, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, History, Paperclip, Upload, Download, File, Image, Trash2, Link2, Plus, TrendingUp, DollarSign, ListTodo } from 'lucide-react'
+import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, History, Paperclip, Upload, Download, File, Image, Trash2, Link2, Plus, TrendingUp, DollarSign, ListTodo, Mail, X, Receipt } from 'lucide-react'
 import { TodoModal, TodoList, type TodoContext, type TodoItem } from '@/features/todos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { formatDate } from '@/lib/utils'
 import { useAuditLogs, AuditLogTable } from '@/features/audit'
 
 type SortField = 'name' | 'status' | 'startDate' | 'endDate' | 'arr' | 'totalValue' | 'remainingMonths' | null
 type SortOrder = 'asc' | 'desc'
-type Tab = 'contracts' | 'attachments' | 'activity' | 'todos'
+type Tab = 'contracts' | 'invoices' | 'attachments' | 'activity' | 'todos'
 
 const CUSTOMER_QUERY = gql`
   query Customer($id: ID!) {
@@ -52,6 +59,7 @@ const CUSTOMER_QUERY = gql`
         createdAt
         createdByName
       }
+      billingEmails
       todos {
         id
         text
@@ -126,6 +134,53 @@ const DELETE_CUSTOMER_LINK_MUTATION = gql`
   }
 `
 
+const UPDATE_CUSTOMER_BILLING_EMAILS_MUTATION = gql`
+  mutation UpdateCustomerBillingEmails($input: UpdateBillingEmailsInput!) {
+    updateCustomerBillingEmails(input: $input) {
+      success
+      error
+      billingEmails
+    }
+  }
+`
+
+const CUSTOMER_INVOICES_QUERY = gql`
+  query CustomerInvoices($customerId: Int!) {
+    importedInvoices(customerId: $customerId, limit: 100) {
+      items {
+        id
+        invoiceNumber
+        invoiceDate
+        totalAmount
+        currency
+        isPaid
+        paidAt
+        firstPaymentTransactionId
+        extractionStatus
+        createdAt
+        pdfUrl
+        contractId
+        contractName
+      }
+      totalCount
+    }
+  }
+`
+
+const ASSIGN_INVOICE_CONTRACT_MUTATION = gql`
+  mutation AssignInvoiceContract($invoiceId: ID!, $contractId: Int) {
+    assignInvoiceContract(invoiceId: $invoiceId, contractId: $contractId) {
+      success
+      error
+      invoice {
+        id
+        contractId
+        contractName
+      }
+    }
+  }
+`
+
 interface CustomerAddress {
   street?: string | null
   city?: string | null
@@ -163,6 +218,22 @@ interface CustomerLink {
   createdByName: string | null
 }
 
+interface CustomerInvoice {
+  id: string
+  invoiceNumber: string
+  invoiceDate: string | null
+  totalAmount: string | null
+  currency: string
+  isPaid: boolean
+  paidAt: string | null
+  firstPaymentTransactionId: number | null
+  extractionStatus: string
+  createdAt: string
+  pdfUrl: string | null
+  contractId: number | null
+  contractName: string | null
+}
+
 interface Customer {
   id: string
   name: string
@@ -177,6 +248,7 @@ interface Customer {
   attachments: Attachment[]
   links: CustomerLink[]
   todos: TodoItem[]
+  billingEmails: string[]
 }
 
 interface CustomerData {
@@ -204,8 +276,19 @@ export function CustomerDetail() {
   const [todoModalOpen, setTodoModalOpen] = useState(false)
   const [todoContext, setTodoContext] = useState<TodoContext | undefined>()
 
+  // Billing email state
+  const [newBillingEmail, setNewBillingEmail] = useState('')
+  const [addingEmail, setAddingEmail] = useState(false)
+  const [emailError, setEmailError] = useState<string | null>(null)
+
   const { data, loading, error, refetch } = useQuery<CustomerData>(CUSTOMER_QUERY, {
     variables: { id },
+    skip: !id,
+  })
+
+  // Invoices query - always fetch to show count in tab
+  const { data: invoicesData, loading: invoicesLoading, refetch: refetchInvoices } = useQuery(CUSTOMER_INVOICES_QUERY, {
+    variables: { customerId: parseInt(id!, 10) },
     skip: !id,
   })
 
@@ -214,6 +297,8 @@ export function CustomerDetail() {
   const [deleteAttachment] = useMutation(DELETE_CUSTOMER_ATTACHMENT_MUTATION)
   const [addLink] = useMutation(ADD_CUSTOMER_LINK_MUTATION)
   const [deleteLink] = useMutation(DELETE_CUSTOMER_LINK_MUTATION)
+  const [updateBillingEmails] = useMutation(UPDATE_CUSTOMER_BILLING_EMAILS_MUTATION)
+  const [assignInvoiceContract] = useMutation(ASSIGN_INVOICE_CONTRACT_MUTATION)
 
   const customer = data?.customer
 
@@ -445,6 +530,90 @@ export function CustomerDetail() {
     }
   }
 
+  const validateEmail = (email: string) => {
+    const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return pattern.test(email)
+  }
+
+  const handleAddBillingEmail = async () => {
+    const email = newBillingEmail.trim().toLowerCase()
+    if (!email || !id) return
+
+    if (!validateEmail(email)) {
+      setEmailError(t('customers.invalidEmailFormat'))
+      return
+    }
+
+    setAddingEmail(true)
+    setEmailError(null)
+    try {
+      const result = await updateBillingEmails({
+        variables: {
+          input: {
+            customerId: id,
+            addEmails: [email],
+          },
+        },
+      })
+
+      if (result.data?.updateCustomerBillingEmails?.success) {
+        setNewBillingEmail('')
+        refetch()
+      } else {
+        setEmailError(result.data?.updateCustomerBillingEmails?.error || 'Failed to add email')
+      }
+    } catch (err) {
+      console.error('Add email error:', err)
+      setEmailError('Failed to add email')
+    } finally {
+      setAddingEmail(false)
+    }
+  }
+
+  const handleRemoveBillingEmail = async (email: string) => {
+    if (!id) return
+
+    try {
+      const result = await updateBillingEmails({
+        variables: {
+          input: {
+            customerId: id,
+            removeEmails: [email],
+          },
+        },
+      })
+
+      if (result.data?.updateCustomerBillingEmails?.success) {
+        refetch()
+      } else {
+        alert(result.data?.updateCustomerBillingEmails?.error || 'Failed to remove email')
+      }
+    } catch (err) {
+      console.error('Remove email error:', err)
+      alert('Failed to remove email')
+    }
+  }
+
+  const handleAssignContract = async (invoiceId: string, contractId: number | null) => {
+    try {
+      const result = await assignInvoiceContract({
+        variables: {
+          invoiceId,
+          contractId,
+        },
+      })
+
+      if (result.data?.assignInvoiceContract?.success) {
+        refetchInvoices()
+      } else {
+        alert(result.data?.assignInvoiceContract?.error || 'Failed to assign contract')
+      }
+    } catch (err) {
+      console.error('Assign contract error:', err)
+      alert('Failed to assign contract')
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -593,6 +762,67 @@ export function CustomerDetail() {
         </div>
       </div>
 
+      {/* Billing Emails Section */}
+      <div className="mt-4 rounded-lg border bg-white p-4" data-testid="customer-billing-emails-section">
+        <div className="flex items-center gap-2 mb-3">
+          <Mail className="h-4 w-4 text-gray-400" />
+          <p className="text-sm font-medium text-gray-500">{t('customers.billingEmails')}</p>
+          <span className="text-xs text-gray-400">({customer.billingEmails?.length || 0})</span>
+        </div>
+
+        {/* Email List */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          {customer.billingEmails?.length > 0 ? (
+            customer.billingEmails.map((email) => (
+              <span
+                key={email}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-sm"
+              >
+                {email}
+                <button
+                  onClick={() => handleRemoveBillingEmail(email)}
+                  className="ml-1 text-blue-400 hover:text-blue-600"
+                  title={t('common.remove')}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))
+          ) : (
+            <span className="text-sm text-gray-400 italic">{t('customers.noBillingEmails')}</span>
+          )}
+        </div>
+
+        {/* Add Email Form */}
+        <div className="flex items-center gap-2">
+          <Input
+            type="email"
+            value={newBillingEmail}
+            onChange={(e) => {
+              setNewBillingEmail(e.target.value)
+              setEmailError(null)
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddBillingEmail()}
+            placeholder={t('customers.addBillingEmailPlaceholder')}
+            className="max-w-xs text-sm"
+          />
+          <Button
+            size="sm"
+            onClick={handleAddBillingEmail}
+            disabled={addingEmail || !newBillingEmail.trim()}
+          >
+            {addingEmail ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+        {emailError && (
+          <p className="mt-1 text-xs text-red-500">{emailError}</p>
+        )}
+      </div>
+
       {/* Tabs */}
       <div className="mt-6 mb-4 border-b">
         <nav className="-mb-px flex gap-4">
@@ -606,6 +836,17 @@ export function CustomerDetail() {
           >
             <FileText className="h-4 w-4" />
             {t('contracts.title')} ({customer.contracts.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('invoices')}
+            className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium ${
+              activeTab === 'invoices'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            <Receipt className="h-4 w-4" />
+            {t('nav.importedInvoices')} ({invoicesData?.importedInvoices?.totalCount || 0})
           </button>
           <button
             onClick={() => setActiveTab('attachments')}
@@ -750,6 +991,132 @@ export function CustomerDetail() {
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-500">
                         {contract.remainingMonths > 0 ? contract.remainingMonths : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Invoices Tab */}
+      {activeTab === 'invoices' && (
+        <div data-testid="customer-invoices-section">
+          {invoicesLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+            </div>
+          ) : (invoicesData?.importedInvoices?.items?.length || 0) === 0 ? (
+            <div className="rounded-lg border bg-white p-8 text-center">
+              <p className="text-gray-500">{t('customers.noInvoices')}</p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-lg border">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('invoices.import.colInvoiceNumber')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('invoices.import.colDate')}
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('invoices.import.colAmount')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('contracts.title')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('invoices.import.colPayment')}
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('common.actions')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {(invoicesData?.importedInvoices?.items as CustomerInvoice[])?.map((invoice) => (
+                    <tr key={invoice.id} className="hover:bg-gray-50">
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <span className="font-medium">
+                          {invoice.invoiceNumber || '-'}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                        {invoice.invoiceDate ? formatDate(invoice.invoiceDate) : '-'}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
+                        {invoice.totalAmount
+                          ? formatCurrency(invoice.totalAmount)
+                          : '-'}
+                      </td>
+                      <td className="px-6 py-4">
+                        <Select
+                          value={invoice.contractId?.toString() || 'none'}
+                          onValueChange={(value) => {
+                            handleAssignContract(
+                              invoice.id,
+                              value === 'none' ? null : parseInt(value, 10)
+                            )
+                          }}
+                        >
+                          <SelectTrigger className="w-[180px] h-8 text-sm">
+                            <SelectValue placeholder={t('invoices.import.selectContract')} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">
+                              <span className="text-gray-400">{t('invoices.import.noContract')}</span>
+                            </SelectItem>
+                            {customer?.contracts.map((contract) => (
+                              <SelectItem key={contract.id} value={contract.id}>
+                                {contract.name || `Contract #${contract.id}`}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        {invoice.isPaid ? (
+                          <div className="flex flex-col">
+                            <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-green-100 text-green-800 w-fit">
+                              {t('invoices.import.paid')}
+                            </span>
+                            {invoice.paidAt && (
+                              invoice.firstPaymentTransactionId ? (
+                                <Link
+                                  to={`/banking?tx=${invoice.firstPaymentTransactionId}`}
+                                  className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                                >
+                                  {formatDate(invoice.paidAt)}
+                                </Link>
+                              ) : (
+                                <span className="text-xs text-gray-500 mt-1">
+                                  {formatDate(invoice.paidAt)}
+                                </span>
+                              )
+                            )}
+                          </div>
+                        ) : (
+                          <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-gray-100 text-gray-600">
+                            {t('invoices.import.unpaid')}
+                          </span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right">
+                        {invoice.pdfUrl && (
+                          <a
+                            href={invoice.pdfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800"
+                            title={t('invoices.import.viewPdf')}
+                          >
+                            <FileText className="h-4 w-4 inline" />
+                          </a>
+                        )}
                       </td>
                     </tr>
                   ))}

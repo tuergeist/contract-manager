@@ -1,18 +1,23 @@
 """GraphQL schema for invoices."""
 import base64
 import os
+import uuid
 from datetime import date
 from decimal import Decimal
+from enum import Enum
 from typing import List, Optional
 
 import strawberry
+import strawberry_django
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.db.models import Q
 from strawberry.types import Info
 
 from apps.core.context import Context
 from apps.core.permissions import check_perm, get_current_user, require_perm
 from apps.core.schema import DeleteResult
+from apps.invoices.models import ImportedInvoice, InvoiceImportBatch, InvoicePaymentMatch, UploadStatus
 from apps.invoices.services import InvoiceService
 from apps.invoices.types import InvoiceData, InvoiceLineItem
 
@@ -301,6 +306,231 @@ class LegalDataCheckResult:
 
 
 # =========================================================================
+# Imported Invoice types
+# =========================================================================
+
+
+@strawberry.type
+class PaymentMatchType:
+    """A match between an imported invoice and a bank transaction."""
+
+    id: int
+    transaction_id: int
+    transaction_date: date
+    transaction_amount: Decimal
+    counterparty_name: str
+    match_type: str
+    confidence: Decimal
+    matched_at: str
+    matched_by_name: str | None
+
+
+@strawberry.type
+class ImportedInvoiceType:
+    """An imported outgoing invoice with extracted metadata."""
+
+    id: strawberry.ID
+    invoice_number: str
+    invoice_date: date | None
+    total_amount: Decimal | None
+    currency: str
+    customer_name: str
+    customer_id: int | None
+    customer_display_name: str | None
+    contract_id: int | None
+    contract_name: str | None
+    original_filename: str
+    file_size: int
+    pdf_url: str | None
+    extraction_status: str
+    extraction_error: str
+    is_paid: bool
+    paid_at: date | None  # Date of first payment match
+    first_payment_transaction_id: int | None  # Transaction ID of first payment match
+    payment_matches: List[PaymentMatchType]
+    created_at: str
+    created_by_name: str | None
+    # New fields for receiver mapping
+    expected_filename: str
+    receiver_emails: List[str]
+    upload_status: str
+    import_batch_id: int | None
+
+
+@strawberry.type
+class ImportedInvoiceConnection:
+    """Paginated list of imported invoices."""
+
+    items: List[ImportedInvoiceType]
+    total_count: int
+    has_next_page: bool
+
+
+@strawberry.input
+class UploadInvoiceInput:
+    """Input for uploading an invoice PDF."""
+
+    file_content: str  # Base64-encoded
+    filename: str
+
+
+@strawberry.input
+class UpdateImportedInvoiceInput:
+    """Input for correcting extracted invoice fields."""
+
+    invoice_number: str | None = None
+    invoice_date: date | None = None
+    total_amount: Decimal | None = None
+    currency: str | None = None
+    customer_name: str | None = None
+    customer_id: int | None = None
+
+
+@strawberry.type
+class ImportedInvoiceResult:
+    """Result of imported invoice operations."""
+
+    success: bool
+    error: str | None = None
+    invoice: ImportedInvoiceType | None = None
+
+
+@strawberry.enum
+class PaymentStatusFilter(Enum):
+    """Filter for invoice payment status."""
+
+    ALL = "all"
+    PAID = "paid"
+    UNPAID = "unpaid"
+
+
+@strawberry.enum
+class UploadStatusFilter(Enum):
+    """Filter for invoice upload status."""
+
+    ALL = "all"
+    PENDING = "pending"
+    UPLOADED = "uploaded"
+
+
+# =========================================================================
+# Import Batch types
+# =========================================================================
+
+
+@strawberry.type
+class InvoiceImportBatchType:
+    """An import batch from CSV upload."""
+
+    id: strawberry.ID
+    name: str
+    total_expected: int
+    total_uploaded: int
+    pending_count: int
+    created_at: str
+    created_by_name: str | None
+
+
+@strawberry.type
+class InvoiceImportBatchConnection:
+    """Paginated list of import batches."""
+
+    items: List[InvoiceImportBatchType]
+    total_count: int
+    has_next_page: bool
+
+
+@strawberry.input
+class UploadInvoiceCsvInput:
+    """Input for uploading a CSV with invoice receiver mapping."""
+
+    file_content: str  # Base64-encoded
+    filename: str
+
+
+@strawberry.type
+class UploadInvoiceCsvResult:
+    """Result of CSV upload."""
+
+    success: bool
+    error: str | None = None
+    batch: InvoiceImportBatchType | None = None
+    rows_processed: int = 0
+
+
+@strawberry.input
+class BulkUploadInvoiceInput:
+    """Input for a single invoice in bulk upload."""
+
+    file_content: str  # Base64-encoded
+    filename: str
+
+
+@strawberry.type
+class BulkUploadItemResult:
+    """Result for a single file in bulk upload."""
+
+    filename: str
+    success: bool
+    error: str | None = None
+    invoice: ImportedInvoiceType | None = None
+    matched_expected: bool = False
+
+
+@strawberry.type
+class BulkUploadInvoicesResult:
+    """Result of bulk PDF upload."""
+
+    success: bool
+    error: str | None = None
+    results: List[BulkUploadItemResult] = strawberry.field(default_factory=list)
+    total_uploaded: int = 0
+    total_failed: int = 0
+
+
+# =========================================================================
+# Customer Matching types
+# =========================================================================
+
+
+@strawberry.type
+class CustomerMatchSuggestionType:
+    """A potential customer match suggestion."""
+
+    customer_id: int
+    customer_name: str
+    similarity: Decimal
+    hubspot_id: str | None
+
+
+# =========================================================================
+# Payment Matching types
+# =========================================================================
+
+
+@strawberry.type
+class PaymentMatchCandidateType:
+    """A potential payment match candidate."""
+
+    transaction_id: int
+    transaction_date: date
+    amount: Decimal
+    counterparty_name: str
+    booking_text: str
+    match_type: str
+    confidence: Decimal
+
+
+@strawberry.type
+class CreatePaymentMatchResult:
+    """Result of creating a payment match."""
+
+    success: bool
+    error: str | None = None
+    match: PaymentMatchType | None = None
+
+
+# =========================================================================
 # Queries
 # =========================================================================
 
@@ -401,6 +631,238 @@ class InvoiceQuery:
             is_complete=len(missing) == 0,
             missing_fields=missing,
         )
+
+    # ----- Imported Invoices -----
+
+    # ----- Import Batches -----
+
+    @strawberry.field
+    def import_batches(
+        self,
+        info: Info,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> InvoiceImportBatchConnection:
+        """Get paginated list of import batches."""
+        user = require_perm(info, "invoices", "read")
+
+        qs = InvoiceImportBatch.objects.filter(tenant=user.tenant).select_related(
+            "uploaded_by"
+        ).order_by("-created_at")
+
+        total_count = qs.count()
+        items = qs[offset : offset + limit]
+        has_next_page = offset + limit < total_count
+
+        return InvoiceImportBatchConnection(
+            items=[_convert_import_batch(batch) for batch in items],
+            total_count=total_count,
+            has_next_page=has_next_page,
+        )
+
+    @strawberry.field
+    def import_batch(
+        self, info: Info, id: strawberry.ID
+    ) -> InvoiceImportBatchType | None:
+        """Get a single import batch by ID."""
+        user = require_perm(info, "invoices", "read")
+
+        try:
+            batch = InvoiceImportBatch.objects.select_related(
+                "uploaded_by"
+            ).get(id=id, tenant=user.tenant)
+        except InvoiceImportBatch.DoesNotExist:
+            return None
+
+        return _convert_import_batch(batch)
+
+    @strawberry.field
+    def pending_invoices(
+        self,
+        info: Info,
+        batch_id: strawberry.ID,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> ImportedInvoiceConnection:
+        """Get pending invoices for a specific batch."""
+        user = require_perm(info, "invoices", "read")
+
+        qs = ImportedInvoice.objects.filter(
+            tenant=user.tenant,
+            import_batch_id=batch_id,
+            upload_status=UploadStatus.PENDING,
+        ).select_related("customer", "created_by", "contract")
+
+        total_count = qs.count()
+        items = qs[offset : offset + limit]
+        has_next_page = offset + limit < total_count
+
+        return ImportedInvoiceConnection(
+            items=[_convert_imported_invoice(inv) for inv in items],
+            total_count=total_count,
+            has_next_page=has_next_page,
+        )
+
+    # ----- Imported Invoices -----
+
+    @strawberry.field
+    def imported_invoices(
+        self,
+        info: Info,
+        search: str | None = None,
+        customer_id: int | None = None,
+        contract_id: int | None = None,
+        payment_status: PaymentStatusFilter | None = None,
+        upload_status: UploadStatusFilter | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = "desc",
+        offset: int = 0,
+        limit: int = 50,
+    ) -> ImportedInvoiceConnection:
+        """Get paginated list of imported invoices with optional filters."""
+        user = require_perm(info, "invoices", "read")
+
+        qs = ImportedInvoice.objects.filter(tenant=user.tenant).select_related(
+            "customer", "created_by", "contract"
+        ).prefetch_related("payment_matches__transaction__counterparty")
+
+        # Filter by customer
+        if customer_id:
+            qs = qs.filter(customer_id=customer_id)
+
+        # Filter by contract
+        if contract_id:
+            qs = qs.filter(contract_id=contract_id)
+
+        # Search by invoice number
+        if search:
+            qs = qs.filter(invoice_number__icontains=search)
+
+        # Filter by payment status
+        if payment_status == PaymentStatusFilter.PAID:
+            qs = qs.filter(payment_matches__isnull=False).distinct()
+        elif payment_status == PaymentStatusFilter.UNPAID:
+            qs = qs.exclude(payment_matches__isnull=False)
+
+        # Filter by upload status
+        if upload_status == UploadStatusFilter.PENDING:
+            qs = qs.filter(upload_status=UploadStatus.PENDING)
+        elif upload_status == UploadStatusFilter.UPLOADED:
+            qs = qs.filter(upload_status=UploadStatus.UPLOADED)
+
+        # Sorting
+        allowed_sort_fields = {
+            "invoiceNumber": "invoice_number",
+            "invoiceDate": "invoice_date",
+            "customerName": "customer_name",
+            "totalAmount": "total_amount",
+            "createdAt": "created_at",
+        }
+        if sort_by and sort_by in allowed_sort_fields:
+            order_field = allowed_sort_fields[sort_by]
+            if sort_order == "desc":
+                order_field = f"-{order_field}"
+            qs = qs.order_by(order_field)
+        else:
+            qs = qs.order_by("-created_at")
+
+        total_count = qs.count()
+        items = qs[offset : offset + limit]
+        has_next_page = offset + limit < total_count
+
+        return ImportedInvoiceConnection(
+            items=[_convert_imported_invoice(inv) for inv in items],
+            total_count=total_count,
+            has_next_page=has_next_page,
+        )
+
+    @strawberry.field
+    def imported_invoice(
+        self, info: Info, id: strawberry.ID
+    ) -> ImportedInvoiceType | None:
+        """Get a single imported invoice by ID."""
+        user = require_perm(info, "invoices", "read")
+
+        try:
+            inv = ImportedInvoice.objects.select_related(
+                "customer", "created_by"
+            ).prefetch_related(
+                "payment_matches__transaction__counterparty",
+                "payment_matches__matched_by",
+            ).get(id=id, tenant=user.tenant)
+        except ImportedInvoice.DoesNotExist:
+            return None
+
+        return _convert_imported_invoice(inv)
+
+    @strawberry.field
+    def customer_match_suggestions(
+        self, info: Info, invoice_id: strawberry.ID
+    ) -> List[CustomerMatchSuggestionType]:
+        """Get customer match suggestions for an imported invoice based on extracted name."""
+        user = require_perm(info, "invoices", "read")
+
+        try:
+            invoice = ImportedInvoice.objects.get(id=invoice_id, tenant=user.tenant)
+        except ImportedInvoice.DoesNotExist:
+            return []
+
+        if not invoice.customer_name:
+            return []
+
+        from apps.invoices.customer_matching import match_customer_by_name
+
+        matches = match_customer_by_name(
+            tenant=user.tenant,
+            extracted_name=invoice.customer_name,
+            min_similarity=0.3,
+            limit=5,
+        )
+
+        return [
+            CustomerMatchSuggestionType(
+                customer_id=m.customer_id,
+                customer_name=m.customer_name,
+                similarity=m.similarity,
+                hubspot_id=m.hubspot_id,
+            )
+            for m in matches
+        ]
+
+    @strawberry.field
+    def find_payment_matches(
+        self,
+        info: Info,
+        invoice_id: strawberry.ID,
+        days_after: int = 90,
+    ) -> List[PaymentMatchCandidateType]:
+        """Find potential payment matches for an imported invoice."""
+        user = require_perm(info, "invoices", "read")
+
+        try:
+            invoice = ImportedInvoice.objects.select_related("customer").get(
+                id=invoice_id, tenant=user.tenant
+            )
+        except ImportedInvoice.DoesNotExist:
+            return []
+
+        from apps.invoices.payment_matching import PaymentMatcher
+
+        matcher = PaymentMatcher()
+        matches = matcher.find_matches(invoice, days_after=days_after)
+
+        return [
+            PaymentMatchCandidateType(
+                transaction_id=m.transaction_id,
+                transaction_date=m.transaction_date,
+                amount=m.amount,
+                counterparty_name=m.counterparty_name,
+                booking_text=m.booking_text,
+                match_type=m.match_type,
+                confidence=m.confidence,
+            )
+            for m in matches
+        ]
 
 
 # =========================================================================
@@ -785,6 +1247,681 @@ class InvoiceMutation:
             success=True, extracted_data=result
         )
 
+    # ----- Imported Invoices -----
+
+    @strawberry.mutation
+    def upload_invoice(
+        self, info: Info[Context, None], input: UploadInvoiceInput
+    ) -> ImportedInvoiceResult:
+        """Upload an invoice PDF for extraction."""
+        user, err = check_perm(info, "invoices", "generate")
+        if err:
+            return ImportedInvoiceResult(success=False, error=err)
+
+        # Validate extension
+        ext = os.path.splitext(input.filename)[1].lower()
+        if ext != ".pdf":
+            return ImportedInvoiceResult(
+                success=False,
+                error="Only PDF files are accepted.",
+            )
+
+        # Decode base64
+        try:
+            file_bytes = base64.b64decode(input.file_content, validate=True)
+        except Exception:
+            return ImportedInvoiceResult(
+                success=False, error="Invalid base64 file content"
+            )
+
+        # Validate size (20MB max)
+        max_size = 20 * 1024 * 1024
+        if len(file_bytes) > max_size:
+            return ImportedInvoiceResult(
+                success=False,
+                error="File too large. Maximum size is 20MB",
+            )
+
+        # Create the imported invoice record
+        invoice = ImportedInvoice(
+            tenant=user.tenant,
+            original_filename=input.filename,
+            file_size=len(file_bytes),
+            extraction_status=ImportedInvoice.ExtractionStatus.PENDING,
+            created_by=user,
+        )
+        invoice.pdf_file.save(input.filename, ContentFile(file_bytes), save=False)
+        invoice.save()
+
+        return ImportedInvoiceResult(
+            success=True,
+            invoice=_convert_imported_invoice(invoice),
+        )
+
+    @strawberry.mutation
+    def update_imported_invoice(
+        self, info: Info[Context, None], id: strawberry.ID, input: UpdateImportedInvoiceInput
+    ) -> ImportedInvoiceResult:
+        """Update/correct fields on an imported invoice."""
+        user, err = check_perm(info, "invoices", "update")
+        if err:
+            return ImportedInvoiceResult(success=False, error=err)
+
+        try:
+            invoice = ImportedInvoice.objects.get(id=id, tenant=user.tenant)
+        except ImportedInvoice.DoesNotExist:
+            return ImportedInvoiceResult(
+                success=False, error="Invoice not found"
+            )
+
+        # Update only provided fields
+        if input.invoice_number is not None:
+            invoice.invoice_number = input.invoice_number
+        if input.invoice_date is not None:
+            invoice.invoice_date = input.invoice_date
+        if input.total_amount is not None:
+            invoice.total_amount = input.total_amount
+        if input.currency is not None:
+            invoice.currency = input.currency
+        if input.customer_name is not None:
+            invoice.customer_name = input.customer_name
+        if input.customer_id is not None:
+            from apps.customers.models import Customer
+            try:
+                customer = Customer.objects.get(id=input.customer_id, tenant=user.tenant)
+                invoice.customer = customer
+            except Customer.DoesNotExist:
+                return ImportedInvoiceResult(
+                    success=False, error="Customer not found"
+                )
+
+        invoice.save()
+
+        # Reload with relations
+        invoice = ImportedInvoice.objects.select_related(
+            "customer", "created_by"
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty"
+        ).get(id=id)
+
+        return ImportedInvoiceResult(
+            success=True,
+            invoice=_convert_imported_invoice(invoice),
+        )
+
+    @strawberry.mutation
+    def delete_imported_invoice(
+        self, info: Info[Context, None], id: strawberry.ID
+    ) -> DeleteResult:
+        """Delete an imported invoice and its PDF."""
+        user, err = check_perm(info, "invoices", "delete")
+        if err:
+            return DeleteResult(success=False, error=err)
+
+        try:
+            invoice = ImportedInvoice.objects.get(id=id, tenant=user.tenant)
+        except ImportedInvoice.DoesNotExist:
+            return DeleteResult(success=False, error="Invoice not found")
+
+        # Delete the PDF file
+        if invoice.pdf_file:
+            invoice.pdf_file.delete(save=False)
+
+        invoice.delete()
+        return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def confirm_imported_invoice(
+        self, info: Info[Context, None], id: strawberry.ID
+    ) -> ImportedInvoiceResult:
+        """Confirm an extracted invoice, marking it as ready for payment matching."""
+        user, err = check_perm(info, "invoices", "update")
+        if err:
+            return ImportedInvoiceResult(success=False, error=err)
+
+        try:
+            invoice = ImportedInvoice.objects.get(id=id, tenant=user.tenant)
+        except ImportedInvoice.DoesNotExist:
+            return ImportedInvoiceResult(
+                success=False, error="Invoice not found"
+            )
+
+        # Only allow confirming extracted invoices
+        if invoice.extraction_status not in [
+            ImportedInvoice.ExtractionStatus.EXTRACTED,
+            ImportedInvoice.ExtractionStatus.EXTRACTION_FAILED,
+        ]:
+            return ImportedInvoiceResult(
+                success=False,
+                error="Invoice must be extracted before confirmation",
+            )
+
+        invoice.extraction_status = ImportedInvoice.ExtractionStatus.CONFIRMED
+        invoice.save(update_fields=["extraction_status", "updated_at"])
+
+        # Reload with relations
+        invoice = ImportedInvoice.objects.select_related(
+            "customer", "created_by"
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty"
+        ).get(id=id)
+
+        return ImportedInvoiceResult(
+            success=True,
+            invoice=_convert_imported_invoice(invoice),
+        )
+
+    @strawberry.mutation
+    def extract_invoice(
+        self, info: Info[Context, None], id: strawberry.ID
+    ) -> ImportedInvoiceResult:
+        """Run extraction on a pending or failed invoice."""
+        user, err = check_perm(info, "invoices", "update")
+        if err:
+            return ImportedInvoiceResult(success=False, error=err)
+
+        try:
+            invoice = ImportedInvoice.objects.get(id=id, tenant=user.tenant)
+        except ImportedInvoice.DoesNotExist:
+            return ImportedInvoiceResult(
+                success=False, error="Invoice not found"
+            )
+
+        # Only allow extraction on pending or failed
+        if invoice.extraction_status not in [
+            ImportedInvoice.ExtractionStatus.PENDING,
+            ImportedInvoice.ExtractionStatus.EXTRACTION_FAILED,
+        ]:
+            return ImportedInvoiceResult(
+                success=False,
+                error=f"Cannot extract invoice in {invoice.extraction_status} status",
+            )
+
+        from apps.invoices.extraction import run_extraction
+
+        success = run_extraction(invoice)
+
+        # Reload with relations
+        invoice = ImportedInvoice.objects.select_related(
+            "customer", "created_by"
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty"
+        ).get(id=id)
+
+        if not success:
+            return ImportedInvoiceResult(
+                success=False,
+                error=invoice.extraction_error or "Extraction failed",
+                invoice=_convert_imported_invoice(invoice),
+            )
+
+        return ImportedInvoiceResult(
+            success=True,
+            invoice=_convert_imported_invoice(invoice),
+        )
+
+    @strawberry.mutation
+    def re_extract_invoice(
+        self, info: Info[Context, None], id: strawberry.ID
+    ) -> ImportedInvoiceResult:
+        """Re-run extraction on an already extracted invoice."""
+        user, err = check_perm(info, "invoices", "update")
+        if err:
+            return ImportedInvoiceResult(success=False, error=err)
+
+        try:
+            invoice = ImportedInvoice.objects.get(id=id, tenant=user.tenant)
+        except ImportedInvoice.DoesNotExist:
+            return ImportedInvoiceResult(
+                success=False, error="Invoice not found"
+            )
+
+        # Allow re-extraction on any status except extracting
+        if invoice.extraction_status == ImportedInvoice.ExtractionStatus.EXTRACTING:
+            return ImportedInvoiceResult(
+                success=False,
+                error="Extraction is already in progress",
+            )
+
+        from apps.invoices.extraction import run_extraction
+
+        success = run_extraction(invoice)
+
+        # Reload with relations
+        invoice = ImportedInvoice.objects.select_related(
+            "customer", "created_by"
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty"
+        ).get(id=id)
+
+        if not success:
+            return ImportedInvoiceResult(
+                success=False,
+                error=invoice.extraction_error or "Extraction failed",
+                invoice=_convert_imported_invoice(invoice),
+            )
+
+        return ImportedInvoiceResult(
+            success=True,
+            invoice=_convert_imported_invoice(invoice),
+        )
+
+    @strawberry.mutation
+    def confirm_customer_match(
+        self, info: Info[Context, None], invoice_id: strawberry.ID, customer_id: int
+    ) -> ImportedInvoiceResult:
+        """Link an imported invoice to a customer and transfer receiver emails."""
+        user, err = check_perm(info, "invoices", "update")
+        if err:
+            return ImportedInvoiceResult(success=False, error=err)
+
+        try:
+            invoice = ImportedInvoice.objects.get(id=invoice_id, tenant=user.tenant)
+        except ImportedInvoice.DoesNotExist:
+            return ImportedInvoiceResult(
+                success=False, error="Invoice not found"
+            )
+
+        from apps.customers.models import Customer
+
+        try:
+            customer = Customer.objects.get(id=customer_id, tenant=user.tenant)
+        except Customer.DoesNotExist:
+            return ImportedInvoiceResult(
+                success=False, error="Customer not found"
+            )
+
+        invoice.customer = customer
+        invoice.save(update_fields=["customer", "updated_at"])
+
+        # Transfer receiver_emails to customer.billing_emails (case-insensitive dedup)
+        if invoice.receiver_emails:
+            existing_emails = set(e.lower() for e in (customer.billing_emails or []))
+            new_emails = []
+            for email in invoice.receiver_emails:
+                email_lower = email.strip().lower()
+                if email_lower and email_lower not in existing_emails:
+                    new_emails.append(email_lower)
+                    existing_emails.add(email_lower)
+
+            if new_emails:
+                customer.billing_emails = sorted(existing_emails)
+                customer.save(update_fields=["billing_emails", "updated_at"])
+
+        # Reload with relations
+        invoice = ImportedInvoice.objects.select_related(
+            "customer", "created_by", "contract"
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty"
+        ).get(id=invoice_id)
+
+        return ImportedInvoiceResult(
+            success=True,
+            invoice=_convert_imported_invoice(invoice),
+        )
+
+    @strawberry.mutation
+    def assign_invoice_contract(
+        self,
+        info: Info[Context, None],
+        invoice_id: strawberry.ID,
+        contract_id: int | None,
+    ) -> ImportedInvoiceResult:
+        """Assign a contract to an imported invoice, or remove the assignment."""
+        user, err = check_perm(info, "invoices", "update")
+        if err:
+            return ImportedInvoiceResult(success=False, error=err)
+
+        try:
+            invoice = ImportedInvoice.objects.get(id=invoice_id, tenant=user.tenant)
+        except ImportedInvoice.DoesNotExist:
+            return ImportedInvoiceResult(
+                success=False, error="Invoice not found"
+            )
+
+        if contract_id is not None:
+            from apps.contracts.models import Contract
+
+            try:
+                contract = Contract.objects.get(id=contract_id, tenant=user.tenant)
+            except Contract.DoesNotExist:
+                return ImportedInvoiceResult(
+                    success=False, error="Contract not found"
+                )
+
+            # Optionally verify contract belongs to same customer if customer is set
+            if invoice.customer_id and contract.customer_id != invoice.customer_id:
+                return ImportedInvoiceResult(
+                    success=False, error="Contract does not belong to this customer"
+                )
+
+            invoice.contract = contract
+        else:
+            invoice.contract = None
+
+        invoice.save(update_fields=["contract", "updated_at"])
+
+        # Reload with relations
+        invoice = ImportedInvoice.objects.select_related(
+            "customer", "created_by", "contract"
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty"
+        ).get(id=invoice_id)
+
+        return ImportedInvoiceResult(
+            success=True,
+            invoice=_convert_imported_invoice(invoice),
+        )
+
+    @strawberry.mutation
+    def create_payment_match(
+        self,
+        info: Info[Context, None],
+        invoice_id: strawberry.ID,
+        transaction_id: int,
+        match_type: str = "manual",
+    ) -> CreatePaymentMatchResult:
+        """Create a payment match between an invoice and a transaction."""
+        user, err = check_perm(info, "invoices", "update")
+        if err:
+            return CreatePaymentMatchResult(success=False, error=err)
+
+        try:
+            invoice = ImportedInvoice.objects.get(id=invoice_id, tenant=user.tenant)
+        except ImportedInvoice.DoesNotExist:
+            return CreatePaymentMatchResult(
+                success=False, error="Invoice not found"
+            )
+
+        from apps.banking.models import BankTransaction
+
+        try:
+            transaction = BankTransaction.objects.select_related("counterparty").get(
+                id=transaction_id, tenant=user.tenant
+            )
+        except BankTransaction.DoesNotExist:
+            return CreatePaymentMatchResult(
+                success=False, error="Transaction not found"
+            )
+
+        # Check if match already exists
+        if InvoicePaymentMatch.objects.filter(
+            invoice=invoice, transaction=transaction
+        ).exists():
+            return CreatePaymentMatchResult(
+                success=False, error="Match already exists"
+            )
+
+        # Validate match type
+        valid_types = [c[0] for c in InvoicePaymentMatch.MatchType.choices]
+        if match_type not in valid_types:
+            match_type = InvoicePaymentMatch.MatchType.MANUAL
+
+        # Set confidence based on match type
+        confidence = Decimal("1.0") if match_type == "manual" else Decimal("0.8")
+
+        match = InvoicePaymentMatch.objects.create(
+            tenant=user.tenant,
+            invoice=invoice,
+            transaction=transaction,
+            match_type=match_type,
+            confidence=confidence,
+            matched_by=user if match_type == "manual" else None,
+        )
+
+        return CreatePaymentMatchResult(
+            success=True,
+            match=_convert_payment_match(match),
+        )
+
+    @strawberry.mutation
+    def delete_payment_match(
+        self, info: Info[Context, None], match_id: int
+    ) -> DeleteResult:
+        """Delete a payment match."""
+        user, err = check_perm(info, "invoices", "update")
+        if err:
+            return DeleteResult(success=False, error=err)
+
+        try:
+            match = InvoicePaymentMatch.objects.get(id=match_id, tenant=user.tenant)
+        except InvoicePaymentMatch.DoesNotExist:
+            return DeleteResult(success=False, error="Match not found")
+
+        match.delete()
+        return DeleteResult(success=True)
+
+    # ----- CSV Import / Bulk Upload -----
+
+    @strawberry.mutation
+    def upload_invoice_csv(
+        self, info: Info[Context, None], input: UploadInvoiceCsvInput
+    ) -> UploadInvoiceCsvResult:
+        """Upload a CSV file with invoice receiver mapping."""
+        import csv
+        import io
+
+        user, err = check_perm(info, "invoices", "generate")
+        if err:
+            return UploadInvoiceCsvResult(success=False, error=err)
+
+        # Validate extension
+        ext = os.path.splitext(input.filename)[1].lower()
+        if ext != ".csv":
+            return UploadInvoiceCsvResult(
+                success=False,
+                error="Only CSV files are accepted.",
+            )
+
+        # Decode base64
+        try:
+            file_bytes = base64.b64decode(input.file_content, validate=True)
+            content = file_bytes.decode("utf-8")
+        except Exception:
+            return UploadInvoiceCsvResult(
+                success=False, error="Invalid file content or encoding"
+            )
+
+        # Parse CSV
+        try:
+            reader = csv.DictReader(io.StringIO(content))
+            fieldnames = reader.fieldnames or []
+
+            # Validate required columns - accept 'emails' or 'receivers'
+            has_filename = "filename" in fieldnames
+            has_emails = "emails" in fieldnames or "receivers" in fieldnames
+            if not has_filename or not has_emails:
+                return UploadInvoiceCsvResult(
+                    success=False,
+                    error="CSV must contain 'filename' and 'emails' (or 'receivers') columns",
+                )
+            emails_column = "receivers" if "receivers" in fieldnames else "emails"
+
+            rows = list(reader)
+
+            # Validate row count
+            if len(rows) > 1000:
+                return UploadInvoiceCsvResult(
+                    success=False,
+                    error="CSV exceeds maximum of 1000 rows",
+                )
+
+        except csv.Error as e:
+            return UploadInvoiceCsvResult(
+                success=False, error=f"Invalid CSV format: {e}"
+            )
+
+        # Create the batch
+        batch = InvoiceImportBatch.objects.create(
+            tenant=user.tenant,
+            name=input.filename,
+            uploaded_by=user,
+            total_expected=len(rows),
+            total_uploaded=0,
+        )
+
+        # Create ImportedInvoice records for each row
+        import re
+        for row in rows:
+            filename = row.get("filename", "").strip()
+            emails_str = row.get(emails_column, "").strip()
+
+            if not filename:
+                continue
+
+            # Parse emails (semicolon or comma-separated)
+            emails = [
+                e.strip().lower()
+                for e in re.split(r"[;,]", emails_str)
+                if e.strip()
+            ]
+
+            ImportedInvoice.objects.create(
+                tenant=user.tenant,
+                import_batch=batch,
+                expected_filename=filename,
+                receiver_emails=emails,
+                upload_status=UploadStatus.PENDING,
+                extraction_status=ImportedInvoice.ExtractionStatus.PENDING,
+                original_filename=filename,
+                file_size=0,
+                created_by=user,
+            )
+
+        # Update batch counts
+        batch.update_counts()
+
+        return UploadInvoiceCsvResult(
+            success=True,
+            batch=_convert_import_batch(batch),
+            rows_processed=len(rows),
+        )
+
+    @strawberry.mutation
+    def upload_invoices(
+        self, info: Info[Context, None], inputs: List[BulkUploadInvoiceInput]
+    ) -> BulkUploadInvoicesResult:
+        """Upload multiple invoice PDFs at once."""
+        user, err = check_perm(info, "invoices", "generate")
+        if err:
+            return BulkUploadInvoicesResult(success=False, error=err)
+
+        results = []
+        total_uploaded = 0
+        total_failed = 0
+
+        for inp in inputs:
+            # Validate extension
+            ext = os.path.splitext(inp.filename)[1].lower()
+            if ext != ".pdf":
+                results.append(BulkUploadItemResult(
+                    filename=inp.filename,
+                    success=False,
+                    error="Only PDF files are accepted.",
+                ))
+                total_failed += 1
+                continue
+
+            # Decode base64
+            try:
+                file_bytes = base64.b64decode(inp.file_content, validate=True)
+            except Exception:
+                results.append(BulkUploadItemResult(
+                    filename=inp.filename,
+                    success=False,
+                    error="Invalid base64 file content",
+                ))
+                total_failed += 1
+                continue
+
+            # Validate size (20MB max)
+            max_size = 20 * 1024 * 1024
+            if len(file_bytes) > max_size:
+                results.append(BulkUploadItemResult(
+                    filename=inp.filename,
+                    success=False,
+                    error="File too large. Maximum size is 20MB",
+                ))
+                total_failed += 1
+                continue
+
+            # Try to match to expected invoice (case-insensitive, most recent pending)
+            expected = ImportedInvoice.objects.filter(
+                tenant=user.tenant,
+                expected_filename__iexact=inp.filename,
+                upload_status=UploadStatus.PENDING,
+            ).order_by("-created_at").first()
+
+            matched_expected = expected is not None
+
+            if expected:
+                # Update existing record
+                invoice = expected
+                invoice.pdf_file.save(inp.filename, ContentFile(file_bytes), save=False)
+                invoice.file_size = len(file_bytes)
+                invoice.upload_status = UploadStatus.UPLOADED
+                invoice.extraction_status = ImportedInvoice.ExtractionStatus.PENDING
+                invoice.save()
+
+                # Update batch counts
+                if invoice.import_batch:
+                    invoice.import_batch.update_counts()
+            else:
+                # Create new record
+                invoice = ImportedInvoice(
+                    tenant=user.tenant,
+                    original_filename=inp.filename,
+                    file_size=len(file_bytes),
+                    upload_status=UploadStatus.UPLOADED,
+                    extraction_status=ImportedInvoice.ExtractionStatus.PENDING,
+                    created_by=user,
+                )
+                invoice.pdf_file.save(inp.filename, ContentFile(file_bytes), save=False)
+                invoice.save()
+
+            results.append(BulkUploadItemResult(
+                filename=inp.filename,
+                success=True,
+                invoice=_convert_imported_invoice(invoice),
+                matched_expected=matched_expected,
+            ))
+            total_uploaded += 1
+
+        return BulkUploadInvoicesResult(
+            success=True,
+            results=results,
+            total_uploaded=total_uploaded,
+            total_failed=total_failed,
+        )
+
+    @strawberry.mutation
+    def delete_import_batch(
+        self, info: Info[Context, None], id: strawberry.ID
+    ) -> DeleteResult:
+        """Delete an import batch and its pending invoices."""
+        user, err = check_perm(info, "invoices", "delete")
+        if err:
+            return DeleteResult(success=False, error=err)
+
+        try:
+            batch = InvoiceImportBatch.objects.get(id=id, tenant=user.tenant)
+        except InvoiceImportBatch.DoesNotExist:
+            return DeleteResult(success=False, error="Batch not found")
+
+        # Delete pending invoices (those without PDFs)
+        pending_invoices = ImportedInvoice.objects.filter(
+            import_batch=batch,
+            upload_status=UploadStatus.PENDING,
+        )
+        pending_invoices.delete()
+
+        # Clear batch reference from uploaded invoices (keep them)
+        ImportedInvoice.objects.filter(import_batch=batch).update(import_batch=None)
+
+        # Delete the batch
+        batch.delete()
+        return DeleteResult(success=True)
+
 
 # =========================================================================
 # Converters
@@ -869,3 +2006,71 @@ def _get_template_type(tenant) -> InvoiceTemplateType:
             logo_url=None,
             references=[],
         )
+
+
+def _convert_payment_match(match: InvoicePaymentMatch) -> PaymentMatchType:
+    """Convert InvoicePaymentMatch to GraphQL type."""
+    return PaymentMatchType(
+        id=match.id,
+        transaction_id=match.transaction_id,
+        transaction_date=match.transaction.entry_date,
+        transaction_amount=match.transaction.amount,
+        counterparty_name=match.transaction.counterparty.name,
+        match_type=match.match_type,
+        confidence=match.confidence,
+        matched_at=match.matched_at.isoformat(),
+        matched_by_name=match.matched_by.email if match.matched_by else None,
+    )
+
+
+def _convert_imported_invoice(inv: ImportedInvoice) -> ImportedInvoiceType:
+    """Convert ImportedInvoice model to GraphQL type."""
+    # Get first payment match for paid_at date and transaction ID
+    payment_matches = list(inv.payment_matches.all())
+    first_match = payment_matches[0] if payment_matches else None
+    paid_at = first_match.transaction.entry_date if first_match else None
+    first_payment_transaction_id = first_match.transaction_id if first_match else None
+
+    return ImportedInvoiceType(
+        id=strawberry.ID(str(inv.id)),
+        invoice_number=inv.invoice_number or "",
+        invoice_date=inv.invoice_date,
+        total_amount=inv.total_amount,
+        currency=inv.currency,
+        customer_name=inv.customer_name or "",
+        customer_id=inv.customer_id,
+        customer_display_name=inv.customer.name if inv.customer else None,
+        contract_id=inv.contract_id,
+        contract_name=inv.contract.name if inv.contract else None,
+        original_filename=inv.original_filename,
+        file_size=inv.file_size,
+        pdf_url=inv.pdf_file.url if inv.pdf_file else None,
+        extraction_status=inv.extraction_status,
+        extraction_error=inv.extraction_error or "",
+        is_paid=inv.is_paid,
+        paid_at=paid_at,
+        first_payment_transaction_id=first_payment_transaction_id,
+        payment_matches=[
+            _convert_payment_match(m) for m in payment_matches
+        ],
+        created_at=inv.created_at.isoformat(),
+        created_by_name=inv.created_by.email if inv.created_by else None,
+        expected_filename=inv.expected_filename or "",
+        receiver_emails=inv.receiver_emails or [],
+        upload_status=inv.upload_status,
+        import_batch_id=inv.import_batch_id,
+    )
+
+
+def _convert_import_batch(batch: InvoiceImportBatch) -> InvoiceImportBatchType:
+    """Convert InvoiceImportBatch model to GraphQL type."""
+    pending_count = batch.total_expected - batch.total_uploaded
+    return InvoiceImportBatchType(
+        id=strawberry.ID(str(batch.id)),
+        name=batch.name,
+        total_expected=batch.total_expected,
+        total_uploaded=batch.total_uploaded,
+        pending_count=pending_count,
+        created_at=batch.created_at.isoformat(),
+        created_by_name=batch.uploaded_by.email if batch.uploaded_by else None,
+    )
