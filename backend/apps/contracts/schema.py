@@ -1643,7 +1643,6 @@ class ContractQuery:
 
         # Search filter (by customer name, contract name, or NetSuite IDs)
         if search:
-            from django.db.models import Q
             queryset = queryset.filter(
                 Q(customer__name__icontains=search) |
                 Q(name__icontains=search) |
@@ -1652,9 +1651,20 @@ class ContractQuery:
                 Q(po_number__icontains=search)
             )
 
-        # Status filter
+        # Status filter (accounts for effective_status: active contracts
+        # with end_date in the past are effectively "ended")
         if status:
-            queryset = queryset.filter(status=status)
+            if status == "active":
+                queryset = queryset.filter(status="active").filter(
+                    Q(end_date__isnull=True) | Q(end_date__gte=date.today())
+                )
+            elif status == "ended":
+                queryset = queryset.filter(
+                    Q(status="ended") |
+                    Q(status="active", end_date__lt=date.today())
+                )
+            else:
+                queryset = queryset.filter(status=status)
 
         # Sorting
         allowed_sort_fields = {
