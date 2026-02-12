@@ -15,6 +15,7 @@ import { RevenueForecast } from './features/forecast/RevenueForecast'
 import { SettingsLayout } from './features/settings/SettingsLayout'
 import { ContractImport } from './features/contracts/import/ContractImport'
 import { InvoiceExportPage } from './features/invoices/InvoiceExportPage'
+import { ImportedInvoiceList } from './features/invoices/ImportedInvoiceList'
 import { AuditLogPage } from './features/audit/AuditLogPage'
 import { BankingPage } from './features/banking/BankingPage'
 import { CounterpartyDetailPage } from './features/banking/CounterpartyDetailPage'
@@ -53,6 +54,7 @@ function App() {
         <Route path="settings/invoices/template" element={<SettingsLayout />} />
         <Route path="contracts/import" element={<ContractImport />} />
         <Route path="invoices/export" element={<InvoiceExportPage />} />
+        <Route path="invoices/imported" element={<ImportedInvoiceList />} />
         <Route path="banking" element={<BankingPage />} />
         <Route path="banking/counterparty/:id" element={<CounterpartyDetailPage />} />
         <Route path="liquidity-forecast" element={<LiquidityForecast />} />

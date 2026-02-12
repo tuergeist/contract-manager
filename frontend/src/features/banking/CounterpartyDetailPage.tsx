@@ -14,6 +14,9 @@ import {
   Pencil,
   Check,
   GitMerge,
+  Link as LinkIcon,
+  Unlink,
+  User,
 } from 'lucide-react'
 import {
   Select,
@@ -52,6 +55,10 @@ const COUNTERPARTY_DETAIL = gql`
       transactionCount
       firstDate
       lastDate
+      customer {
+        id
+        name
+      }
     }
   }
 `
@@ -160,6 +167,50 @@ const MERGE_COUNTERPARTIES = gql`
   }
 `
 
+const SEARCH_CUSTOMERS = gql`
+  query SearchCustomers($search: String, $activeOnly: Boolean) {
+    customers(search: $search, activeOnly: $activeOnly) {
+      items {
+        id
+        name
+      }
+      totalCount
+    }
+  }
+`
+
+const LINK_COUNTERPARTY_TO_CUSTOMER = gql`
+  mutation LinkCounterpartyToCustomer($counterpartyId: ID!, $customerId: Int!) {
+    linkCounterpartyToCustomer(counterpartyId: $counterpartyId, customerId: $customerId) {
+      success
+      error
+      counterparty {
+        id
+        customer {
+          id
+          name
+        }
+      }
+    }
+  }
+`
+
+const UNLINK_COUNTERPARTY_FROM_CUSTOMER = gql`
+  mutation UnlinkCounterpartyFromCustomer($counterpartyId: ID!) {
+    unlinkCounterpartyFromCustomer(counterpartyId: $counterpartyId) {
+      success
+      error
+      counterparty {
+        id
+        customer {
+          id
+          name
+        }
+      }
+    }
+  }
+`
+
 interface Counterparty {
   id: string
   name: string
@@ -190,6 +241,12 @@ interface CounterpartySummary {
   transactionCount: number
   firstDate: string
   lastDate: string
+  customer: { id: number; name: string } | null
+}
+
+interface CustomerSearchResult {
+  id: number
+  name: string
 }
 
 export function CounterpartyDetailPage() {
@@ -212,6 +269,12 @@ export function CounterpartyDetailPage() {
   const [mergeTargetName, setMergeTargetName] = useState<string | null>(null)
   const [mergePopoverOpen, setMergePopoverOpen] = useState(false)
 
+  // Customer link state
+  const [customerLinkDialogOpen, setCustomerLinkDialogOpen] = useState(false)
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('')
+  const [customerPopoverOpen, setCustomerPopoverOpen] = useState(false)
+
   // Filters
   const [filterAccountId, setFilterAccountId] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -230,6 +293,11 @@ export function CounterpartyDetailPage() {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300)
     return () => clearTimeout(timer)
   }, [searchQuery])
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedCustomerSearch(customerSearch), 300)
+    return () => clearTimeout(timer)
+  }, [customerSearch])
 
   useEffect(() => {
     setPage(1)
@@ -281,11 +349,24 @@ export function CounterpartyDetailPage() {
     (cp: { id: string }) => cp.id !== id // Exclude current counterparty
   )
 
+  // Search customers for linking
+  const { data: customerSearchData } = useQuery(SEARCH_CUSTOMERS, {
+    variables: { search: debouncedCustomerSearch, activeOnly: true },
+    skip: !customerLinkDialogOpen || !debouncedCustomerSearch,
+  })
+  const customerResults: CustomerSearchResult[] = customerSearchData?.customers?.items ?? []
+
   // Mutations
   const [updateCounterparty, { loading: updating }] = useMutation(UPDATE_COUNTERPARTY, {
     refetchQueries: ['CounterpartyDetail'],
   })
   const [mergeCounterparties, { loading: merging }] = useMutation(MERGE_COUNTERPARTIES)
+  const [linkCustomer, { loading: linking }] = useMutation(LINK_COUNTERPARTY_TO_CUSTOMER, {
+    refetchQueries: ['CounterpartyDetail'],
+  })
+  const [unlinkCustomer, { loading: unlinking }] = useMutation(UNLINK_COUNTERPARTY_FROM_CUSTOMER, {
+    refetchQueries: ['CounterpartyDetail'],
+  })
 
   // Start editing
   const handleStartEdit = () => {
@@ -331,6 +412,42 @@ export function CounterpartyDetailPage() {
     } catch (err) {
       console.error('Merge error:', err)
       alert('Failed to merge counterparties')
+    }
+  }
+
+  // Handle customer link
+  const handleLinkCustomer = async (customerId: number) => {
+    if (!id) return
+    try {
+      const { data } = await linkCustomer({
+        variables: { counterpartyId: id, customerId },
+      })
+      if (data?.linkCounterpartyToCustomer?.success) {
+        setCustomerLinkDialogOpen(false)
+        setCustomerSearch('')
+        setCustomerPopoverOpen(false)
+      } else {
+        alert(data?.linkCounterpartyToCustomer?.error || 'Failed to link customer')
+      }
+    } catch (err) {
+      console.error('Link error:', err)
+      alert('Failed to link customer')
+    }
+  }
+
+  // Handle customer unlink
+  const handleUnlinkCustomer = async () => {
+    if (!id) return
+    try {
+      const { data } = await unlinkCustomer({
+        variables: { counterpartyId: id },
+      })
+      if (!data?.unlinkCounterpartyFromCustomer?.success) {
+        alert(data?.unlinkCounterpartyFromCustomer?.error || 'Failed to unlink customer')
+      }
+    } catch (err) {
+      console.error('Unlink error:', err)
+      alert('Failed to unlink customer')
     }
   }
 
@@ -455,9 +572,37 @@ export function CounterpartyDetailPage() {
             >
               <GitMerge className="h-4 w-4" />
             </button>
+            <button
+              onClick={() => setCustomerLinkDialogOpen(true)}
+              className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              title={t('banking.linkToCustomer')}
+            >
+              <LinkIcon className="h-4 w-4" />
+            </button>
           </>
         )}
       </div>
+
+      {/* Linked Customer */}
+      {summary?.customer && (
+        <div className="mt-2 flex items-center gap-2">
+          <User className="h-4 w-4 text-blue-600" />
+          <Link
+            to={`/customers/${summary.customer.id}`}
+            className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+          >
+            {summary.customer.name}
+          </Link>
+          <button
+            onClick={handleUnlinkCustomer}
+            disabled={unlinking}
+            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600"
+            title={t('banking.unlinkCustomer')}
+          >
+            {unlinking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlink className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+      )}
 
       {/* IBAN/BIC if available */}
       {(summary?.iban || summary?.bic) && (
@@ -534,6 +679,70 @@ export function CounterpartyDetailPage() {
             >
               {merging && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {t('banking.merge')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Customer Link Dialog */}
+      <Dialog open={customerLinkDialogOpen} onOpenChange={(open) => {
+        setCustomerLinkDialogOpen(open)
+        if (!open) {
+          setCustomerSearch('')
+          setCustomerPopoverOpen(false)
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('banking.linkToCustomer')}</DialogTitle>
+            <DialogDescription>
+              {t('banking.linkCustomerDescription', { name: summary?.name })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="mb-2 block text-sm font-medium text-gray-700">
+              {t('banking.selectCustomerToLink')}
+            </label>
+            <Popover open={customerPopoverOpen} onOpenChange={setCustomerPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-between"
+                >
+                  {t('banking.searchCustomers')}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[400px] p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder={t('common.search')}
+                    value={customerSearch}
+                    onValueChange={setCustomerSearch}
+                  />
+                  <CommandList>
+                    <CommandEmpty>{t('banking.noCustomersFound')}</CommandEmpty>
+                    {customerResults.map((customer) => (
+                      <CommandItem
+                        key={customer.id}
+                        value={String(customer.id)}
+                        onSelect={() => handleLinkCustomer(customer.id)}
+                        disabled={linking}
+                      >
+                        <div className="flex w-full items-center">
+                          <User className="mr-2 h-4 w-4 text-gray-400" />
+                          <span>{customer.name}</span>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCustomerLinkDialogOpen(false)}>
+              {t('common.cancel')}
             </Button>
           </DialogFooter>
         </DialogContent>

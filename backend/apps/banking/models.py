@@ -15,6 +15,14 @@ class Counterparty(TenantModel):
     name = models.CharField(max_length=255)
     iban = models.CharField(max_length=50, blank=True)
     bic = models.CharField(max_length=20, blank=True)
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="counterparties",
+        help_text="Linked customer for payment matching",
+    )
 
     class Meta:
         verbose_name_plural = "counterparties"

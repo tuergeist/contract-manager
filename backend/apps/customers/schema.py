@@ -62,6 +62,7 @@ class CustomerType:
     is_active: auto
     synced_at: auto
     created_at: auto
+    billing_emails: auto
 
     @strawberry.field
     def hubspot_url(self, info: Info[Context, None]) -> str | None:
@@ -190,6 +191,24 @@ class AddCustomerLinkInput:
     customer_id: strawberry.ID
     name: str
     url: str
+
+
+@strawberry.input
+class UpdateBillingEmailsInput:
+    """Input for updating customer billing emails."""
+
+    customer_id: strawberry.ID
+    add_emails: List[str] | None = None
+    remove_emails: List[str] | None = None
+
+
+@strawberry.type
+class UpdateBillingEmailsResult:
+    """Result of updating billing emails."""
+
+    success: bool = False
+    error: str | None = None
+    billing_emails: List[str] | None = None
 
 
 @strawberry.type
@@ -456,3 +475,60 @@ class CustomerMutation:
             return DeleteResult(success=True)
         except Exception as e:
             return DeleteResult(error=str(e))
+
+    # =========================================================================
+    # Billing Email Mutations
+    # =========================================================================
+
+    @strawberry.mutation
+    def update_customer_billing_emails(
+        self,
+        info: Info[Context, None],
+        input: UpdateBillingEmailsInput,
+    ) -> UpdateBillingEmailsResult:
+        """Add or remove billing emails for a customer."""
+        import re
+
+        user, err = check_perm(info, "customers", "write")
+        if err:
+            return UpdateBillingEmailsResult(error=err)
+        if not user.tenant:
+            return UpdateBillingEmailsResult(error="No tenant assigned")
+
+        # Verify customer belongs to tenant
+        customer = Customer.objects.filter(
+            tenant=user.tenant, id=input.customer_id
+        ).first()
+        if not customer:
+            return UpdateBillingEmailsResult(error="Customer not found")
+
+        # Email validation regex
+        email_pattern = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+        # Start with current emails (as lowercase set)
+        current_emails = set(e.lower() for e in (customer.billing_emails or []))
+
+        # Add new emails
+        if input.add_emails:
+            for email in input.add_emails:
+                email_lower = email.strip().lower()
+                if not email_pattern.match(email_lower):
+                    return UpdateBillingEmailsResult(
+                        error=f"Invalid email format: {email}"
+                    )
+                current_emails.add(email_lower)
+
+        # Remove emails
+        if input.remove_emails:
+            for email in input.remove_emails:
+                email_lower = email.strip().lower()
+                current_emails.discard(email_lower)
+
+        # Save updated list
+        customer.billing_emails = sorted(current_emails)
+        customer.save(update_fields=["billing_emails", "updated_at"])
+
+        return UpdateBillingEmailsResult(
+            success=True,
+            billing_emails=customer.billing_emails,
+        )

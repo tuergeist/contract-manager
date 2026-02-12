@@ -37,6 +37,11 @@ class Customer(TenantModel):
     is_active = models.BooleanField(default=True)
     synced_at = models.DateTimeField(null=True, blank=True)
     hubspot_deleted_at = models.DateTimeField(null=True, blank=True)
+    billing_emails = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of billing contact email addresses",
+    )
 
     class Meta:
         ordering = ["name"]

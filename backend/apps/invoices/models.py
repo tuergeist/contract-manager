@@ -22,6 +22,12 @@ def reference_pdf_upload_path(instance, filename):
     return f"uploads/{tenant_id}/invoices/references/{unique_filename}"
 
 
+def imported_invoice_upload_path(instance, filename):
+    """Upload path: uploads/{tenant_id}/invoices/imported/{uuid}.pdf"""
+    unique_filename = f"{uuid.uuid4().hex}.pdf"
+    return f"uploads/{instance.tenant_id}/invoices/imported/{unique_filename}"
+
+
 class CompanyLegalData(TimestampedModel):
     """German HGB/UStG §14 mandatory company data for invoices."""
 
@@ -319,3 +325,237 @@ class InvoiceRecord(TenantModel):
 
     def __str__(self):
         return f"Invoice {self.invoice_number} - {self.customer_name}"
+
+
+class UploadStatus(models.TextChoices):
+    """Upload status for imported invoices."""
+
+    PENDING = "pending", "Pending Upload"
+    UPLOADED = "uploaded", "Uploaded"
+
+
+class InvoiceImportBatch(TenantModel):
+    """A batch of expected invoices from a CSV upload."""
+
+    name = models.CharField(
+        max_length=255,
+        help_text="Batch name (CSV filename or user-provided)",
+    )
+    uploaded_by = models.ForeignKey(
+        "tenants.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="invoice_import_batches",
+    )
+    total_expected = models.PositiveIntegerField(
+        default=0,
+        help_text="Total number of expected invoices from CSV",
+    )
+    total_uploaded = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of invoices that have been uploaded",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.total_uploaded}/{self.total_expected})"
+
+    def update_counts(self):
+        """Update total_expected and total_uploaded from related invoices."""
+        from django.db.models import Count, Q
+
+        counts = self.invoices.aggregate(
+            total=Count("id"),
+            uploaded=Count("id", filter=Q(upload_status=UploadStatus.UPLOADED)),
+        )
+        self.total_expected = counts["total"]
+        self.total_uploaded = counts["uploaded"]
+        self.save(update_fields=["total_expected", "total_uploaded"])
+
+
+class ImportedInvoice(TenantModel):
+    """An imported outgoing invoice PDF with extracted metadata."""
+
+    class ExtractionStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        EXTRACTING = "extracting", "Extracting"
+        EXTRACTED = "extracted", "Extracted"
+        EXTRACTION_FAILED = "extraction_failed", "Extraction Failed"
+        CONFIRMED = "confirmed", "Confirmed"
+
+    # Invoice identification (from extraction)
+    invoice_number = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Invoice number extracted from PDF",
+    )
+    invoice_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Invoice date extracted from PDF",
+    )
+    total_amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Total gross amount extracted from PDF",
+    )
+    currency = models.CharField(
+        max_length=3,
+        default="EUR",
+        help_text="Currency code",
+    )
+    customer_name = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Customer name extracted from PDF",
+    )
+
+    # Linked customer (after matching)
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="imported_invoices",
+        help_text="Matched customer record",
+    )
+
+    # Linked contract
+    contract = models.ForeignKey(
+        "contracts.Contract",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="imported_invoices",
+        help_text="Associated contract",
+    )
+
+    # PDF file storage
+    pdf_file = models.FileField(
+        upload_to=imported_invoice_upload_path,
+        help_text="Uploaded invoice PDF",
+    )
+    original_filename = models.CharField(
+        max_length=255,
+        help_text="Original filename as uploaded",
+    )
+    file_size = models.PositiveIntegerField(
+        help_text="File size in bytes",
+    )
+
+    # Extraction status
+    extraction_status = models.CharField(
+        max_length=20,
+        choices=ExtractionStatus.choices,
+        default=ExtractionStatus.PENDING,
+    )
+    extraction_error = models.TextField(
+        blank=True,
+        help_text="Error message if extraction failed",
+    )
+
+    # Audit
+    created_by = models.ForeignKey(
+        "tenants.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="imported_invoices",
+    )
+
+    # Receiver mapping fields (from CSV import)
+    import_batch = models.ForeignKey(
+        InvoiceImportBatch,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="invoices",
+        help_text="The import batch this invoice belongs to",
+    )
+    expected_filename = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Expected filename from CSV (for matching uploaded PDFs)",
+    )
+    receiver_emails = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of receiver email addresses from CSV",
+    )
+    upload_status = models.CharField(
+        max_length=20,
+        choices=UploadStatus.choices,
+        default=UploadStatus.UPLOADED,
+        help_text="Upload status: pending (from CSV) or uploaded (has PDF)",
+    )
+
+    class Meta:
+        ordering = ["-invoice_date", "-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "invoice_number"]),
+            models.Index(fields=["tenant", "extraction_status"]),
+            models.Index(fields=["tenant", "upload_status"]),
+            models.Index(fields=["tenant", "expected_filename"]),
+        ]
+
+    def __str__(self):
+        if self.invoice_number:
+            return f"Imported: {self.invoice_number}"
+        return f"Imported invoice (pending extraction)"
+
+    @property
+    def is_paid(self) -> bool:
+        """Check if this invoice has at least one payment match."""
+        return self.payment_matches.exists()
+
+
+class InvoicePaymentMatch(TenantModel):
+    """A match between an imported invoice and a bank transaction (payment)."""
+
+    class MatchType(models.TextChoices):
+        INVOICE_NUMBER = "invoice_number", "Invoice Number Match"
+        AMOUNT_CUSTOMER = "amount_customer", "Amount + Customer Match"
+        MANUAL = "manual", "Manual Match"
+
+    invoice = models.ForeignKey(
+        ImportedInvoice,
+        on_delete=models.CASCADE,
+        related_name="payment_matches",
+    )
+    transaction = models.ForeignKey(
+        "banking.BankTransaction",
+        on_delete=models.CASCADE,
+        related_name="invoice_matches",
+    )
+    match_type = models.CharField(
+        max_length=20,
+        choices=MatchType.choices,
+    )
+    confidence = models.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        help_text="Match confidence score (0.00-1.00)",
+    )
+    matched_at = models.DateTimeField(auto_now_add=True)
+    matched_by = models.ForeignKey(
+        "tenants.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="User who created manual match (null for auto matches)",
+    )
+
+    class Meta:
+        ordering = ["-matched_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["invoice", "transaction"],
+                name="unique_invoice_transaction_match",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Match: {self.invoice.invoice_number} <- {self.transaction}"
