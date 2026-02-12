@@ -1303,7 +1303,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], id: strawberry.ID, input: UpdateImportedInvoiceInput
     ) -> ImportedInvoiceResult:
         """Update/correct fields on an imported invoice."""
-        user, err = check_perm(info, "invoices", "update")
+        user, err = check_perm(info, "invoices", "generate")
         if err:
             return ImportedInvoiceResult(success=False, error=err)
 
@@ -1375,7 +1375,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], id: strawberry.ID
     ) -> ImportedInvoiceResult:
         """Confirm an extracted invoice, marking it as ready for payment matching."""
-        user, err = check_perm(info, "invoices", "update")
+        user, err = check_perm(info, "invoices", "generate")
         if err:
             return ImportedInvoiceResult(success=False, error=err)
 
@@ -1416,7 +1416,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], id: strawberry.ID
     ) -> ImportedInvoiceResult:
         """Run extraction on a pending or failed invoice."""
-        user, err = check_perm(info, "invoices", "update")
+        user, err = check_perm(info, "invoices", "generate")
         if err:
             return ImportedInvoiceResult(success=False, error=err)
 
@@ -1465,7 +1465,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], id: strawberry.ID
     ) -> ImportedInvoiceResult:
         """Re-run extraction on an already extracted invoice."""
-        user, err = check_perm(info, "invoices", "update")
+        user, err = check_perm(info, "invoices", "generate")
         if err:
             return ImportedInvoiceResult(success=False, error=err)
 
@@ -1511,7 +1511,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], invoice_id: strawberry.ID, customer_id: int
     ) -> ImportedInvoiceResult:
         """Link an imported invoice to a customer and transfer receiver emails."""
-        user, err = check_perm(info, "invoices", "update")
+        user, err = check_perm(info, "invoices", "generate")
         if err:
             return ImportedInvoiceResult(success=False, error=err)
 
@@ -1568,7 +1568,7 @@ class InvoiceMutation:
         contract_id: int | None,
     ) -> ImportedInvoiceResult:
         """Assign a contract to an imported invoice, or remove the assignment."""
-        user, err = check_perm(info, "invoices", "update")
+        user, err = check_perm(info, "invoices", "generate")
         if err:
             return ImportedInvoiceResult(success=False, error=err)
 
@@ -1622,7 +1622,7 @@ class InvoiceMutation:
         match_type: str = "manual",
     ) -> CreatePaymentMatchResult:
         """Create a payment match between an invoice and a transaction."""
-        user, err = check_perm(info, "invoices", "update")
+        user, err = check_perm(info, "invoices", "generate")
         if err:
             return CreatePaymentMatchResult(success=False, error=err)
 
@@ -1679,7 +1679,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], match_id: int
     ) -> DeleteResult:
         """Delete a payment match."""
-        user, err = check_perm(info, "invoices", "update")
+        user, err = check_perm(info, "invoices", "generate")
         if err:
             return DeleteResult(success=False, error=err)
 
