@@ -383,6 +383,11 @@ class ContractType:
         return [todo_to_type(todo) for todo in todos]
 
     @strawberry.field
+    def time_tracking_mappings_count(self) -> int:
+        """Get the number of time tracking project mappings for this contract."""
+        return TimeTrackingProjectMapping.objects.filter(contract=self).count()
+
+    @strawberry.field
     def effective_end_date(self) -> date | None:
         """Get the effective end date for total value calculation."""
         return self.get_effective_end_date()
@@ -2258,41 +2263,50 @@ class ContractMutation:
 
                 # Create amendment record only for non-draft contracts
                 if item.contract.status != Contract.Status.DRAFT:
-                    # Determine amendment type
-                    item_name = item.product.name if item.product else item.description[:50]
-                    if input.product_id is not None and old_values["product_id"] != str(input.product_id):
-                        amendment_type = ContractAmendment.AmendmentType.TERMS_CHANGED
-                        description = f"Changed product from {old_values['product_name'] or 'none'} to {item_name}"
-                    elif input.quantity is not None and old_values["quantity"] != input.quantity:
-                        amendment_type = ContractAmendment.AmendmentType.QUANTITY_CHANGED
-                        description = f"Changed {item_name} quantity from {old_values['quantity']} to {input.quantity}"
-                    elif input.unit_price is not None:
-                        amendment_type = ContractAmendment.AmendmentType.PRICE_CHANGED
-                        description = f"Changed {item_name} price from {old_values['unit_price']} to {input.unit_price}"
-                    else:
-                        amendment_type = ContractAmendment.AmendmentType.TERMS_CHANGED
-                        description = f"Updated {item_name}"
+                    new_values = {
+                        "quantity": item.quantity,
+                        "unit_price": str(item.unit_price),
+                        "price_source": item.price_source,
+                        "description": item.description,
+                        "product_id": str(item.product_id) if item.product_id else None,
+                    }
 
-                    ContractAmendment.objects.create(
-                        tenant=user.tenant,
-                        contract=item.contract,
-                        effective_date=date.today(),
-                        type=amendment_type,
-                        description=description,
-                        changes={
-                            "item_id": str(item.id),
-                            "product_name": item.product.name if item.product else None,
-                            "description": item.description,
-                            "old_values": old_values,
-                            "new_values": {
-                                "quantity": item.quantity,
-                                "unit_price": str(item.unit_price),
-                                "price_source": item.price_source,
-                                "description": item.description,
-                                "product_id": str(item.product_id) if item.product_id else None,
-                            },
-                        },
+                    # Only create amendment if something actually changed
+                    has_changes = any(
+                        new_values.get(k) != old_values.get(k)
+                        for k in ("quantity", "unit_price", "price_source", "description", "product_id")
                     )
+
+                    if has_changes:
+                        # Determine amendment type
+                        item_name = item.product.name if item.product else item.description[:50]
+                        if input.product_id is not None and old_values["product_id"] != str(input.product_id):
+                            amendment_type = ContractAmendment.AmendmentType.TERMS_CHANGED
+                            description = f"Changed product from {old_values['product_name'] or 'none'} to {item_name}"
+                        elif input.quantity is not None and old_values["quantity"] != input.quantity:
+                            amendment_type = ContractAmendment.AmendmentType.QUANTITY_CHANGED
+                            description = f"Changed {item_name} quantity from {old_values['quantity']} to {input.quantity}"
+                        elif input.unit_price is not None and old_values["unit_price"] != str(input.unit_price):
+                            amendment_type = ContractAmendment.AmendmentType.PRICE_CHANGED
+                            description = f"Changed {item_name} price from {old_values['unit_price']} to {input.unit_price}"
+                        else:
+                            amendment_type = ContractAmendment.AmendmentType.TERMS_CHANGED
+                            description = f"Updated {item_name}"
+
+                        ContractAmendment.objects.create(
+                            tenant=user.tenant,
+                            contract=item.contract,
+                            effective_date=date.today(),
+                            type=amendment_type,
+                            description=description,
+                            changes={
+                                "item_id": str(item.id),
+                                "product_name": item.product.name if item.product else None,
+                                "description": item.description,
+                                "old_values": old_values,
+                                "new_values": new_values,
+                            },
+                        )
 
             # Get price periods
             price_periods = [
@@ -3424,6 +3438,16 @@ class ContractImportMutation:
                                 error=f"Existing item not found: {item_input.existing_item_id}",
                             )
 
+                        # Capture old values before update
+                        old_item_values = {
+                            "product_id": str(existing_item.product_id) if existing_item.product_id else None,
+                            "description": existing_item.description,
+                            "quantity": existing_item.quantity,
+                            "unit_price": str(existing_item.unit_price),
+                            "price_period": existing_item.price_period,
+                            "is_one_off": existing_item.is_one_off,
+                        }
+
                         existing_item.product = product
                         existing_item.description = item_input.description
                         existing_item.quantity = item_input.quantity
@@ -3433,13 +3457,22 @@ class ContractImportMutation:
                         existing_item.is_one_off = item_input.is_one_off
                         existing_item.save()
 
-                        if contract.status != Contract.Status.DRAFT:
+                        new_item_values = {
+                            "product_id": str(product.id) if product else None,
+                            "description": item_input.description,
+                            "quantity": item_input.quantity,
+                            "unit_price": str(item_input.unit_price),
+                            "price_period": item_input.price_period,
+                            "is_one_off": item_input.is_one_off,
+                        }
+
+                        if contract.status != Contract.Status.DRAFT and old_item_values != new_item_values:
                             item_name = product.name if product else item_input.description[:50]
                             ContractAmendment.objects.create(
                                 tenant=user.tenant,
                                 contract=contract,
                                 effective_date=date.today(),
-                                type=ContractAmendment.AmendmentType.PRICE_CHANGE,
+                                type=ContractAmendment.AmendmentType.PRICE_CHANGED,
                                 description=f"Updated {item_name} (PDF import)",
                                 changes={
                                     "item_id": str(existing_item.id),

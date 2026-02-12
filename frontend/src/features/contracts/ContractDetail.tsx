@@ -193,6 +193,7 @@ const CONTRACT_DETAIL_QUERY = gql`
         contractItemId
         customerId
       }
+      timeTrackingMappingsCount
     }
   }
 `
@@ -529,6 +530,7 @@ interface Contract {
   attachments: Attachment[]
   links: ContractLink[]
   todos: TodoItem[]
+  timeTrackingMappingsCount: number
 }
 
 function SortableRow({
@@ -1001,10 +1003,17 @@ export function ContractDetail() {
               activeTab === 'timeTracking'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            } ${
+              (contract.timeTrackingMappingsCount || 0) > 0
+                ? 'bg-green-100 rounded-t-md'
+                : ''
             }`}
           >
             <Clock className="h-4 w-4" />
             {t('timeTracking.title')}
+            {(contract.timeTrackingMappingsCount || 0) > 0 && (
+              <span className="text-xs">({contract.timeTrackingMappingsCount})</span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('activity')}

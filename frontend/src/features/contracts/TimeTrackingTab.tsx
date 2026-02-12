@@ -171,7 +171,14 @@ export function TimeTrackingTab({ contractId, customerName }: TimeTrackingTabPro
                     <td className="py-2">
                       <div className="flex items-center gap-2">
                         <Link2 className="h-4 w-4 text-gray-400" />
-                        {m.externalProjectName}
+                        <a
+                          href={`https://my.clockodo.com/de/projects/${m.externalProjectId}/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {m.externalProjectName}
+                        </a>
                       </div>
                     </td>
                     <td className="py-2 text-gray-600">{m.externalCustomerName}</td>

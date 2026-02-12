@@ -115,20 +115,26 @@ class ClockodoProvider(TimeTrackingProvider):
         date_from: date | None = None,
         date_to: date | None = None,
     ) -> TimeTrackingSummary:
-        """Get aggregated time data from Clockodo for the given projects."""
+        """Get aggregated time data from Clockodo for the given projects.
+
+        Uses the entrygroups endpoint for efficient aggregation instead of
+        fetching individual entries.
+        """
         if not project_ids:
             return TimeTrackingSummary(total_hours=0, total_revenue=0)
 
         # Build time range params (ISO 8601 UTC format required)
-        params: dict = {}
-        if date_from:
-            params["time_since"] = f"{date_from.isoformat()}T00:00:00Z"
-        else:
-            params["time_since"] = "2000-01-01T00:00:00Z"
+        # Note: Clockodo rejects far-future dates, so use today as max
+        time_since = f"{date_from.isoformat()}T00:00:00Z" if date_from else "2000-01-01T00:00:00Z"
         if date_to:
-            params["time_until"] = f"{date_to.isoformat()}T23:59:59Z"
+            time_until = f"{date_to.isoformat()}T23:59:59Z"
         else:
-            params["time_until"] = "2099-12-31T23:59:59Z"
+            time_until = f"{date.today().isoformat()}T23:59:59Z"
+
+        total_hours = 0.0
+        total_revenue = 0.0
+        service_data: dict[str, dict] = defaultdict(lambda: {"hours": 0.0, "revenue": 0.0})
+        month_data: dict[str, dict] = defaultdict(lambda: {"hours": 0.0, "revenue": 0.0})
 
         # Fetch services for name lookup
         services_by_id: dict[int, str] = {}
@@ -139,44 +145,63 @@ class ClockodoProvider(TimeTrackingProvider):
         except Exception as e:
             logger.warning("Failed to fetch Clockodo services: %s", e)
 
-        total_hours = 0.0
-        total_revenue = 0.0
-        service_data: dict[str, dict] = defaultdict(lambda: {"hours": 0.0, "revenue": 0.0})
-        month_data: dict[str, dict] = defaultdict(lambda: {"hours": 0.0, "revenue": 0.0})
-
-        # Fetch entries for each project
+        # Use entrygroups endpoint for aggregated data per project
         for project_id in project_ids:
             try:
-                entry_params = {
-                    **params,
+                # Get total for this project (grouping is required)
+                params = {
+                    "time_since": time_since,
+                    "time_until": time_until,
                     "filter[projects_id]": project_id,
+                    "grouping[]": "projects_id",
                 }
-                entries = self._get_all_pages("entries", "entries", entry_params)
-            except Exception as e:
-                logger.error("Failed to fetch entries for project %s: %s", project_id, e)
-                continue
+                data = self._get("entrygroups", params)
+                groups = data.get("groups", [])
 
-            for entry in entries:
-                # Duration is in seconds
-                duration_seconds = entry.get("duration", 0) or 0
-                duration_hours = duration_seconds / 3600.0
-                revenue = float(entry.get("revenue", 0) or 0)
+                # The response contains a single group with duration and revenue
+                for group in groups:
+                    duration_seconds = group.get("duration", 0) or 0
+                    duration_hours = duration_seconds / 3600.0
+                    revenue = float(group.get("revenue", 0) or 0)
+                    total_hours += duration_hours
+                    total_revenue += revenue
 
-                total_hours += duration_hours
-                total_revenue += revenue
+                # Get breakdown by service
+                params_by_service = {
+                    "time_since": time_since,
+                    "time_until": time_until,
+                    "filter[projects_id]": project_id,
+                    "grouping[]": "services_id",
+                }
+                data_by_service = self._get("entrygroups", params_by_service)
+                for group in data_by_service.get("groups", []):
+                    service_id = group.get("group")  # The group value is the service ID
+                    service_name = services_by_id.get(int(service_id) if service_id else 0, "") or group.get("name", "") or "Other"
+                    duration_seconds = group.get("duration", 0) or 0
+                    duration_hours = duration_seconds / 3600.0
+                    revenue = float(group.get("revenue", 0) or 0)
+                    service_data[service_name]["hours"] += duration_hours
+                    service_data[service_name]["revenue"] += revenue
 
-                # By service — look up name from services_id
-                services_id = entry.get("services_id")
-                service_name = services_by_id.get(services_id, "") or entry.get("text", "") or "Other"
-                service_data[service_name]["hours"] += duration_hours
-                service_data[service_name]["revenue"] += revenue
-
-                # By month — time_since is ISO 8601 like "2024-03-15T08:00:00Z"
-                time_since = entry.get("time_since", "")
-                if time_since and len(time_since) >= 7:
-                    month_key = time_since[:7]  # "YYYY-MM"
+                # Get breakdown by month
+                params_by_month = {
+                    "time_since": time_since,
+                    "time_until": time_until,
+                    "filter[projects_id]": project_id,
+                    "grouping[]": "month",
+                }
+                data_by_month = self._get("entrygroups", params_by_month)
+                for group in data_by_month.get("groups", []):
+                    month_key = group.get("group", "")  # e.g., "2024-03"
+                    duration_seconds = group.get("duration", 0) or 0
+                    duration_hours = duration_seconds / 3600.0
+                    revenue = float(group.get("revenue", 0) or 0)
                     month_data[month_key]["hours"] += duration_hours
                     month_data[month_key]["revenue"] += revenue
+
+            except Exception as e:
+                logger.error("Failed to fetch entrygroups for project %s: %s", project_id, e)
+                continue
 
         by_service = [
             {"service_name": k, "hours": round(v["hours"], 2), "revenue": round(v["revenue"], 2)}
