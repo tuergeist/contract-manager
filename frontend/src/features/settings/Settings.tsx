@@ -36,6 +36,12 @@ const SAVE_TIME_TRACKING_SETTINGS = gql`
   }
 `
 
+const UPDATE_TIME_TRACKING_DISPLAY = gql`
+  mutation UpdateTimeTrackingDisplay($showRevenue: Boolean!) {
+    updateTimeTrackingDisplay(showRevenue: $showRevenue)
+  }
+`
+
 const HUBSPOT_SETTINGS_QUERY = gql`
   query HubSpotSettings {
     hubspotSettings {
@@ -136,6 +142,7 @@ export function Settings({ showHeader = true }: SettingsProps) {
 
   const { data: ttSettingsData, refetch: refetchTtSettings } = useQuery(TIME_TRACKING_SETTINGS_QUERY)
   const [saveTtSettings, { loading: savingTt }] = useMutation(SAVE_TIME_TRACKING_SETTINGS)
+  const [updateTtDisplay] = useMutation(UPDATE_TIME_TRACKING_DISPLAY)
 
   const { data: settingsData, refetch: refetchSettings } = useQuery(HUBSPOT_SETTINGS_QUERY)
   const [saveSettings, { loading: saving }] = useMutation(SAVE_HUBSPOT_SETTINGS)
@@ -736,7 +743,11 @@ export function Settings({ showHeader = true }: SettingsProps) {
                 type="checkbox"
                 id="ttShowRevenue"
                 checked={ttShowRevenue}
-                onChange={(e) => setTtShowRevenue(e.target.checked)}
+                onChange={async (e) => {
+                  const newValue = e.target.checked
+                  setTtShowRevenue(newValue)
+                  await updateTtDisplay({ variables: { showRevenue: newValue } })
+                }}
                 className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
               <label htmlFor="ttShowRevenue" className="text-sm text-gray-700">

@@ -449,6 +449,24 @@ class TenantMutation:
         )
 
     @strawberry.mutation
+    def update_time_tracking_display(
+        self,
+        info: Info[Context, None],
+        show_revenue: bool,
+    ) -> bool:
+        """Update time tracking display settings (no credentials required)."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return False
+
+        tenant = user.tenant
+        config = tenant.time_tracking_config or {}
+        config["show_revenue"] = show_revenue
+        tenant.time_tracking_config = config
+        tenant.save(update_fields=["time_tracking_config"])
+        return True
+
+    @strawberry.mutation
     def save_hubspot_settings(
         self, info: Info[Context, None], api_key: str
     ) -> HubSpotTestResult:
