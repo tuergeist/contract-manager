@@ -16,6 +16,7 @@ class CustomerMatch:
 
     customer_id: int
     customer_name: str
+    city: str | None
     similarity: Decimal
     hubspot_id: str | None
 
@@ -53,6 +54,7 @@ def match_customer_by_name(
         CustomerMatch(
             customer_id=m.id,
             customer_name=m.name,
+            city=m.city,
             similarity=Decimal(str(round(m.similarity, 2))),
             hubspot_id=m.hubspot_id,
         )

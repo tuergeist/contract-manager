@@ -154,6 +154,7 @@ const CUSTOMER_MATCH_SUGGESTIONS = gql`
     customerMatchSuggestions(invoiceId: $invoiceId) {
       customerId
       customerName
+      city
       similarity
       hubspotId
     }
@@ -304,6 +305,7 @@ const SEARCH_CUSTOMERS = gql`
       items {
         id
         name
+        city
         hubspotId
       }
     }
@@ -356,6 +358,7 @@ interface ImportedInvoice {
 interface CustomerMatch {
   customerId: number
   customerName: string
+  city: string | null
   similarity: string
   hubspotId: string | null
 }
@@ -1235,7 +1238,7 @@ export function ImportedInvoiceList() {
                   </div>
                 ) : customerSearchData?.customers?.items?.length > 0 ? (
                   <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {customerSearchData.customers.items.map((customer: { id: number; name: string; hubspotId: string | null }) => (
+                    {customerSearchData.customers.items.map((customer: { id: number; name: string; city: string | null; hubspotId: string | null }) => (
                       <button
                         key={customer.id}
                         onClick={() => handleConfirmCustomer(customer.id)}
@@ -1243,9 +1246,9 @@ export function ImportedInvoiceList() {
                       >
                         <div>
                           <div className="font-medium">{customer.name}</div>
-                          {customer.hubspotId && (
-                            <div className="text-xs text-gray-500">HubSpot ID: {customer.hubspotId}</div>
-                          )}
+                          <div className="text-xs text-gray-500">
+                            CUS-{customer.id}{customer.city && ` · ${customer.city}`}
+                          </div>
                         </div>
                       </button>
                     ))}
@@ -1274,9 +1277,9 @@ export function ImportedInvoiceList() {
                       >
                         <div>
                           <div className="font-medium">{match.customerName}</div>
-                          {match.hubspotId && (
-                            <div className="text-xs text-gray-500">HubSpot ID: {match.hubspotId}</div>
-                          )}
+                          <div className="text-xs text-gray-500">
+                            CUS-{match.customerId}{match.city && ` · ${match.city}`}
+                          </div>
                         </div>
                         <Badge variant="secondary">
                           {Math.round(parseFloat(match.similarity) * 100)}% match

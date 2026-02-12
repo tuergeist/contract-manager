@@ -499,6 +499,7 @@ class CustomerMatchSuggestionType:
 
     customer_id: int
     customer_name: str
+    city: str | None
     similarity: Decimal
     hubspot_id: str | None
 
@@ -823,6 +824,7 @@ class InvoiceQuery:
             CustomerMatchSuggestionType(
                 customer_id=m.customer_id,
                 customer_name=m.customer_name,
+                city=m.city,
                 similarity=m.similarity,
                 hubspot_id=m.hubspot_id,
             )
@@ -1515,7 +1517,7 @@ class InvoiceMutation:
         self, info: Info[Context, None], invoice_id: strawberry.ID, customer_id: int
     ) -> ImportedInvoiceResult:
         """Link an imported invoice to a customer and transfer receiver emails."""
-        user, err = check_perm(info, "invoices", "generate")
+        user, err = check_perm(info, "invoices", "write")
         if err:
             return ImportedInvoiceResult(success=False, error=err)
 

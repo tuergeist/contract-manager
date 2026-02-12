@@ -18,7 +18,7 @@ PERMISSION_REGISTRY = {
     "settings": ["read", "write"],
     "todos": ["read", "write"],
     "notes": ["read", "write"],
-    "invoices": ["read", "export", "generate", "settings"],
+    "invoices": ["read", "write", "delete", "export", "generate", "settings"],
     "banking": ["read", "write"],
 }
 

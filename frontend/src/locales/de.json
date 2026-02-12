@@ -838,7 +838,8 @@
         "settings": "Einstellungen",
         "todos": "Aufgaben",
         "notes": "Notizen",
-        "invoices": "Rechnungen"
+        "invoices": "Rechnungen",
+        "banking": "Banking"
       },
       "actions": {
         "read": "Lesen",
