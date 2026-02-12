@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, History, Paperclip, Upload, Download, File, Image, Trash2, Link2, Plus, TrendingUp, DollarSign, ListTodo, Mail, X, Receipt } from 'lucide-react'
+import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, History, Paperclip, Upload, Download, File, Image, Trash2, Link2, Plus, TrendingUp, DollarSign, ListTodo, Mail, X, Receipt, ChevronsUpDown, Check, FolderOpen } from 'lucide-react'
 import { TodoModal, TodoList, type TodoContext, type TodoItem } from '@/features/todos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { formatDate } from '@/lib/utils'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { cn, formatDate } from '@/lib/utils'
 import { useAuditLogs, AuditLogTable } from '@/features/audit'
 
 type SortField = 'name' | 'status' | 'startDate' | 'endDate' | 'arr' | 'totalValue' | 'remainingMonths' | null
@@ -41,6 +54,11 @@ const CUSTOMER_QUERY = gql`
         totalValue
         arr
         remainingMonths
+        group {
+          id
+          name
+          contractCount
+        }
       }
       attachments {
         id
@@ -181,11 +199,58 @@ const ASSIGN_INVOICE_CONTRACT_MUTATION = gql`
   }
 `
 
+const CONTRACT_GROUPS_QUERY = gql`
+  query ContractGroups($customerId: ID!) {
+    contractGroups(customerId: $customerId) {
+      id
+      name
+      contractCount
+    }
+  }
+`
+
+const CREATE_CONTRACT_GROUP_MUTATION = gql`
+  mutation CreateContractGroup($customerId: ID!, $name: String!) {
+    createContractGroup(customerId: $customerId, name: $name) {
+      success
+      error
+      group {
+        id
+        name
+        contractCount
+      }
+    }
+  }
+`
+
+const ASSIGN_CONTRACT_TO_GROUP_MUTATION = gql`
+  mutation AssignContractToGroup($contractId: ID!, $groupId: ID) {
+    assignContractToGroup(contractId: $contractId, groupId: $groupId) {
+      success
+      error
+      contract {
+        id
+        group {
+          id
+          name
+          contractCount
+        }
+      }
+    }
+  }
+`
+
 interface CustomerAddress {
   street?: string | null
   city?: string | null
   zip?: string | null
   country?: string | null
+}
+
+interface ContractGroup {
+  id: number
+  name: string
+  contractCount: number
 }
 
 interface Contract {
@@ -197,6 +262,7 @@ interface Contract {
   totalValue: string
   arr: string
   remainingMonths: number
+  group: ContractGroup | null
 }
 
 interface Attachment {
@@ -292,6 +358,17 @@ export function CustomerDetail() {
     skip: !id,
   })
 
+  // Contract groups state
+  const [groupPopoverOpen, setGroupPopoverOpen] = useState<string | null>(null)
+  const [newGroupName, setNewGroupName] = useState('')
+  const [creatingGroup, setCreatingGroup] = useState(false)
+
+  // Contract groups query
+  const { data: groupsData, refetch: refetchGroups } = useQuery(CONTRACT_GROUPS_QUERY, {
+    variables: { customerId: id },
+    skip: !id,
+  })
+
   // Mutations
   const [uploadAttachment] = useMutation(UPLOAD_CUSTOMER_ATTACHMENT_MUTATION)
   const [deleteAttachment] = useMutation(DELETE_CUSTOMER_ATTACHMENT_MUTATION)
@@ -299,8 +376,11 @@ export function CustomerDetail() {
   const [deleteLink] = useMutation(DELETE_CUSTOMER_LINK_MUTATION)
   const [updateBillingEmails] = useMutation(UPDATE_CUSTOMER_BILLING_EMAILS_MUTATION)
   const [assignInvoiceContract] = useMutation(ASSIGN_INVOICE_CONTRACT_MUTATION)
+  const [createContractGroup] = useMutation(CREATE_CONTRACT_GROUP_MUTATION)
+  const [assignContractToGroup] = useMutation(ASSIGN_CONTRACT_TO_GROUP_MUTATION)
 
   const customer = data?.customer
+  const contractGroups = (groupsData?.contractGroups || []) as ContractGroup[]
 
   // Sort contracts
   const sortedContracts = useMemo(() => {
@@ -614,6 +694,57 @@ export function CustomerDetail() {
     }
   }
 
+  const handleAssignContractGroup = async (contractId: string, groupId: number | null) => {
+    try {
+      const result = await assignContractToGroup({
+        variables: {
+          contractId,
+          groupId: groupId?.toString() ?? null,
+        },
+      })
+
+      if (result.data?.assignContractToGroup?.success) {
+        refetch()
+        refetchGroups()
+        setGroupPopoverOpen(null)
+      } else {
+        alert(result.data?.assignContractToGroup?.error || 'Failed to assign group')
+      }
+    } catch (err) {
+      console.error('Assign group error:', err)
+      alert('Failed to assign group')
+    }
+  }
+
+  const handleCreateGroup = async (contractId: string) => {
+    if (!newGroupName.trim() || !id) return
+
+    setCreatingGroup(true)
+    try {
+      const result = await createContractGroup({
+        variables: {
+          customerId: id,
+          name: newGroupName.trim(),
+        },
+      })
+
+      if (result.data?.createContractGroup?.success) {
+        const newGroup = result.data.createContractGroup.group
+        setNewGroupName('')
+        // Assign the contract to the new group
+        await handleAssignContractGroup(contractId, newGroup.id)
+        refetchGroups()
+      } else {
+        alert(result.data?.createContractGroup?.error || 'Failed to create group')
+      }
+    } catch (err) {
+      console.error('Create group error:', err)
+      alert('Failed to create group')
+    } finally {
+      setCreatingGroup(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -920,6 +1051,9 @@ export function CustomerDetail() {
                       {t('contracts.statusLabel')}
                       {getSortIcon('status')}
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('contracts.group.title')}
+                    </th>
                     <th
                       className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('startDate')}
@@ -976,6 +1110,98 @@ export function CustomerDetail() {
                         >
                           {t(`contracts.status.${contract.status}`)}
                         </span>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <Popover
+                          open={groupPopoverOpen === contract.id}
+                          onOpenChange={(open) => {
+                            setGroupPopoverOpen(open ? contract.id : null)
+                            if (!open) setNewGroupName('')
+                          }}
+                        >
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 justify-start text-left font-normal"
+                            >
+                              {contract.group ? (
+                                <span className="flex items-center gap-1.5">
+                                  <FolderOpen className="h-3.5 w-3.5 text-gray-400" />
+                                  {contract.group.name}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">{t('contracts.group.noGroup')}</span>
+                              )}
+                              <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[250px] p-0" align="start">
+                            <Command shouldFilter={false}>
+                              <CommandInput
+                                placeholder={t('contracts.form.selectGroup')}
+                                value={newGroupName}
+                                onValueChange={setNewGroupName}
+                              />
+                              <CommandList>
+                                <CommandEmpty>
+                                  {newGroupName.trim() ? (
+                                    <Button
+                                      variant="ghost"
+                                      className="w-full justify-start"
+                                      onClick={() => handleCreateGroup(contract.id)}
+                                      disabled={creatingGroup}
+                                    >
+                                      {creatingGroup ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Plus className="mr-2 h-4 w-4" />
+                                      )}
+                                      {t('contracts.group.createNew')}: "{newGroupName}"
+                                    </Button>
+                                  ) : (
+                                    t('contracts.group.noGroup')
+                                  )}
+                                </CommandEmpty>
+                                <CommandGroup>
+                                  <CommandItem
+                                    value="none"
+                                    onSelect={() => handleAssignContractGroup(contract.id, null)}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        'mr-2 h-4 w-4',
+                                        !contract.group ? 'opacity-100' : 'opacity-0'
+                                      )}
+                                    />
+                                    <span className="text-gray-400">{t('contracts.group.noGroup')}</span>
+                                  </CommandItem>
+                                  {contractGroups
+                                    .filter(g => !newGroupName.trim() || g.name.toLowerCase().includes(newGroupName.toLowerCase()))
+                                    .map((group) => (
+                                      <CommandItem
+                                        key={group.id}
+                                        value={group.id.toString()}
+                                        onSelect={() => handleAssignContractGroup(contract.id, group.id)}
+                                      >
+                                        <Check
+                                          className={cn(
+                                            'mr-2 h-4 w-4',
+                                            contract.group?.id === group.id ? 'opacity-100' : 'opacity-0'
+                                          )}
+                                        />
+                                        <FolderOpen className="mr-2 h-4 w-4 text-gray-400" />
+                                        {group.name}
+                                        <span className="ml-auto text-xs text-gray-400">
+                                          ({group.contractCount})
+                                        </span>
+                                      </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                         {formatDate(contract.startDate)}

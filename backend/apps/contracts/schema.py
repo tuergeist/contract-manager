@@ -21,7 +21,7 @@ from apps.customers.models import Customer
 from apps.customers.schema import CustomerType
 from apps.products.models import Product
 from apps.products.schema import ProductType
-from .models import Contract, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, TimeTrackingProjectMapping
+from .models import Contract, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, TimeTrackingProjectMapping
 from .services import ExcelParser, ImportService, MatchStatus
 
 if TYPE_CHECKING:
@@ -173,6 +173,15 @@ class ContractLinkType:
 
 
 @strawberry.type
+class ContractGroupType:
+    """A group for organizing contracts within a customer."""
+
+    id: int
+    name: str
+    contract_count: int
+
+
+@strawberry.type
 class ContractItemPriceType:
     """A price period for a contract item."""
 
@@ -246,6 +255,20 @@ class ContractType:
     notes: auto
     invoice_text: auto
     customer: CustomerType
+
+    @strawberry.field
+    def group(self) -> ContractGroupType | None:
+        """Get the contract's group."""
+        if not self.group_id:
+            return None
+        group = ContractGroup.objects.filter(id=self.group_id).first()
+        if not group:
+            return None
+        return ContractGroupType(
+            id=group.id,
+            name=group.name,
+            contract_count=Contract.objects.filter(group=group).count(),
+        )
 
     @strawberry.field
     def status(self) -> str:
@@ -583,6 +606,13 @@ class ContractItemResult:
 @strawberry.type
 class ContractItemPriceResult:
     price_period: ContractItemPriceType | None = None
+    success: bool = False
+    error: str | None = None
+
+
+@strawberry.type
+class ContractGroupResult:
+    group: ContractGroupType | None = None
     success: bool = False
     error: str | None = None
 
@@ -1740,6 +1770,30 @@ class ContractQuery:
         if user.tenant:
             return Contract.objects.filter(tenant=user.tenant, id=id).first()
         return None
+
+    @strawberry.field
+    def contract_groups(
+        self, info: Info[Context, None], customer_id: strawberry.ID
+    ) -> list[ContractGroupType]:
+        """Get all contract groups for a customer."""
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+
+        # Verify customer belongs to tenant
+        customer = Customer.objects.filter(tenant=user.tenant, id=customer_id).first()
+        if not customer:
+            return []
+
+        groups = ContractGroup.objects.filter(customer=customer).order_by("name")
+        return [
+            ContractGroupType(
+                id=g.id,
+                name=g.name,
+                contract_count=Contract.objects.filter(group=g).count(),
+            )
+            for g in groups
+        ]
 
     @strawberry.field
     def time_tracking_projects(
@@ -2965,6 +3019,139 @@ class ContractMutation:
 
         mapping.delete()
         return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def create_contract_group(
+        self,
+        info: Info[Context, None],
+        customer_id: strawberry.ID,
+        name: str,
+    ) -> ContractGroupResult:
+        """Create a new contract group for a customer."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractGroupResult(error=err)
+        if not user.tenant:
+            return ContractGroupResult(error="No tenant assigned")
+
+        # Verify customer belongs to tenant
+        customer = Customer.objects.filter(tenant=user.tenant, id=customer_id).first()
+        if not customer:
+            return ContractGroupResult(error="Customer not found")
+
+        # Check for duplicate name
+        if ContractGroup.objects.filter(customer=customer, name=name).exists():
+            return ContractGroupResult(error="A group with this name already exists for this customer")
+
+        try:
+            group = ContractGroup.objects.create(
+                tenant=user.tenant,
+                customer=customer,
+                name=name,
+            )
+            return ContractGroupResult(
+                success=True,
+                group=ContractGroupType(
+                    id=group.id,
+                    name=group.name,
+                    contract_count=0,
+                ),
+            )
+        except Exception as e:
+            return ContractGroupResult(error=str(e))
+
+    @strawberry.mutation
+    def update_contract_group(
+        self,
+        info: Info[Context, None],
+        group_id: strawberry.ID,
+        name: str,
+    ) -> ContractGroupResult:
+        """Rename a contract group."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractGroupResult(error=err)
+        if not user.tenant:
+            return ContractGroupResult(error="No tenant assigned")
+
+        group = ContractGroup.objects.filter(tenant=user.tenant, id=group_id).first()
+        if not group:
+            return ContractGroupResult(error="Group not found")
+
+        # Check for duplicate name (excluding current group)
+        if ContractGroup.objects.filter(customer=group.customer, name=name).exclude(id=group.id).exists():
+            return ContractGroupResult(error="A group with this name already exists for this customer")
+
+        try:
+            group.name = name
+            group.save()
+            return ContractGroupResult(
+                success=True,
+                group=ContractGroupType(
+                    id=group.id,
+                    name=group.name,
+                    contract_count=Contract.objects.filter(group=group).count(),
+                ),
+            )
+        except Exception as e:
+            return ContractGroupResult(error=str(e))
+
+    @strawberry.mutation
+    def delete_contract_group(
+        self,
+        info: Info[Context, None],
+        group_id: strawberry.ID,
+    ) -> DeleteResult:
+        """Delete a contract group. Contracts in the group will be ungrouped."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return DeleteResult(error=err)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        group = ContractGroup.objects.filter(tenant=user.tenant, id=group_id).first()
+        if not group:
+            return DeleteResult(error="Group not found")
+
+        # Contracts will have group set to null via on_delete=SET_NULL
+        group.delete()
+        return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def assign_contract_to_group(
+        self,
+        info: Info[Context, None],
+        contract_id: strawberry.ID,
+        group_id: strawberry.ID | None,
+    ) -> ContractResult:
+        """Assign a contract to a group, or unassign if group_id is null."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractResult(error=err)
+        if not user.tenant:
+            return ContractResult(error="No tenant assigned")
+
+        contract = Contract.objects.filter(tenant=user.tenant, id=contract_id).first()
+        if not contract:
+            return ContractResult(error="Contract not found")
+
+        if group_id is None:
+            # Unassign from group
+            contract.group = None
+            contract.save()
+            return ContractResult(success=True, contract=contract)
+
+        group = ContractGroup.objects.filter(tenant=user.tenant, id=group_id).first()
+        if not group:
+            return ContractResult(error="Group not found")
+
+        # Verify group belongs to same customer as contract
+        if group.customer_id != contract.customer_id:
+            return ContractResult(error="Group must belong to the same customer as the contract")
+
+        contract.group = group
+        contract.save()
+        return ContractResult(success=True, contract=contract)
 
 
 # =============================================================================

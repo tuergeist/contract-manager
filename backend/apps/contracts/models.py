@@ -7,6 +7,24 @@ from django.db import models
 from apps.core.models import TenantModel
 
 
+class ContractGroup(TenantModel):
+    """A group for organizing contracts within a customer."""
+
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.CASCADE,
+        related_name="contract_groups",
+    )
+    name = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = ["customer", "name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.customer.name})"
+
+
 def attachment_upload_path(instance, filename):
     """
     Generate upload path: uploads/{tenant_id}/contracts/{contract_id}/{uuid}_{ext}
@@ -91,6 +109,13 @@ class Contract(TenantModel):
     customer = models.ForeignKey(
         "customers.Customer",
         on_delete=models.PROTECT,
+        related_name="contracts",
+    )
+    group = models.ForeignKey(
+        ContractGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="contracts",
     )
     primary_contract = models.ForeignKey(

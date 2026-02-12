@@ -182,7 +182,17 @@
       "noticePeriodAnchor": "Notice Period Anchor",
       "billingAlignmentDate": "Billing Alignment Date",
       "billingAlignmentDateHint": "Date when billing aligns to regular cycle. First invoice covers period from billing start to this date (pro-rated).",
-      "billingDescription": "Configure how and when the contract is billed. For intervals larger than monthly, you can set an alignment date to pro-rate the first invoice."
+      "billingDescription": "Configure how and when the contract is billed. For intervals larger than monthly, you can set an alignment date to pro-rate the first invoice.",
+      "group": "Group",
+      "selectGroup": "Select group...",
+      "noGroup": "No group"
+    },
+    "group": {
+      "title": "Group",
+      "noGroup": "No group",
+      "createNew": "Create new group",
+      "newGroupName": "New group name",
+      "groupExists": "A group with this name already exists"
     },
     "detail": {
       "overview": "Overview",
