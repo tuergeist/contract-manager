@@ -9,7 +9,7 @@ spec:
     spec:
       containers:
         - name: migrate
-          image: ghcr.io/OWNER/contract-manager/backend:main
+          image: ghcr.io/OWNER/contract-manager/backend:latest
           command: ["python", "manage.py", "migrate", "--noinput"]
           envFrom:
             - configMapRef:

@@ -51,6 +51,8 @@ LABELS = {
         "pos": "Pos.",
         "date_label": "Datum",
         "invoice_amount": "Rechnungsbetrag",
+        "po_number": "Bestellnummer",
+        "order_confirmation": "Auftragsbestätigung",
     },
     "en": {
         "invoice": "Invoice",
@@ -81,6 +83,8 @@ LABELS = {
         "pos": "Pos.",
         "date_label": "Date",
         "invoice_amount": "Invoice Total",
+        "po_number": "PO Number",
+        "order_confirmation": "Order Confirmation",
     },
 }
 
@@ -346,6 +350,9 @@ class InvoiceService:
                 "total_net": total_net,
                 "tax_amount": tax_amount,
                 "total_gross": total_gross,
+                "invoice_text": invoice.invoice_text,
+                "po_number": invoice.po_number,
+                "order_confirmation_number": invoice.order_confirmation_number,
             }
 
             html = render_to_string(
@@ -421,6 +428,9 @@ class InvoiceService:
             "total_net": net,
             "tax_amount": tax_amount,
             "total_gross": gross,
+            "invoice_text": "Zahlungsziel: 30 Tage netto",
+            "po_number": "PO-2025-001",
+            "order_confirmation_number": "AB-2025-001",
         }
 
         html = render_to_string(

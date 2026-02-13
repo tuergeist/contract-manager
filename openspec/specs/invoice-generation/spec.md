@@ -21,7 +21,7 @@ The system SHALL calculate all invoices due for a specified month by aggregating
 
 ### Requirement: Invoice includes complete billing details
 
-Each generated invoice SHALL include all information needed for customer billing and accounting.
+Each generated invoice SHALL include all information needed for customer billing and accounting, including contract metadata such as invoice text, PO number, and order confirmation number.
 
 #### Scenario: Invoice contains required fields
 - **WHEN** an invoice is generated
@@ -36,6 +36,26 @@ Each generated invoice SHALL include all information needed for customer billing
 - **WHEN** a contract item has align_to_contract_at set
 - **THEN** the first billing period is prorated
 - **AND** the prorated amount and factor are included in the line item
+
+#### Scenario: Invoice PDF shows PO number when present
+- **WHEN** the contract has a PO number set
+- **THEN** the invoice PDF metadata section SHALL display the PO number with label "Bestellnummer" (DE) or "PO Number" (EN)
+
+#### Scenario: Invoice PDF shows order confirmation number when present
+- **WHEN** the contract has an order confirmation number set
+- **THEN** the invoice PDF metadata section SHALL display it with label "Auftragsbestätigung" (DE) or "Order Confirmation" (EN)
+
+#### Scenario: Invoice PDF shows invoice text when present
+- **WHEN** the contract has invoice_text set
+- **THEN** the invoice PDF SHALL render the text below the totals section, before the footer
+
+#### Scenario: Invoice PDF omits empty metadata fields
+- **WHEN** the contract has no PO number, no order confirmation number, or no invoice text
+- **THEN** the corresponding sections SHALL not appear on the PDF
+
+#### Scenario: Invoice preview includes metadata fields
+- **WHEN** a preview PDF is generated
+- **THEN** it SHALL include sample PO number, order confirmation number, and invoice text to demonstrate the layout
 
 ### Requirement: Invoice generation is tenant-scoped
 

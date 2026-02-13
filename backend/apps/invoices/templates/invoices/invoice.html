@@ -237,6 +237,14 @@
             white-space: nowrap;
         }
 
+        /* ---- Invoice text ---- */
+        .invoice-text {
+            margin-top: 20px;
+            font-size: 9pt;
+            color: #333;
+            line-height: 1.5;
+        }
+
         /* ---- Contract info ---- */
         .contract-info {
             margin-top: 30px;
@@ -344,6 +352,18 @@
                 <td>{{ labels.contract }}:</td>
                 <td>{{ invoice.contract_name }}</td>
             </tr>
+            {% if invoice.po_number %}
+            <tr>
+                <td>{{ labels.po_number }}:</td>
+                <td>{{ invoice.po_number }}</td>
+            </tr>
+            {% endif %}
+            {% if invoice.order_confirmation_number %}
+            <tr>
+                <td>{{ labels.order_confirmation }}:</td>
+                <td>{{ invoice.order_confirmation_number }}</td>
+            </tr>
+            {% endif %}
         </table>
     </div>
 
@@ -393,6 +413,12 @@
     </div>
 
     <div style="clear: both;"></div>
+
+    {% if invoice.invoice_text %}
+    <div class="invoice-text">
+        {{ invoice.invoice_text|linebreaksbr }}
+    </div>
+    {% endif %}
 
     <div class="contract-info">
         {{ labels.contract }}: {{ invoice.contract_name }} | {{ labels.customer_id }}: {{ invoice.customer_id }}

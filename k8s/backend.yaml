@@ -3,10 +3,10 @@ kind: Deployment
 metadata:
   name: backend
   namespace: contract-manager
-  labels:
-    app: backend
 spec:
-  replicas: 2
+  replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: backend
@@ -15,9 +15,16 @@ spec:
       labels:
         app: backend
     spec:
+      initContainers:
+        - name: fix-media-permissions
+          image: alpine
+          command: ["sh", "-c", "chown -R 1000:1000 /app/media"]
+          volumeMounts:
+            - name: media
+              mountPath: /app/media
       containers:
         - name: backend
-          image: ghcr.io/OWNER/contract-manager/backend:main
+          image: ghcr.io/OWNER/contract-manager/backend:latest
           ports:
             - containerPort: 8000
           envFrom:
@@ -25,25 +32,34 @@ spec:
                 name: contract-manager-config
             - secretRef:
                 name: contract-manager-secrets
-          resources:
-            requests:
-              memory: "256Mi"
-              cpu: "100m"
-            limits:
-              memory: "512Mi"
-              cpu: "500m"
-          livenessProbe:
-            httpGet:
-              path: /health/
-              port: 8000
-            initialDelaySeconds: 30
-            periodSeconds: 10
+          volumeMounts:
+            - name: media
+              mountPath: /app/media
           readinessProbe:
             httpGet:
-              path: /health/
+              path: /api/health
               port: 8000
-            initialDelaySeconds: 5
-            periodSeconds: 5
+              httpHeaders:
+                - name: Host
+                  value: YOUR_DOMAIN
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+              httpHeaders:
+                - name: Host
+                  value: YOUR_DOMAIN
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+      volumes:
+        - name: media
+          persistentVolumeClaim:
+            claimName: media-pvc
 ---
 apiVersion: v1
 kind: Service
@@ -56,4 +72,3 @@ spec:
   ports:
     - port: 8000
       targetPort: 8000
-  type: ClusterIP

@@ -7,13 +7,10 @@ resources:
   - namespace.yaml
   - secrets.yaml
   - configmap.yaml
+  - postgres.yaml
+  - redis.yaml
+  - media-pvc.yaml
   - backend.yaml
   - frontend.yaml
   - ingress.yaml
-
-# Uncomment to use image tags from CI
-# images:
-#   - name: ghcr.io/OWNER/contract-manager/backend
-#     newTag: main
-#   - name: ghcr.io/OWNER/contract-manager/frontend
-#     newTag: main
+  - migration-job.yaml

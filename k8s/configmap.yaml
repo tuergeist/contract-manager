@@ -4,6 +4,8 @@ metadata:
   name: contract-manager-config
   namespace: contract-manager
 data:
+  DJANGO_SETTINGS_MODULE: config.settings.production
   DJANGO_DEBUG: "false"
-  DJANGO_ALLOWED_HOSTS: "contract-manager.example.com,localhost"
-  DJANGO_CSRF_TRUSTED_ORIGINS: "https://contract-manager.example.com"
+  DJANGO_ALLOWED_HOSTS: "YOUR_DOMAIN"
+  DJANGO_CSRF_TRUSTED_ORIGINS: "https://YOUR_DOMAIN"
+  REDIS_URL: redis://redis:6379/0

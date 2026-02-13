@@ -114,6 +114,9 @@ def render_invoice_html(tenant, invoice, language="de", invoice_number="",
         "total_net": total_net,
         "tax_amount": tax_amount,
         "total_gross": total_gross,
+        "invoice_text": invoice.invoice_text,
+        "po_number": invoice.po_number,
+        "order_confirmation_number": invoice.order_confirmation_number,
     }
 
     return render_to_string(
@@ -285,3 +288,41 @@ class TestEnglishLabels:
         assert "Commercial Register" in html
         assert "Managing Directors" in html
         assert "Bank Details" in html
+
+
+class TestInvoiceMetadataFields:
+    def test_po_number_shown_when_set(self, db, tenant, legal_data, sample_invoice):
+        sample_invoice.po_number = "PO-2026-001"
+        html = render_invoice_html(tenant, sample_invoice)
+        assert "Bestellnummer" in html
+        assert "PO-2026-001" in html
+
+    def test_po_number_hidden_when_empty(self, db, tenant, legal_data, sample_invoice):
+        html = render_invoice_html(tenant, sample_invoice)
+        assert "Bestellnummer" not in html
+
+    def test_order_confirmation_shown_when_set(self, db, tenant, legal_data, sample_invoice):
+        sample_invoice.order_confirmation_number = "AB-2026-001"
+        html = render_invoice_html(tenant, sample_invoice)
+        assert "Auftragsbestätigung" in html
+        assert "AB-2026-001" in html
+
+    def test_order_confirmation_hidden_when_empty(self, db, tenant, legal_data, sample_invoice):
+        html = render_invoice_html(tenant, sample_invoice)
+        assert "Auftragsbestätigung" not in html
+
+    def test_invoice_text_shown_when_set(self, db, tenant, legal_data, sample_invoice):
+        sample_invoice.invoice_text = "Payment due within 30 days"
+        html = render_invoice_html(tenant, sample_invoice)
+        assert "Payment due within 30 days" in html
+
+    def test_invoice_text_hidden_when_empty(self, db, tenant, legal_data, sample_invoice):
+        html = render_invoice_html(tenant, sample_invoice)
+        assert 'class="invoice-text"' not in html.split("</style>")[1]
+
+    def test_english_labels_for_metadata(self, db, tenant, legal_data, sample_invoice):
+        sample_invoice.po_number = "PO-123"
+        sample_invoice.order_confirmation_number = "AB-456"
+        html = render_invoice_html(tenant, sample_invoice, language="en")
+        assert "PO Number" in html
+        assert "Order Confirmation" in html
