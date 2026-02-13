@@ -5,7 +5,7 @@ import { useQuery, useMutation, gql } from '@apollo/client'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2, ArrowLeft, Check, ChevronsUpDown, Edit, ExternalLink, Trash2 } from 'lucide-react'
+import { Loader2, ArrowLeft, Check, ChevronsUpDown, Edit, ExternalLink, Trash2, Plus } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -79,6 +79,10 @@ const CONTRACT_QUERY = gql`
       noticePeriodMonths
       noticePeriodAfterMinMonths
       noticePeriodAnchor
+      group {
+        id
+        name
+      }
       customer {
         id
         name
@@ -138,6 +142,36 @@ const DELETE_CONTRACT_MUTATION = gql`
   }
 `
 
+const CONTRACT_GROUPS_QUERY = gql`
+  query ContractGroups($customerId: ID!) {
+    contractGroups(customerId: $customerId) {
+      id
+      name
+      contractCount
+    }
+  }
+`
+
+const CREATE_CONTRACT_GROUP_MUTATION = gql`
+  mutation CreateContractGroup($customerId: ID!, $name: String!) {
+    createContractGroup(customerId: $customerId, name: $name) {
+      success
+      error
+      group {
+        id
+        name
+        contractCount
+      }
+    }
+  }
+`
+
+interface ContractGroup {
+  id: string
+  name: string
+  contractCount: number
+}
+
 interface CustomerAddress {
   city?: string | null
 }
@@ -166,6 +200,7 @@ interface Contract {
   noticePeriodMonths: number
   noticePeriodAfterMinMonths: number | null
   noticePeriodAnchor: string
+  group: { id: string; name: string } | null
   customer: Customer
 }
 
@@ -176,6 +211,7 @@ const formSchema = z.object({
   netsuiteUrl: z.string().optional().nullable(),
   poNumber: z.string().optional().nullable(),
   orderConfirmationNumber: z.string().optional().nullable(),
+  groupId: z.string().optional().nullable(),
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().optional(),
   billingStartDate: z.string().optional(),
@@ -241,6 +277,8 @@ export function ContractForm() {
   const [isEditing, setIsEditing] = useState(!isEdit) // New contracts start in edit mode
   const [statusTransition, setStatusTransition] = useState<StatusTransition | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [groupPopoverOpen, setGroupPopoverOpen] = useState(false)
+  const [groupSearchTerm, setGroupSearchTerm] = useState('')
   const billingStartManuallyChanged = useRef(false)
 
   const form = useForm<FormData>({
@@ -252,6 +290,7 @@ export function ContractForm() {
       netsuiteUrl: '',
       poNumber: '',
       orderConfirmationNumber: '',
+      groupId: null,
       startDate: '',
       endDate: '',
       billingStartDate: '',
@@ -277,9 +316,18 @@ export function ContractForm() {
     skip: !isEdit,
   })
 
+  // Fetch groups for selected customer
+  const watchedCustomerId = form.watch('customerId')
+  const { data: groupsData, refetch: refetchGroups } = useQuery(CONTRACT_GROUPS_QUERY, {
+    variables: { customerId: watchedCustomerId },
+    skip: !watchedCustomerId,
+  })
+  const contractGroups: ContractGroup[] = groupsData?.contractGroups || []
+
   const [createContract, { loading: creating }] = useMutation(CREATE_CONTRACT_MUTATION)
   const [updateContract, { loading: updating }] = useMutation(UPDATE_CONTRACT_MUTATION)
   const [deleteContract, { loading: deleting }] = useMutation(DELETE_CONTRACT_MUTATION)
+  const [createContractGroup] = useMutation(CREATE_CONTRACT_GROUP_MUTATION)
 
   // Populate form when editing
   useEffect(() => {
@@ -293,6 +341,7 @@ export function ContractForm() {
         netsuiteUrl: c.netsuiteUrl || '',
         poNumber: c.poNumber || '',
         orderConfirmationNumber: c.orderConfirmationNumber || '',
+        groupId: c.group?.id || null,
         startDate: c.startDate,
         endDate: c.endDate || '',
         billingStartDate: c.billingStartDate,
@@ -329,6 +378,7 @@ export function ContractForm() {
               netsuiteUrl: data.netsuiteUrl || null,
               poNumber: data.poNumber || null,
               orderConfirmationNumber: data.orderConfirmationNumber || null,
+              groupId: data.groupId || null,
               startDate: data.startDate,
               billingStartDate: data.billingStartDate || data.startDate,
               endDate: data.endDate || null,
@@ -358,6 +408,7 @@ export function ContractForm() {
               netsuiteUrl: data.netsuiteUrl || null,
               poNumber: data.poNumber || null,
               orderConfirmationNumber: data.orderConfirmationNumber || null,
+              groupId: data.groupId || null,
               startDate: data.startDate,
               endDate: data.endDate || null,
               billingStartDate: data.billingStartDate || data.startDate,
@@ -695,6 +746,120 @@ export function ContractForm() {
                 )}
               />
 
+              {/* Group */}
+              {watchedCustomerId && (
+                <FormField
+                  control={form.control}
+                  name="groupId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('contracts.form.group')}</FormLabel>
+                      <Popover open={groupPopoverOpen} onOpenChange={setGroupPopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              disabled={!isEditing}
+                              className={cn(
+                                'w-full justify-between',
+                                !field.value && 'text-muted-foreground'
+                              )}
+                            >
+                              {field.value
+                                ? contractGroups.find((g) => g.id === field.value)?.name || t('contracts.form.selectGroup')
+                                : t('contracts.form.noGroup')}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[300px] p-0" align="start">
+                          <Command shouldFilter={false}>
+                            <CommandInput
+                              placeholder={t('contracts.form.selectGroup')}
+                              value={groupSearchTerm}
+                              onValueChange={setGroupSearchTerm}
+                            />
+                            <CommandList>
+                              <CommandEmpty>
+                                {groupSearchTerm.trim() ? (
+                                  <button
+                                    type="button"
+                                    className="flex w-full items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded"
+                                    onClick={async () => {
+                                      const result = await createContractGroup({
+                                        variables: {
+                                          customerId: watchedCustomerId,
+                                          name: groupSearchTerm.trim(),
+                                        },
+                                      })
+                                      if (result.data?.createContractGroup?.success) {
+                                        const newGroup = result.data.createContractGroup.group
+                                        field.onChange(newGroup.id)
+                                        setGroupSearchTerm('')
+                                        setGroupPopoverOpen(false)
+                                        refetchGroups()
+                                      }
+                                    }}
+                                  >
+                                    <Plus className="h-4 w-4" />
+                                    {t('contracts.group.createNew')}: &quot;{groupSearchTerm.trim()}&quot;
+                                  </button>
+                                ) : (
+                                  t('contracts.group.noGroup')
+                                )}
+                              </CommandEmpty>
+                              <CommandGroup>
+                                <CommandItem
+                                  value="__none__"
+                                  onSelect={() => {
+                                    field.onChange(null)
+                                    setGroupPopoverOpen(false)
+                                    setGroupSearchTerm('')
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      'mr-2 h-4 w-4',
+                                      !field.value ? 'opacity-100' : 'opacity-0'
+                                    )}
+                                  />
+                                  {t('contracts.form.noGroup')}
+                                </CommandItem>
+                                {contractGroups
+                                  .filter((g) =>
+                                    !groupSearchTerm || g.name.toLowerCase().includes(groupSearchTerm.toLowerCase())
+                                  )
+                                  .map((group) => (
+                                    <CommandItem
+                                      key={group.id}
+                                      value={group.id}
+                                      onSelect={() => {
+                                        field.onChange(group.id)
+                                        setGroupPopoverOpen(false)
+                                        setGroupSearchTerm('')
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          'mr-2 h-4 w-4',
+                                          field.value === group.id ? 'opacity-100' : 'opacity-0'
+                                        )}
+                                      />
+                                      {group.name}
+                                    </CommandItem>
+                                  ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
               {/* Start Date */}
               <FormField
                 control={form.control}
@@ -971,6 +1136,7 @@ export function ContractForm() {
                         netsuiteUrl: contract.netsuiteUrl || '',
                         poNumber: contract.poNumber || '',
                         orderConfirmationNumber: contract.orderConfirmationNumber || '',
+                        groupId: contract.group?.id || null,
                         startDate: contract.startDate,
                         endDate: contract.endDate || '',
                         billingStartDate: contract.billingStartDate,

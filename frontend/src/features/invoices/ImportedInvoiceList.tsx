@@ -31,13 +31,6 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -74,6 +67,7 @@ const IMPORTED_INVOICES = gql`
         customerName
         customerId
         customerDisplayName
+        contractId
         originalFilename
         fileSize
         pdfUrl
@@ -170,6 +164,21 @@ const CONFIRM_CUSTOMER_MATCH = gql`
         id
         customerId
         customerDisplayName
+      }
+    }
+  }
+`
+
+const UNLINK_CUSTOMER = gql`
+  mutation UnlinkCustomerFromInvoice($invoiceId: ID!) {
+    unlinkCustomerFromInvoice(invoiceId: $invoiceId) {
+      success
+      error
+      invoice {
+        id
+        customerId
+        customerDisplayName
+        contractId
       }
     }
   }
@@ -331,6 +340,7 @@ interface ImportedInvoice {
   customerName: string
   customerId: number | null
   customerDisplayName: string | null
+  contractId: number | null
   originalFilename: string
   fileSize: number
   pdfUrl: string | null
@@ -457,6 +467,7 @@ export function ImportedInvoiceList() {
   const [extractInvoiceMutation] = useMutation(EXTRACT_INVOICE)
   const [reExtractInvoiceMutation] = useMutation(RE_EXTRACT_INVOICE)
   const [confirmCustomerMatchMutation] = useMutation(CONFIRM_CUSTOMER_MATCH)
+  const [unlinkCustomerMutation] = useMutation(UNLINK_CUSTOMER)
   const [createPaymentMatchMutation] = useMutation(CREATE_PAYMENT_MATCH)
   const [deletePaymentMatchMutation] = useMutation(DELETE_PAYMENT_MATCH)
 
@@ -670,15 +681,20 @@ export function ImportedInvoiceList() {
     refetch()
   }
 
-  const handleConfirmCustomer = async (customerId: number) => {
+  const handleConfirmCustomer = async (customerId: number | string) => {
     if (!customerMatchInvoice) return
     await confirmCustomerMatchMutation({
       variables: {
         invoiceId: customerMatchInvoice.id,
-        customerId,
+        customerId: typeof customerId === 'string' ? parseInt(customerId, 10) : customerId,
       },
     })
     setCustomerMatchInvoice(null)
+    refetch()
+  }
+
+  const handleUnlinkCustomer = async (invoiceId: string) => {
+    await unlinkCustomerMutation({ variables: { invoiceId } })
     refetch()
   }
 
@@ -790,7 +806,7 @@ export function ImportedInvoiceList() {
                 <button
                   onClick={() => setDeleteBatchId(batch.id)}
                   className="ml-1 text-gray-400 hover:text-red-500"
-                  title={t('common.delete')}
+                  title={t('invoices.import.deleteBatchTooltip')}
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -814,26 +830,46 @@ export function ImportedInvoiceList() {
             className="pl-9"
           />
         </div>
-        <Select value={paymentStatus} onValueChange={(v) => { setPaymentStatus(v); setPage(1) }}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder={t('invoices.import.filterPaymentStatus')} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">{t('invoices.import.filterAll')}</SelectItem>
-            <SelectItem value="PAID">{t('invoices.import.filterPaid')}</SelectItem>
-            <SelectItem value="UNPAID">{t('invoices.import.filterUnpaid')}</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={uploadStatus} onValueChange={(v) => { setUploadStatus(v); setPage(1) }}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder={t('invoices.import.filterUploadStatus')} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">{t('invoices.import.filterAll')}</SelectItem>
-            <SelectItem value="PENDING">{t('invoices.import.filterPendingUpload')}</SelectItem>
-            <SelectItem value="UPLOADED">{t('invoices.import.filterUploaded')}</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="inline-flex rounded-md border border-input">
+          {[
+            { value: 'ALL', label: t('invoices.import.filterAll') },
+            { value: 'PAID', label: t('invoices.import.filterPaid') },
+            { value: 'UNPAID', label: t('invoices.import.filterUnpaid') },
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => { setPaymentStatus(opt.value); setPage(1) }}
+              className={cn(
+                'px-3 py-1.5 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md',
+                paymentStatus === opt.value
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-background text-muted-foreground hover:bg-muted'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div className="inline-flex rounded-md border border-input">
+          {[
+            { value: 'ALL', label: t('invoices.import.filterAll') },
+            { value: 'PENDING', label: t('invoices.import.filterPendingUpload') },
+            { value: 'UPLOADED', label: t('invoices.import.filterUploaded') },
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => { setUploadStatus(opt.value); setPage(1) }}
+              className={cn(
+                'px-3 py-1.5 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md',
+                uploadStatus === opt.value
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-background text-muted-foreground hover:bg-muted'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Table */}
@@ -915,12 +951,22 @@ export function ImportedInvoiceList() {
                   <td className="px-4 py-3">
                     <div>
                       {invoice.customerId ? (
-                        <Link
-                          to={`/customers/${invoice.customerId}`}
-                          className="text-blue-600 hover:text-blue-800 hover:underline"
-                        >
-                          {invoice.customerDisplayName || invoice.customerName}
-                        </Link>
+                        <>
+                          <Link
+                            to={`/customers/${invoice.customerId}`}
+                            className="text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            {invoice.customerDisplayName || invoice.customerName}
+                          </Link>
+                          <button
+                            onClick={() => !invoice.contractId && handleUnlinkCustomer(invoice.id)}
+                            className={`ml-2 ${invoice.contractId ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-600'}`}
+                            title={invoice.contractId ? t('invoices.import.unlinkCustomerDisabled') : t('invoices.import.unlinkCustomer')}
+                            disabled={!!invoice.contractId}
+                          >
+                            <Unlink className="w-3 h-3 inline" />
+                          </button>
+                        </>
                       ) : invoice.customerName ? (
                         <>
                           {invoice.customerName}
@@ -1323,6 +1369,7 @@ export function ImportedInvoiceList() {
                   {t('invoices.import.matchPaymentDescription', {
                     invoiceNumber: paymentMatchInvoice.invoiceNumber || paymentMatchInvoice.originalFilename,
                     amount: paymentMatchInvoice.totalAmount ? formatCurrency(parseFloat(paymentMatchInvoice.totalAmount)) : '-',
+                    customer: paymentMatchInvoice.customerDisplayName || paymentMatchInvoice.customerName || '-',
                   })}
                 </>
               )}
@@ -1430,7 +1477,7 @@ export function ImportedInvoiceList() {
                         >
                           <div className="min-w-0 flex-1">
                             <div className="font-medium">{tx.counterparty?.name || '-'}</div>
-                            <div className="text-sm text-gray-500 truncate">
+                            <div className="text-sm text-gray-500 break-words">
                               {formatDate(tx.entryDate)} - {tx.bookingText}
                             </div>
                           </div>

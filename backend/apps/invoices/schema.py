@@ -1567,6 +1567,39 @@ class InvoiceMutation:
         )
 
     @strawberry.mutation
+    def unlink_customer_from_invoice(
+        self, info: Info[Context, None], invoice_id: strawberry.ID
+    ) -> ImportedInvoiceResult:
+        """Unlink a customer from an imported invoice (only if no contract is assigned)."""
+        user, err = check_perm(info, "invoices", "write")
+        if err:
+            return ImportedInvoiceResult(success=False, error=err)
+
+        try:
+            invoice = ImportedInvoice.objects.get(id=invoice_id, tenant=user.tenant)
+        except ImportedInvoice.DoesNotExist:
+            return ImportedInvoiceResult(success=False, error="Invoice not found")
+
+        if invoice.contract_id is not None:
+            return ImportedInvoiceResult(
+                success=False, error="Cannot unlink customer while invoice is assigned to a contract"
+            )
+
+        invoice.customer = None
+        invoice.save(update_fields=["customer", "updated_at"])
+
+        invoice = ImportedInvoice.objects.select_related(
+            "customer", "created_by", "contract"
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty"
+        ).get(id=invoice_id)
+
+        return ImportedInvoiceResult(
+            success=True,
+            invoice=_convert_imported_invoice(invoice),
+        )
+
+    @strawberry.mutation
     def assign_invoice_contract(
         self,
         info: Info[Context, None],

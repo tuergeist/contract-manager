@@ -579,6 +579,8 @@
       "extract": "Extrahieren",
       "reExtract": "Erneut extrahieren",
       "linkCustomer": "Mit Kunde verknüpfen",
+      "unlinkCustomer": "Kunde trennen",
+      "unlinkCustomerDisabled": "Trennen nicht möglich, solange einem Vertrag zugeordnet",
       "deleteTitle": "Rechnung löschen",
       "deleteConfirmation": "Sind Sie sicher, dass Sie diese importierte Rechnung löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
       "matchCustomerTitle": "Kunde verknüpfen",
@@ -594,12 +596,13 @@
       "selectContract": "Vertrag auswählen",
       "noContract": "Kein Vertrag",
       "matchPaymentTitle": "Zahlung zuordnen",
-      "matchPaymentDescription": "Rechnung {{invoiceNumber}} ({{amount}}) einer Bankbuchung zuordnen",
+      "matchPaymentDescription": "Rechnung {{invoiceNumber}} ({{amount}}) für {{customer}} einer Bankbuchung zuordnen",
       "existingMatches": "Zugeordnete Transaktionen",
       "suggestedMatches": "Vorgeschlagene Zuordnungen",
       "noSuggestedMatches": "Keine Vorschläge gefunden",
-      "manualSearch": "Manuelle Suche",
+      "manualSearch": "Suche nach Gegenpartei, Buchungstext oder Betrag",
       "searchTransactions": "Haben-Buchungen suchen...",
+      "searchTransactionsHint": "Sucht nach Gegenpartei oder Buchungstext",
       "noTransactionsFound": "Keine Transaktionen gefunden",
       "importCsv": "CSV importieren",
       "csvUploadTitle": "Rechnungs-CSV importieren",
@@ -619,8 +622,9 @@
       "pending": "Ausstehend",
       "success": "Hochgeladen",
       "failed": "Fehlgeschlagen",
+      "deleteBatchTooltip": "Stapel löschen — nur Rechnungen ohne PDF werden entfernt, bereits hochgeladene bleiben erhalten",
       "deleteBatchTitle": "Import-Stapel löschen",
-      "deleteBatchConfirmation": "Sind Sie sicher, dass Sie diesen Import-Stapel löschen möchten? Dies löscht auch alle ausstehenden Rechnungen aus diesem Stapel."
+      "deleteBatchConfirmation": "Möchten Sie diesen Import-Stapel wirklich löschen? Nur Rechnungen ohne PDF werden gelöscht, bereits hochgeladene bleiben erhalten."
     }
   },
   "audit": {

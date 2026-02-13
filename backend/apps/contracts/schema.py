@@ -509,6 +509,7 @@ class CreateContractInput:
     notice_period_months: int = 3
     notice_period_anchor: str = "end_of_duration"
     notice_period_after_min_months: int | None = None
+    group_id: strawberry.ID | None = None
 
 
 @strawberry.input
@@ -531,6 +532,7 @@ class UpdateContractInput:
     notice_period_months: int | None = None
     notice_period_anchor: str | None = None
     notice_period_after_min_months: int | None = None
+    group_id: strawberry.ID | None = UNSET
 
 
 @strawberry.input
@@ -2070,6 +2072,15 @@ class ContractMutation:
         if not customer:
             return ContractResult(error="Customer not found")
 
+        # Validate group belongs to same customer
+        group = None
+        if input.group_id:
+            group = ContractGroup.objects.filter(
+                tenant=user.tenant, id=input.group_id, customer=customer
+            ).first()
+            if not group:
+                return ContractResult(error="Group not found or belongs to a different customer")
+
         try:
             contract = Contract.objects.create(
                 tenant=user.tenant,
@@ -2091,6 +2102,7 @@ class ContractMutation:
                 notice_period_months=input.notice_period_months,
                 notice_period_anchor=input.notice_period_anchor,
                 notice_period_after_min_months=input.notice_period_after_min_months,
+                group=group,
             )
             return ContractResult(contract=contract, success=True)
         except Exception as e:
@@ -2148,6 +2160,16 @@ class ContractMutation:
                 contract.notice_period_anchor = input.notice_period_anchor
             if input.notice_period_after_min_months is not None:
                 contract.notice_period_after_min_months = input.notice_period_after_min_months
+            if input.group_id is not UNSET:
+                if input.group_id is None:
+                    contract.group = None
+                else:
+                    group = ContractGroup.objects.filter(
+                        tenant=user.tenant, id=input.group_id, customer=contract.customer
+                    ).first()
+                    if not group:
+                        return ContractResult(error="Group not found or belongs to a different customer")
+                    contract.group = group
 
             contract.save()
             return ContractResult(contract=contract, success=True)

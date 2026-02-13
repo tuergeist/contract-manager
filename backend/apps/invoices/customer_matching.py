@@ -54,7 +54,7 @@ def match_customer_by_name(
         CustomerMatch(
             customer_id=m.id,
             customer_name=m.name,
-            city=m.city,
+            city=(m.address or {}).get("city"),
             similarity=Decimal(str(round(m.similarity, 2))),
             hubspot_id=m.hubspot_id,
         )

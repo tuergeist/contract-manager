@@ -366,10 +366,14 @@ class BankingQuery:
         if counterparty_id is not None:
             qs = qs.filter(counterparty_id=str(counterparty_id))
         if search:
-            qs = qs.filter(
-                Q(counterparty__name__icontains=search)
-                | Q(booking_text__icontains=search)
-            )
+            q = Q(counterparty__name__icontains=search) | Q(booking_text__icontains=search)
+            # Also match by amount if the search term looks numeric
+            try:
+                amount_val = Decimal(search.replace(",", ".").strip())
+                q = q | Q(amount=amount_val) | Q(amount=-amount_val)
+            except Exception:
+                pass
+            qs = qs.filter(q)
         if date_from:
             qs = qs.filter(entry_date__gte=date_from)
         if date_to:

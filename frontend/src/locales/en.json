@@ -579,6 +579,8 @@
       "extract": "Extract",
       "reExtract": "Re-extract",
       "linkCustomer": "Link to customer",
+      "unlinkCustomer": "Unlink customer",
+      "unlinkCustomerDisabled": "Cannot unlink while assigned to a contract",
       "deleteTitle": "Delete Invoice",
       "deleteConfirmation": "Are you sure you want to delete this imported invoice? This action cannot be undone.",
       "matchCustomerTitle": "Link Customer",
@@ -594,12 +596,13 @@
       "selectContract": "Select contract",
       "noContract": "No contract",
       "matchPaymentTitle": "Match Payment",
-      "matchPaymentDescription": "Match invoice {{invoiceNumber}} ({{amount}}) to a bank transaction",
+      "matchPaymentDescription": "Match invoice {{invoiceNumber}} ({{amount}}) for {{customer}} to a bank transaction",
       "existingMatches": "Matched Transactions",
       "suggestedMatches": "Suggested Matches",
       "noSuggestedMatches": "No suggested matches found",
-      "manualSearch": "Manual Search",
+      "manualSearch": "Search by counterparty name, booking text, or amount",
       "searchTransactions": "Search credit transactions...",
+      "searchTransactionsHint": "Searches by counterparty name or booking text",
       "noTransactionsFound": "No transactions found",
       "importCsv": "Import CSV",
       "csvUploadTitle": "Import Invoice CSV",
@@ -619,8 +622,9 @@
       "pending": "Pending",
       "success": "Uploaded",
       "failed": "Failed",
+      "deleteBatchTooltip": "Delete batch — only removes invoices without PDF, already uploaded invoices are kept",
       "deleteBatchTitle": "Delete Import Batch",
-      "deleteBatchConfirmation": "Are you sure you want to delete this import batch? This will also delete all pending invoices from this batch."
+      "deleteBatchConfirmation": "Are you sure you want to delete this import batch? Only invoices without PDF will be deleted, already uploaded invoices will be kept."
     }
   },
   "audit": {
