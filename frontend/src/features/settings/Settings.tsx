@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, gql } from '@apollo/client'
 import { RefreshCw, CheckCircle, XCircle, Loader2, Upload, Plus, X } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
+import { HelpVideoSettings } from './HelpVideoSettings'
 
 interface CompanyFilter {
   propertyName: string
@@ -772,6 +773,9 @@ export function Settings({ showHeader = true }: SettingsProps) {
             </Link>
           </div>
         </div>
+
+        {/* Help Video Links */}
+        <HelpVideoSettings />
       </div>
     </div>
   )

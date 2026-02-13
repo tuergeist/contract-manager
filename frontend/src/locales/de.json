@@ -1150,5 +1150,23 @@
     "sortFrequency": "Häufigkeit",
     "sortConfidence": "Konfidenz",
     "noFiltersHint": "Aktivieren Sie mindestens einen Filter (Ausgaben oder Einnahmen)"
+  },
+  "routes": {
+    "customerDetail": "Kundendetails",
+    "contractDetail": "Vertragsdetails",
+    "contractEdit": "Vertrag bearbeiten"
+  },
+  "helpVideo": {
+    "button": "Kurze Anleitung",
+    "settings": {
+      "title": "Hilfe-Videos",
+      "description": "Konfigurieren Sie Links zu Erklärvideos für einzelne Seiten. Ein grüner Button erscheint auf den jeweiligen Seiten.",
+      "addScreen": "Seite hinzufügen",
+      "addLink": "Link hinzufügen",
+      "urlPlaceholder": "https://screen.studio/share/...",
+      "labelPlaceholder": "Bezeichnung (optional)",
+      "saved": "Hilfe-Videos gespeichert",
+      "saveFailed": "Fehler beim Speichern"
+    }
   }
 }

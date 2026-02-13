@@ -1150,5 +1150,23 @@
     "sortFrequency": "Frequency",
     "sortConfidence": "Confidence",
     "noFiltersHint": "Enable at least one filter (Costs or Income) to see patterns"
+  },
+  "routes": {
+    "customerDetail": "Customer Detail",
+    "contractDetail": "Contract Detail",
+    "contractEdit": "Contract Edit"
+  },
+  "helpVideo": {
+    "button": "Quick Guide",
+    "settings": {
+      "title": "Help Videos",
+      "description": "Configure links to tutorial videos for individual pages. A green button will appear on the respective pages.",
+      "addScreen": "Add screen",
+      "addLink": "Add link",
+      "urlPlaceholder": "https://screen.studio/share/...",
+      "labelPlaceholder": "Label (optional)",
+      "saved": "Help videos saved",
+      "saveFailed": "Failed to save"
+    }
   }
 }

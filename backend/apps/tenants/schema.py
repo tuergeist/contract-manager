@@ -244,6 +244,34 @@ class TimeTrackingTestResult:
 
 
 @strawberry.type
+class HelpVideoLinkType:
+    """A single help video link."""
+    url: str
+    label: str | None = None
+
+
+@strawberry.type
+class HelpVideoLinksEntryType:
+    """Help video links for a specific route."""
+    route_key: str
+    links: list[HelpVideoLinkType]
+
+
+@strawberry.input
+class HelpVideoLinkInput:
+    """Input for a single help video link."""
+    url: str
+    label: str | None = None
+
+
+@strawberry.input
+class HelpVideoLinksEntryInput:
+    """Input for help video links for a route."""
+    route_key: str
+    links: list[HelpVideoLinkInput]
+
+
+@strawberry.type
 class TenantQuery:
     @strawberry.field
     def current_user(self, info: Info[Context, None]) -> UserType | None:
@@ -402,6 +430,24 @@ class TenantQuery:
             error=result.get("error"),
             properties=properties,
         )
+
+    @strawberry.field
+    def help_video_links(self, info: Info[Context, None]) -> list[HelpVideoLinksEntryType]:
+        """Get help video links configured for the current tenant."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return []
+        config = (user.tenant.settings or {}).get("help_video_links", {})
+        return [
+            HelpVideoLinksEntryType(
+                route_key=route_key,
+                links=[
+                    HelpVideoLinkType(url=link["url"], label=link.get("label"))
+                    for link in links
+                ],
+            )
+            for route_key, links in config.items()
+        ]
 
 
 @strawberry.input
@@ -588,6 +634,44 @@ class TenantMutation:
         tenant.save(update_fields=["hubspot_config"])
 
         return HubSpotTestResult(success=True, error=None)
+
+    @strawberry.mutation
+    def update_help_video_links(
+        self,
+        info: Info[Context, None],
+        entries: list[HelpVideoLinksEntryInput],
+    ) -> list[HelpVideoLinksEntryType]:
+        """Update help video links for the tenant. Requires settings.write."""
+        user = require_perm(info, "settings", "write")
+        tenant = user.tenant
+
+        if not tenant.settings:
+            tenant.settings = {}
+
+        if not entries:
+            tenant.settings.pop("help_video_links", None)
+        else:
+            tenant.settings["help_video_links"] = {
+                entry.route_key: [
+                    {"url": link.url, "label": link.label}
+                    for link in entry.links
+                ]
+                for entry in entries
+            }
+        tenant.save(update_fields=["settings"])
+
+        # Return updated config
+        config = tenant.settings.get("help_video_links", {})
+        return [
+            HelpVideoLinksEntryType(
+                route_key=route_key,
+                links=[
+                    HelpVideoLinkType(url=link["url"], label=link.get("label"))
+                    for link in links
+                ],
+            )
+            for route_key, links in config.items()
+        ]
 
     @strawberry.mutation
     def check_hubspot_property(
