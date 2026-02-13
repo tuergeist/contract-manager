@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { usePersistedState } from '@/lib/usePersistedState'
 import { formatDate } from '@/lib/utils'
+import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 const CONTRACTS_QUERY = gql`
   query Contracts(
@@ -181,6 +182,7 @@ export function ContractList() {
           <span className="text-sm text-gray-500">
             {totalCount} {t('contracts.total')}
           </span>
+          <HelpVideoButton />
           <Link
             to="/contracts/new"
             className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"

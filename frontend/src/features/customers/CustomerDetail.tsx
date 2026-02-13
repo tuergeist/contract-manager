@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/command'
 import { cn, formatDate } from '@/lib/utils'
 import { useAuditLogs, AuditLogTable } from '@/features/audit'
+import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 type SortField = 'name' | 'status' | 'startDate' | 'endDate' | 'arr' | 'totalValue' | 'remainingMonths' | null
 type SortOrder = 'asc' | 'desc'
@@ -815,6 +816,7 @@ export function CustomerDetail() {
             </div>
           </div>
         </div>
+        <HelpVideoButton />
       </div>
 
       {/* Summary Cards - 4 in a row */}

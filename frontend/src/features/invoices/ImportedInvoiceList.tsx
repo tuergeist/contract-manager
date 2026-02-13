@@ -37,6 +37,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn, formatCurrency, formatDate } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
+import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 // --- GraphQL ---
 
@@ -774,18 +775,21 @@ export function ImportedInvoiceList() {
           <h1 className="text-2xl font-semibold">{t('invoices.import.title')}</h1>
           <p className="text-sm text-gray-500">{t('invoices.import.subtitle')}</p>
         </div>
-        {canWrite && (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setCsvUploadOpen(true)}>
-              <FileSpreadsheet className="w-4 h-4 mr-2" />
-              {t('invoices.import.importCsv')}
-            </Button>
-            <Button onClick={() => setUploadOpen(true)}>
-              <Upload className="w-4 h-4 mr-2" />
-              {t('invoices.import.uploadButton')}
-            </Button>
-          </div>
-        )}
+        <div className="flex gap-2">
+          <HelpVideoButton />
+          {canWrite && (
+            <>
+              <Button variant="outline" onClick={() => setCsvUploadOpen(true)}>
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                {t('invoices.import.importCsv')}
+              </Button>
+              <Button onClick={() => setUploadOpen(true)}>
+                <Upload className="w-4 h-4 mr-2" />
+                {t('invoices.import.uploadButton')}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Import Batches */}

@@ -4,6 +4,7 @@ import { useQuery, gql } from '@apollo/client'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { KPICard } from './KPICard'
 import { TodoList, type TodoItem } from '@/features/todos'
+import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 const DASHBOARD_KPIS_QUERY = gql`
   query DashboardKPIs {
@@ -143,7 +144,10 @@ export function Dashboard() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">{t('dashboard.title')}</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">{t('dashboard.title')}</h1>
+        <HelpVideoButton />
+      </div>
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">

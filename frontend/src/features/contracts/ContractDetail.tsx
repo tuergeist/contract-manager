@@ -82,6 +82,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { TimeTrackingTab } from './TimeTrackingTab'
 import { PdfAnalysisPanel } from './PdfAnalysisPanel'
 import { ListTodo, Receipt } from 'lucide-react'
@@ -827,6 +828,7 @@ export function ContractDetail() {
         </div>
         {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+          <HelpVideoButton />
           <Button
             variant="outline"
             onClick={() => {

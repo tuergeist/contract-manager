@@ -17,6 +17,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -888,6 +889,7 @@ export function TodoBoard() {
             />
             {t('todos.showCompleted')}
           </label>
+          <HelpVideoButton />
         </div>
       </div>
 

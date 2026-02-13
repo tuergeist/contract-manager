@@ -4,6 +4,7 @@ import { useQuery, gql } from '@apollo/client'
 import { Loader2, Search, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { usePersistedState } from '@/lib/usePersistedState'
 import { formatDateTime } from '@/lib/utils'
+import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 const PRODUCTS_QUERY = gql`
   query Products($search: String, $isActive: Boolean, $page: Int, $pageSize: Int, $sortBy: String, $sortOrder: String) {
@@ -136,9 +137,12 @@ export function ProductList() {
     <div>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t('products.title')}</h1>
-        <span className="text-sm text-gray-500">
-          {totalCount} {t('products.total')}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500">
+            {totalCount} {t('products.total')}
+          </span>
+          <HelpVideoButton />
+        </div>
       </div>
 
       {/* Search and Filters */}

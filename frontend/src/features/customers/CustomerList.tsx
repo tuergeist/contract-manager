@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import { Loader2, Search, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { usePersistedState } from '@/lib/usePersistedState'
 import { formatDateTime } from '@/lib/utils'
+import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 const CUSTOMERS_QUERY = gql`
   query Customers($search: String, $isActive: Boolean, $page: Int, $pageSize: Int, $sortBy: String, $sortOrder: String) {
@@ -120,9 +121,12 @@ export function CustomerList() {
     <div>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t('customers.title')}</h1>
-        <span className="text-sm text-gray-500">
-          {totalCount} {t('customers.total')}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500">
+            {totalCount} {t('customers.total')}
+          </span>
+          <HelpVideoButton />
+        </div>
       </div>
 
       {/* Search and Filter */}

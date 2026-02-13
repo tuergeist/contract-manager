@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
 import { Loader2, Filter, ChevronDown } from 'lucide-react'
 import { AuditLogTable, AuditLogEntry } from './AuditLogTable'
+import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 const AUDIT_LOGS_QUERY = gql`
   query AuditLogs(
@@ -107,9 +108,12 @@ export function AuditLogPage() {
     <div data-testid="audit-log-page">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t('audit.title')}</h1>
-        <span className="text-sm text-gray-500">
-          {totalCount} {t('audit.entries')}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500">
+            {totalCount} {t('audit.entries')}
+          </span>
+          <HelpVideoButton />
+        </div>
       </div>
 
       {/* Filters */}

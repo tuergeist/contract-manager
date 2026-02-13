@@ -46,6 +46,7 @@ import {
   CommandSeparator,
 } from '@/components/ui/command'
 import { useAuth } from '@/lib/auth'
+import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 // --- GraphQL ---
 
@@ -717,13 +718,16 @@ export function BankingPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t('banking.title')}</h1>
-        <button
-          onClick={openCreateDialog}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          <Plus className="h-4 w-4" />
-          {t('banking.addAccount')}
-        </button>
+        <div className="flex items-center gap-2">
+          <HelpVideoButton />
+          <button
+            onClick={openCreateDialog}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4" />
+            {t('banking.addAccount')}
+          </button>
+        </div>
       </div>
 
       {/* Accounts Section */}

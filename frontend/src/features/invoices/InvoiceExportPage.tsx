@@ -24,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 const INVOICES_FOR_MONTH = gql`
   query InvoicesForMonth($year: Int!, $month: Int!) {
@@ -312,6 +313,7 @@ export function InvoiceExportPage() {
         <h1 className="text-2xl font-bold" data-testid="invoice-export-title">
           {t('invoices.export.title')}
         </h1>
+        <HelpVideoButton />
       </div>
 
       {/* Toast */}

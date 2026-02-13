@@ -5,6 +5,7 @@ import { Loader2, RefreshCw, TrendingUp, TrendingDown, ChevronDown, ChevronRight
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { ForecastChart } from './ForecastChart'
 import { EditPatternModal } from './EditPatternModal'
+import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 const LIQUIDITY_FORECAST_QUERY = gql`
   query LiquidityForecast($months: Int!) {
@@ -350,18 +351,21 @@ export function LiquidityForecast() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t('liquidity.title')}</h1>
-        <button
-          onClick={() => detectPatterns()}
-          disabled={detecting}
-          className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {detecting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
-          {t('liquidity.detectPatterns')}
-        </button>
+        <div className="flex items-center gap-2">
+          <HelpVideoButton />
+          <button
+            onClick={() => detectPatterns()}
+            disabled={detecting}
+            className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {detecting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            {t('liquidity.detectPatterns')}
+          </button>
+        </div>
       </div>
 
       {/* Info Note and Account Offset */}

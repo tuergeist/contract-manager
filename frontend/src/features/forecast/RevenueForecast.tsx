@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
+import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 const REVENUE_FORECAST_QUERY = gql`
   query RevenueForecast($months: Int, $quarters: Int, $view: String, $proRata: Boolean) {
@@ -306,6 +307,7 @@ export function RevenueForecast() {
               {t('forecast.proRata')}
             </label>
           </div>
+          <HelpVideoButton />
         </div>
       </div>
 
