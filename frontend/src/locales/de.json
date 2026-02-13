@@ -866,7 +866,15 @@
       "assignRoles": "Rollen zuweisen",
       "selectRoles": "Rollen für diesen Benutzer auswählen",
       "rolesUpdated": "Rollen aktualisiert",
-      "rolesUpdateFailed": "Rollen konnten nicht aktualisiert werden"
+      "rolesUpdateFailed": "Rollen konnten nicht aktualisiert werden",
+      "permissionHints": {
+        "title": "Benötigte Rechtekombinationen",
+        "invoicePaymentMatching": "Zahlungszuordnung: Rechnungen (Generieren) + Banking (Lesen)",
+        "contractCreation": "Verträge erstellen: Verträge (Schreiben) + Kunden (Lesen)",
+        "contractItems": "Vertragsposten mit Produkten: Verträge (Schreiben) + Produkte (Lesen)",
+        "invoiceGeneration": "Rechnungen generieren: Rechnungen (Generieren) + Verträge (Lesen)",
+        "customerMatching": "Kundenzuordnung (Import): Rechnungen (Lesen) + Kunden (Lesen)"
+      }
     },
     "hubspot": {
       "title": "HubSpot Integration",

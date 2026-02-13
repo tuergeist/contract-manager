@@ -281,6 +281,17 @@ export function RoleManagement() {
               t={t}
             />
 
+            <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+              <p className="text-xs font-medium text-gray-500">{t('settings.roles.permissionHints.title')}</p>
+              <ul className="mt-1 space-y-0.5 text-xs text-gray-500">
+                <li>{t('settings.roles.permissionHints.invoicePaymentMatching')}</li>
+                <li>{t('settings.roles.permissionHints.contractCreation')}</li>
+                <li>{t('settings.roles.permissionHints.contractItems')}</li>
+                <li>{t('settings.roles.permissionHints.invoiceGeneration')}</li>
+                <li>{t('settings.roles.permissionHints.customerMatching')}</li>
+              </ul>
+            </div>
+
             {message && (
               <p className={`mt-3 text-sm ${message.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
                 {message.text}

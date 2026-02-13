@@ -866,7 +866,15 @@
       "assignRoles": "Assign Roles",
       "selectRoles": "Select roles for this user",
       "rolesUpdated": "Roles updated",
-      "rolesUpdateFailed": "Failed to update roles"
+      "rolesUpdateFailed": "Failed to update roles",
+      "permissionHints": {
+        "title": "Required permission combinations",
+        "invoicePaymentMatching": "Payment matching: Invoices (Generate) + Banking (Read)",
+        "contractCreation": "Create contracts: Contracts (Write) + Customers (Read)",
+        "contractItems": "Contract items with products: Contracts (Write) + Products (Read)",
+        "invoiceGeneration": "Generate invoices: Invoices (Generate) + Contracts (Read)",
+        "customerMatching": "Customer matching (import): Invoices (Read) + Customers (Read)"
+      }
     },
     "hubspot": {
       "title": "HubSpot Integration",
