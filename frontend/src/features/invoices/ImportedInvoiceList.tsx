@@ -305,7 +305,7 @@ const SEARCH_CUSTOMERS = gql`
       items {
         id
         name
-        city
+        address
         hubspotId
       }
     }
@@ -1209,7 +1209,7 @@ export function ImportedInvoiceList() {
           setCustomerSearch('')
         }
       }}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('invoices.import.matchCustomerTitle')}</DialogTitle>
             <DialogDescription>
@@ -1237,8 +1237,8 @@ export function ImportedInvoiceList() {
                     <Loader2 className="w-4 h-4 mx-auto animate-spin" />
                   </div>
                 ) : customerSearchData?.customers?.items?.length > 0 ? (
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {customerSearchData.customers.items.map((customer: { id: number; name: string; city: string | null; hubspotId: string | null }) => (
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {customerSearchData.customers.items.map((customer: { id: number; name: string; address?: { city?: string | null } | null; hubspotId: string | null }) => (
                       <button
                         key={customer.id}
                         onClick={() => handleConfirmCustomer(customer.id)}
@@ -1247,7 +1247,7 @@ export function ImportedInvoiceList() {
                         <div>
                           <div className="font-medium">{customer.name}</div>
                           <div className="text-xs text-gray-500">
-                            CUS-{customer.id}{customer.city && ` · ${customer.city}`}
+                            CUS-{customer.id}{customer.address?.city && ` · ${customer.address.city}`}
                           </div>
                         </div>
                       </button>
