@@ -16,6 +16,7 @@ import {
   ChevronRight,
   CreditCard,
   Unlink,
+  Eye,
   FileSpreadsheet,
   Mail,
   X,
@@ -524,6 +525,7 @@ export function ImportedInvoiceList() {
   const hasNextPage = data?.importedInvoices?.hasNextPage ?? false
   const totalPages = Math.ceil(totalCount / pageSize)
   const batches: ImportBatch[] = batchData?.importBatches?.items ?? []
+  const hasPendingUploads = batches.some((b) => b.pendingCount > 0)
 
   // Sort handling
   const handleSort = (field: string) => {
@@ -850,26 +852,28 @@ export function ImportedInvoiceList() {
             </button>
           ))}
         </div>
-        <div className="inline-flex rounded-md border border-input">
-          {[
-            { value: 'ALL', label: t('invoices.import.filterAll') },
-            { value: 'PENDING', label: t('invoices.import.filterPendingUpload') },
-            { value: 'UPLOADED', label: t('invoices.import.filterUploaded') },
-          ].map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => { setUploadStatus(opt.value); setPage(1) }}
-              className={cn(
-                'px-3 py-1.5 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md',
-                uploadStatus === opt.value
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-background text-muted-foreground hover:bg-muted'
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        {hasPendingUploads && (
+          <div className="inline-flex rounded-md border border-input">
+            {[
+              { value: 'ALL', label: t('invoices.import.filterAll') },
+              { value: 'PENDING', label: t('invoices.import.filterPendingUpload') },
+              { value: 'UPLOADED', label: t('invoices.import.filterUploaded') },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => { setUploadStatus(opt.value); setPage(1) }}
+                className={cn(
+                  'px-3 py-1.5 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md',
+                  uploadStatus === opt.value
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-background text-muted-foreground hover:bg-muted'
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Table */}
@@ -1011,7 +1015,7 @@ export function ImportedInvoiceList() {
                           size="sm"
                           onClick={() => openPaymentMatchModal(invoice)}
                           title={t('invoices.import.matchPayment')}
-                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          className="text-gray-400 hover:text-blue-600 hover:bg-blue-50"
                         >
                           <CreditCard className="w-4 h-4" />
                         </Button>
@@ -1022,6 +1026,7 @@ export function ImportedInvoiceList() {
                           size="sm"
                           onClick={() => handleExtract(invoice.id)}
                           title={t('invoices.import.extract')}
+                          className="text-gray-400 hover:text-foreground"
                         >
                           <RefreshCw className="w-4 h-4" />
                         </Button>
@@ -1032,6 +1037,7 @@ export function ImportedInvoiceList() {
                           size="sm"
                           onClick={() => handleReExtract(invoice.id)}
                           title={t('invoices.import.reExtract')}
+                          className="text-gray-400 hover:text-foreground"
                         >
                           <RefreshCw className="w-4 h-4" />
                         </Button>
@@ -1041,9 +1047,10 @@ export function ImportedInvoiceList() {
                           variant="ghost"
                           size="sm"
                           asChild
+                          className="text-gray-400 hover:text-foreground"
                         >
-                          <a href={invoice.pdfUrl} target="_blank" rel="noopener noreferrer">
-                            <FileText className="w-4 h-4" />
+                          <a href={invoice.pdfUrl} target="_blank" rel="noopener noreferrer" title={t('invoices.import.viewPdf')}>
+                            <Eye className="w-4 h-4" />
                           </a>
                         </Button>
                       )}
@@ -1052,7 +1059,7 @@ export function ImportedInvoiceList() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setDeleteId(invoice.id)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          className="text-gray-400 hover:text-red-600 hover:bg-red-50"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
