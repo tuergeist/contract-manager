@@ -91,7 +91,12 @@
     "billingEmails": "Billing Emails",
     "noBillingEmails": "No billing emails",
     "addBillingEmailPlaceholder": "Add email address...",
-    "invalidEmailFormat": "Invalid email format"
+    "invalidEmailFormat": "Invalid email format",
+    "invoiceLanguage": "Invoice Language",
+    "invoiceLanguageDefault": "System Default (German)",
+    "invoiceLanguageDe": "German (Deutsch)",
+    "invoiceLanguageEn": "English",
+    "invoiceLanguageHint": "Language used for invoice PDF labels and headers for this customer"
   },
   "products": {
     "title": "Products",

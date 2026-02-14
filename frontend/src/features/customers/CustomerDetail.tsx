@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, History, Paperclip, Upload, Download, File, Image, Trash2, Link2, Plus, TrendingUp, DollarSign, ListTodo, Mail, X, Receipt, ChevronsUpDown, Check, FolderOpen } from 'lucide-react'
+import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, History, Paperclip, Upload, Download, File, Image, Trash2, Link2, Plus, TrendingUp, DollarSign, ListTodo, Mail, X, Receipt, ChevronsUpDown, Check, FolderOpen, Globe } from 'lucide-react'
 import { TodoModal, TodoList, type TodoContext, type TodoItem } from '@/features/todos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -79,6 +79,7 @@ const CUSTOMER_QUERY = gql`
         createdByName
       }
       billingEmails
+      invoiceLanguage
       todos {
         id
         text
@@ -159,6 +160,16 @@ const UPDATE_CUSTOMER_BILLING_EMAILS_MUTATION = gql`
       success
       error
       billingEmails
+    }
+  }
+`
+
+const UPDATE_CUSTOMER_INVOICE_LANGUAGE_MUTATION = gql`
+  mutation UpdateCustomerInvoiceLanguage($input: UpdateCustomerInvoiceLanguageInput!) {
+    updateCustomerInvoiceLanguage(input: $input) {
+      success
+      error
+      invoiceLanguage
     }
   }
 `
@@ -316,6 +327,7 @@ interface Customer {
   links: CustomerLink[]
   todos: TodoItem[]
   billingEmails: string[]
+  invoiceLanguage: string
 }
 
 interface CustomerData {
@@ -376,6 +388,7 @@ export function CustomerDetail() {
   const [addLink] = useMutation(ADD_CUSTOMER_LINK_MUTATION)
   const [deleteLink] = useMutation(DELETE_CUSTOMER_LINK_MUTATION)
   const [updateBillingEmails] = useMutation(UPDATE_CUSTOMER_BILLING_EMAILS_MUTATION)
+  const [updateInvoiceLanguage] = useMutation(UPDATE_CUSTOMER_INVOICE_LANGUAGE_MUTATION)
   const [assignInvoiceContract] = useMutation(ASSIGN_INVOICE_CONTRACT_MUTATION)
   const [createContractGroup] = useMutation(CREATE_CONTRACT_GROUP_MUTATION)
   const [assignContractToGroup] = useMutation(ASSIGN_CONTRACT_TO_GROUP_MUTATION)
@@ -746,6 +759,25 @@ export function CustomerDetail() {
     }
   }
 
+  const handleInvoiceLanguageChange = async (value: string) => {
+    if (!id) return
+    try {
+      const result = await updateInvoiceLanguage({
+        variables: {
+          input: {
+            customerId: id,
+            language: value === 'default' ? '' : value,
+          },
+        },
+      })
+      if (result.data?.updateCustomerInvoiceLanguage?.success) {
+        refetch()
+      }
+    } catch (err) {
+      console.error('Update invoice language error:', err)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -895,8 +927,32 @@ export function CustomerDetail() {
         </div>
       </div>
 
+      {/* Invoice Language & Billing Emails */}
+      <div className="mt-4 grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-4">
+        {/* Invoice Language */}
+        <div className="rounded-lg border bg-white p-4" data-testid="customer-invoice-language-section">
+          <div className="flex items-center gap-2 mb-3">
+            <Globe className="h-4 w-4 text-gray-400" />
+            <p className="text-sm font-medium text-gray-500">{t('customers.invoiceLanguage')}</p>
+          </div>
+          <Select
+            value={customer.invoiceLanguage || 'default'}
+            onValueChange={handleInvoiceLanguageChange}
+          >
+            <SelectTrigger className="w-[180px]" data-testid="invoice-language-select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="default">{t('customers.invoiceLanguageDefault')}</SelectItem>
+              <SelectItem value="de">{t('customers.invoiceLanguageDe')}</SelectItem>
+              <SelectItem value="en">{t('customers.invoiceLanguageEn')}</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="mt-2 text-xs text-muted-foreground">{t('customers.invoiceLanguageHint')}</p>
+        </div>
+
       {/* Billing Emails Section */}
-      <div className="mt-4 rounded-lg border bg-white p-4" data-testid="customer-billing-emails-section">
+      <div className="rounded-lg border bg-white p-4" data-testid="customer-billing-emails-section">
         <div className="flex items-center gap-2 mb-3">
           <Mail className="h-4 w-4 text-gray-400" />
           <p className="text-sm font-medium text-gray-500">{t('customers.billingEmails')}</p>
@@ -954,6 +1010,7 @@ export function CustomerDetail() {
         {emailError && (
           <p className="mt-1 text-xs text-red-500">{emailError}</p>
         )}
+      </div>
       </div>
 
       {/* Tabs */}

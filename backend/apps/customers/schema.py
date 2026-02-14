@@ -63,6 +63,7 @@ class CustomerType:
     synced_at: auto
     created_at: auto
     billing_emails: auto
+    invoice_language: auto
 
     @strawberry.field
     def hubspot_url(self, info: Info[Context, None]) -> str | None:
@@ -209,6 +210,23 @@ class UpdateBillingEmailsResult:
     success: bool = False
     error: str | None = None
     billing_emails: List[str] | None = None
+
+
+@strawberry.input
+class UpdateCustomerInvoiceLanguageInput:
+    """Input for updating customer invoice language."""
+
+    customer_id: strawberry.ID
+    language: str  # "de", "en", or "" (system default)
+
+
+@strawberry.type
+class UpdateCustomerInvoiceLanguageResult:
+    """Result of updating customer invoice language."""
+
+    success: bool = False
+    error: str | None = None
+    invoice_language: str | None = None
 
 
 @strawberry.type
@@ -531,4 +549,42 @@ class CustomerMutation:
         return UpdateBillingEmailsResult(
             success=True,
             billing_emails=customer.billing_emails,
+        )
+
+    # =========================================================================
+    # Invoice Language Mutations
+    # =========================================================================
+
+    @strawberry.mutation
+    def update_customer_invoice_language(
+        self,
+        info: Info[Context, None],
+        input: UpdateCustomerInvoiceLanguageInput,
+    ) -> UpdateCustomerInvoiceLanguageResult:
+        """Set the invoice language for a customer."""
+        user, err = check_perm(info, "customers", "write")
+        if err:
+            return UpdateCustomerInvoiceLanguageResult(error=err)
+        if not user.tenant:
+            return UpdateCustomerInvoiceLanguageResult(error="No tenant assigned")
+
+        # Validate language
+        if input.language not in ("de", "en", ""):
+            return UpdateCustomerInvoiceLanguageResult(
+                error="Language must be 'de', 'en', or empty for system default"
+            )
+
+        # Verify customer belongs to tenant
+        customer = Customer.objects.filter(
+            tenant=user.tenant, id=input.customer_id
+        ).first()
+        if not customer:
+            return UpdateCustomerInvoiceLanguageResult(error="Customer not found")
+
+        customer.invoice_language = input.language
+        customer.save(update_fields=["invoice_language", "updated_at"])
+
+        return UpdateCustomerInvoiceLanguageResult(
+            success=True,
+            invoice_language=customer.invoice_language,
         )

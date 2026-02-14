@@ -5,7 +5,23 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.core.permissions import get_current_user_from_request
+from apps.customers.models import Customer
 from apps.invoices.services import InvoiceService
+
+
+def _resolve_invoice_language(tenant, customer_id, fallback="de"):
+    """Resolve the invoice language for a customer.
+
+    Uses the customer's invoice_language if set, otherwise falls back.
+    """
+    if customer_id:
+        try:
+            customer = Customer.objects.get(tenant=tenant, id=customer_id)
+            if customer.invoice_language:
+                return customer.invoice_language
+        except Customer.DoesNotExist:
+            pass
+    return fallback
 
 
 @method_decorator(csrf_exempt, name="dispatch")
@@ -98,15 +114,27 @@ class InvoiceExportView(View):
                 {"error": "No invoices found for this month"}, status=404
             )
 
+        # Build per-customer language map
+        customer_ids = {inv.customer_id for inv in invoices}
+        customer_languages = {}
+        for cust in Customer.objects.filter(
+            tenant=user.tenant, id__in=customer_ids
+        ).only("id", "invoice_language"):
+            if cust.invoice_language:
+                customer_languages[cust.id] = cust.invoice_language
+
         # Generate export
         if export_format == "pdf":
-            content = service.generate_pdf(invoices, language=language)
+            content = service.generate_pdf(
+                invoices, language=language, customer_languages=customer_languages
+            )
             filename = f"invoices-{year:04d}-{month:02d}.pdf"
             content_type = "application/pdf"
 
         elif export_format == "pdf-individual":
             content = service.generate_individual_pdfs(
-                invoices, year, month, language=language
+                invoices, year, month, language=language,
+                customer_languages=customer_languages,
             )
             filename = f"invoices-{year:04d}-{month:02d}.zip"
             content_type = "application/zip"
@@ -156,7 +184,11 @@ class InvoiceExportView(View):
                     {"error": "Finalized invoice not found"}, status=404
                 )
 
-            content = service.generate_zugferd_pdf_for_record(record, language)
+            # Use customer's invoice language if set
+            record_language = _resolve_invoice_language(
+                user.tenant, record.customer_id, fallback=language
+            )
+            content = service.generate_zugferd_pdf_for_record(record, record_language)
             filename = f"invoice-{record.invoice_number}.pdf"
             content_type = "application/pdf"
 
@@ -184,8 +216,17 @@ class InvoiceExportView(View):
                     status=404,
                 )
 
+            # Build per-customer language map for batch export
+            customer_ids = {r.customer_id for r in records if r.customer_id}
+            customer_languages = {}
+            for cust in Customer.objects.filter(
+                tenant=user.tenant, id__in=customer_ids
+            ).only("id", "invoice_language"):
+                if cust.invoice_language:
+                    customer_languages[cust.id] = cust.invoice_language
+
             content = service.generate_individual_zugferd_pdfs(
-                records, year, month, language
+                records, year, month, language, customer_languages=customer_languages
             )
             filename = f"invoices-zugferd-{year:04d}-{month:02d}.zip"
             content_type = "application/zip"

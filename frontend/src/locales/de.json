@@ -91,7 +91,12 @@
     "billingEmails": "Rechnungs-E-Mails",
     "noBillingEmails": "Keine Rechnungs-E-Mails",
     "addBillingEmailPlaceholder": "E-Mail-Adresse hinzufügen...",
-    "invalidEmailFormat": "Ungültiges E-Mail-Format"
+    "invalidEmailFormat": "Ungültiges E-Mail-Format",
+    "invoiceLanguage": "Rechnungssprache",
+    "invoiceLanguageDefault": "Systemstandard (Deutsch)",
+    "invoiceLanguageDe": "Deutsch",
+    "invoiceLanguageEn": "Englisch (English)",
+    "invoiceLanguageHint": "Sprache für Rechnungs-PDF Bezeichnungen und Kopfzeilen dieses Kunden"
   },
   "products": {
     "title": "Produkte",

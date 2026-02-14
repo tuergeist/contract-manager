@@ -293,6 +293,7 @@ class InvoiceService:
         self,
         invoices: list[InvoiceData],
         language: Literal["de", "en"] = "de",
+        customer_languages: dict[int, str] | None = None,
     ) -> bytes:
         """
         Generate a combined PDF containing all invoices.
@@ -302,7 +303,9 @@ class InvoiceService:
 
         Args:
             invoices: List of InvoiceData to include in PDF
-            language: Language for labels ("de" or "en")
+            language: Default language for labels ("de" or "en")
+            customer_languages: Optional mapping of customer_id -> language code.
+                Overrides the default language for that customer's invoices.
 
         Returns:
             PDF file as bytes.
@@ -310,7 +313,7 @@ class InvoiceService:
         if not invoices:
             return b""
 
-        labels = LABELS.get(language, LABELS["en"])
+        customer_languages = customer_languages or {}
         currency_symbol = self.tenant.currency_symbol
         template_ctx = self._get_template_context()
         tax_rate = template_ctx["tax_rate"]
@@ -318,6 +321,10 @@ class InvoiceService:
         # Render each invoice as HTML
         html_parts = []
         for i, invoice in enumerate(invoices):
+            # Resolve per-customer language, falling back to default
+            inv_language = customer_languages.get(invoice.customer_id, language)
+            labels = LABELS.get(inv_language, LABELS["en"])
+
             # Calculate tax for this invoice
             total_net = invoice.total_amount
             tax_amount, total_gross = self.calculate_tax(total_net, tax_rate)
@@ -360,7 +367,7 @@ class InvoiceService:
                 {
                     "invoice": invoice_dict,
                     "labels": labels,
-                    "language": language,
+                    "language": inv_language,
                     "currency_symbol": currency_symbol,
                     "invoice_number": getattr(invoice, "invoice_number", ""),
                     "tax_rate": tax_rate,
@@ -455,6 +462,7 @@ class InvoiceService:
         year: int,
         month: int,
         language: Literal["de", "en"] = "de",
+        customer_languages: dict[int, str] | None = None,
     ) -> bytes:
         """
         Generate individual PDFs for each invoice, packaged as a ZIP.
@@ -463,7 +471,8 @@ class InvoiceService:
             invoices: List of InvoiceData to generate PDFs for
             year: Year for filename
             month: Month for filename
-            language: Language for labels ("de" or "en")
+            language: Default language for labels ("de" or "en")
+            customer_languages: Optional mapping of customer_id -> language code.
 
         Returns:
             ZIP file containing individual PDFs as bytes.
@@ -471,12 +480,15 @@ class InvoiceService:
         if not invoices:
             return b""
 
+        customer_languages = customer_languages or {}
         zip_buffer = io.BytesIO()
 
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
             for invoice in invoices:
+                # Resolve per-customer language
+                inv_language = customer_languages.get(invoice.customer_id, language)
                 # Generate PDF for single invoice
-                pdf_bytes = self.generate_pdf([invoice], language)
+                pdf_bytes = self.generate_pdf([invoice], inv_language)
 
                 # Create safe filename
                 customer_safe = self._safe_filename(invoice.customer_name)
@@ -564,6 +576,7 @@ class InvoiceService:
         year: int,
         month: int,
         language: Literal["de", "en"] = "de",
+        customer_languages: dict[int, str] | None = None,
     ) -> bytes:
         """Generate individual ZUGFeRD PDFs for each InvoiceRecord, packaged as ZIP.
 
@@ -573,7 +586,8 @@ class InvoiceService:
             records: List of InvoiceRecord instances
             year: Year for filename
             month: Month for filename
-            language: Language for labels
+            language: Default language for labels
+            customer_languages: Optional mapping of customer_id -> language code.
 
         Returns:
             ZIP file containing individual ZUGFeRD PDFs as bytes.
@@ -581,11 +595,14 @@ class InvoiceService:
         if not records:
             return b""
 
+        customer_languages = customer_languages or {}
         zip_buffer = io.BytesIO()
 
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
             for record in records:
-                pdf_bytes = self.generate_zugferd_pdf_for_record(record, language)
+                # Resolve per-customer language
+                rec_language = customer_languages.get(record.customer_id, language)
+                pdf_bytes = self.generate_zugferd_pdf_for_record(record, rec_language)
 
                 customer_safe = self._safe_filename(record.customer_name)
                 contract_safe = self._safe_filename(record.contract_name)

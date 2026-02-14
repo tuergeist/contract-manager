@@ -42,6 +42,12 @@ class Customer(TenantModel):
         blank=True,
         help_text="List of billing contact email addresses",
     )
+    invoice_language = models.CharField(
+        max_length=2,
+        blank=True,
+        default="",
+        help_text="Language for invoices (de/en). Empty means use system default.",
+    )
 
     class Meta:
         ordering = ["name"]
