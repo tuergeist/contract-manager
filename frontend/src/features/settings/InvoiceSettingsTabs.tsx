@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { CompanyDataSettings } from '@/features/invoices/CompanyDataSettings'
 import { NumberSchemeSettings } from '@/features/invoices/NumberSchemeSettings'
 import { TemplateSettings } from '@/features/invoices/TemplateSettings'
+import { ZugferdSettings } from '@/features/invoices/ZugferdSettings'
 
 export function InvoiceSettingsTabs() {
   const { t } = useTranslation()
@@ -14,6 +15,7 @@ export function InvoiceSettingsTabs() {
   const getActiveSubTab = () => {
     if (location.pathname.includes('/numbering')) return 'numbering'
     if (location.pathname.includes('/template')) return 'template'
+    if (location.pathname.includes('/zugferd')) return 'zugferd'
     return 'company'
   }
 
@@ -27,6 +29,9 @@ export function InvoiceSettingsTabs() {
       case 'template':
         navigate('/settings/invoices/template')
         break
+      case 'zugferd':
+        navigate('/settings/invoices/zugferd')
+        break
       default:
         navigate('/settings/invoices')
     }
@@ -38,6 +43,7 @@ export function InvoiceSettingsTabs() {
         <TabsTrigger value="company">{t('invoices.companyData.title')}</TabsTrigger>
         <TabsTrigger value="numbering">{t('invoices.numberScheme.title')}</TabsTrigger>
         <TabsTrigger value="template">{t('invoices.template.title')}</TabsTrigger>
+        <TabsTrigger value="zugferd">{t('invoices.zugferd.title')}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="company">
@@ -50,6 +56,10 @@ export function InvoiceSettingsTabs() {
 
       <TabsContent value="template">
         <TemplateSettings showHeader={false} />
+      </TabsContent>
+
+      <TabsContent value="zugferd">
+        <ZugferdSettings showHeader={false} />
       </TabsContent>
     </Tabs>
   )

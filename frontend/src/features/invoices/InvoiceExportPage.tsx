@@ -5,7 +5,7 @@ import { useQuery, useMutation } from '@apollo/client'
 import { gql } from '@apollo/client'
 import { format } from 'date-fns'
 import { de, enUS } from 'date-fns/locale'
-import { FileDown, FileSpreadsheet, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { FileDown, FileSpreadsheet, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Loader2, ShieldCheck } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -258,7 +258,7 @@ export function InvoiceExportPage() {
     setTimeout(() => setToast(null), 4000)
   }
 
-  const handleExport = async (exportFormat: 'pdf' | 'pdf-individual' | 'excel') => {
+  const handleExport = async (exportFormat: 'pdf' | 'pdf-individual' | 'excel' | 'zugferd') => {
     setExportingFormat(exportFormat)
     try {
       const token = localStorage.getItem('auth_token')
@@ -278,6 +278,7 @@ export function InvoiceExportPage() {
       } else {
         if (exportFormat === 'pdf') filename += '.pdf'
         else if (exportFormat === 'pdf-individual') filename += '.zip'
+        else if (exportFormat === 'zugferd') filename += '-zugferd.zip'
         else filename += '.xlsx'
       }
       const blob = await response.blob()
@@ -446,6 +447,16 @@ export function InvoiceExportPage() {
         >
           <FileSpreadsheet className="mr-2 h-4 w-4" />
           {exportingFormat === 'excel' ? t('invoices.export.exporting') : t('invoices.export.exportExcel')}
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => handleExport('zugferd')}
+          disabled={invoices.length === 0 || exportingFormat !== null || !legalDataComplete}
+          title={t('invoices.export.zugferdTooltip')}
+          data-testid="export-zugferd-button"
+        >
+          <ShieldCheck className="mr-2 h-4 w-4" />
+          {exportingFormat === 'zugferd' ? t('invoices.export.exporting') : t('invoices.export.exportZugferd')}
         </Button>
       </div>
 

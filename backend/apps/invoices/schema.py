@@ -633,6 +633,12 @@ class InvoiceQuery:
             missing_fields=missing,
         )
 
+    @strawberry.field
+    def zugferd_enabled(self, info: Info) -> bool:
+        """Check if ZUGFeRD is enabled as default PDF format for the tenant."""
+        user = require_perm(info, "settings", "read")
+        return user.tenant.settings.get("zugferd_default", False)
+
     # ----- Imported Invoices -----
 
     # ----- Import Batches -----
@@ -1211,6 +1217,23 @@ class InvoiceMutation:
             InvoiceService.cancel_invoice(record)
         except ValueError as e:
             return CancelInvoiceResult(success=False, error=str(e))
+
+        return CancelInvoiceResult(success=True)
+
+    @strawberry.mutation
+    def set_zugferd_default(
+        self, info: Info[Context, None], enabled: bool
+    ) -> CancelInvoiceResult:
+        """Enable or disable ZUGFeRD as the default PDF export format."""
+        user, err = check_perm(info, "invoices", "settings")
+        if err:
+            return CancelInvoiceResult(success=False, error=err)
+
+        tenant = user.tenant
+        tenant_settings = tenant.settings or {}
+        tenant_settings["zugferd_default"] = enabled
+        tenant.settings = tenant_settings
+        tenant.save(update_fields=["settings"])
 
         return CancelInvoiceResult(success=True)
 

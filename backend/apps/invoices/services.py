@@ -487,6 +487,117 @@ class InvoiceService:
 
         return zip_buffer.getvalue()
 
+    # ----------------------------------------------------------------
+    # ZUGFeRD PDF generation
+    # ----------------------------------------------------------------
+
+    def generate_zugferd_pdf_for_record(
+        self,
+        record,
+        language: Literal["de", "en"] = "de",
+    ) -> bytes:
+        """Generate a ZUGFeRD PDF/A-3b for a single persisted InvoiceRecord.
+
+        Renders the visual PDF via the existing HTML template, generates
+        the ZUGFeRD CII XML, and embeds it using drafthorse.
+
+        Args:
+            record: InvoiceRecord instance (must be finalized)
+            language: Language for PDF labels
+
+        Returns:
+            PDF/A-3b bytes with embedded factur-x.xml
+        """
+        from apps.invoices.zugferd import ZugferdService
+
+        # Build a single-invoice InvoiceData-like dict for the PDF renderer
+        labels = LABELS.get(language, LABELS["en"])
+        currency_symbol = self.tenant.currency_symbol
+        template_ctx = self._get_template_context()
+
+        invoice_dict = {
+            "contract_id": record.contract_id,
+            "contract_name": record.contract_name,
+            "customer_id": record.customer_id,
+            "customer_name": record.customer_name,
+            "customer_address": (
+                record.customer.address if record.customer else {}
+            ) or {},
+            "billing_date": record.billing_date,
+            "billing_period_start": record.period_start,
+            "billing_period_end": record.period_end,
+            "line_items": record.line_items_snapshot,
+            "total_amount": record.total_net,
+            "total_net": record.total_net,
+            "tax_amount": record.tax_amount,
+            "total_gross": record.total_gross,
+            "invoice_text": record.invoice_text,
+            "po_number": record.contract.po_number if record.contract else "",
+            "order_confirmation_number": (
+                record.contract.order_confirmation_number if record.contract else ""
+            ),
+        }
+
+        html = render_to_string(
+            "invoices/invoice.html",
+            {
+                "invoice": invoice_dict,
+                "labels": labels,
+                "language": language,
+                "currency_symbol": currency_symbol,
+                "invoice_number": record.invoice_number,
+                "tax_rate": record.tax_rate,
+                **template_ctx,
+            },
+        )
+
+        pdf_document = HTML(string=html).render()
+        pdf_bytes = pdf_document.write_pdf()
+
+        # Generate ZUGFeRD XML and embed
+        zugferd = ZugferdService(self.tenant)
+        return zugferd.generate_zugferd_pdf(pdf_bytes, record)
+
+    def generate_individual_zugferd_pdfs(
+        self,
+        records: list,
+        year: int,
+        month: int,
+        language: Literal["de", "en"] = "de",
+    ) -> bytes:
+        """Generate individual ZUGFeRD PDFs for each InvoiceRecord, packaged as ZIP.
+
+        Each invoice gets its own PDF/A-3b with an individual factur-x.xml.
+
+        Args:
+            records: List of InvoiceRecord instances
+            year: Year for filename
+            month: Month for filename
+            language: Language for labels
+
+        Returns:
+            ZIP file containing individual ZUGFeRD PDFs as bytes.
+        """
+        if not records:
+            return b""
+
+        zip_buffer = io.BytesIO()
+
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for record in records:
+                pdf_bytes = self.generate_zugferd_pdf_for_record(record, language)
+
+                customer_safe = self._safe_filename(record.customer_name)
+                contract_safe = self._safe_filename(record.contract_name)
+                filename = (
+                    f"invoice-{customer_safe}-{contract_safe}"
+                    f"-{year:04d}-{month:02d}.pdf"
+                )
+
+                zip_file.writestr(filename, pdf_bytes)
+
+        return zip_buffer.getvalue()
+
     def _safe_filename(self, name: str) -> str:
         """Convert a name to a safe filename component."""
         import re

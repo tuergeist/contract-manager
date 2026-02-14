@@ -32,7 +32,7 @@ class InvoicePreviewView(View):
 
 @method_decorator(csrf_exempt, name="dispatch")
 class InvoiceExportView(View):
-    """REST endpoint for exporting invoices as PDF or Excel."""
+    """REST endpoint for exporting invoices as PDF, Excel, or ZUGFeRD."""
 
     def get(self, request):
         """
@@ -41,8 +41,9 @@ class InvoiceExportView(View):
         Query parameters:
             year: Year (required)
             month: Month 1-12 (required)
-            format: "pdf", "pdf-individual", or "excel" (required)
+            format: "pdf", "pdf-individual", "excel", "zugferd", or "zugferd-single" (required)
             language: "de" or "en" (optional, default "de")
+            invoice_id: Invoice record ID (required for "zugferd-single")
 
         Returns:
             File download response with appropriate content-type and filename.
@@ -69,10 +70,11 @@ class InvoiceExportView(View):
         if month < 1 or month > 12:
             return JsonResponse({"error": "month must be between 1 and 12"}, status=400)
 
+        valid_formats = ("pdf", "pdf-individual", "excel", "zugferd", "zugferd-single")
         export_format = request.GET.get("format", "")
-        if export_format not in ("pdf", "pdf-individual", "excel"):
+        if export_format not in valid_formats:
             return JsonResponse(
-                {"error": "format must be 'pdf', 'pdf-individual', or 'excel'"},
+                {"error": f"format must be one of: {', '.join(valid_formats)}"},
                 status=400,
             )
 
@@ -80,8 +82,15 @@ class InvoiceExportView(View):
         if language not in ("de", "en"):
             language = "de"
 
-        # Generate invoices
         service = InvoiceService(user.tenant)
+
+        # ZUGFeRD formats use persisted InvoiceRecords
+        if export_format in ("zugferd", "zugferd-single"):
+            return self._handle_zugferd_export(
+                request, service, user, year, month, export_format, language
+            )
+
+        # Standard formats use on-demand calculated invoices
         invoices = service.get_invoices_for_month(year, month)
 
         if not invoices:
@@ -113,4 +122,75 @@ class InvoiceExportView(View):
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         response["Content-Length"] = len(content)
 
+        return response
+
+    def _handle_zugferd_export(self, request, service, user, year, month, fmt, language):
+        """Handle ZUGFeRD export formats using persisted InvoiceRecords."""
+        from apps.invoices.models import CompanyLegalData, InvoiceRecord
+
+        # Validate company legal data exists
+        try:
+            user.tenant.legal_data
+        except CompanyLegalData.DoesNotExist:
+            return JsonResponse(
+                {"error": "Company legal data must be configured for ZUGFeRD export."},
+                status=400,
+            )
+
+        if fmt == "zugferd-single":
+            # Single invoice export
+            invoice_id = request.GET.get("invoice_id", "")
+            if not invoice_id:
+                return JsonResponse(
+                    {"error": "invoice_id is required for zugferd-single format"},
+                    status=400,
+                )
+            try:
+                record = InvoiceRecord.objects.get(
+                    id=int(invoice_id),
+                    tenant=user.tenant,
+                    status=InvoiceRecord.Status.FINALIZED,
+                )
+            except (InvoiceRecord.DoesNotExist, ValueError):
+                return JsonResponse(
+                    {"error": "Finalized invoice not found"}, status=404
+                )
+
+            content = service.generate_zugferd_pdf_for_record(record, language)
+            filename = f"invoice-{record.invoice_number}.pdf"
+            content_type = "application/pdf"
+
+        else:
+            # Batch ZUGFeRD export
+            records = list(
+                InvoiceRecord.objects.filter(
+                    tenant=user.tenant,
+                    billing_date__year=year,
+                    billing_date__month=month,
+                    status=InvoiceRecord.Status.FINALIZED,
+                ).select_related("customer", "contract").order_by(
+                    "customer_name", "billing_date"
+                )
+            )
+
+            if not records:
+                return JsonResponse(
+                    {
+                        "error": (
+                            "No finalized invoices for this month. "
+                            "Please generate invoices first."
+                        )
+                    },
+                    status=404,
+                )
+
+            content = service.generate_individual_zugferd_pdfs(
+                records, year, month, language
+            )
+            filename = f"invoices-zugferd-{year:04d}-{month:02d}.zip"
+            content_type = "application/zip"
+
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        response["Content-Length"] = len(content)
         return response

@@ -52,6 +52,7 @@ function App() {
         <Route path="settings/invoices" element={<SettingsLayout />} />
         <Route path="settings/invoices/numbering" element={<SettingsLayout />} />
         <Route path="settings/invoices/template" element={<SettingsLayout />} />
+        <Route path="settings/invoices/zugferd" element={<SettingsLayout />} />
         <Route path="contracts/import" element={<ContractImport />} />
         <Route path="invoices/export" element={<InvoiceExportPage />} />
         <Route path="invoices/imported" element={<ImportedInvoiceList />} />

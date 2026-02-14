@@ -414,6 +414,8 @@
       "exportPdf": "Export PDF",
       "exportIndividualPdfs": "Individual PDFs",
       "exportExcel": "Export Excel",
+      "exportZugferd": "ZUGFeRD PDF",
+      "zugferdTooltip": "Electronic invoice in ZUGFeRD format (PDF/A-3 with XML)",
       "exporting": "Exporting..."
     },
     "customer": "Customer",
@@ -523,6 +525,19 @@
       "previewHint": "Generate a sample invoice PDF with the current template settings. Save your changes first to see them reflected in the preview.",
       "showPreview": "Show Preview",
       "previewFailed": "Failed to generate preview"
+    },
+    "zugferd": {
+      "title": "ZUGFeRD",
+      "description": "Configure ZUGFeRD electronic invoicing (EN 16931)",
+      "formatTitle": "ZUGFeRD Format",
+      "formatDescription": "ZUGFeRD embeds machine-readable XML data into PDF/A-3 invoices, enabling automated processing by your customers' ERP systems.",
+      "defaultLabel": "ZUGFeRD as default PDF format",
+      "defaultDescription": "When enabled, the regular PDF export will automatically generate ZUGFeRD-compliant PDF/A-3 documents.",
+      "infoTitle": "About ZUGFeRD EN 16931",
+      "infoPoint1": "Compliant with the European e-invoicing standard EN 16931",
+      "infoPoint2": "Embeds structured XML (UN/CEFACT CII) inside a PDF/A-3 document",
+      "infoPoint3": "Required for B2B invoicing in Germany from 2025 (receiving) and 2027 (sending)",
+      "infoPoint4": "Readable both by humans (PDF) and machines (XML)"
     },
     "extraction": {
       "extract": "Extract Data",

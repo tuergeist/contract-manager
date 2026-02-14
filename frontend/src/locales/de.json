@@ -414,6 +414,8 @@
       "exportPdf": "PDF exportieren",
       "exportIndividualPdfs": "Einzelne PDFs",
       "exportExcel": "Excel exportieren",
+      "exportZugferd": "ZUGFeRD PDF",
+      "zugferdTooltip": "Elektronische Rechnung im ZUGFeRD-Format (PDF/A-3 mit XML)",
       "exporting": "Exportieren..."
     },
     "customer": "Kunde",
@@ -523,6 +525,19 @@
       "previewHint": "Erstellen Sie eine Muster-Rechnung als PDF mit den aktuellen Vorlageneinstellungen. Speichern Sie Ihre Änderungen zuerst, damit sie in der Vorschau sichtbar werden.",
       "showPreview": "Vorschau anzeigen",
       "previewFailed": "Vorschau konnte nicht generiert werden"
+    },
+    "zugferd": {
+      "title": "ZUGFeRD",
+      "description": "ZUGFeRD elektronische Rechnungsstellung konfigurieren (EN 16931)",
+      "formatTitle": "ZUGFeRD-Format",
+      "formatDescription": "ZUGFeRD bettet maschinenlesbare XML-Daten in PDF/A-3-Rechnungen ein, die eine automatische Verarbeitung durch die ERP-Systeme Ihrer Kunden ermöglichen.",
+      "defaultLabel": "ZUGFeRD als Standard-PDF-Format",
+      "defaultDescription": "Wenn aktiviert, erzeugt der reguläre PDF-Export automatisch ZUGFeRD-konforme PDF/A-3-Dokumente.",
+      "infoTitle": "Über ZUGFeRD EN 16931",
+      "infoPoint1": "Konform mit dem europäischen E-Rechnungsstandard EN 16931",
+      "infoPoint2": "Bettet strukturiertes XML (UN/CEFACT CII) in ein PDF/A-3-Dokument ein",
+      "infoPoint3": "Pflicht für B2B-Rechnungen in Deutschland ab 2025 (Empfang) und 2027 (Versand)",
+      "infoPoint4": "Lesbar sowohl für Menschen (PDF) als auch für Maschinen (XML)"
     },
     "extraction": {
       "extract": "Daten extrahieren",
