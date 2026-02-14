@@ -956,7 +956,7 @@ class InvoiceService:
     # Invoice persistence
     # ----------------------------------------------------------------
 
-    def generate_and_persist(self, year: int, month: int) -> list:
+    def generate_and_persist(self, year: int, month: int, contract_ids: list[int] | None = None) -> list:
         """
         Generate invoices for a month, assign numbers, and persist as records.
 
@@ -976,6 +976,9 @@ class InvoiceService:
 
         # Calculate invoices
         invoices = self.get_invoices_for_month(year, month)
+        if contract_ids is not None:
+            allowed = set(contract_ids)
+            invoices = [inv for inv in invoices if inv.contract_id in allowed]
         if not invoices:
             return []
 

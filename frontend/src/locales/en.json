@@ -421,6 +421,7 @@
       "exportExcel": "Export Excel",
       "exportZugferd": "ZUGFeRD PDF",
       "zugferdTooltip": "Electronic invoice in ZUGFeRD format (PDF/A-3 with XML)",
+      "zugferdNoFinalized": "ZUGFeRD export requires at least one finalized invoice",
       "exporting": "Exporting..."
     },
     "customer": "Customer",

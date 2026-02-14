@@ -1174,7 +1174,7 @@ class InvoiceMutation:
 
     @strawberry.mutation
     def generate_invoices(
-        self, info: Info[Context, None], year: int, month: int
+        self, info: Info[Context, None], year: int, month: int, contract_ids: list[int] | None = None
     ) -> GenerateInvoicesResult:
         """Generate and persist invoices for a month."""
         user, err = check_perm(info, "invoices", "generate")
@@ -1183,7 +1183,7 @@ class InvoiceMutation:
 
         service = InvoiceService(user.tenant)
         try:
-            records = service.generate_and_persist(year, month)
+            records = service.generate_and_persist(year, month, contract_ids=contract_ids)
         except ValueError as e:
             return GenerateInvoicesResult(success=False, error=str(e))
 

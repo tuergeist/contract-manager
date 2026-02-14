@@ -421,6 +421,7 @@
       "exportExcel": "Excel exportieren",
       "exportZugferd": "ZUGFeRD PDF",
       "zugferdTooltip": "Elektronische Rechnung im ZUGFeRD-Format (PDF/A-3 mit XML)",
+      "zugferdNoFinalized": "ZUGFeRD-Export benötigt mindestens eine finalisierte Rechnung",
       "exporting": "Exportieren..."
     },
     "customer": "Kunde",
