@@ -1478,15 +1478,33 @@ export function ContractDetail() {
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-right">
-                        <a
-                          href={record.pdfUrl || `/api/invoices/${record.id}/pdf/`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800"
-                          title={t('invoices.import.viewPdfGenerated')}
-                        >
-                          <Download className="h-4 w-4 inline" />
-                        </a>
+                        {record.pdfUrl ? (
+                          <a
+                            href={record.pdfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800"
+                            title={t('invoices.import.viewPdfGenerated')}
+                          >
+                            <Download className="h-4 w-4 inline" />
+                          </a>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              const token = getToken()
+                              const resp = await fetch(`/api/invoices/${record.id}/pdf/`, {
+                                headers: { Authorization: `Bearer ${token}` },
+                              })
+                              if (!resp.ok) return
+                              const blob = await resp.blob()
+                              window.open(URL.createObjectURL(blob), '_blank')
+                            }}
+                            className="text-blue-600 hover:text-blue-800"
+                            title={t('invoices.import.viewPdfGenerated')}
+                          >
+                            <Download className="h-4 w-4 inline" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

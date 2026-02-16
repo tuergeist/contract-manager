@@ -885,6 +885,17 @@ export function ImportedInvoiceList() {
     setUploadProgress([])
   }
 
+  const openPdfWithAuth = async (url: string) => {
+    const token = localStorage.getItem('auth_token')
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!response.ok) return
+    const blob = await response.blob()
+    const blobUrl = window.URL.createObjectURL(blob)
+    window.open(blobUrl, '_blank')
+  }
+
   const handleExtract = async (id: string) => {
     await extractInvoiceMutation({ variables: { id } })
     refetch()
@@ -1437,21 +1448,23 @@ export function ImportedInvoiceList() {
                               <CreditCard className="w-4 h-4" />
                             </Button>
                           )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            asChild
-                            className="text-gray-400 hover:text-foreground"
-                          >
-                            <a
-                              href={row.generated.pdfUrl || `/api/invoices/${row.generated.id}/pdf/`}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                          {row.generated.pdfUrl ? (
+                            <Button variant="ghost" size="sm" asChild className="text-gray-400 hover:text-foreground">
+                              <a href={row.generated.pdfUrl} target="_blank" rel="noopener noreferrer" title={t('invoices.import.viewPdf')}>
+                                <Eye className="w-4 h-4" />
+                              </a>
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-gray-400 hover:text-foreground"
+                              onClick={() => openPdfWithAuth(`/api/invoices/${row.generated!.id}/pdf/`)}
                               title={t('invoices.import.viewPdf')}
                             >
                               <Eye className="w-4 h-4" />
-                            </a>
-                          </Button>
+                            </Button>
+                          )}
                           {row.contractId && (
                             <Button
                               variant="ghost"
