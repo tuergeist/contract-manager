@@ -132,6 +132,8 @@
     "arr": "ARR",
     "updatedAt": "Aktualisiert",
     "remainingMonths": "Restlaufzeit",
+    "exportExcel": "Excel exportieren",
+    "exporting": "Exportieren...",
     "status": {
       "draft": "Entwurf",
       "active": "Aktiv",

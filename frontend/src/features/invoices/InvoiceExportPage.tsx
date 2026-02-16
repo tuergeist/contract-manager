@@ -5,7 +5,7 @@ import { useQuery, useMutation } from '@apollo/client'
 import { gql } from '@apollo/client'
 import { format } from 'date-fns'
 import { de, enUS } from 'date-fns/locale'
-import { FileDown, FileSpreadsheet, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Loader2, ShieldCheck } from 'lucide-react'
+import { FileDown, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Loader2, ShieldCheck } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -271,7 +271,7 @@ export function InvoiceExportPage() {
     setTimeout(() => setToast(null), 4000)
   }
 
-  const handleExport = async (exportFormat: 'pdf' | 'pdf-individual' | 'excel' | 'zugferd') => {
+  const handleExport = async (exportFormat: 'pdf' | 'pdf-individual' | 'zugferd') => {
     setExportingFormat(exportFormat)
     try {
       const token = localStorage.getItem('auth_token')
@@ -291,8 +291,7 @@ export function InvoiceExportPage() {
       } else {
         if (exportFormat === 'pdf') filename += '.pdf'
         else if (exportFormat === 'pdf-individual') filename += '.zip'
-        else if (exportFormat === 'zugferd') filename += '-zugferd.zip'
-        else filename += '.xlsx'
+        else filename += '-zugferd.zip'
       }
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
@@ -451,15 +450,6 @@ export function InvoiceExportPage() {
         >
           <Files className="mr-2 h-4 w-4" />
           {exportingFormat === 'pdf-individual' ? t('invoices.export.exporting') : t('invoices.export.exportIndividualPdfs')}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => handleExport('excel')}
-          disabled={invoices.length === 0 || exportingFormat !== null}
-          data-testid="export-excel-button"
-        >
-          <FileSpreadsheet className="mr-2 h-4 w-4" />
-          {exportingFormat === 'excel' ? t('invoices.export.exporting') : t('invoices.export.exportExcel')}
         </Button>
         <Button
           variant="outline"

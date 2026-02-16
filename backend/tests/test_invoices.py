@@ -650,25 +650,12 @@ class TestInvoiceExportEndpoint:
         assert 'filename="invoices-2026-01.pdf"' in response["Content-Disposition"]
         assert response.content[:4] == b"%PDF"
 
-    def test_export_excel_success(
-        self, client, auth_headers, tenant, monthly_contract, product
+    def test_export_excel_no_longer_supported(
+        self, client, auth_headers
     ):
-        """Test successful Excel export."""
-        ContractItem.objects.create(
-            tenant=tenant,
-            contract=monthly_contract,
-            product=product,
-            quantity=1,
-            unit_price=Decimal("100.00"),
-        )
-
+        """Test that Excel format is no longer accepted for invoice export."""
         response = client.get("/api/invoices/export/?year=2026&month=1&format=excel", **auth_headers)
-
-        assert response.status_code == 200
-        assert "spreadsheetml" in response["Content-Type"]
-        assert 'filename="invoices-2026-01.xlsx"' in response["Content-Disposition"]
-        # Excel (xlsx) files start with PK (ZIP format)
-        assert response.content[:2] == b"PK"
+        assert response.status_code == 400
 
     def test_export_individual_pdfs_success(
         self, client, auth_headers, tenant, monthly_contract, product
@@ -691,3 +678,55 @@ class TestInvoiceExportEndpoint:
         assert 'filename="invoices-2026-01.zip"' in response["Content-Disposition"]
         # ZIP files start with PK
         assert response.content[:2] == b"PK"
+
+
+class TestContractExportEndpoint:
+    """Test the REST contract export endpoint."""
+
+    @pytest.fixture
+    def auth_headers(self, user):
+        from apps.core.auth import create_access_token
+
+        token = create_access_token(user)
+        return {"HTTP_AUTHORIZATION": f"Bearer {token}"}
+
+    def test_export_requires_authentication(self, client):
+        response = client.get("/api/contracts/export/")
+        assert response.status_code == 401
+
+    def test_export_returns_404_when_no_active_contracts(self, client, auth_headers):
+        response = client.get("/api/contracts/export/", **auth_headers)
+        assert response.status_code == 404
+
+    def test_export_excel_success(
+        self, client, auth_headers, tenant, monthly_contract, product
+    ):
+        """Test successful contract Excel export."""
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=monthly_contract,
+            product=product,
+            quantity=2,
+            unit_price=Decimal("500.00"),
+        )
+
+        response = client.get("/api/contracts/export/", **auth_headers)
+
+        assert response.status_code == 200
+        assert "spreadsheetml" in response["Content-Type"]
+        assert 'filename="contracts-export.xlsx"' in response["Content-Disposition"]
+        assert response.content[:2] == b"PK"
+
+    def test_export_respects_language_param(
+        self, client, auth_headers, tenant, monthly_contract, product
+    ):
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=monthly_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("100.00"),
+        )
+
+        response = client.get("/api/contracts/export/?language=en", **auth_headers)
+        assert response.status_code == 200

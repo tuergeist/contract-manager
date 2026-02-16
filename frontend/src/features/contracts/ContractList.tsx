@@ -12,6 +12,7 @@ import {
   ArrowDown,
   Plus,
   Filter,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { usePersistedState } from '@/lib/usePersistedState'
 import { formatDate } from '@/lib/utils'
@@ -98,6 +99,7 @@ export function ContractList() {
   const [page, setPage] = useState(1)
   const [sortBy, setSortBy] = usePersistedState<SortField>('contracts-sort-by', 'updated_at')
   const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('contracts-sort-order', 'desc')
+  const [exporting, setExporting] = useState(false)
 
   const { data, loading, error } = useQuery<ContractsData>(CONTRACTS_QUERY, {
     variables: {
@@ -169,6 +171,34 @@ export function ContractList() {
     )
   }
 
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const token = localStorage.getItem('auth_token')
+      const response = await fetch(
+        `/api/contracts/export/?language=${i18n.language}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Export failed')
+      }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'contracts-export.xlsx'
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (err) {
+      console.error('Export error:', err)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const contractsData = data?.contracts
   const contracts = contractsData?.items || []
   const totalCount = contractsData?.totalCount || 0
@@ -183,6 +213,19 @@ export function ContractList() {
             {totalCount} {t('contracts.total')}
           </span>
           <HelpVideoButton />
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid="export-contracts-button"
+          >
+            {exporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4" />
+            )}
+            {exporting ? t('contracts.exporting') : t('contracts.exportExcel')}
+          </button>
           <Link
             to="/contracts/new"
             className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"

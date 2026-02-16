@@ -132,6 +132,8 @@
     "arr": "ARR",
     "updatedAt": "Updated",
     "remainingMonths": "Remaining",
+    "exportExcel": "Export Excel",
+    "exporting": "Exporting...",
     "status": {
       "draft": "Draft",
       "active": "Active",

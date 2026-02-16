@@ -6,7 +6,8 @@ from django.views.decorators.csrf import csrf_exempt
 
 from apps.core.permissions import get_current_user_from_request
 from apps.customers.models import Customer
-from apps.invoices.services import InvoiceService
+from apps.invoices.models import InvoiceRecord
+from apps.invoices.services import InvoiceService, _get_company_language
 
 
 def _resolve_invoice_language(tenant, customer_id, fallback="de"):
@@ -33,9 +34,10 @@ class InvoicePreviewView(View):
         if not user:
             return JsonResponse({"error": "Authentication required"}, status=401)
 
-        language = request.GET.get("language", "de")
+        company_lang = _get_company_language(user.tenant)
+        language = request.GET.get("language", company_lang)
         if language not in ("de", "en"):
-            language = "de"
+            language = company_lang
 
         service = InvoiceService(user.tenant)
         content = service.generate_preview_pdf(language=language)
@@ -48,7 +50,7 @@ class InvoicePreviewView(View):
 
 @method_decorator(csrf_exempt, name="dispatch")
 class InvoiceExportView(View):
-    """REST endpoint for exporting invoices as PDF, Excel, or ZUGFeRD."""
+    """REST endpoint for exporting invoices as PDF or ZUGFeRD."""
 
     def get(self, request):
         """
@@ -57,7 +59,7 @@ class InvoiceExportView(View):
         Query parameters:
             year: Year (required)
             month: Month 1-12 (required)
-            format: "pdf", "pdf-individual", "excel", "zugferd", or "zugferd-single" (required)
+            format: "pdf", "pdf-individual", "zugferd", or "zugferd-single" (required)
             language: "de" or "en" (optional, default "de")
             invoice_id: Invoice record ID (required for "zugferd-single")
 
@@ -86,7 +88,7 @@ class InvoiceExportView(View):
         if month < 1 or month > 12:
             return JsonResponse({"error": "month must be between 1 and 12"}, status=400)
 
-        valid_formats = ("pdf", "pdf-individual", "excel", "zugferd", "zugferd-single")
+        valid_formats = ("pdf", "pdf-individual", "zugferd", "zugferd-single")
         export_format = request.GET.get("format", "")
         if export_format not in valid_formats:
             return JsonResponse(
@@ -94,9 +96,11 @@ class InvoiceExportView(View):
                 status=400,
             )
 
-        language = request.GET.get("language", "de")
+        # Use company country to determine default invoice language
+        company_lang = _get_company_language(user.tenant)
+        language = request.GET.get("language", company_lang)
         if language not in ("de", "en"):
-            language = "de"
+            language = company_lang
 
         service = InvoiceService(user.tenant)
 
@@ -113,6 +117,19 @@ class InvoiceExportView(View):
             return JsonResponse(
                 {"error": "No invoices found for this month"}, status=404
             )
+
+        # Enrich invoices with invoice numbers from finalized records
+        records = InvoiceRecord.objects.filter(
+            tenant=user.tenant,
+            billing_date__year=year,
+            billing_date__month=month,
+            status=InvoiceRecord.Status.FINALIZED,
+        ).values_list("contract_id", "invoice_number")
+        invoice_number_map = {cid: num for cid, num in records}
+        for inv in invoices:
+            num = invoice_number_map.get(inv.contract_id)
+            if num:
+                inv.invoice_number = num
 
         # Build per-customer language map
         customer_ids = {inv.customer_id for inv in invoices}
@@ -131,20 +148,13 @@ class InvoiceExportView(View):
             filename = f"invoices-{year:04d}-{month:02d}.pdf"
             content_type = "application/pdf"
 
-        elif export_format == "pdf-individual":
+        else:  # pdf-individual
             content = service.generate_individual_pdfs(
                 invoices, year, month, language=language,
                 customer_languages=customer_languages,
             )
             filename = f"invoices-{year:04d}-{month:02d}.zip"
             content_type = "application/zip"
-
-        else:  # excel
-            content = service.generate_excel(invoices, year, month, language=language)
-            filename = f"invoices-{year:04d}-{month:02d}.xlsx"
-            content_type = (
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
 
         response = HttpResponse(content, content_type=content_type)
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
