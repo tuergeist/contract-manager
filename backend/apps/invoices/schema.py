@@ -246,6 +246,26 @@ class InvoiceTemplateResult:
 
 
 # =========================================================================
+# Payment Match type (shared by imported and generated invoices)
+# =========================================================================
+
+
+@strawberry.type
+class PaymentMatchType:
+    """A match between an invoice and a bank transaction."""
+
+    id: int
+    transaction_id: int
+    transaction_date: date
+    transaction_amount: Decimal
+    counterparty_name: str
+    match_type: str
+    confidence: Decimal
+    matched_at: str
+    matched_by_name: str | None
+
+
+# =========================================================================
 # Invoice Record types
 # =========================================================================
 
@@ -271,6 +291,9 @@ class InvoiceRecordType:
     generated_at: str
     line_items_snapshot: strawberry.scalars.JSON
     invoice_text: str
+    pdf_url: str | None
+    is_paid: bool
+    payment_matches: List[PaymentMatchType]
 
 
 @strawberry.type
@@ -317,21 +340,6 @@ class LegalDataCheckResult:
 # =========================================================================
 # Imported Invoice types
 # =========================================================================
-
-
-@strawberry.type
-class PaymentMatchType:
-    """A match between an imported invoice and a bank transaction."""
-
-    id: int
-    transaction_id: int
-    transaction_date: date
-    transaction_amount: Decimal
-    counterparty_name: str
-    match_type: str
-    confidence: Decimal
-    matched_at: str
-    matched_by_name: str | None
 
 
 @strawberry.type
@@ -587,6 +595,9 @@ class InvoiceQuery:
 
         qs = InvoiceRecord.objects.filter(
             tenant=user.tenant,
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty",
+            "payment_matches__matched_by",
         ).exclude(status=InvoiceRecord.Status.DRAFT)
 
         if contract_id:
@@ -922,6 +933,42 @@ class InvoiceQuery:
 
         matcher = PaymentMatcher()
         matches = matcher.find_matches(invoice, days_after=days_after)
+
+        return [
+            PaymentMatchCandidateType(
+                transaction_id=m.transaction_id,
+                transaction_date=m.transaction_date,
+                amount=m.amount,
+                counterparty_name=m.counterparty_name,
+                booking_text=m.booking_text,
+                match_type=m.match_type,
+                confidence=m.confidence,
+            )
+            for m in matches
+        ]
+
+    @strawberry.field
+    def find_payment_matches_for_record(
+        self,
+        info: Info,
+        invoice_record_id: int,
+        days_after: int = 90,
+    ) -> List[PaymentMatchCandidateType]:
+        """Find potential payment matches for a generated invoice record."""
+        user = require_perm(info, "invoices", "read")
+
+        try:
+            record = InvoiceRecord.objects.select_related("customer").get(
+                id=invoice_record_id, tenant=user.tenant
+            )
+        except InvoiceRecord.DoesNotExist:
+            return []
+
+        from apps.invoices.payment_matching import InvoiceRecordAdapter, PaymentMatcher
+
+        adapter = InvoiceRecordAdapter(record)
+        matcher = PaymentMatcher()
+        matches = matcher.find_matches(adapter, days_after=days_after)
 
         return [
             PaymentMatchCandidateType(
@@ -1801,6 +1848,66 @@ class InvoiceMutation:
         )
 
     @strawberry.mutation
+    def create_payment_match_for_record(
+        self,
+        info: Info[Context, None],
+        invoice_record_id: int,
+        transaction_id: int,
+        match_type: str = "manual",
+    ) -> CreatePaymentMatchResult:
+        """Create a payment match between a generated invoice record and a transaction."""
+        user, err = check_perm(info, "invoices", "generate")
+        if err:
+            return CreatePaymentMatchResult(success=False, error=err)
+
+        try:
+            record = InvoiceRecord.objects.get(id=invoice_record_id, tenant=user.tenant)
+        except InvoiceRecord.DoesNotExist:
+            return CreatePaymentMatchResult(
+                success=False, error="Invoice record not found"
+            )
+
+        from apps.banking.models import BankTransaction
+
+        try:
+            transaction_obj = BankTransaction.objects.select_related("counterparty").get(
+                id=transaction_id, tenant=user.tenant
+            )
+        except BankTransaction.DoesNotExist:
+            return CreatePaymentMatchResult(
+                success=False, error="Transaction not found"
+            )
+
+        # Check if match already exists
+        if InvoicePaymentMatch.objects.filter(
+            invoice_record=record, transaction=transaction_obj
+        ).exists():
+            return CreatePaymentMatchResult(
+                success=False, error="Match already exists"
+            )
+
+        # Validate match type
+        valid_types = [c[0] for c in InvoicePaymentMatch.MatchType.choices]
+        if match_type not in valid_types:
+            match_type = InvoicePaymentMatch.MatchType.MANUAL
+
+        confidence = Decimal("1.0") if match_type == "manual" else Decimal("0.8")
+
+        match = InvoicePaymentMatch.objects.create(
+            tenant=user.tenant,
+            invoice_record=record,
+            transaction=transaction_obj,
+            match_type=match_type,
+            confidence=confidence,
+            matched_by=user if match_type == "manual" else None,
+        )
+
+        return CreatePaymentMatchResult(
+            success=True,
+            match=_convert_payment_match(match),
+        )
+
+    @strawberry.mutation
     def delete_payment_match(
         self, info: Info[Context, None], match_id: int
     ) -> DeleteResult:
@@ -2082,6 +2189,9 @@ def _convert_legal_data(ld) -> CompanyLegalDataType:
 
 
 def _convert_record(record) -> InvoiceRecordType:
+    # Payment matches - use prefetched data if available, otherwise query
+    payment_matches = list(record.payment_matches.all())
+
     return InvoiceRecordType(
         id=record.id,
         invoice_number=record.invoice_number,
@@ -2100,6 +2210,9 @@ def _convert_record(record) -> InvoiceRecordType:
         generated_at=record.generated_at.isoformat(),
         line_items_snapshot=record.line_items_snapshot,
         invoice_text=record.invoice_text,
+        pdf_url=record.pdf_file.url if record.pdf_file else None,
+        is_paid=len(payment_matches) > 0,
+        payment_matches=[_convert_payment_match(m) for m in payment_matches],
     )
 
 

@@ -1138,6 +1138,12 @@ class InvoiceService:
                 )
                 created_records.append(record)
 
+        # Dispatch background ZUGFeRD PDF generation for each new record
+        from apps.invoices.tasks import generate_invoice_pdf_task
+
+        for record in created_records:
+            generate_invoice_pdf_task.delay(record.id)
+
         return created_records
 
     @staticmethod

@@ -4,6 +4,7 @@ import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 
 from apps.core.models import TenantModel, TimestampedModel
 
@@ -26,6 +27,12 @@ def imported_invoice_upload_path(instance, filename):
     """Upload path: uploads/{tenant_id}/invoices/imported/{uuid}.pdf"""
     unique_filename = f"{uuid.uuid4().hex}.pdf"
     return f"uploads/{instance.tenant_id}/invoices/imported/{unique_filename}"
+
+
+def invoice_record_upload_path(instance, filename):
+    """Upload path: uploads/{tenant_id}/invoices/generated/{uuid}.pdf"""
+    unique_filename = f"{uuid.uuid4().hex}.pdf"
+    return f"uploads/{instance.tenant_id}/invoices/generated/{unique_filename}"
 
 
 class CompanyLegalData(TimestampedModel):
@@ -317,6 +324,7 @@ class InvoiceRecord(TenantModel):
     customer_name = models.CharField(max_length=255)
     contract_name = models.CharField(max_length=255)
     invoice_text = models.TextField(blank=True)
+    pdf_file = models.FileField(upload_to=invoice_record_upload_path, blank=True)
 
     class Meta:
         ordering = ["-billing_date", "-generated_at"]
@@ -329,6 +337,11 @@ class InvoiceRecord(TenantModel):
 
     def __str__(self):
         return f"Invoice {self.invoice_number} - {self.customer_name}"
+
+    @property
+    def is_paid(self) -> bool:
+        """Check if this invoice record has at least one payment match."""
+        return self.payment_matches.exists()
 
 
 class UploadStatus(models.TextChoices):
@@ -528,6 +541,15 @@ class InvoicePaymentMatch(TenantModel):
     invoice = models.ForeignKey(
         ImportedInvoice,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="payment_matches",
+    )
+    invoice_record = models.ForeignKey(
+        InvoiceRecord,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="payment_matches",
     )
     transaction = models.ForeignKey(
@@ -558,9 +580,20 @@ class InvoicePaymentMatch(TenantModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["invoice", "transaction"],
-                name="unique_invoice_transaction_match",
+                condition=Q(invoice__isnull=False),
+                name="unique_imported_tx_match",
+            ),
+            models.UniqueConstraint(
+                fields=["invoice_record", "transaction"],
+                condition=Q(invoice_record__isnull=False),
+                name="unique_record_tx_match",
             ),
         ]
 
     def __str__(self):
-        return f"Match: {self.invoice.invoice_number} <- {self.transaction}"
+        inv_num = ""
+        if self.invoice:
+            inv_num = self.invoice.invoice_number
+        elif self.invoice_record:
+            inv_num = self.invoice_record.invoice_number
+        return f"Match: {inv_num} <- {self.transaction}"

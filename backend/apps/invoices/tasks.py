@@ -3,9 +3,10 @@
 import logging
 
 from celery import shared_task
+from django.core.files.base import ContentFile
 
 from apps.invoices.extraction import run_extraction
-from apps.invoices.models import ImportedInvoice
+from apps.invoices.models import ImportedInvoice, InvoiceRecord
 
 logger = logging.getLogger(__name__)
 
@@ -68,3 +69,67 @@ def extract_invoice_task(self, invoice_id: int) -> bool:
             logger.error("Extraction failed for invoice %s after retries: %s", invoice_id, e)
             return False
         raise  # Re-raise for Celery retry
+
+
+@shared_task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=10,
+    retry_kwargs={"max_retries": 1},
+    acks_late=True,
+)
+def generate_invoice_pdf_task(self, record_id: int) -> bool:
+    """
+    Background task to generate a ZUGFeRD PDF for an InvoiceRecord and store it.
+
+    Args:
+        record_id: ID of the InvoiceRecord to process
+
+    Returns:
+        True if generation succeeded, False otherwise
+    """
+    try:
+        record = InvoiceRecord.objects.select_related(
+            "customer", "contract", "tenant"
+        ).get(id=record_id)
+    except InvoiceRecord.DoesNotExist:
+        logger.error("InvoiceRecord %s not found for PDF generation", record_id)
+        return False
+
+    # Idempotent: skip if pdf_file already set
+    if record.pdf_file:
+        logger.info("InvoiceRecord %s already has PDF, skipping", record_id)
+        return True
+
+    logger.info(
+        "Generating ZUGFeRD PDF for InvoiceRecord %s (attempt %s)",
+        record_id,
+        self.request.retries + 1,
+    )
+
+    try:
+        from apps.invoices.services import InvoiceService, _get_company_language
+
+        # Resolve language: customer preference > company default
+        language = _get_company_language(record.tenant)
+        if record.customer and getattr(record.customer, "invoice_language", None):
+            language = record.customer.invoice_language
+
+        service = InvoiceService(record.tenant)
+        pdf_bytes = service.generate_zugferd_pdf_for_record(record, language=language)
+
+        filename = f"invoice-{record.invoice_number}.pdf"
+        record.pdf_file.save(filename, ContentFile(pdf_bytes), save=True)
+
+        logger.info("ZUGFeRD PDF saved for InvoiceRecord %s", record_id)
+        return True
+
+    except Exception as e:
+        if self.request.retries >= self.max_retries:
+            logger.error(
+                "PDF generation failed for InvoiceRecord %s after retries: %s",
+                record_id,
+                e,
+            )
+            return False
+        raise
