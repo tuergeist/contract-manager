@@ -261,6 +261,10 @@ class InvoiceRecord(TenantModel):
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
         FINALIZED = "finalized", "Finalized"
+        SENT = "sent", "Sent"
+        PAID = "paid", "Paid"
+        DUNNING = "dunning", "Dunning"
+        STORNO = "storno", "Storno"
         CANCELLED = "cancelled", "Cancelled"
 
     contract = models.ForeignKey(

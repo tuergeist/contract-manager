@@ -226,9 +226,9 @@ class ZugferdService:
         phone = company.get("phone", "")
         if email or phone:
             if email:
-                seller.contact.email.value = email
+                seller.contact.email.address = email
             if phone:
-                seller.contact.phone.value = phone
+                seller.contact.telephone.number = phone
 
         # -- Buyer --
         buyer = doc.trade.agreement.buyer

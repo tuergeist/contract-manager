@@ -647,7 +647,22 @@
       "failed": "Fehlgeschlagen",
       "deleteBatchTooltip": "Stapel löschen — nur Rechnungen ohne PDF werden entfernt, bereits hochgeladene bleiben erhalten",
       "deleteBatchTitle": "Import-Stapel löschen",
-      "deleteBatchConfirmation": "Möchten Sie diesen Import-Stapel wirklich löschen? Nur Rechnungen ohne PDF werden gelöscht, bereits hochgeladene bleiben erhalten."
+      "deleteBatchConfirmation": "Möchten Sie diesen Import-Stapel wirklich löschen? Nur Rechnungen ohne PDF werden gelöscht, bereits hochgeladene bleiben erhalten.",
+      "source": "Quelle",
+      "sourceAll": "Alle Rechnungen",
+      "sourceImported": "Importiert",
+      "sourceGenerated": "Generiert",
+      "noInvoicesUnified": "Keine Rechnungen gefunden",
+      "generatedStatus": {
+        "finalized": "Finalisiert",
+        "sent": "Versendet",
+        "paid": "Bezahlt",
+        "dunning": "Mahnung",
+        "storno": "Storno",
+        "cancelled": "Storniert"
+      },
+      "viewPdfGenerated": "PDF herunterladen",
+      "contractLink": "Vertrag anzeigen"
     }
   },
   "audit": {

@@ -49,6 +49,42 @@ class InvoicePreviewView(View):
 
 
 @method_decorator(csrf_exempt, name="dispatch")
+class InvoiceRecordPdfView(View):
+    """REST endpoint for downloading a single invoice record as PDF."""
+
+    def get(self, request, record_id):
+        user = get_current_user_from_request(request)
+        if not user:
+            return JsonResponse({"error": "Authentication required"}, status=401)
+
+        if not user.has_perm_check("invoices", "read"):
+            return JsonResponse({"error": "Permission denied"}, status=403)
+
+        try:
+            record = InvoiceRecord.objects.select_related(
+                "customer", "contract"
+            ).get(id=record_id, tenant=user.tenant)
+        except InvoiceRecord.DoesNotExist:
+            return JsonResponse({"error": "Invoice not found"}, status=404)
+
+        company_lang = _get_company_language(user.tenant)
+        language = request.GET.get("language", None)
+        if not language or language not in ("de", "en"):
+            language = _resolve_invoice_language(
+                user.tenant, record.customer_id, fallback=company_lang
+            )
+
+        service = InvoiceService(user.tenant)
+        content = service.generate_pdf_for_record(record, language=language)
+
+        filename = f"invoice-{record.invoice_number}.pdf"
+        response = HttpResponse(content, content_type="application/pdf")
+        response["Content-Disposition"] = f'inline; filename="{filename}"'
+        response["Content-Length"] = len(content)
+        return response
+
+
+@method_decorator(csrf_exempt, name="dispatch")
 class InvoiceExportView(View):
     """REST endpoint for exporting invoices as PDF or ZUGFeRD."""
 

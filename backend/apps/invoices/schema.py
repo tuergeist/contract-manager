@@ -17,7 +17,7 @@ from strawberry.types import Info
 from apps.core.context import Context
 from apps.core.permissions import check_perm, get_current_user, require_perm
 from apps.core.schema import DeleteResult
-from apps.invoices.models import ImportedInvoice, InvoiceImportBatch, InvoicePaymentMatch, UploadStatus
+from apps.invoices.models import ImportedInvoice, InvoiceImportBatch, InvoicePaymentMatch, InvoiceRecord, UploadStatus
 from apps.invoices.services import InvoiceService
 from apps.invoices.types import InvoiceData, InvoiceLineItem
 
@@ -271,6 +271,15 @@ class InvoiceRecordType:
     generated_at: str
     line_items_snapshot: strawberry.scalars.JSON
     invoice_text: str
+
+
+@strawberry.type
+class InvoiceRecordConnection:
+    """Paginated list of invoice records."""
+
+    items: List[InvoiceRecordType]
+    total_count: int
+    has_next_page: bool
 
 
 @strawberry.type
@@ -559,6 +568,57 @@ class InvoiceQuery:
         service = InvoiceService(user.tenant)
         records = service.get_persisted_invoices(year, month, status=status)
         return [_convert_record(r) for r in records]
+
+    @strawberry.field
+    def invoice_records(
+        self,
+        info: Info,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = "desc",
+        offset: int = 0,
+        limit: int = 50,
+    ) -> InvoiceRecordConnection:
+        """Get paginated invoice records (non-draft by default)."""
+        from apps.invoices.models import InvoiceRecord
+
+        user = require_perm(info, "invoices", "read")
+
+        qs = InvoiceRecord.objects.filter(
+            tenant=user.tenant,
+        ).exclude(status=InvoiceRecord.Status.DRAFT)
+
+        if search:
+            qs = qs.filter(
+                Q(invoice_number__icontains=search)
+                | Q(customer_name__icontains=search)
+                | Q(contract_name__icontains=search)
+            )
+
+        allowed_sort_fields = {
+            "invoiceNumber": "invoice_number",
+            "billingDate": "billing_date",
+            "customerName": "customer_name",
+            "totalGross": "total_gross",
+            "generatedAt": "generated_at",
+        }
+        if sort_by and sort_by in allowed_sort_fields:
+            order_field = allowed_sort_fields[sort_by]
+            if sort_order == "desc":
+                order_field = f"-{order_field}"
+            qs = qs.order_by(order_field)
+        else:
+            qs = qs.order_by("-billing_date", "-generated_at")
+
+        total_count = qs.count()
+        items = qs[offset : offset + limit]
+        has_next_page = offset + limit < total_count
+
+        return InvoiceRecordConnection(
+            items=[_convert_record(r) for r in items],
+            total_count=total_count,
+            has_next_page=has_next_page,
+        )
 
     @strawberry.field
     def company_legal_data(self, info: Info) -> CompanyLegalDataType | None:

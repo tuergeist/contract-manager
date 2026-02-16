@@ -647,7 +647,22 @@
       "failed": "Failed",
       "deleteBatchTooltip": "Delete batch — only removes invoices without PDF, already uploaded invoices are kept",
       "deleteBatchTitle": "Delete Import Batch",
-      "deleteBatchConfirmation": "Are you sure you want to delete this import batch? Only invoices without PDF will be deleted, already uploaded invoices will be kept."
+      "deleteBatchConfirmation": "Are you sure you want to delete this import batch? Only invoices without PDF will be deleted, already uploaded invoices will be kept.",
+      "source": "Source",
+      "sourceAll": "All Invoices",
+      "sourceImported": "Imported",
+      "sourceGenerated": "Generated",
+      "noInvoicesUnified": "No invoices found",
+      "generatedStatus": {
+        "finalized": "Finalized",
+        "sent": "Sent",
+        "paid": "Paid",
+        "dunning": "Dunning",
+        "storno": "Storno",
+        "cancelled": "Cancelled"
+      },
+      "viewPdfGenerated": "Download PDF",
+      "contractLink": "View contract"
     }
   },
   "audit": {
