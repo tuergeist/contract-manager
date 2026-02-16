@@ -52,7 +52,7 @@ export const UPDATE_HELP_VIDEO_LINKS_MUTATION = gql`
   }
 `
 
-function matchRoute(pattern: string, pathname: string): boolean {
+export function matchRoute(pattern: string, pathname: string): boolean {
   if (pattern === pathname) return true
   const patternParts = pattern.split('/')
   const pathParts = pathname.split('/')
