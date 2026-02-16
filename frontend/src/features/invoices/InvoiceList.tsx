@@ -41,8 +41,8 @@ import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 // --- GraphQL ---
 
-const IMPORTED_INVOICES = gql`
-  query ImportedInvoices(
+const INVOICES = gql`
+  query Invoices(
     $search: String
     $paymentStatus: PaymentStatusFilter
     $uploadStatus: UploadStatusFilter
@@ -51,7 +51,7 @@ const IMPORTED_INVOICES = gql`
     $offset: Int
     $limit: Int
   ) {
-    importedInvoices(
+    invoices(
       search: $search
       paymentStatus: $paymentStatus
       uploadStatus: $uploadStatus
@@ -99,8 +99,8 @@ const IMPORTED_INVOICES = gql`
 `
 
 const DELETE_INVOICE = gql`
-  mutation DeleteImportedInvoice($id: ID!) {
-    deleteImportedInvoice(id: $id) {
+  mutation DeleteInvoice($id: ID!) {
+    deleteInvoice(id: $id) {
       success
       error
     }
@@ -436,11 +436,11 @@ interface UnifiedRow {
   contractName?: string
   amount: number | null
   currency: string
-  imported?: ImportedInvoice
+  imported?: Invoice
   generated?: GeneratedInvoice
 }
 
-interface ImportBatch {
+interface InvoiceImportBatch {
   id: string
   name: string
   totalExpected: number
@@ -450,7 +450,7 @@ interface ImportBatch {
   createdByName: string | null
 }
 
-interface ImportedInvoice {
+interface Invoice {
   id: string
   invoiceNumber: string
   invoiceDate: string | null
@@ -511,7 +511,7 @@ interface SearchTransaction {
   bookingText: string
 }
 
-export function ImportedInvoiceList() {
+export function InvoiceList() {
   const { t } = useTranslation()
   const { hasPermission } = useAuth()
 
@@ -530,8 +530,8 @@ export function ImportedInvoiceList() {
   const [csvUploadOpen, setCsvUploadOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleteBatchId, setDeleteBatchId] = useState<string | null>(null)
-  const [customerMatchInvoice, setCustomerMatchInvoice] = useState<ImportedInvoice | null>(null)
-  const [paymentMatchInvoice, setPaymentMatchInvoice] = useState<ImportedInvoice | null>(null)
+  const [customerMatchInvoice, setCustomerMatchInvoice] = useState<Invoice | null>(null)
+  const [paymentMatchInvoice, setPaymentMatchInvoice] = useState<Invoice | null>(null)
   const [paymentMatchRecord, setPaymentMatchRecord] = useState<GeneratedInvoice | null>(null)
   const [transactionSearch, setTransactionSearch] = useState('')
   const [debouncedTxSearch, setDebouncedTxSearch] = useState('')
@@ -547,7 +547,7 @@ export function ImportedInvoiceList() {
   const [uploadProgress, setUploadProgress] = useState<{ filename: string; status: 'pending' | 'success' | 'error'; error?: string }[]>([])
 
   // Queries & Mutations
-  const { data, loading, refetch, startPolling, stopPolling } = useQuery(IMPORTED_INVOICES, {
+  const { data, loading, refetch, startPolling, stopPolling } = useQuery(INVOICES, {
     variables: {
       search: search || null,
       paymentStatus: paymentStatus === 'ALL' ? null : paymentStatus,
@@ -574,9 +574,9 @@ export function ImportedInvoiceList() {
 
   // Poll for updates when any invoice is being extracted
   useEffect(() => {
-    const items = data?.importedInvoices?.items || []
+    const items = data?.invoices?.items || []
     const hasExtracting = items.some(
-      (inv: ImportedInvoice) => inv.extractionStatus === 'extracting'
+      (inv: Invoice) => inv.extractionStatus === 'extracting'
     )
 
     if (hasExtracting) {
@@ -586,7 +586,7 @@ export function ImportedInvoiceList() {
     }
 
     return () => stopPolling()
-  }, [data?.importedInvoices?.items, startPolling, stopPolling])
+  }, [data?.invoices?.items, startPolling, stopPolling])
 
   const { data: batchData, refetch: refetchBatches } = useQuery(IMPORT_BATCHES, {
     variables: { offset: 0, limit: 10 },
@@ -665,9 +665,9 @@ export function ImportedInvoiceList() {
     }
   )
 
-  const importedInvoices: ImportedInvoice[] = data?.importedInvoices?.items ?? []
+  const invoices: Invoice[] = data?.invoices?.items ?? []
   const generatedInvoices: GeneratedInvoice[] = generatedData?.invoiceRecords?.items ?? []
-  const batches: ImportBatch[] = batchData?.importBatches?.items ?? []
+  const batches: InvoiceImportBatch[] = batchData?.importBatches?.items ?? []
   const hasPendingUploads = batches.some((b) => b.pendingCount > 0)
 
   // Build unified rows
@@ -675,7 +675,7 @@ export function ImportedInvoiceList() {
     const rows: UnifiedRow[] = []
 
     if (sourceFilter !== 'GENERATED') {
-      for (const inv of importedInvoices) {
+      for (const inv of invoices) {
         rows.push({
           key: `imp-${inv.id}`,
           source: 'imported',
@@ -725,8 +725,8 @@ export function ImportedInvoiceList() {
   const totalCount = sourceFilter === 'GENERATED'
     ? unifiedRows.length
     : (sourceFilter === 'IMPORTED'
-      ? (data?.importedInvoices?.totalCount ?? 0)
-      : (data?.importedInvoices?.totalCount ?? 0) + (generatedData?.invoiceRecords?.totalCount ?? 0))
+      ? (data?.invoices?.totalCount ?? 0)
+      : (data?.invoices?.totalCount ?? 0) + (generatedData?.invoiceRecords?.totalCount ?? 0))
   const paginatedRows = sourceFilter === 'ALL'
     ? unifiedRows.slice((page - 1) * pageSize, page * pageSize)
     : unifiedRows
@@ -734,7 +734,7 @@ export function ImportedInvoiceList() {
   const hasNextPage = sourceFilter === 'ALL'
     ? page * pageSize < totalCount
     : (sourceFilter === 'IMPORTED'
-      ? (data?.importedInvoices?.hasNextPage ?? false)
+      ? (data?.invoices?.hasNextPage ?? false)
       : page * pageSize < totalCount)
   const displayRows = sourceFilter === 'ALL' ? paginatedRows : unifiedRows
   const isLoading = loading || (sourceFilter !== 'IMPORTED' && generatedLoading)
@@ -965,7 +965,7 @@ export function ImportedInvoiceList() {
     }
   }
 
-  const openPaymentMatchModal = (invoice: ImportedInvoice) => {
+  const openPaymentMatchModal = (invoice: Invoice) => {
     setPaymentMatchInvoice(invoice)
     setPaymentMatchRecord(null)
     setTransactionSearch('')
@@ -977,7 +977,7 @@ export function ImportedInvoiceList() {
     setTransactionSearch('')
   }
 
-  const getStatusBadge = (invoice: ImportedInvoice) => {
+  const getStatusBadge = (invoice: Invoice) => {
     const status = invoice.extractionStatus
     switch (status) {
       case 'pending':
@@ -997,14 +997,14 @@ export function ImportedInvoiceList() {
     }
   }
 
-  const getPaymentBadge = (invoice: ImportedInvoice) => {
+  const getPaymentBadge = (invoice: Invoice) => {
     if (invoice.isPaid) {
       return <Badge variant="default" className="bg-green-500"><Check className="w-3 h-3 mr-1" />{t('invoices.import.paid')}</Badge>
     }
     return <Badge variant="outline">{t('invoices.import.unpaid')}</Badge>
   }
 
-  const getUploadStatusBadge = (invoice: ImportedInvoice) => {
+  const getUploadStatusBadge = (invoice: Invoice) => {
     if (invoice.uploadStatus === 'pending') {
       return <Badge variant="secondary">{t('invoices.import.uploadPending')}</Badge>
     }

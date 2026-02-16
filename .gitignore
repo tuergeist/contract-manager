@@ -69,5 +69,8 @@ media/
 tmp/
 temp/
 
+# Generated license files
+frontend/public/licenses-frontend.json
+
 # Claude Code
 .claude/

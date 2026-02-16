@@ -22,6 +22,7 @@ import {
   Landmark,
   Wallet,
   ListTodo,
+  Info,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
@@ -72,6 +73,7 @@ const navItems: NavItem[] = [
   { to: '/liquidity-forecast', icon: Wallet, labelKey: 'nav.liquidityForecast', permission: 'banking.read' },
   { to: '/forecast', icon: TrendingUp, labelKey: 'nav.forecast' },
   { to: '/audit-log', icon: History, labelKey: 'nav.auditLog' },
+  { to: '/about', icon: Info, labelKey: 'nav.about' },
   { to: '/settings', icon: Settings, labelKey: 'nav.settings', end: true },
 ]
 

@@ -201,7 +201,7 @@ const CONTRACT_DETAIL_QUERY = gql`
 
 const CONTRACT_INVOICES_QUERY = gql`
   query ContractInvoices($contractId: Int!) {
-    importedInvoices(contractId: $contractId, limit: 100) {
+    invoices(contractId: $contractId, limit: 100) {
       items {
         id
         invoiceNumber
@@ -970,7 +970,7 @@ export function ContractDetail() {
             }`}
           >
             <Receipt className="h-4 w-4" />
-            {t('nav.invoices')} ({(invoicesData?.importedInvoices?.totalCount || 0) + (generatedInvoicesData?.invoiceRecords?.totalCount || 0)})
+            {t('nav.invoices')} ({(invoicesData?.invoices?.totalCount || 0) + (generatedInvoicesData?.invoiceRecords?.totalCount || 0)})
           </button>
           <button
             onClick={() => setActiveTab('amendments')}
@@ -1433,7 +1433,7 @@ export function ContractDetail() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
             </div>
-          ) : ((invoicesData?.importedInvoices?.items?.length || 0) + (generatedInvoicesData?.invoiceRecords?.items?.length || 0)) === 0 ? (
+          ) : ((invoicesData?.invoices?.items?.length || 0) + (generatedInvoicesData?.invoiceRecords?.items?.length || 0)) === 0 ? (
             <div className="rounded-lg border bg-white p-8 text-center">
               <p className="text-gray-500">{t('contracts.noInvoices')}</p>
             </div>
@@ -1509,7 +1509,7 @@ export function ContractDetail() {
                     </tr>
                   ))}
                   {/* Imported invoices */}
-                  {invoicesData?.importedInvoices?.items?.map((invoice: { id: string; invoiceNumber: string; invoiceDate: string | null; totalAmount: string | null; currency: string; isPaid: boolean; paidAt: string | null; firstPaymentTransactionId: number | null; pdfUrl: string | null }) => (
+                  {invoicesData?.invoices?.items?.map((invoice: { id: string; invoiceNumber: string; invoiceDate: string | null; totalAmount: string | null; currency: string; isPaid: boolean; paidAt: string | null; firstPaymentTransactionId: number | null; pdfUrl: string | null }) => (
                     <tr key={`imp-${invoice.id}`} className="hover:bg-gray-50">
                       <td className="whitespace-nowrap px-6 py-4">
                         <span className="font-medium">

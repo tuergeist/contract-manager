@@ -15,12 +15,13 @@ import { RevenueForecast } from './features/forecast/RevenueForecast'
 import { SettingsLayout } from './features/settings/SettingsLayout'
 import { ContractImport } from './features/contracts/import/ContractImport'
 import { InvoiceExportPage } from './features/invoices/InvoiceExportPage'
-import { ImportedInvoiceList } from './features/invoices/ImportedInvoiceList'
+import { InvoiceList } from './features/invoices/InvoiceList'
 import { AuditLogPage } from './features/audit/AuditLogPage'
 import { BankingPage } from './features/banking/BankingPage'
 import { CounterpartyDetailPage } from './features/banking/CounterpartyDetailPage'
 import { LiquidityForecast } from './features/liquidity'
 import { TodoBoard } from './features/todos/TodoBoard'
+import { AboutPage } from './features/about/AboutPage'
 
 function App() {
   return (
@@ -55,12 +56,13 @@ function App() {
         <Route path="settings/invoices/zugferd" element={<SettingsLayout />} />
         <Route path="contracts/import" element={<ContractImport />} />
         <Route path="invoices/export" element={<InvoiceExportPage />} />
-        <Route path="invoices" element={<ImportedInvoiceList />} />
+        <Route path="invoices" element={<InvoiceList />} />
         <Route path="banking" element={<BankingPage />} />
         <Route path="banking/counterparty/:id" element={<CounterpartyDetailPage />} />
         <Route path="liquidity-forecast" element={<LiquidityForecast />} />
         <Route path="audit-log" element={<AuditLogPage />} />
         <Route path="todos" element={<TodoBoard />} />
+        <Route path="about" element={<AboutPage />} />
       </Route>
     </Routes>
   )

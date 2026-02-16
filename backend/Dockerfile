@@ -27,8 +27,14 @@ COPY pyproject.toml .
 # Install dependencies
 RUN uv pip install --system -e ".[dev]"
 
+# Install pip-licenses for OSS attribution
+RUN uv pip install --system pip-licenses
+
 # Copy application code
 COPY . .
+
+# Generate backend license list
+RUN python -m piplicenses --format=json --output-file=/app/licenses-backend.json
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
