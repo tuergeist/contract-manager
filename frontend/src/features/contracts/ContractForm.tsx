@@ -783,29 +783,6 @@ export function ContractForm() {
                             <CommandList>
                               <CommandEmpty>{t('contracts.group.noGroup')}</CommandEmpty>
                               <CommandGroup>
-                                {groupSearchTerm.trim() && !contractGroups.some(g => g.name.toLowerCase() === groupSearchTerm.trim().toLowerCase()) && (
-                                  <CommandItem
-                                    value="__create__"
-                                    onSelect={async () => {
-                                      const result = await createContractGroup({
-                                        variables: {
-                                          customerId: watchedCustomerId,
-                                          name: groupSearchTerm.trim(),
-                                        },
-                                      })
-                                      if (result.data?.createContractGroup?.success) {
-                                        const newGroup = result.data.createContractGroup.group
-                                        field.onChange(newGroup.id)
-                                        setGroupSearchTerm('')
-                                        setGroupPopoverOpen(false)
-                                        refetchGroups()
-                                      }
-                                    }}
-                                  >
-                                    <Plus className="mr-2 h-4 w-4" />
-                                    {t('contracts.group.createNew')}: &quot;{groupSearchTerm.trim()}&quot;
-                                  </CommandItem>
-                                )}
                                 <CommandItem
                                   value="__none__"
                                   onSelect={() => {
@@ -848,6 +825,30 @@ export function ContractForm() {
                               </CommandGroup>
                             </CommandList>
                           </Command>
+                          {groupSearchTerm.trim() && !contractGroups.some(g => g.name.toLowerCase() === groupSearchTerm.trim().toLowerCase()) && (
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2 border-t px-3 py-2 text-sm hover:bg-accent cursor-pointer"
+                              onClick={async () => {
+                                const result = await createContractGroup({
+                                  variables: {
+                                    customerId: watchedCustomerId,
+                                    name: groupSearchTerm.trim(),
+                                  },
+                                })
+                                if (result.data?.createContractGroup?.success) {
+                                  const newGroup = result.data.createContractGroup.group
+                                  field.onChange(newGroup.id)
+                                  setGroupSearchTerm('')
+                                  setGroupPopoverOpen(false)
+                                  refetchGroups()
+                                }
+                              }}
+                            >
+                              <Plus className="h-4 w-4" />
+                              {t('contracts.group.createNew')}: &quot;{groupSearchTerm.trim()}&quot;
+                            </button>
+                          )}
                         </PopoverContent>
                       </Popover>
                       <FormMessage />

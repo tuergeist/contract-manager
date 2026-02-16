@@ -1205,19 +1205,6 @@ export function CustomerDetail() {
                               <CommandList>
                                 <CommandEmpty>{t('contracts.group.noGroup')}</CommandEmpty>
                                 <CommandGroup>
-                                  {newGroupName.trim() && !contractGroups.some(g => g.name.toLowerCase() === newGroupName.trim().toLowerCase()) && (
-                                    <CommandItem
-                                      value="__create__"
-                                      onSelect={() => handleCreateGroup(contract.id)}
-                                    >
-                                      {creatingGroup ? (
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                      ) : (
-                                        <Plus className="mr-2 h-4 w-4" />
-                                      )}
-                                      {t('contracts.group.createNew')}: &quot;{newGroupName}&quot;
-                                    </CommandItem>
-                                  )}
                                   <CommandItem
                                     value="none"
                                     onSelect={() => handleAssignContractGroup(contract.id, null)}
@@ -1254,6 +1241,21 @@ export function CustomerDetail() {
                                 </CommandGroup>
                               </CommandList>
                             </Command>
+                            {newGroupName.trim() && !contractGroups.some(g => g.name.toLowerCase() === newGroupName.trim().toLowerCase()) && (
+                              <button
+                                type="button"
+                                className="flex w-full items-center gap-2 border-t px-3 py-2 text-sm hover:bg-accent cursor-pointer"
+                                onClick={() => handleCreateGroup(contract.id)}
+                                disabled={creatingGroup}
+                              >
+                                {creatingGroup ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Plus className="h-4 w-4" />
+                                )}
+                                {t('contracts.group.createNew')}: &quot;{newGroupName}&quot;
+                              </button>
+                            )}
                           </PopoverContent>
                         </Popover>
                       </td>
