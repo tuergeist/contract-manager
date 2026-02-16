@@ -1131,7 +1131,7 @@ export function BankingPage() {
               <thead>
                 <tr className="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                   <th
-                    className="w-[100px] cursor-pointer whitespace-nowrap px-4 py-3"
+                    className="w-[8%] cursor-pointer whitespace-nowrap px-4 py-3"
                     onClick={() => handleSort('date')}
                   >
                     <span className="inline-flex items-center gap-1">
@@ -1140,7 +1140,7 @@ export function BankingPage() {
                     </span>
                   </th>
                   <th
-                    className="w-[200px] cursor-pointer px-4 py-3"
+                    className="w-[15%] cursor-pointer px-4 py-3"
                     onClick={() => handleSort('counterparty')}
                   >
                     <span className="inline-flex items-center gap-1">
@@ -1150,7 +1150,7 @@ export function BankingPage() {
                   </th>
                   <th className="px-4 py-3">{t('banking.bookingText')}</th>
                   <th
-                    className="w-[120px] cursor-pointer whitespace-nowrap px-4 py-3 text-right"
+                    className="w-[9%] cursor-pointer whitespace-nowrap px-4 py-3 text-right"
                     onClick={() => handleSort('amount')}
                   >
                     <span className="inline-flex items-center justify-end gap-1">
@@ -1158,7 +1158,7 @@ export function BankingPage() {
                       {getSortIcon('amount')}
                     </span>
                   </th>
-                  <th className="w-[110px] px-4 py-3">{t('banking.account')}</th>
+                  <th className="w-[10%] px-4 py-3">{t('banking.account')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -1188,7 +1188,7 @@ export function BankingPage() {
                         <td className="whitespace-nowrap px-4 py-2.5 text-gray-900">
                           {formatDate(tx.entryDate)}
                         </td>
-                        <td className="max-w-[220px] px-4 py-2.5 text-gray-900">
+                        <td className="px-4 py-2.5 text-gray-900">
                           <div className="flex items-center gap-1">
                             <div className="min-w-0 flex-1 truncate">
                               {tx.counterparty?.name ? (
@@ -1347,7 +1347,7 @@ export function BankingPage() {
                                     ? `/contracts/${tx.matchedInvoice.contractId}`
                                     : tx.matchedInvoice.customerId
                                     ? `/customers/${tx.matchedInvoice.customerId}`
-                                    : '/invoices/imported'
+                                    : '/invoices'
                                 }
                                 onClick={(e) => e.stopPropagation()}
                                 className="text-blue-600 hover:text-blue-800"

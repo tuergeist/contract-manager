@@ -1036,7 +1036,7 @@ export function CustomerDetail() {
             }`}
           >
             <Receipt className="h-4 w-4" />
-            {t('nav.importedInvoices')} ({invoicesData?.importedInvoices?.totalCount || 0})
+            {t('nav.invoices')} ({invoicesData?.importedInvoices?.totalCount || 0})
           </button>
           <button
             onClick={() => setActiveTab('attachments')}

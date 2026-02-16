@@ -55,7 +55,7 @@ function App() {
         <Route path="settings/invoices/zugferd" element={<SettingsLayout />} />
         <Route path="contracts/import" element={<ContractImport />} />
         <Route path="invoices/export" element={<InvoiceExportPage />} />
-        <Route path="invoices/imported" element={<ImportedInvoiceList />} />
+        <Route path="invoices" element={<ImportedInvoiceList />} />
         <Route path="banking" element={<BankingPage />} />
         <Route path="banking/counterparty/:id" element={<CounterpartyDetailPage />} />
         <Route path="liquidity-forecast" element={<LiquidityForecast />} />

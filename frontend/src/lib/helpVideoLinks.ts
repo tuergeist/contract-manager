@@ -11,7 +11,7 @@ export const ROUTE_KEYS = [
   { key: '/contracts/:id/edit', labelKey: 'routes.contractEdit' },
   { key: '/products', labelKey: 'nav.products' },
   { key: '/banking', labelKey: 'nav.banking' },
-  { key: '/invoices/imported', labelKey: 'nav.importedInvoices' },
+  { key: '/invoices', labelKey: 'nav.invoices' },
   { key: '/invoices/export', labelKey: 'nav.invoiceExport' },
   { key: '/forecast', labelKey: 'nav.forecast' },
   { key: '/liquidity-forecast', labelKey: 'nav.liquidityForecast' },

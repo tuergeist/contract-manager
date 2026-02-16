@@ -5,7 +5,7 @@
     "customers": "Customers",
     "products": "Products",
     "contracts": "Contracts",
-    "importedInvoices": "Invoices",
+    "invoices": "Invoices",
     "invoiceExport": "Invoice Export",
     "forecast": "Revenue Forecast",
     "liquidityForecast": "Liquidity Forecast",
