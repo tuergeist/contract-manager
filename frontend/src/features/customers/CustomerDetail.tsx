@@ -1203,26 +1203,21 @@ export function CustomerDetail() {
                                 onValueChange={setNewGroupName}
                               />
                               <CommandList>
-                                <CommandEmpty>
-                                  {newGroupName.trim() ? (
-                                    <Button
-                                      variant="ghost"
-                                      className="w-full justify-start"
-                                      onClick={() => handleCreateGroup(contract.id)}
-                                      disabled={creatingGroup}
+                                <CommandEmpty>{t('contracts.group.noGroup')}</CommandEmpty>
+                                <CommandGroup>
+                                  {newGroupName.trim() && !contractGroups.some(g => g.name.toLowerCase() === newGroupName.trim().toLowerCase()) && (
+                                    <CommandItem
+                                      value="__create__"
+                                      onSelect={() => handleCreateGroup(contract.id)}
                                     >
                                       {creatingGroup ? (
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                       ) : (
                                         <Plus className="mr-2 h-4 w-4" />
                                       )}
-                                      {t('contracts.group.createNew')}: "{newGroupName}"
-                                    </Button>
-                                  ) : (
-                                    t('contracts.group.noGroup')
+                                      {t('contracts.group.createNew')}: &quot;{newGroupName}&quot;
+                                    </CommandItem>
                                   )}
-                                </CommandEmpty>
-                                <CommandGroup>
                                   <CommandItem
                                     value="none"
                                     onSelect={() => handleAssignContractGroup(contract.id, null)}

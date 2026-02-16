@@ -781,12 +781,12 @@ export function ContractForm() {
                               onValueChange={setGroupSearchTerm}
                             />
                             <CommandList>
-                              <CommandEmpty>
-                                {groupSearchTerm.trim() ? (
-                                  <button
-                                    type="button"
-                                    className="flex w-full items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded"
-                                    onClick={async () => {
+                              <CommandEmpty>{t('contracts.group.noGroup')}</CommandEmpty>
+                              <CommandGroup>
+                                {groupSearchTerm.trim() && !contractGroups.some(g => g.name.toLowerCase() === groupSearchTerm.trim().toLowerCase()) && (
+                                  <CommandItem
+                                    value="__create__"
+                                    onSelect={async () => {
                                       const result = await createContractGroup({
                                         variables: {
                                           customerId: watchedCustomerId,
@@ -802,14 +802,10 @@ export function ContractForm() {
                                       }
                                     }}
                                   >
-                                    <Plus className="h-4 w-4" />
+                                    <Plus className="mr-2 h-4 w-4" />
                                     {t('contracts.group.createNew')}: &quot;{groupSearchTerm.trim()}&quot;
-                                  </button>
-                                ) : (
-                                  t('contracts.group.noGroup')
+                                  </CommandItem>
                                 )}
-                              </CommandEmpty>
-                              <CommandGroup>
                                 <CommandItem
                                   value="__none__"
                                   onSelect={() => {
