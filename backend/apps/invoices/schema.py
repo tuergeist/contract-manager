@@ -43,7 +43,7 @@ class InvoiceLineItemType:
 
 
 @strawberry.type
-class InvoiceType:
+class InvoicePreviewType:
     """Invoice data for preview (calculated, not persisted)."""
 
     contract_id: int
@@ -75,9 +75,9 @@ def _convert_line_item(item: InvoiceLineItem) -> InvoiceLineItemType:
     )
 
 
-def _convert_invoice(invoice: InvoiceData) -> InvoiceType:
+def _convert_invoice(invoice: InvoiceData) -> InvoicePreviewType:
     """Convert InvoiceData dataclass to GraphQL type."""
-    return InvoiceType(
+    return InvoicePreviewType(
         contract_id=invoice.contract_id,
         contract_name=invoice.contract_name,
         customer_id=invoice.customer_id,
@@ -338,12 +338,12 @@ class LegalDataCheckResult:
 
 
 # =========================================================================
-# Imported Invoice types
+# Invoice types (uploaded/imported)
 # =========================================================================
 
 
 @strawberry.type
-class ImportedInvoiceType:
+class InvoiceType:
     """An imported outgoing invoice with extracted metadata."""
 
     id: strawberry.ID
@@ -375,10 +375,10 @@ class ImportedInvoiceType:
 
 
 @strawberry.type
-class ImportedInvoiceConnection:
+class InvoiceConnection:
     """Paginated list of imported invoices."""
 
-    items: List[ImportedInvoiceType]
+    items: List[InvoiceType]
     total_count: int
     has_next_page: bool
 
@@ -392,7 +392,7 @@ class UploadInvoiceInput:
 
 
 @strawberry.input
-class UpdateImportedInvoiceInput:
+class UpdateInvoiceInput:
     """Input for correcting extracted invoice fields."""
 
     invoice_number: str | None = None
@@ -404,12 +404,12 @@ class UpdateImportedInvoiceInput:
 
 
 @strawberry.type
-class ImportedInvoiceResult:
+class InvoiceResult:
     """Result of imported invoice operations."""
 
     success: bool
     error: str | None = None
-    invoice: ImportedInvoiceType | None = None
+    invoice: InvoiceType | None = None
 
 
 @strawberry.enum
@@ -490,7 +490,7 @@ class BulkUploadItemResult:
     filename: str
     success: bool
     error: str | None = None
-    invoice: ImportedInvoiceType | None = None
+    invoice: InvoiceType | None = None
     matched_expected: bool = False
 
 
@@ -560,7 +560,7 @@ class InvoiceQuery:
     @strawberry.field
     def invoices_for_month(
         self, info: Info, year: int, month: int
-    ) -> List[InvoiceType]:
+    ) -> List[InvoicePreviewType]:
         """Get all calculated invoices due for a specific month."""
         user = require_perm(info, "invoices", "read")
         service = InvoiceService(user.tenant)
@@ -714,7 +714,7 @@ class InvoiceQuery:
         user = require_perm(info, "settings", "read")
         return user.tenant.settings.get("zugferd_default", False)
 
-    # ----- Imported Invoices -----
+    # ----- Invoices -----
 
     # ----- Import Batches -----
 
@@ -765,7 +765,7 @@ class InvoiceQuery:
         batch_id: strawberry.ID,
         offset: int = 0,
         limit: int = 50,
-    ) -> ImportedInvoiceConnection:
+    ) -> InvoiceConnection:
         """Get pending invoices for a specific batch."""
         user = require_perm(info, "invoices", "read")
 
@@ -779,16 +779,16 @@ class InvoiceQuery:
         items = qs[offset : offset + limit]
         has_next_page = offset + limit < total_count
 
-        return ImportedInvoiceConnection(
+        return InvoiceConnection(
             items=[_convert_imported_invoice(inv) for inv in items],
             total_count=total_count,
             has_next_page=has_next_page,
         )
 
-    # ----- Imported Invoices -----
+    # ----- Invoices -----
 
     @strawberry.field
-    def imported_invoices(
+    def invoices(
         self,
         info: Info,
         search: str | None = None,
@@ -800,8 +800,8 @@ class InvoiceQuery:
         sort_order: str | None = "desc",
         offset: int = 0,
         limit: int = 50,
-    ) -> ImportedInvoiceConnection:
-        """Get paginated list of imported invoices with optional filters."""
+    ) -> InvoiceConnection:
+        """Get paginated list of invoices with optional filters."""
         user = require_perm(info, "invoices", "read")
 
         qs = ImportedInvoice.objects.filter(tenant=user.tenant).select_related(
@@ -852,17 +852,17 @@ class InvoiceQuery:
         items = qs[offset : offset + limit]
         has_next_page = offset + limit < total_count
 
-        return ImportedInvoiceConnection(
+        return InvoiceConnection(
             items=[_convert_imported_invoice(inv) for inv in items],
             total_count=total_count,
             has_next_page=has_next_page,
         )
 
     @strawberry.field
-    def imported_invoice(
+    def invoice(
         self, info: Info, id: strawberry.ID
-    ) -> ImportedInvoiceType | None:
-        """Get a single imported invoice by ID."""
+    ) -> InvoiceType | None:
+        """Get a single invoice by ID."""
         user = require_perm(info, "invoices", "read")
 
         try:
@@ -1383,21 +1383,21 @@ class InvoiceMutation:
             success=True, extracted_data=result
         )
 
-    # ----- Imported Invoices -----
+    # ----- Invoices -----
 
     @strawberry.mutation
     def upload_invoice(
         self, info: Info[Context, None], input: UploadInvoiceInput
-    ) -> ImportedInvoiceResult:
+    ) -> InvoiceResult:
         """Upload an invoice PDF for extraction."""
         user, err = check_perm(info, "invoices", "generate")
         if err:
-            return ImportedInvoiceResult(success=False, error=err)
+            return InvoiceResult(success=False, error=err)
 
         # Validate extension
         ext = os.path.splitext(input.filename)[1].lower()
         if ext != ".pdf":
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False,
                 error="Only PDF files are accepted.",
             )
@@ -1406,14 +1406,14 @@ class InvoiceMutation:
         try:
             file_bytes = base64.b64decode(input.file_content, validate=True)
         except Exception:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False, error="Invalid base64 file content"
             )
 
         # Validate size (20MB max)
         max_size = 20 * 1024 * 1024
         if len(file_bytes) > max_size:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False,
                 error="File too large. Maximum size is 20MB",
             )
@@ -1433,24 +1433,24 @@ class InvoiceMutation:
         from apps.invoices.tasks import extract_invoice_task
         extract_invoice_task.delay(invoice.id)
 
-        return ImportedInvoiceResult(
+        return InvoiceResult(
             success=True,
             invoice=_convert_imported_invoice(invoice),
         )
 
     @strawberry.mutation
-    def update_imported_invoice(
-        self, info: Info[Context, None], id: strawberry.ID, input: UpdateImportedInvoiceInput
-    ) -> ImportedInvoiceResult:
-        """Update/correct fields on an imported invoice."""
+    def update_invoice(
+        self, info: Info[Context, None], id: strawberry.ID, input: UpdateInvoiceInput
+    ) -> InvoiceResult:
+        """Update/correct fields on an invoice."""
         user, err = check_perm(info, "invoices", "generate")
         if err:
-            return ImportedInvoiceResult(success=False, error=err)
+            return InvoiceResult(success=False, error=err)
 
         try:
             invoice = ImportedInvoice.objects.get(id=id, tenant=user.tenant)
         except ImportedInvoice.DoesNotExist:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False, error="Invoice not found"
             )
 
@@ -1471,7 +1471,7 @@ class InvoiceMutation:
                 customer = Customer.objects.get(id=input.customer_id, tenant=user.tenant)
                 invoice.customer = customer
             except Customer.DoesNotExist:
-                return ImportedInvoiceResult(
+                return InvoiceResult(
                     success=False, error="Customer not found"
                 )
 
@@ -1484,16 +1484,16 @@ class InvoiceMutation:
             "payment_matches__transaction__counterparty"
         ).get(id=id)
 
-        return ImportedInvoiceResult(
+        return InvoiceResult(
             success=True,
             invoice=_convert_imported_invoice(invoice),
         )
 
     @strawberry.mutation
-    def delete_imported_invoice(
+    def delete_invoice(
         self, info: Info[Context, None], id: strawberry.ID
     ) -> DeleteResult:
-        """Delete an imported invoice and its PDF."""
+        """Delete an invoice and its PDF."""
         user, err = check_perm(info, "invoices", "delete")
         if err:
             return DeleteResult(success=False, error=err)
@@ -1511,18 +1511,18 @@ class InvoiceMutation:
         return DeleteResult(success=True)
 
     @strawberry.mutation
-    def confirm_imported_invoice(
+    def confirm_invoice(
         self, info: Info[Context, None], id: strawberry.ID
-    ) -> ImportedInvoiceResult:
+    ) -> InvoiceResult:
         """Confirm an extracted invoice, marking it as ready for payment matching."""
         user, err = check_perm(info, "invoices", "generate")
         if err:
-            return ImportedInvoiceResult(success=False, error=err)
+            return InvoiceResult(success=False, error=err)
 
         try:
             invoice = ImportedInvoice.objects.get(id=id, tenant=user.tenant)
         except ImportedInvoice.DoesNotExist:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False, error="Invoice not found"
             )
 
@@ -1531,7 +1531,7 @@ class InvoiceMutation:
             ImportedInvoice.ExtractionStatus.EXTRACTED,
             ImportedInvoice.ExtractionStatus.EXTRACTION_FAILED,
         ]:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False,
                 error="Invoice must be extracted before confirmation",
             )
@@ -1546,7 +1546,7 @@ class InvoiceMutation:
             "payment_matches__transaction__counterparty"
         ).get(id=id)
 
-        return ImportedInvoiceResult(
+        return InvoiceResult(
             success=True,
             invoice=_convert_imported_invoice(invoice),
         )
@@ -1554,16 +1554,16 @@ class InvoiceMutation:
     @strawberry.mutation
     def extract_invoice(
         self, info: Info[Context, None], id: strawberry.ID
-    ) -> ImportedInvoiceResult:
+    ) -> InvoiceResult:
         """Run extraction on a pending or failed invoice."""
         user, err = check_perm(info, "invoices", "generate")
         if err:
-            return ImportedInvoiceResult(success=False, error=err)
+            return InvoiceResult(success=False, error=err)
 
         try:
             invoice = ImportedInvoice.objects.get(id=id, tenant=user.tenant)
         except ImportedInvoice.DoesNotExist:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False, error="Invoice not found"
             )
 
@@ -1572,7 +1572,7 @@ class InvoiceMutation:
             ImportedInvoice.ExtractionStatus.PENDING,
             ImportedInvoice.ExtractionStatus.EXTRACTION_FAILED,
         ]:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False,
                 error=f"Cannot extract invoice in {invoice.extraction_status} status",
             )
@@ -1589,13 +1589,13 @@ class InvoiceMutation:
         ).get(id=id)
 
         if not success:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False,
                 error=invoice.extraction_error or "Extraction failed",
                 invoice=_convert_imported_invoice(invoice),
             )
 
-        return ImportedInvoiceResult(
+        return InvoiceResult(
             success=True,
             invoice=_convert_imported_invoice(invoice),
         )
@@ -1603,22 +1603,22 @@ class InvoiceMutation:
     @strawberry.mutation
     def re_extract_invoice(
         self, info: Info[Context, None], id: strawberry.ID
-    ) -> ImportedInvoiceResult:
+    ) -> InvoiceResult:
         """Re-run extraction on an already extracted invoice."""
         user, err = check_perm(info, "invoices", "generate")
         if err:
-            return ImportedInvoiceResult(success=False, error=err)
+            return InvoiceResult(success=False, error=err)
 
         try:
             invoice = ImportedInvoice.objects.get(id=id, tenant=user.tenant)
         except ImportedInvoice.DoesNotExist:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False, error="Invoice not found"
             )
 
         # Allow re-extraction on any status except extracting
         if invoice.extraction_status == ImportedInvoice.ExtractionStatus.EXTRACTING:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False,
                 error="Extraction is already in progress",
             )
@@ -1635,13 +1635,13 @@ class InvoiceMutation:
         ).get(id=id)
 
         if not success:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False,
                 error=invoice.extraction_error or "Extraction failed",
                 invoice=_convert_imported_invoice(invoice),
             )
 
-        return ImportedInvoiceResult(
+        return InvoiceResult(
             success=True,
             invoice=_convert_imported_invoice(invoice),
         )
@@ -1649,16 +1649,16 @@ class InvoiceMutation:
     @strawberry.mutation
     def confirm_customer_match(
         self, info: Info[Context, None], invoice_id: strawberry.ID, customer_id: int
-    ) -> ImportedInvoiceResult:
+    ) -> InvoiceResult:
         """Link an imported invoice to a customer and transfer receiver emails."""
         user, err = check_perm(info, "invoices", "write")
         if err:
-            return ImportedInvoiceResult(success=False, error=err)
+            return InvoiceResult(success=False, error=err)
 
         try:
             invoice = ImportedInvoice.objects.get(id=invoice_id, tenant=user.tenant)
         except ImportedInvoice.DoesNotExist:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False, error="Invoice not found"
             )
 
@@ -1667,7 +1667,7 @@ class InvoiceMutation:
         try:
             customer = Customer.objects.get(id=customer_id, tenant=user.tenant)
         except Customer.DoesNotExist:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False, error="Customer not found"
             )
 
@@ -1695,7 +1695,7 @@ class InvoiceMutation:
             "payment_matches__transaction__counterparty"
         ).get(id=invoice_id)
 
-        return ImportedInvoiceResult(
+        return InvoiceResult(
             success=True,
             invoice=_convert_imported_invoice(invoice),
         )
@@ -1703,19 +1703,19 @@ class InvoiceMutation:
     @strawberry.mutation
     def unlink_customer_from_invoice(
         self, info: Info[Context, None], invoice_id: strawberry.ID
-    ) -> ImportedInvoiceResult:
+    ) -> InvoiceResult:
         """Unlink a customer from an imported invoice (only if no contract is assigned)."""
         user, err = check_perm(info, "invoices", "write")
         if err:
-            return ImportedInvoiceResult(success=False, error=err)
+            return InvoiceResult(success=False, error=err)
 
         try:
             invoice = ImportedInvoice.objects.get(id=invoice_id, tenant=user.tenant)
         except ImportedInvoice.DoesNotExist:
-            return ImportedInvoiceResult(success=False, error="Invoice not found")
+            return InvoiceResult(success=False, error="Invoice not found")
 
         if invoice.contract_id is not None:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False, error="Cannot unlink customer while invoice is assigned to a contract"
             )
 
@@ -1728,7 +1728,7 @@ class InvoiceMutation:
             "payment_matches__transaction__counterparty"
         ).get(id=invoice_id)
 
-        return ImportedInvoiceResult(
+        return InvoiceResult(
             success=True,
             invoice=_convert_imported_invoice(invoice),
         )
@@ -1739,16 +1739,16 @@ class InvoiceMutation:
         info: Info[Context, None],
         invoice_id: strawberry.ID,
         contract_id: int | None,
-    ) -> ImportedInvoiceResult:
+    ) -> InvoiceResult:
         """Assign a contract to an imported invoice, or remove the assignment."""
         user, err = check_perm(info, "invoices", "generate")
         if err:
-            return ImportedInvoiceResult(success=False, error=err)
+            return InvoiceResult(success=False, error=err)
 
         try:
             invoice = ImportedInvoice.objects.get(id=invoice_id, tenant=user.tenant)
         except ImportedInvoice.DoesNotExist:
-            return ImportedInvoiceResult(
+            return InvoiceResult(
                 success=False, error="Invoice not found"
             )
 
@@ -1758,13 +1758,13 @@ class InvoiceMutation:
             try:
                 contract = Contract.objects.get(id=contract_id, tenant=user.tenant)
             except Contract.DoesNotExist:
-                return ImportedInvoiceResult(
+                return InvoiceResult(
                     success=False, error="Contract not found"
                 )
 
             # Optionally verify contract belongs to same customer if customer is set
             if invoice.customer_id and contract.customer_id != invoice.customer_id:
-                return ImportedInvoiceResult(
+                return InvoiceResult(
                     success=False, error="Contract does not belong to this customer"
                 )
 
@@ -1781,7 +1781,7 @@ class InvoiceMutation:
             "payment_matches__transaction__counterparty"
         ).get(id=invoice_id)
 
-        return ImportedInvoiceResult(
+        return InvoiceResult(
             success=True,
             invoice=_convert_imported_invoice(invoice),
         )
@@ -2266,7 +2266,7 @@ def _convert_payment_match(match: InvoicePaymentMatch) -> PaymentMatchType:
     )
 
 
-def _convert_imported_invoice(inv: ImportedInvoice) -> ImportedInvoiceType:
+def _convert_imported_invoice(inv: ImportedInvoice) -> InvoiceType:
     """Convert ImportedInvoice model to GraphQL type."""
     # Get first payment match for paid_at date and transaction ID
     payment_matches = list(inv.payment_matches.all())
@@ -2274,7 +2274,7 @@ def _convert_imported_invoice(inv: ImportedInvoice) -> ImportedInvoiceType:
     paid_at = first_match.transaction.entry_date if first_match else None
     first_payment_transaction_id = first_match.transaction_id if first_match else None
 
-    return ImportedInvoiceType(
+    return InvoiceType(
         id=strawberry.ID(str(inv.id)),
         invoice_number=inv.invoice_number or "",
         invoice_date=inv.invoice_date,

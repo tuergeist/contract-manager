@@ -176,7 +176,7 @@ const UPDATE_CUSTOMER_INVOICE_LANGUAGE_MUTATION = gql`
 
 const CUSTOMER_INVOICES_QUERY = gql`
   query CustomerInvoices($customerId: Int!) {
-    importedInvoices(customerId: $customerId, limit: 100) {
+    invoices(customerId: $customerId, limit: 100) {
       items {
         id
         invoiceNumber
@@ -1036,7 +1036,7 @@ export function CustomerDetail() {
             }`}
           >
             <Receipt className="h-4 w-4" />
-            {t('nav.invoices')} ({invoicesData?.importedInvoices?.totalCount || 0})
+            {t('nav.invoices')} ({invoicesData?.invoices?.totalCount || 0})
           </button>
           <button
             onClick={() => setActiveTab('attachments')}
@@ -1290,7 +1290,7 @@ export function CustomerDetail() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
             </div>
-          ) : (invoicesData?.importedInvoices?.items?.length || 0) === 0 ? (
+          ) : (invoicesData?.invoices?.items?.length || 0) === 0 ? (
             <div className="rounded-lg border bg-white p-8 text-center">
               <p className="text-gray-500">{t('customers.noInvoices')}</p>
             </div>
@@ -1320,7 +1320,7 @@ export function CustomerDetail() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {(invoicesData?.importedInvoices?.items as CustomerInvoice[])?.map((invoice) => (
+                  {(invoicesData?.invoices?.items as CustomerInvoice[])?.map((invoice) => (
                     <tr key={invoice.id} className="hover:bg-gray-50">
                       <td className="whitespace-nowrap px-6 py-4">
                         <span className="font-medium">
