@@ -6,9 +6,7 @@
     "products": "Products",
     "contracts": "Contracts",
     "invoices": "Invoices",
-    "invoiceExport": "Invoice Export",
-    "forecast": "Revenue Forecast",
-    "liquidityForecast": "Liquidity Forecast",
+    "forecasts": "Forecasts",
     "auditLog": "Audit Log",
     "banking": "Banking",
     "about": "About",
@@ -344,6 +342,10 @@
       "noEvents": "No billing events in selected period"
     }
   },
+  "forecasts": {
+    "revenueTab": "Revenue",
+    "liquidityTab": "Liquidity"
+  },
   "forecast": {
     "title": "Revenue Forecast",
     "recognitionTitle": "Recognition Forecast",
@@ -412,6 +414,7 @@
     "existsInSystem": "Already exists"
   },
   "invoices": {
+    "exportButton": "Export",
     "export": {
       "title": "Invoice Export",
       "selectPeriod": "Select Period",

@@ -6,9 +6,7 @@
     "products": "Produkte",
     "contracts": "Verträge",
     "invoices": "Rechnungen",
-    "invoiceExport": "Rechnungsexport",
-    "forecast": "Umsatzvorschau",
-    "liquidityForecast": "Liquiditätsvorschau",
+    "forecasts": "Vorschauen",
     "auditLog": "Änderungsprotokoll",
     "banking": "Bankkonten",
     "about": "Info",
@@ -344,6 +342,10 @@
       "noEvents": "Keine Abrechnungen im gewählten Zeitraum"
     }
   },
+  "forecasts": {
+    "revenueTab": "Umsatz",
+    "liquidityTab": "Liquidität"
+  },
   "forecast": {
     "title": "Umsatzvorschau",
     "recognitionTitle": "Erlösrealisierung",
@@ -412,6 +414,7 @@
     "existsInSystem": "Bereits vorhanden"
   },
   "invoices": {
+    "exportButton": "Export",
     "export": {
       "title": "Rechnungsexport",
       "selectPeriod": "Zeitraum auswählen",

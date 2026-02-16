@@ -23,6 +23,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  FileDown,
 } from 'lucide-react'
 import {
   Dialog,
@@ -1042,6 +1043,14 @@ export function InvoiceList() {
         </div>
         <div className="flex gap-2">
           <HelpVideoButton />
+          {hasPermission('invoices', 'export') && (
+            <Button variant="outline" asChild>
+              <Link to="/invoices/export">
+                <FileDown className="w-4 h-4 mr-2" />
+                {t('invoices.exportButton')}
+              </Link>
+            </Button>
+          )}
           {canWrite && (
             <>
               <Button variant="outline" onClick={() => setCsvUploadOpen(true)}>

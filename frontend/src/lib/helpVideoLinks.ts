@@ -12,9 +12,8 @@ export const ROUTE_KEYS = [
   { key: '/products', labelKey: 'nav.products' },
   { key: '/banking', labelKey: 'nav.banking' },
   { key: '/invoices', labelKey: 'nav.invoices' },
-  { key: '/invoices/export', labelKey: 'nav.invoiceExport' },
-  { key: '/forecast', labelKey: 'nav.forecast' },
-  { key: '/liquidity-forecast', labelKey: 'nav.liquidityForecast' },
+  { key: '/invoices/export', labelKey: 'invoices.export.title' },
+  { key: '/forecasts', labelKey: 'nav.forecasts' },
   { key: '/todos', labelKey: 'nav.todos' },
   { key: '/audit-log', labelKey: 'nav.auditLog' },
 ] as const
