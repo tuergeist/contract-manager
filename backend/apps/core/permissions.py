@@ -11,7 +11,7 @@ from apps.core.context import Context
 # Single source of truth for all grantable permissions.
 # Each key is a resource, value is a list of valid actions.
 PERMISSION_REGISTRY = {
-    "contracts": ["read", "write", "delete"],
+    "contracts": ["read", "write", "delete", "export"],
     "customers": ["read", "write", "delete"],
     "products": ["read", "write", "delete"],
     "users": ["read", "write", "delete"],

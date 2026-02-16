@@ -91,7 +91,12 @@
     "billingEmails": "Rechnungs-E-Mails",
     "noBillingEmails": "Keine Rechnungs-E-Mails",
     "addBillingEmailPlaceholder": "E-Mail-Adresse hinzufügen...",
-    "invalidEmailFormat": "Ungültiges E-Mail-Format"
+    "invalidEmailFormat": "Ungültiges E-Mail-Format",
+    "invoiceLanguage": "Rechnungssprache",
+    "invoiceLanguageDefault": "Systemstandard (Deutsch)",
+    "invoiceLanguageDe": "Deutsch",
+    "invoiceLanguageEn": "Englisch (English)",
+    "invoiceLanguageHint": "Sprache für Rechnungs-PDF Bezeichnungen und Kopfzeilen dieses Kunden"
   },
   "products": {
     "title": "Produkte",
@@ -127,6 +132,8 @@
     "arr": "ARR",
     "updatedAt": "Aktualisiert",
     "remainingMonths": "Restlaufzeit",
+    "exportExcel": "Excel exportieren",
+    "exporting": "Exportieren...",
     "status": {
       "draft": "Entwurf",
       "active": "Aktiv",
@@ -414,6 +421,9 @@
       "exportPdf": "PDF exportieren",
       "exportIndividualPdfs": "Einzelne PDFs",
       "exportExcel": "Excel exportieren",
+      "exportZugferd": "ZUGFeRD PDF",
+      "zugferdTooltip": "Elektronische Rechnung im ZUGFeRD-Format (PDF/A-3 mit XML)",
+      "zugferdNoFinalized": "ZUGFeRD-Export benötigt mindestens eine finalisierte Rechnung",
       "exporting": "Exportieren..."
     },
     "customer": "Kunde",
@@ -524,6 +534,19 @@
       "showPreview": "Vorschau anzeigen",
       "previewFailed": "Vorschau konnte nicht generiert werden"
     },
+    "zugferd": {
+      "title": "ZUGFeRD",
+      "description": "ZUGFeRD elektronische Rechnungsstellung konfigurieren (EN 16931)",
+      "formatTitle": "ZUGFeRD-Format",
+      "formatDescription": "ZUGFeRD bettet maschinenlesbare XML-Daten in PDF/A-3-Rechnungen ein, die eine automatische Verarbeitung durch die ERP-Systeme Ihrer Kunden ermöglichen.",
+      "defaultLabel": "ZUGFeRD als Standard-PDF-Format",
+      "defaultDescription": "Wenn aktiviert, erzeugt der reguläre PDF-Export automatisch ZUGFeRD-konforme PDF/A-3-Dokumente.",
+      "infoTitle": "Über ZUGFeRD EN 16931",
+      "infoPoint1": "Konform mit dem europäischen E-Rechnungsstandard EN 16931",
+      "infoPoint2": "Bettet strukturiertes XML (UN/CEFACT CII) in ein PDF/A-3-Dokument ein",
+      "infoPoint3": "Pflicht für B2B-Rechnungen in Deutschland ab 2025 (Empfang) und 2027 (Versand)",
+      "infoPoint4": "Lesbar sowohl für Menschen (PDF) als auch für Maschinen (XML)"
+    },
     "extraction": {
       "extract": "Daten extrahieren",
       "reExtract": "Erneut extrahieren",
@@ -624,7 +647,22 @@
       "failed": "Fehlgeschlagen",
       "deleteBatchTooltip": "Stapel löschen — nur Rechnungen ohne PDF werden entfernt, bereits hochgeladene bleiben erhalten",
       "deleteBatchTitle": "Import-Stapel löschen",
-      "deleteBatchConfirmation": "Möchten Sie diesen Import-Stapel wirklich löschen? Nur Rechnungen ohne PDF werden gelöscht, bereits hochgeladene bleiben erhalten."
+      "deleteBatchConfirmation": "Möchten Sie diesen Import-Stapel wirklich löschen? Nur Rechnungen ohne PDF werden gelöscht, bereits hochgeladene bleiben erhalten.",
+      "source": "Quelle",
+      "sourceAll": "Alle Rechnungen",
+      "sourceImported": "Importiert",
+      "sourceGenerated": "Generiert",
+      "noInvoicesUnified": "Keine Rechnungen gefunden",
+      "generatedStatus": {
+        "finalized": "Finalisiert",
+        "sent": "Versendet",
+        "paid": "Bezahlt",
+        "dunning": "Mahnung",
+        "storno": "Storno",
+        "cancelled": "Storniert"
+      },
+      "viewPdfGenerated": "PDF herunterladen",
+      "contractLink": "Vertrag anzeigen"
     }
   },
   "audit": {

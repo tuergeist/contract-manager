@@ -17,7 +17,7 @@ from strawberry.types import Info
 from apps.core.context import Context
 from apps.core.permissions import check_perm, get_current_user, require_perm
 from apps.core.schema import DeleteResult
-from apps.invoices.models import ImportedInvoice, InvoiceImportBatch, InvoicePaymentMatch, UploadStatus
+from apps.invoices.models import ImportedInvoice, InvoiceImportBatch, InvoicePaymentMatch, InvoiceRecord, UploadStatus
 from apps.invoices.services import InvoiceService
 from apps.invoices.types import InvoiceData, InvoiceLineItem
 
@@ -246,6 +246,26 @@ class InvoiceTemplateResult:
 
 
 # =========================================================================
+# Payment Match type (shared by imported and generated invoices)
+# =========================================================================
+
+
+@strawberry.type
+class PaymentMatchType:
+    """A match between an invoice and a bank transaction."""
+
+    id: int
+    transaction_id: int
+    transaction_date: date
+    transaction_amount: Decimal
+    counterparty_name: str
+    match_type: str
+    confidence: Decimal
+    matched_at: str
+    matched_by_name: str | None
+
+
+# =========================================================================
 # Invoice Record types
 # =========================================================================
 
@@ -271,6 +291,18 @@ class InvoiceRecordType:
     generated_at: str
     line_items_snapshot: strawberry.scalars.JSON
     invoice_text: str
+    pdf_url: str | None
+    is_paid: bool
+    payment_matches: List[PaymentMatchType]
+
+
+@strawberry.type
+class InvoiceRecordConnection:
+    """Paginated list of invoice records."""
+
+    items: List[InvoiceRecordType]
+    total_count: int
+    has_next_page: bool
 
 
 @strawberry.type
@@ -308,21 +340,6 @@ class LegalDataCheckResult:
 # =========================================================================
 # Imported Invoice types
 # =========================================================================
-
-
-@strawberry.type
-class PaymentMatchType:
-    """A match between an imported invoice and a bank transaction."""
-
-    id: int
-    transaction_id: int
-    transaction_date: date
-    transaction_amount: Decimal
-    counterparty_name: str
-    match_type: str
-    confidence: Decimal
-    matched_at: str
-    matched_by_name: str | None
 
 
 @strawberry.type
@@ -561,6 +578,64 @@ class InvoiceQuery:
         return [_convert_record(r) for r in records]
 
     @strawberry.field
+    def invoice_records(
+        self,
+        info: Info,
+        search: str | None = None,
+        contract_id: int | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = "desc",
+        offset: int = 0,
+        limit: int = 50,
+    ) -> InvoiceRecordConnection:
+        """Get paginated invoice records (non-draft by default)."""
+        from apps.invoices.models import InvoiceRecord
+
+        user = require_perm(info, "invoices", "read")
+
+        qs = InvoiceRecord.objects.filter(
+            tenant=user.tenant,
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty",
+            "payment_matches__matched_by",
+        ).exclude(status=InvoiceRecord.Status.DRAFT)
+
+        if contract_id:
+            qs = qs.filter(contract_id=contract_id)
+
+        if search:
+            qs = qs.filter(
+                Q(invoice_number__icontains=search)
+                | Q(customer_name__icontains=search)
+                | Q(contract_name__icontains=search)
+            )
+
+        allowed_sort_fields = {
+            "invoiceNumber": "invoice_number",
+            "billingDate": "billing_date",
+            "customerName": "customer_name",
+            "totalGross": "total_gross",
+            "generatedAt": "generated_at",
+        }
+        if sort_by and sort_by in allowed_sort_fields:
+            order_field = allowed_sort_fields[sort_by]
+            if sort_order == "desc":
+                order_field = f"-{order_field}"
+            qs = qs.order_by(order_field)
+        else:
+            qs = qs.order_by("-billing_date", "-generated_at")
+
+        total_count = qs.count()
+        items = qs[offset : offset + limit]
+        has_next_page = offset + limit < total_count
+
+        return InvoiceRecordConnection(
+            items=[_convert_record(r) for r in items],
+            total_count=total_count,
+            has_next_page=has_next_page,
+        )
+
+    @strawberry.field
     def company_legal_data(self, info: Info) -> CompanyLegalDataType | None:
         """Get the tenant's company legal data."""
         user = require_perm(info, "settings", "read")
@@ -632,6 +707,12 @@ class InvoiceQuery:
             is_complete=len(missing) == 0,
             missing_fields=missing,
         )
+
+    @strawberry.field
+    def zugferd_enabled(self, info: Info) -> bool:
+        """Check if ZUGFeRD is enabled as default PDF format for the tenant."""
+        user = require_perm(info, "settings", "read")
+        return user.tenant.settings.get("zugferd_default", False)
 
     # ----- Imported Invoices -----
 
@@ -852,6 +933,42 @@ class InvoiceQuery:
 
         matcher = PaymentMatcher()
         matches = matcher.find_matches(invoice, days_after=days_after)
+
+        return [
+            PaymentMatchCandidateType(
+                transaction_id=m.transaction_id,
+                transaction_date=m.transaction_date,
+                amount=m.amount,
+                counterparty_name=m.counterparty_name,
+                booking_text=m.booking_text,
+                match_type=m.match_type,
+                confidence=m.confidence,
+            )
+            for m in matches
+        ]
+
+    @strawberry.field
+    def find_payment_matches_for_record(
+        self,
+        info: Info,
+        invoice_record_id: int,
+        days_after: int = 90,
+    ) -> List[PaymentMatchCandidateType]:
+        """Find potential payment matches for a generated invoice record."""
+        user = require_perm(info, "invoices", "read")
+
+        try:
+            record = InvoiceRecord.objects.select_related("customer").get(
+                id=invoice_record_id, tenant=user.tenant
+            )
+        except InvoiceRecord.DoesNotExist:
+            return []
+
+        from apps.invoices.payment_matching import InvoiceRecordAdapter, PaymentMatcher
+
+        adapter = InvoiceRecordAdapter(record)
+        matcher = PaymentMatcher()
+        matches = matcher.find_matches(adapter, days_after=days_after)
 
         return [
             PaymentMatchCandidateType(
@@ -1168,7 +1285,7 @@ class InvoiceMutation:
 
     @strawberry.mutation
     def generate_invoices(
-        self, info: Info[Context, None], year: int, month: int
+        self, info: Info[Context, None], year: int, month: int, contract_ids: list[int] | None = None
     ) -> GenerateInvoicesResult:
         """Generate and persist invoices for a month."""
         user, err = check_perm(info, "invoices", "generate")
@@ -1177,7 +1294,7 @@ class InvoiceMutation:
 
         service = InvoiceService(user.tenant)
         try:
-            records = service.generate_and_persist(year, month)
+            records = service.generate_and_persist(year, month, contract_ids=contract_ids)
         except ValueError as e:
             return GenerateInvoicesResult(success=False, error=str(e))
 
@@ -1211,6 +1328,23 @@ class InvoiceMutation:
             InvoiceService.cancel_invoice(record)
         except ValueError as e:
             return CancelInvoiceResult(success=False, error=str(e))
+
+        return CancelInvoiceResult(success=True)
+
+    @strawberry.mutation
+    def set_zugferd_default(
+        self, info: Info[Context, None], enabled: bool
+    ) -> CancelInvoiceResult:
+        """Enable or disable ZUGFeRD as the default PDF export format."""
+        user, err = check_perm(info, "invoices", "settings")
+        if err:
+            return CancelInvoiceResult(success=False, error=err)
+
+        tenant = user.tenant
+        tenant_settings = tenant.settings or {}
+        tenant_settings["zugferd_default"] = enabled
+        tenant.settings = tenant_settings
+        tenant.save(update_fields=["settings"])
 
         return CancelInvoiceResult(success=True)
 
@@ -1714,6 +1848,66 @@ class InvoiceMutation:
         )
 
     @strawberry.mutation
+    def create_payment_match_for_record(
+        self,
+        info: Info[Context, None],
+        invoice_record_id: int,
+        transaction_id: int,
+        match_type: str = "manual",
+    ) -> CreatePaymentMatchResult:
+        """Create a payment match between a generated invoice record and a transaction."""
+        user, err = check_perm(info, "invoices", "generate")
+        if err:
+            return CreatePaymentMatchResult(success=False, error=err)
+
+        try:
+            record = InvoiceRecord.objects.get(id=invoice_record_id, tenant=user.tenant)
+        except InvoiceRecord.DoesNotExist:
+            return CreatePaymentMatchResult(
+                success=False, error="Invoice record not found"
+            )
+
+        from apps.banking.models import BankTransaction
+
+        try:
+            transaction_obj = BankTransaction.objects.select_related("counterparty").get(
+                id=transaction_id, tenant=user.tenant
+            )
+        except BankTransaction.DoesNotExist:
+            return CreatePaymentMatchResult(
+                success=False, error="Transaction not found"
+            )
+
+        # Check if match already exists
+        if InvoicePaymentMatch.objects.filter(
+            invoice_record=record, transaction=transaction_obj
+        ).exists():
+            return CreatePaymentMatchResult(
+                success=False, error="Match already exists"
+            )
+
+        # Validate match type
+        valid_types = [c[0] for c in InvoicePaymentMatch.MatchType.choices]
+        if match_type not in valid_types:
+            match_type = InvoicePaymentMatch.MatchType.MANUAL
+
+        confidence = Decimal("1.0") if match_type == "manual" else Decimal("0.8")
+
+        match = InvoicePaymentMatch.objects.create(
+            tenant=user.tenant,
+            invoice_record=record,
+            transaction=transaction_obj,
+            match_type=match_type,
+            confidence=confidence,
+            matched_by=user if match_type == "manual" else None,
+        )
+
+        return CreatePaymentMatchResult(
+            success=True,
+            match=_convert_payment_match(match),
+        )
+
+    @strawberry.mutation
     def delete_payment_match(
         self, info: Info[Context, None], match_id: int
     ) -> DeleteResult:
@@ -1995,6 +2189,9 @@ def _convert_legal_data(ld) -> CompanyLegalDataType:
 
 
 def _convert_record(record) -> InvoiceRecordType:
+    # Payment matches - use prefetched data if available, otherwise query
+    payment_matches = list(record.payment_matches.all())
+
     return InvoiceRecordType(
         id=record.id,
         invoice_number=record.invoice_number,
@@ -2013,6 +2210,9 @@ def _convert_record(record) -> InvoiceRecordType:
         generated_at=record.generated_at.isoformat(),
         line_items_snapshot=record.line_items_snapshot,
         invoice_text=record.invoice_text,
+        pdf_url=record.pdf_file.url if record.pdf_file else None,
+        is_paid=len(payment_matches) > 0,
+        payment_matches=[_convert_payment_match(m) for m in payment_matches],
     )
 
 

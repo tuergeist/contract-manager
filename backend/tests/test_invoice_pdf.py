@@ -152,19 +152,19 @@ class TestTaxBreakdownInPdf:
     def test_net_total_shown(self, db, tenant, legal_data, sample_invoice):
         html = render_invoice_html(tenant, sample_invoice)
         assert "Nettobetrag" in html
-        # Django floatformat uses locale-specific separator (comma in de)
-        assert "1000" in html
+        # money filter formats with thousand separator: 1.000,00 (de)
+        assert "1.000,00" in html
 
     def test_tax_line_shown(self, db, tenant, legal_data, sample_invoice):
         html = render_invoice_html(tenant, sample_invoice)
         assert "MwSt." in html
-        assert "19" in html
-        assert "190" in html
+        assert "19,00%" in html
+        assert "190,00" in html
 
     def test_gross_total_shown(self, db, tenant, legal_data, sample_invoice):
         html = render_invoice_html(tenant, sample_invoice)
         assert "Rechnungsbetrag" in html
-        assert "1190" in html
+        assert "1.190,00" in html
 
 
 class TestCompanyLegalDataInPdf:

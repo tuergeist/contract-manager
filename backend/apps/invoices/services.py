@@ -53,6 +53,7 @@ LABELS = {
         "invoice_amount": "Rechnungsbetrag",
         "po_number": "Bestellnummer",
         "order_confirmation": "Auftragsbestätigung",
+        "reverse_charge": "Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge gem. § 13b UStG)",
     },
     "en": {
         "invoice": "Invoice",
@@ -85,8 +86,48 @@ LABELS = {
         "invoice_amount": "Invoice Total",
         "po_number": "PO Number",
         "order_confirmation": "Order Confirmation",
+        "reverse_charge": "Reverse Charge – VAT liability transferred to the recipient (§ 13b UStG)",
     },
 }
+
+
+def _normalize_country(country: str) -> str:
+    """Normalize a country name to a lowercase key for comparison."""
+    return (country or "").strip().lower()
+
+
+def _is_domestic_customer(company_country: str, customer_address: dict) -> bool:
+    """Check if a customer is in the same country as the company.
+
+    Returns True if countries match (= domestic, VAT applies).
+    Returns False for foreign customers (no VAT / reverse charge).
+    """
+    company = _normalize_country(company_country)
+    customer = _normalize_country(customer_address.get("country", ""))
+    if not company or not customer:
+        # If either country is unknown, assume domestic (safe default)
+        return True
+    # Match common variants (e.g., "Deutschland" == "Germany" == "DE")
+    _aliases = {
+        "deutschland": "DE", "germany": "DE", "de": "DE",
+        "österreich": "AT", "austria": "AT", "at": "AT",
+        "schweiz": "CH", "switzerland": "CH", "ch": "CH",
+    }
+    company_code = _aliases.get(company, company)
+    customer_code = _aliases.get(customer, customer)
+    return company_code == customer_code
+
+
+def _get_company_language(tenant) -> str:
+    """Derive the default invoice language from the company's country.
+
+    German company → 'de', otherwise → 'en'.
+    """
+    try:
+        country = _normalize_country(tenant.legal_data.country)
+    except Exception:
+        return "en"
+    return "de" if country in ("deutschland", "germany", "de") else "en"
 
 
 class InvoiceService:
@@ -293,6 +334,7 @@ class InvoiceService:
         self,
         invoices: list[InvoiceData],
         language: Literal["de", "en"] = "de",
+        customer_languages: dict[int, str] | None = None,
     ) -> bytes:
         """
         Generate a combined PDF containing all invoices.
@@ -302,7 +344,9 @@ class InvoiceService:
 
         Args:
             invoices: List of InvoiceData to include in PDF
-            language: Language for labels ("de" or "en")
+            language: Default language for labels ("de" or "en")
+            customer_languages: Optional mapping of customer_id -> language code.
+                Overrides the default language for that customer's invoices.
 
         Returns:
             PDF file as bytes.
@@ -310,14 +354,23 @@ class InvoiceService:
         if not invoices:
             return b""
 
-        labels = LABELS.get(language, LABELS["en"])
+        customer_languages = customer_languages or {}
         currency_symbol = self.tenant.currency_symbol
         template_ctx = self._get_template_context()
-        tax_rate = template_ctx["tax_rate"]
+        default_tax_rate = template_ctx["tax_rate"]
+        company_country = template_ctx["company"].get("country", "")
 
         # Render each invoice as HTML
         html_parts = []
         for i, invoice in enumerate(invoices):
+            # Resolve per-customer language, falling back to default
+            inv_language = customer_languages.get(invoice.customer_id, language)
+            labels = LABELS.get(inv_language, LABELS["en"])
+
+            # Apply tax only for domestic customers
+            domestic = _is_domestic_customer(company_country, invoice.customer_address)
+            tax_rate = default_tax_rate if domestic else Decimal("0.00")
+
             # Calculate tax for this invoice
             total_net = invoice.total_amount
             tax_amount, total_gross = self.calculate_tax(total_net, tax_rate)
@@ -327,6 +380,7 @@ class InvoiceService:
                 "contract_id": invoice.contract_id,
                 "contract_name": invoice.contract_name,
                 "customer_id": invoice.customer_id,
+                "customer_number": invoice.customer_number,
                 "customer_name": invoice.customer_name,
                 "customer_address": invoice.customer_address,
                 "billing_date": invoice.billing_date,
@@ -360,10 +414,11 @@ class InvoiceService:
                 {
                     "invoice": invoice_dict,
                     "labels": labels,
-                    "language": language,
+                    "language": inv_language,
                     "currency_symbol": currency_symbol,
                     "invoice_number": getattr(invoice, "invoice_number", ""),
                     "tax_rate": tax_rate,
+                    "reverse_charge": not domestic,
                     **template_ctx,
                 },
             )
@@ -393,6 +448,7 @@ class InvoiceService:
         invoice_dict = {
             "contract_name": "Mustervertrag 2025-001",
             "customer_name": "Mustermann GmbH",
+            "customer_number": "CUS001",
             "customer_address": {
                 "street": "Musterstraße 1",
                 "zip_code": "12345",
@@ -442,6 +498,7 @@ class InvoiceService:
                 "currency_symbol": currency_symbol,
                 "invoice_number": "PREVIEW-2025-0001",
                 "tax_rate": tax_rate,
+                "reverse_charge": False,
                 **template_ctx,
             },
         )
@@ -455,6 +512,7 @@ class InvoiceService:
         year: int,
         month: int,
         language: Literal["de", "en"] = "de",
+        customer_languages: dict[int, str] | None = None,
     ) -> bytes:
         """
         Generate individual PDFs for each invoice, packaged as a ZIP.
@@ -463,7 +521,8 @@ class InvoiceService:
             invoices: List of InvoiceData to generate PDFs for
             year: Year for filename
             month: Month for filename
-            language: Language for labels ("de" or "en")
+            language: Default language for labels ("de" or "en")
+            customer_languages: Optional mapping of customer_id -> language code.
 
         Returns:
             ZIP file containing individual PDFs as bytes.
@@ -471,17 +530,170 @@ class InvoiceService:
         if not invoices:
             return b""
 
+        customer_languages = customer_languages or {}
         zip_buffer = io.BytesIO()
 
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
             for invoice in invoices:
+                # Resolve per-customer language
+                inv_language = customer_languages.get(invoice.customer_id, language)
                 # Generate PDF for single invoice
-                pdf_bytes = self.generate_pdf([invoice], language)
+                pdf_bytes = self.generate_pdf([invoice], inv_language)
 
                 # Create safe filename
                 customer_safe = self._safe_filename(invoice.customer_name)
                 contract_safe = self._safe_filename(invoice.contract_name)
                 filename = f"invoice-{customer_safe}-{contract_safe}-{year:04d}-{month:02d}.pdf"
+
+                zip_file.writestr(filename, pdf_bytes)
+
+        return zip_buffer.getvalue()
+
+    # ----------------------------------------------------------------
+    # Single record PDF generation
+    # ----------------------------------------------------------------
+
+    def _build_record_template_context(
+        self,
+        record,
+        language: Literal["de", "en"] = "de",
+    ) -> dict:
+        """Build the template context dict for rendering a single InvoiceRecord as HTML."""
+        labels = LABELS.get(language, LABELS["en"])
+        currency_symbol = self.tenant.currency_symbol
+        template_ctx = self._get_template_context()
+
+        invoice_dict = {
+            "contract_id": record.contract_id,
+            "contract_name": record.contract_name,
+            "customer_id": record.customer_id,
+            "customer_name": record.customer_name,
+            "customer_number": (
+                record.customer.netsuite_customer_number if record.customer else ""
+            ) or "",
+            "customer_address": (
+                record.customer.address if record.customer else {}
+            ) or {},
+            "billing_date": record.billing_date,
+            "billing_period_start": record.period_start,
+            "billing_period_end": record.period_end,
+            "line_items": record.line_items_snapshot,
+            "total_amount": record.total_net,
+            "total_net": record.total_net,
+            "tax_amount": record.tax_amount,
+            "total_gross": record.total_gross,
+            "invoice_text": record.invoice_text,
+            "po_number": record.contract.po_number if record.contract else "",
+            "order_confirmation_number": (
+                record.contract.order_confirmation_number if record.contract else ""
+            ),
+        }
+
+        is_reverse_charge = record.tax_rate == Decimal("0.00")
+
+        return {
+            "invoice": invoice_dict,
+            "labels": labels,
+            "language": language,
+            "currency_symbol": currency_symbol,
+            "invoice_number": record.invoice_number,
+            "tax_rate": record.tax_rate,
+            "reverse_charge": is_reverse_charge,
+            **template_ctx,
+        }
+
+    def generate_pdf_for_record(
+        self,
+        record,
+        language: Literal["de", "en"] = "de",
+    ) -> bytes:
+        """Generate a standard PDF for a single persisted InvoiceRecord.
+
+        Args:
+            record: InvoiceRecord instance
+            language: Language for PDF labels
+
+        Returns:
+            PDF bytes
+        """
+        ctx = self._build_record_template_context(record, language)
+        html = render_to_string("invoices/invoice.html", ctx)
+        pdf_document = HTML(string=html).render()
+        return pdf_document.write_pdf()
+
+    # ----------------------------------------------------------------
+    # ZUGFeRD PDF generation
+    # ----------------------------------------------------------------
+
+    def generate_zugferd_pdf_for_record(
+        self,
+        record,
+        language: Literal["de", "en"] = "de",
+    ) -> bytes:
+        """Generate a ZUGFeRD PDF/A-3b for a single persisted InvoiceRecord.
+
+        Renders the visual PDF via the existing HTML template, generates
+        the ZUGFeRD CII XML, and embeds it using drafthorse.
+
+        Args:
+            record: InvoiceRecord instance (must be finalized)
+            language: Language for PDF labels
+
+        Returns:
+            PDF/A-3b bytes with embedded factur-x.xml
+        """
+        from apps.invoices.zugferd import ZugferdService
+
+        ctx = self._build_record_template_context(record, language)
+        html = render_to_string("invoices/invoice.html", ctx)
+
+        pdf_document = HTML(string=html).render()
+        pdf_bytes = pdf_document.write_pdf()
+
+        # Generate ZUGFeRD XML and embed
+        zugferd = ZugferdService(self.tenant)
+        return zugferd.generate_zugferd_pdf(pdf_bytes, record)
+
+    def generate_individual_zugferd_pdfs(
+        self,
+        records: list,
+        year: int,
+        month: int,
+        language: Literal["de", "en"] = "de",
+        customer_languages: dict[int, str] | None = None,
+    ) -> bytes:
+        """Generate individual ZUGFeRD PDFs for each InvoiceRecord, packaged as ZIP.
+
+        Each invoice gets its own PDF/A-3b with an individual factur-x.xml.
+
+        Args:
+            records: List of InvoiceRecord instances
+            year: Year for filename
+            month: Month for filename
+            language: Default language for labels
+            customer_languages: Optional mapping of customer_id -> language code.
+
+        Returns:
+            ZIP file containing individual ZUGFeRD PDFs as bytes.
+        """
+        if not records:
+            return b""
+
+        customer_languages = customer_languages or {}
+        zip_buffer = io.BytesIO()
+
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for record in records:
+                # Resolve per-customer language
+                rec_language = customer_languages.get(record.customer_id, language)
+                pdf_bytes = self.generate_zugferd_pdf_for_record(record, rec_language)
+
+                customer_safe = self._safe_filename(record.customer_name)
+                contract_safe = self._safe_filename(record.contract_name)
+                filename = (
+                    f"invoice-{customer_safe}-{contract_safe}"
+                    f"-{year:04d}-{month:02d}.pdf"
+                )
 
                 zip_file.writestr(filename, pdf_bytes)
 
@@ -828,7 +1040,7 @@ class InvoiceService:
     # Invoice persistence
     # ----------------------------------------------------------------
 
-    def generate_and_persist(self, year: int, month: int) -> list:
+    def generate_and_persist(self, year: int, month: int, contract_ids: list[int] | None = None) -> list:
         """
         Generate invoices for a month, assign numbers, and persist as records.
 
@@ -848,10 +1060,14 @@ class InvoiceService:
 
         # Calculate invoices
         invoices = self.get_invoices_for_month(year, month)
+        if contract_ids is not None:
+            allowed = set(contract_ids)
+            invoices = [inv for inv in invoices if inv.contract_id in allowed]
         if not invoices:
             return []
 
-        tax_rate = legal_data.default_tax_rate
+        default_tax_rate = legal_data.default_tax_rate
+        company_country = legal_data.country
         company_snapshot = legal_data.to_snapshot()
         numbering = InvoiceNumberService(self.tenant)
 
@@ -873,6 +1089,10 @@ class InvoiceService:
                 ).exists()
                 if exists:
                     continue
+
+                # Apply tax only for domestic customers
+                domestic = _is_domestic_customer(company_country, invoice_data.customer_address)
+                tax_rate = default_tax_rate if domestic else Decimal("0.00")
 
                 # Calculate amounts
                 total_net = invoice_data.total_amount
@@ -917,6 +1137,12 @@ class InvoiceService:
                     invoice_text=invoice_data.invoice_text,
                 )
                 created_records.append(record)
+
+        # Dispatch background ZUGFeRD PDF generation for each new record
+        from apps.invoices.tasks import generate_invoice_pdf_task
+
+        for record in created_records:
+            generate_invoice_pdf_task.delay(record.id)
 
         return created_records
 

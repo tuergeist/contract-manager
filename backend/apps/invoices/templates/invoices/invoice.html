@@ -1,3 +1,4 @@
+{% load invoice_filters %}
 <!DOCTYPE html>
 <html lang="{{ language }}">
 <head>
@@ -385,12 +386,12 @@
                 <td>
                     {{ item.product_name }}
                     {% if item.description %}<br><span class="prorated">{{ item.description }}</span>{% endif %}
-                    {% if item.is_prorated %}<br><span class="prorated">{{ labels.prorated }} ({{ item.prorate_factor|floatformat:2 }})</span>{% endif %}
+                    {% if item.is_prorated %}<br><span class="prorated">{{ labels.prorated }} ({{ item.prorate_factor|money:language }})</span>{% endif %}
                     {% if item.is_one_off %}<br><span class="prorated">{{ labels.one_off }}</span>{% endif %}
                 </td>
                 <td class="quantity">{{ item.quantity }}</td>
-                <td class="unit-price">{{ currency_symbol }}{{ item.unit_price|floatformat:2 }}</td>
-                <td>{{ currency_symbol }}{{ item.amount|floatformat:2 }}</td>
+                <td class="unit-price">{{ currency_symbol }}{{ item.unit_price|money:language }}</td>
+                <td>{{ currency_symbol }}{{ item.amount|money:language }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -400,19 +401,27 @@
     <div class="totals">
         <div class="total-row subtotal">
             <span>{{ labels.net_total }}</span>
-            <span>{{ currency_symbol }}{{ invoice.total_net|floatformat:2 }}</span>
+            <span>{{ currency_symbol }}{{ invoice.total_net|money:language }}</span>
         </div>
+        {% if not reverse_charge %}
         <div class="total-row tax-row">
-            <span>{{ labels.tax }} ({{ tax_rate|floatformat:2 }}%)</span>
-            <span>{{ currency_symbol }}{{ invoice.tax_amount|floatformat:2 }}</span>
+            <span>{{ labels.tax }} ({{ tax_rate|money:language }}%)</span>
+            <span>{{ currency_symbol }}{{ invoice.tax_amount|money:language }}</span>
         </div>
+        {% endif %}
         <div class="total-row grand-total">
             <span>{{ labels.invoice_amount }}</span>
-            <span>{{ currency_symbol }}{{ invoice.total_gross|floatformat:2 }}</span>
+            <span>{{ currency_symbol }}{{ invoice.total_gross|money:language }}</span>
         </div>
     </div>
 
     <div style="clear: both;"></div>
+
+    {% if reverse_charge %}
+    <div class="invoice-text" style="font-weight: bold; font-size: 8pt; color: #555;">
+        {{ labels.reverse_charge }}
+    </div>
+    {% endif %}
 
     {% if invoice.invoice_text %}
     <div class="invoice-text">
@@ -421,7 +430,7 @@
     {% endif %}
 
     <div class="contract-info">
-        {{ labels.contract }}: {{ invoice.contract_name }} | {{ labels.customer_id }}: {{ invoice.customer_id }}
+        {{ labels.customer_id }}: {% if invoice.customer_number %}{{ invoice.customer_number }}{% else %}{{ invoice.customer_id }}{% endif %}
     </div>
 
     {% if footer_text %}

@@ -91,7 +91,12 @@
     "billingEmails": "Billing Emails",
     "noBillingEmails": "No billing emails",
     "addBillingEmailPlaceholder": "Add email address...",
-    "invalidEmailFormat": "Invalid email format"
+    "invalidEmailFormat": "Invalid email format",
+    "invoiceLanguage": "Invoice Language",
+    "invoiceLanguageDefault": "System Default (German)",
+    "invoiceLanguageDe": "German (Deutsch)",
+    "invoiceLanguageEn": "English",
+    "invoiceLanguageHint": "Language used for invoice PDF labels and headers for this customer"
   },
   "products": {
     "title": "Products",
@@ -127,6 +132,8 @@
     "arr": "ARR",
     "updatedAt": "Updated",
     "remainingMonths": "Remaining",
+    "exportExcel": "Export Excel",
+    "exporting": "Exporting...",
     "status": {
       "draft": "Draft",
       "active": "Active",
@@ -414,6 +421,9 @@
       "exportPdf": "Export PDF",
       "exportIndividualPdfs": "Individual PDFs",
       "exportExcel": "Export Excel",
+      "exportZugferd": "ZUGFeRD PDF",
+      "zugferdTooltip": "Electronic invoice in ZUGFeRD format (PDF/A-3 with XML)",
+      "zugferdNoFinalized": "ZUGFeRD export requires at least one finalized invoice",
       "exporting": "Exporting..."
     },
     "customer": "Customer",
@@ -524,6 +534,19 @@
       "showPreview": "Show Preview",
       "previewFailed": "Failed to generate preview"
     },
+    "zugferd": {
+      "title": "ZUGFeRD",
+      "description": "Configure ZUGFeRD electronic invoicing (EN 16931)",
+      "formatTitle": "ZUGFeRD Format",
+      "formatDescription": "ZUGFeRD embeds machine-readable XML data into PDF/A-3 invoices, enabling automated processing by your customers' ERP systems.",
+      "defaultLabel": "ZUGFeRD as default PDF format",
+      "defaultDescription": "When enabled, the regular PDF export will automatically generate ZUGFeRD-compliant PDF/A-3 documents.",
+      "infoTitle": "About ZUGFeRD EN 16931",
+      "infoPoint1": "Compliant with the European e-invoicing standard EN 16931",
+      "infoPoint2": "Embeds structured XML (UN/CEFACT CII) inside a PDF/A-3 document",
+      "infoPoint3": "Required for B2B invoicing in Germany from 2025 (receiving) and 2027 (sending)",
+      "infoPoint4": "Readable both by humans (PDF) and machines (XML)"
+    },
     "extraction": {
       "extract": "Extract Data",
       "reExtract": "Re-extract",
@@ -624,7 +647,22 @@
       "failed": "Failed",
       "deleteBatchTooltip": "Delete batch — only removes invoices without PDF, already uploaded invoices are kept",
       "deleteBatchTitle": "Delete Import Batch",
-      "deleteBatchConfirmation": "Are you sure you want to delete this import batch? Only invoices without PDF will be deleted, already uploaded invoices will be kept."
+      "deleteBatchConfirmation": "Are you sure you want to delete this import batch? Only invoices without PDF will be deleted, already uploaded invoices will be kept.",
+      "source": "Source",
+      "sourceAll": "All Invoices",
+      "sourceImported": "Imported",
+      "sourceGenerated": "Generated",
+      "noInvoicesUnified": "No invoices found",
+      "generatedStatus": {
+        "finalized": "Finalized",
+        "sent": "Sent",
+        "paid": "Paid",
+        "dunning": "Dunning",
+        "storno": "Storno",
+        "cancelled": "Cancelled"
+      },
+      "viewPdfGenerated": "Download PDF",
+      "contractLink": "View contract"
     }
   },
   "audit": {

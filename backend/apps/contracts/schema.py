@@ -70,6 +70,10 @@ def _calculate_item_value_over_duration(
     # Iterate month by month through the contract duration
     current_month_start = date(start.year, start.month, 1)
     end_month_start = date(end.year, end.month, 1)
+    # If end date is the 1st of a month, the last active month is the previous one
+    # (matches _months_between logic which doesn't add +1 when end.day == 1)
+    if end.day == 1:
+        end_month_start = end_month_start - relativedelta(months=1)
 
     while current_month_start <= end_month_start:
         # Find the price period that applies to this month

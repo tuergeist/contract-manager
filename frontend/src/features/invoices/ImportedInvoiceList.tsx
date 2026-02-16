@@ -310,6 +310,82 @@ const DELETE_IMPORT_BATCH = gql`
   }
 `
 
+const INVOICE_RECORDS = gql`
+  query InvoiceRecords(
+    $search: String
+    $sortBy: String
+    $sortOrder: String
+    $offset: Int
+    $limit: Int
+  ) {
+    invoiceRecords(
+      search: $search
+      sortBy: $sortBy
+      sortOrder: $sortOrder
+      offset: $offset
+      limit: $limit
+    ) {
+      items {
+        id
+        invoiceNumber
+        contractId
+        contractName
+        customerId
+        customerName
+        billingDate
+        totalGross
+        status
+        generatedAt
+        pdfUrl
+        isPaid
+        paymentMatches {
+          id
+          transactionId
+          transactionDate
+          transactionAmount
+          counterpartyName
+          matchType
+          confidence
+        }
+      }
+      totalCount
+      hasNextPage
+    }
+  }
+`
+
+const FIND_PAYMENT_MATCHES_FOR_RECORD = gql`
+  query FindPaymentMatchesForRecord($invoiceRecordId: Int!, $daysAfter: Int) {
+    findPaymentMatchesForRecord(invoiceRecordId: $invoiceRecordId, daysAfter: $daysAfter) {
+      transactionId
+      transactionDate
+      amount
+      counterpartyName
+      bookingText
+      matchType
+      confidence
+    }
+  }
+`
+
+const CREATE_PAYMENT_MATCH_FOR_RECORD = gql`
+  mutation CreatePaymentMatchForRecord($invoiceRecordId: Int!, $transactionId: Int!, $matchType: String) {
+    createPaymentMatchForRecord(invoiceRecordId: $invoiceRecordId, transactionId: $transactionId, matchType: $matchType) {
+      success
+      error
+      match {
+        id
+        transactionId
+        transactionDate
+        transactionAmount
+        counterpartyName
+        matchType
+        confidence
+      }
+    }
+  }
+`
+
 const SEARCH_CUSTOMERS = gql`
   query SearchCustomers($search: String!) {
     customers(search: $search) {
@@ -322,6 +398,47 @@ const SEARCH_CUSTOMERS = gql`
     }
   }
 `
+
+interface GeneratedInvoice {
+  id: number
+  invoiceNumber: string
+  contractId: number | null
+  contractName: string
+  customerId: number | null
+  customerName: string
+  billingDate: string
+  totalGross: string
+  status: string
+  generatedAt: string
+  pdfUrl: string | null
+  isPaid: boolean
+  paymentMatches: {
+    id: number
+    transactionId: number
+    transactionDate: string
+    transactionAmount: string
+    counterpartyName: string
+    matchType: string
+    confidence: string
+  }[]
+}
+
+type SourceFilter = 'ALL' | 'IMPORTED' | 'GENERATED'
+
+interface UnifiedRow {
+  key: string
+  source: 'imported' | 'generated'
+  invoiceNumber: string
+  date: string | null
+  customerName: string
+  customerId: number | null
+  contractId: number | null
+  contractName?: string
+  amount: number | null
+  currency: string
+  imported?: ImportedInvoice
+  generated?: GeneratedInvoice
+}
 
 interface ImportBatch {
   id: string
@@ -400,6 +517,7 @@ export function ImportedInvoiceList() {
 
   // State
   const [search, setSearch] = useState('')
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('ALL')
   const [paymentStatus, setPaymentStatus] = useState<string>('ALL')
   const [uploadStatus, setUploadStatus] = useState<string>('ALL')
   const [page, setPage] = useState(1)
@@ -414,6 +532,7 @@ export function ImportedInvoiceList() {
   const [deleteBatchId, setDeleteBatchId] = useState<string | null>(null)
   const [customerMatchInvoice, setCustomerMatchInvoice] = useState<ImportedInvoice | null>(null)
   const [paymentMatchInvoice, setPaymentMatchInvoice] = useState<ImportedInvoice | null>(null)
+  const [paymentMatchRecord, setPaymentMatchRecord] = useState<GeneratedInvoice | null>(null)
   const [transactionSearch, setTransactionSearch] = useState('')
   const [debouncedTxSearch, setDebouncedTxSearch] = useState('')
   const [customerSearch, setCustomerSearch] = useState('')
@@ -438,6 +557,18 @@ export function ImportedInvoiceList() {
       offset: (page - 1) * pageSize,
       limit: pageSize,
     },
+    fetchPolicy: 'cache-and-network',
+  })
+
+  const { data: generatedData, loading: generatedLoading, refetch: generatedRefetch } = useQuery(INVOICE_RECORDS, {
+    variables: {
+      search: search || null,
+      sortBy: sortField,
+      sortOrder: sortField ? sortOrder : null,
+      offset: 0,
+      limit: 200,
+    },
+    skip: sourceFilter === 'IMPORTED',
     fetchPolicy: 'cache-and-network',
   })
 
@@ -471,6 +602,7 @@ export function ImportedInvoiceList() {
   const [confirmCustomerMatchMutation] = useMutation(CONFIRM_CUSTOMER_MATCH)
   const [unlinkCustomerMutation] = useMutation(UNLINK_CUSTOMER)
   const [createPaymentMatchMutation] = useMutation(CREATE_PAYMENT_MATCH)
+  const [createPaymentMatchForRecordMutation] = useMutation(CREATE_PAYMENT_MATCH_FOR_RECORD)
   const [deletePaymentMatchMutation] = useMutation(DELETE_PAYMENT_MATCH)
 
   const [findPaymentMatches, { data: paymentMatchData, loading: loadingPaymentMatches }] = useLazyQuery(
@@ -478,11 +610,16 @@ export function ImportedInvoiceList() {
     { fetchPolicy: 'network-only' }
   )
 
+  const [findPaymentMatchesForRecord, { data: paymentMatchRecordData, loading: loadingPaymentMatchesForRecord }] = useLazyQuery(
+    FIND_PAYMENT_MATCHES_FOR_RECORD,
+    { fetchPolicy: 'network-only' }
+  )
+
   const { data: searchTxData, loading: loadingTxSearch } = useQuery(
     SEARCH_TRANSACTIONS,
     {
       variables: { search: debouncedTxSearch, direction: 'credit', page: 1, pageSize: 20 },
-      skip: !paymentMatchInvoice || !debouncedTxSearch,
+      skip: (!paymentMatchInvoice && !paymentMatchRecord) || !debouncedTxSearch,
     }
   )
 
@@ -505,6 +642,13 @@ export function ImportedInvoiceList() {
     }
   }, [paymentMatchInvoice, findPaymentMatches])
 
+  // Fetch payment matches when generated invoice record selected
+  useEffect(() => {
+    if (paymentMatchRecord) {
+      findPaymentMatchesForRecord({ variables: { invoiceRecordId: paymentMatchRecord.id, daysAfter: 90 } })
+    }
+  }, [paymentMatchRecord, findPaymentMatchesForRecord])
+
   const { data: customerMatchData, loading: loadingCustomerMatches } = useQuery(
     CUSTOMER_MATCH_SUGGESTIONS,
     {
@@ -521,12 +665,79 @@ export function ImportedInvoiceList() {
     }
   )
 
-  const invoices: ImportedInvoice[] = data?.importedInvoices?.items ?? []
-  const totalCount = data?.importedInvoices?.totalCount ?? 0
-  const hasNextPage = data?.importedInvoices?.hasNextPage ?? false
-  const totalPages = Math.ceil(totalCount / pageSize)
+  const importedInvoices: ImportedInvoice[] = data?.importedInvoices?.items ?? []
+  const generatedInvoices: GeneratedInvoice[] = generatedData?.invoiceRecords?.items ?? []
   const batches: ImportBatch[] = batchData?.importBatches?.items ?? []
   const hasPendingUploads = batches.some((b) => b.pendingCount > 0)
+
+  // Build unified rows
+  const unifiedRows: UnifiedRow[] = (() => {
+    const rows: UnifiedRow[] = []
+
+    if (sourceFilter !== 'GENERATED') {
+      for (const inv of importedInvoices) {
+        rows.push({
+          key: `imp-${inv.id}`,
+          source: 'imported',
+          invoiceNumber: inv.invoiceNumber,
+          date: inv.invoiceDate,
+          customerName: inv.customerDisplayName || inv.customerName,
+          customerId: inv.customerId,
+          contractId: inv.contractId,
+          amount: inv.totalAmount ? parseFloat(inv.totalAmount) : null,
+          currency: inv.currency,
+          imported: inv,
+        })
+      }
+    }
+
+    if (sourceFilter !== 'IMPORTED') {
+      for (const rec of generatedInvoices) {
+        rows.push({
+          key: `gen-${rec.id}`,
+          source: 'generated',
+          invoiceNumber: rec.invoiceNumber,
+          date: rec.billingDate,
+          customerName: rec.customerName,
+          customerId: rec.customerId,
+          contractId: rec.contractId,
+          contractName: rec.contractName,
+          amount: rec.totalGross ? parseFloat(rec.totalGross) : null,
+          currency: 'EUR',
+          generated: rec,
+        })
+      }
+    }
+
+    // Sort by date descending when no explicit sort
+    if (!sortField) {
+      rows.sort((a, b) => {
+        const da = a.date || ''
+        const db = b.date || ''
+        return db.localeCompare(da)
+      })
+    }
+
+    return rows
+  })()
+
+  // Client-side pagination over unified rows
+  const totalCount = sourceFilter === 'GENERATED'
+    ? unifiedRows.length
+    : (sourceFilter === 'IMPORTED'
+      ? (data?.importedInvoices?.totalCount ?? 0)
+      : (data?.importedInvoices?.totalCount ?? 0) + (generatedData?.invoiceRecords?.totalCount ?? 0))
+  const paginatedRows = sourceFilter === 'ALL'
+    ? unifiedRows.slice((page - 1) * pageSize, page * pageSize)
+    : unifiedRows
+  const totalPages = Math.ceil(totalCount / pageSize)
+  const hasNextPage = sourceFilter === 'ALL'
+    ? page * pageSize < totalCount
+    : (sourceFilter === 'IMPORTED'
+      ? (data?.importedInvoices?.hasNextPage ?? false)
+      : page * pageSize < totalCount)
+  const displayRows = sourceFilter === 'ALL' ? paginatedRows : unifiedRows
+  const isLoading = loading || (sourceFilter !== 'IMPORTED' && generatedLoading)
 
   // Sort handling
   const handleSort = (field: string) => {
@@ -702,6 +913,22 @@ export function ImportedInvoiceList() {
   }
 
   const handleCreatePaymentMatch = async (transactionId: number, matchType: string = 'manual') => {
+    if (paymentMatchRecord) {
+      const result = await createPaymentMatchForRecordMutation({
+        variables: {
+          invoiceRecordId: paymentMatchRecord.id,
+          transactionId,
+          matchType,
+        },
+      })
+      if (result.data?.createPaymentMatchForRecord?.success) {
+        setPaymentMatchRecord(null)
+        setTransactionSearch('')
+        refetch()
+        generatedRefetch()
+      }
+      return
+    }
     if (!paymentMatchInvoice) return
     const result = await createPaymentMatchMutation({
       variables: {
@@ -723,11 +950,19 @@ export function ImportedInvoiceList() {
     })
     if (result.data?.deletePaymentMatch?.success) {
       refetch()
+      generatedRefetch()
     }
   }
 
   const openPaymentMatchModal = (invoice: ImportedInvoice) => {
     setPaymentMatchInvoice(invoice)
+    setPaymentMatchRecord(null)
+    setTransactionSearch('')
+  }
+
+  const openPaymentMatchRecordModal = (record: GeneratedInvoice) => {
+    setPaymentMatchRecord(record)
+    setPaymentMatchInvoice(null)
     setTransactionSearch('')
   }
 
@@ -763,6 +998,25 @@ export function ImportedInvoiceList() {
       return <Badge variant="secondary">{t('invoices.import.uploadPending')}</Badge>
     }
     return null
+  }
+
+  const getGeneratedStatusBadge = (status: string) => {
+    switch (status) {
+      case 'finalized':
+        return <Badge variant="default">{t('invoices.import.generatedStatus.finalized')}</Badge>
+      case 'sent':
+        return <Badge variant="default" className="bg-blue-500">{t('invoices.import.generatedStatus.sent')}</Badge>
+      case 'paid':
+        return <Badge variant="default" className="bg-green-500">{t('invoices.import.generatedStatus.paid')}</Badge>
+      case 'dunning':
+        return <Badge variant="destructive">{t('invoices.import.generatedStatus.dunning')}</Badge>
+      case 'storno':
+        return <Badge variant="outline" className="text-orange-600 border-orange-600">{t('invoices.import.generatedStatus.storno')}</Badge>
+      case 'cancelled':
+        return <Badge variant="secondary">{t('invoices.import.generatedStatus.cancelled')}</Badge>
+      default:
+        return <Badge variant="secondary">{status}</Badge>
+    }
   }
 
   const canWrite = hasPermission('invoices', 'generate')
@@ -823,7 +1077,7 @@ export function ImportedInvoiceList() {
       )}
 
       {/* Filters */}
-      <div className="flex gap-4">
+      <div className="flex gap-4 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
@@ -836,18 +1090,19 @@ export function ImportedInvoiceList() {
             className="pl-9"
           />
         </div>
+        {/* Source filter */}
         <div className="inline-flex rounded-md border border-input">
-          {[
-            { value: 'ALL', label: t('invoices.import.filterAll') },
-            { value: 'PAID', label: t('invoices.import.filterPaid') },
-            { value: 'UNPAID', label: t('invoices.import.filterUnpaid') },
-          ].map((opt) => (
+          {([
+            { value: 'ALL', label: t('invoices.import.sourceAll') },
+            { value: 'IMPORTED', label: t('invoices.import.sourceImported') },
+            { value: 'GENERATED', label: t('invoices.import.sourceGenerated') },
+          ] as const).map((opt) => (
             <button
               key={opt.value}
-              onClick={() => { setPaymentStatus(opt.value); setPage(1) }}
+              onClick={() => { setSourceFilter(opt.value as SourceFilter); setPage(1); setPaymentStatus('ALL'); setUploadStatus('ALL') }}
               className={cn(
                 'px-3 py-1.5 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md',
-                paymentStatus === opt.value
+                sourceFilter === opt.value
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-background text-muted-foreground hover:bg-muted'
               )}
@@ -856,7 +1111,31 @@ export function ImportedInvoiceList() {
             </button>
           ))}
         </div>
-        {hasPendingUploads && (
+        {/* Payment status filter - only for imported */}
+        {sourceFilter !== 'GENERATED' && (
+          <div className="inline-flex rounded-md border border-input">
+            {[
+              { value: 'ALL', label: t('invoices.import.filterAll') },
+              { value: 'PAID', label: t('invoices.import.filterPaid') },
+              { value: 'UNPAID', label: t('invoices.import.filterUnpaid') },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => { setPaymentStatus(opt.value); setPage(1) }}
+                className={cn(
+                  'px-3 py-1.5 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md',
+                  paymentStatus === opt.value
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-background text-muted-foreground hover:bg-muted'
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {/* Upload status filter - only for imported with pending batches */}
+        {sourceFilter !== 'GENERATED' && hasPendingUploads && (
           <div className="inline-flex rounded-md border border-input">
             {[
               { value: 'ALL', label: t('invoices.import.filterAll') },
@@ -894,10 +1173,10 @@ export function ImportedInvoiceList() {
               </th>
               <th
                 className="px-4 py-3 cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort('invoiceDate')}
+                onClick={() => handleSort(sourceFilter === 'GENERATED' ? 'billingDate' : 'invoiceDate')}
               >
                 {t('invoices.import.colDate')}
-                {getSortIcon('invoiceDate')}
+                {getSortIcon(sourceFilter === 'GENERATED' ? 'billingDate' : 'invoiceDate')}
               </th>
               <th
                 className="px-4 py-3 cursor-pointer hover:bg-gray-100"
@@ -908,166 +1187,285 @@ export function ImportedInvoiceList() {
               </th>
               <th
                 className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort('totalAmount')}
+                onClick={() => handleSort(sourceFilter === 'GENERATED' ? 'totalGross' : 'totalAmount')}
               >
                 {t('invoices.import.colAmount')}
-                {getSortIcon('totalAmount')}
+                {getSortIcon(sourceFilter === 'GENERATED' ? 'totalGross' : 'totalAmount')}
               </th>
+              {sourceFilter === 'ALL' && (
+                <th className="px-4 py-3">{t('invoices.import.source')}</th>
+              )}
               <th className="px-4 py-3">{t('invoices.import.colStatus')}</th>
               <th className="px-4 py-3">{t('invoices.import.colPayment')}</th>
               <th className="px-4 py-3 text-right">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
-            {loading && invoices.length === 0 ? (
+            {isLoading && displayRows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={sourceFilter === 'ALL' ? 8 : 7} className="px-4 py-8 text-center text-gray-500">
                   <Loader2 className="w-6 h-6 mx-auto animate-spin" />
                 </td>
               </tr>
-            ) : invoices.length === 0 ? (
+            ) : displayRows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                  {t('invoices.import.noInvoices')}
+                <td colSpan={sourceFilter === 'ALL' ? 8 : 7} className="px-4 py-8 text-center text-gray-500">
+                  {t('invoices.import.noInvoicesUnified')}
                 </td>
               </tr>
             ) : (
-              invoices.map((invoice) => (
-                <tr key={invoice.id} className="border-b last:border-0 hover:bg-gray-50">
+              displayRows.map((row) => (
+                <tr key={row.key} className="border-b last:border-0 hover:bg-gray-50">
+                  {/* Invoice Number */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-gray-400" />
                       <div>
                         <div className="font-medium flex items-center gap-2">
-                          {invoice.invoiceNumber || <span className="text-gray-400 italic">{t('invoices.import.noNumber')}</span>}
-                          {getUploadStatusBadge(invoice)}
+                          {row.invoiceNumber || <span className="text-gray-400 italic">{t('invoices.import.noNumber')}</span>}
+                          {row.imported && getUploadStatusBadge(row.imported)}
                         </div>
-                        <div className="text-xs text-gray-500">{invoice.originalFilename}</div>
-                        {invoice.receiverEmails && invoice.receiverEmails.length > 0 && (
+                        {row.imported && (
+                          <div className="text-xs text-gray-500">{row.imported.originalFilename}</div>
+                        )}
+                        {row.generated && row.contractName && (
+                          <Link
+                            to={`/contracts/${row.contractId}`}
+                            className="text-xs text-gray-500 hover:text-blue-600 hover:underline"
+                          >
+                            {row.contractName}
+                          </Link>
+                        )}
+                        {row.imported?.receiverEmails && row.imported.receiverEmails.length > 0 && (
                           <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
                             <Mail className="w-3 h-3" />
-                            {invoice.receiverEmails.slice(0, 2).join(', ')}
-                            {invoice.receiverEmails.length > 2 && ` +${invoice.receiverEmails.length - 2}`}
+                            {row.imported.receiverEmails.slice(0, 2).join(', ')}
+                            {row.imported.receiverEmails.length > 2 && ` +${row.imported.receiverEmails.length - 2}`}
                           </div>
                         )}
                       </div>
                     </div>
                   </td>
+                  {/* Date */}
                   <td className="px-4 py-3">
-                    {invoice.invoiceDate ? formatDate(invoice.invoiceDate) : '-'}
+                    {row.date ? formatDate(row.date) : '-'}
                   </td>
+                  {/* Customer */}
                   <td className="px-4 py-3">
                     <div>
-                      {invoice.customerId ? (
+                      {row.source === 'imported' && row.imported ? (
                         <>
-                          <Link
-                            to={`/customers/${invoice.customerId}`}
-                            className="text-blue-600 hover:text-blue-800 hover:underline"
-                          >
-                            {invoice.customerDisplayName || invoice.customerName}
-                          </Link>
-                          <button
-                            onClick={() => !invoice.contractId && handleUnlinkCustomer(invoice.id)}
-                            className={`ml-2 ${invoice.contractId ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-600'}`}
-                            title={invoice.contractId ? t('invoices.import.unlinkCustomerDisabled') : t('invoices.import.unlinkCustomer')}
-                            disabled={!!invoice.contractId}
-                          >
-                            <Unlink className="w-3 h-3 inline" />
-                          </button>
+                          {row.imported.customerId ? (
+                            <>
+                              <Link
+                                to={`/customers/${row.imported.customerId}`}
+                                className="text-blue-600 hover:text-blue-800 hover:underline"
+                              >
+                                {row.imported.customerDisplayName || row.imported.customerName}
+                              </Link>
+                              <button
+                                onClick={() => !row.imported!.contractId && handleUnlinkCustomer(row.imported!.id)}
+                                className={`ml-2 ${row.imported.contractId ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-600'}`}
+                                title={row.imported.contractId ? t('invoices.import.unlinkCustomerDisabled') : t('invoices.import.unlinkCustomer')}
+                                disabled={!!row.imported.contractId}
+                              >
+                                <Unlink className="w-3 h-3 inline" />
+                              </button>
+                            </>
+                          ) : row.imported.customerName ? (
+                            <>
+                              {row.imported.customerName}
+                              <button
+                                onClick={() => setCustomerMatchInvoice(row.imported!)}
+                                className="ml-2 text-blue-600 hover:text-blue-800"
+                                title={t('invoices.import.linkCustomer')}
+                              >
+                                <LinkIcon className="w-3 h-3 inline" />
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-gray-400 italic">{t('invoices.import.noCustomer')}</span>
+                          )}
                         </>
-                      ) : invoice.customerName ? (
-                        <>
-                          {invoice.customerName}
-                          <button
-                            onClick={() => setCustomerMatchInvoice(invoice)}
-                            className="ml-2 text-blue-600 hover:text-blue-800"
-                            title={t('invoices.import.linkCustomer')}
-                          >
-                            <LinkIcon className="w-3 h-3 inline" />
-                          </button>
-                        </>
+                      ) : row.customerId ? (
+                        <Link
+                          to={`/customers/${row.customerId}`}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {row.customerName}
+                        </Link>
                       ) : (
-                        <span className="text-gray-400 italic">{t('invoices.import.noCustomer')}</span>
+                        row.customerName || <span className="text-gray-400 italic">-</span>
                       )}
                     </div>
                   </td>
+                  {/* Amount */}
                   <td className="px-4 py-3 text-right font-mono">
-                    {invoice.totalAmount
-                      ? `${formatCurrency(parseFloat(invoice.totalAmount))} ${invoice.currency !== 'EUR' ? invoice.currency : ''}`
+                    {row.amount != null
+                      ? `${formatCurrency(row.amount)} ${row.currency !== 'EUR' ? row.currency : ''}`
                       : '-'}
                   </td>
-                  <td className="px-4 py-3">{getStatusBadge(invoice)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      {getPaymentBadge(invoice)}
-                      {invoice.isPaid && invoice.paymentMatches.length > 0 && (
-                        <button
-                          onClick={() => openPaymentMatchModal(invoice)}
-                          className="text-xs text-blue-600 hover:text-blue-800"
-                          title={t('invoices.import.viewPaymentMatch')}
-                        >
-                          ({invoice.paymentMatches.length})
-                        </button>
+                  {/* Source badge */}
+                  {sourceFilter === 'ALL' && (
+                    <td className="px-4 py-3">
+                      {row.source === 'imported' ? (
+                        <Badge variant="outline" className="text-xs">{t('invoices.import.sourceImported')}</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">{t('invoices.import.sourceGenerated')}</Badge>
                       )}
-                    </div>
+                    </td>
+                  )}
+                  {/* Status */}
+                  <td className="px-4 py-3">
+                    {row.source === 'imported' && row.imported
+                      ? getStatusBadge(row.imported)
+                      : row.generated
+                        ? getGeneratedStatusBadge(row.generated.status)
+                        : null}
                   </td>
+                  {/* Payment */}
+                  <td className="px-4 py-3">
+                    {row.source === 'imported' && row.imported ? (
+                      <div className="flex items-center gap-2">
+                        {getPaymentBadge(row.imported)}
+                        {row.imported.isPaid && row.imported.paymentMatches.length > 0 && (
+                          <button
+                            onClick={() => openPaymentMatchModal(row.imported!)}
+                            className="text-xs text-blue-600 hover:text-blue-800"
+                            title={t('invoices.import.viewPaymentMatch')}
+                          >
+                            ({row.imported.paymentMatches.length})
+                          </button>
+                        )}
+                      </div>
+                    ) : row.source === 'generated' && row.generated ? (
+                      <div className="flex items-center gap-2">
+                        {row.generated.isPaid ? (
+                          <Badge variant="default" className="bg-green-500 text-white text-xs">
+                            {t('invoices.import.paid')}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs">
+                            {t('invoices.import.unpaid')}
+                          </Badge>
+                        )}
+                        {row.generated.isPaid && row.generated.paymentMatches.length > 0 && (
+                          <button
+                            onClick={() => openPaymentMatchRecordModal(row.generated!)}
+                            className="text-xs text-blue-600 hover:text-blue-800"
+                            title={t('invoices.import.viewPaymentMatch')}
+                          >
+                            ({row.generated.paymentMatches.length})
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </td>
+                  {/* Actions */}
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
-                      {!invoice.isPaid && invoice.extractionStatus !== 'pending' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openPaymentMatchModal(invoice)}
-                          title={t('invoices.import.matchPayment')}
-                          className="text-gray-400 hover:text-blue-600 hover:bg-blue-50"
-                        >
-                          <CreditCard className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {invoice.extractionStatus === 'pending' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleExtract(invoice.id)}
-                          title={t('invoices.import.extract')}
-                          className="text-gray-400 hover:text-foreground"
-                        >
-                          <RefreshCw className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {invoice.extractionStatus === 'extraction_failed' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleReExtract(invoice.id)}
-                          title={t('invoices.import.reExtract')}
-                          className="text-gray-400 hover:text-foreground"
-                        >
-                          <RefreshCw className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {invoice.pdfUrl && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          asChild
-                          className="text-gray-400 hover:text-foreground"
-                        >
-                          <a href={invoice.pdfUrl} target="_blank" rel="noopener noreferrer" title={t('invoices.import.viewPdf')}>
-                            <Eye className="w-4 h-4" />
-                          </a>
-                        </Button>
-                      )}
-                      {canWrite && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteId(invoice.id)}
-                          className="text-gray-400 hover:text-red-600 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
+                      {row.source === 'imported' && row.imported ? (
+                        <>
+                          {!row.imported.isPaid && row.imported.extractionStatus !== 'pending' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openPaymentMatchModal(row.imported!)}
+                              title={t('invoices.import.matchPayment')}
+                              className="text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                            >
+                              <CreditCard className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {row.imported.extractionStatus === 'pending' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleExtract(row.imported!.id)}
+                              title={t('invoices.import.extract')}
+                              className="text-gray-400 hover:text-foreground"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {row.imported.extractionStatus === 'extraction_failed' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleReExtract(row.imported!.id)}
+                              title={t('invoices.import.reExtract')}
+                              className="text-gray-400 hover:text-foreground"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {row.imported.pdfUrl && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              asChild
+                              className="text-gray-400 hover:text-foreground"
+                            >
+                              <a href={row.imported.pdfUrl} target="_blank" rel="noopener noreferrer" title={t('invoices.import.viewPdf')}>
+                                <Eye className="w-4 h-4" />
+                              </a>
+                            </Button>
+                          )}
+                          {canWrite && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeleteId(row.imported!.id)}
+                              className="text-gray-400 hover:text-red-600 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </>
+                      ) : row.generated ? (
+                        <>
+                          {!row.generated.isPaid && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openPaymentMatchRecordModal(row.generated!)}
+                              title={t('invoices.import.matchPayment')}
+                              className="text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                            >
+                              <CreditCard className="w-4 h-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            asChild
+                            className="text-gray-400 hover:text-foreground"
+                          >
+                            <a
+                              href={row.generated.pdfUrl || `/api/invoices/${row.generated.id}/pdf/`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={t('invoices.import.viewPdf')}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </a>
+                          </Button>
+                          {row.contractId && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              asChild
+                              className="text-gray-400 hover:text-foreground"
+                            >
+                              <Link to={`/contracts/${row.contractId}`} title={t('invoices.import.contractLink')}>
+                                <LinkIcon className="w-4 h-4" />
+                              </Link>
+                            </Button>
+                          )}
+                        </>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -1365,9 +1763,10 @@ export function ImportedInvoiceList() {
       </Dialog>
 
       {/* Payment Match Modal */}
-      <Dialog open={!!paymentMatchInvoice} onOpenChange={(open: boolean) => {
+      <Dialog open={!!paymentMatchInvoice || !!paymentMatchRecord} onOpenChange={(open: boolean) => {
         if (!open) {
           setPaymentMatchInvoice(null)
+          setPaymentMatchRecord(null)
           setTransactionSearch('')
         }
       }}>
@@ -1384,54 +1783,66 @@ export function ImportedInvoiceList() {
                   })}
                 </>
               )}
+              {paymentMatchRecord && (
+                <>
+                  {t('invoices.import.matchPaymentDescription', {
+                    invoiceNumber: paymentMatchRecord.invoiceNumber,
+                    amount: paymentMatchRecord.totalGross ? formatCurrency(parseFloat(paymentMatchRecord.totalGross)) : '-',
+                    customer: paymentMatchRecord.customerName || '-',
+                  })}
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             {/* Existing matches */}
-            {paymentMatchInvoice && paymentMatchInvoice.paymentMatches.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">{t('invoices.import.existingMatches')}</h4>
-                <div className="space-y-2">
-                  {paymentMatchInvoice.paymentMatches.map((match) => (
-                    <div
-                      key={match.id}
-                      className="flex items-center justify-between p-3 rounded-lg border bg-green-50 border-green-200"
-                    >
-                      <div>
-                        <div className="font-medium">{match.counterpartyName}</div>
-                        <div className="text-sm text-gray-500">
-                          {formatDate(match.transactionDate)} - {formatCurrency(parseFloat(match.transactionAmount))}
+            {(() => {
+              const matches = paymentMatchInvoice?.paymentMatches ?? paymentMatchRecord?.paymentMatches ?? []
+              return matches.length > 0 ? (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">{t('invoices.import.existingMatches')}</h4>
+                  <div className="space-y-2">
+                    {matches.map((match) => (
+                      <div
+                        key={match.id}
+                        className="flex items-center justify-between p-3 rounded-lg border bg-green-50 border-green-200"
+                      >
+                        <div>
+                          <div className="font-medium">{match.counterpartyName}</div>
+                          <div className="text-sm text-gray-500">
+                            {formatDate(match.transactionDate)} - {formatCurrency(parseFloat(match.transactionAmount))}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">{match.matchType}</Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeletePaymentMatch(match.id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Unlink className="w-4 h-4" />
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary">{match.matchType}</Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeletePaymentMatch(match.id)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Unlink className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : null
+            })()}
 
             {/* Suggested matches */}
-            {!paymentMatchInvoice?.isPaid && (
+            {!(paymentMatchInvoice?.isPaid || paymentMatchRecord?.isPaid) && (
               <>
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 mb-2">{t('invoices.import.suggestedMatches')}</h4>
-                  {loadingPaymentMatches ? (
+                  {(loadingPaymentMatches || loadingPaymentMatchesForRecord) ? (
                     <div className="text-center py-4">
                       <Loader2 className="w-6 h-6 mx-auto animate-spin" />
                     </div>
-                  ) : (paymentMatchData?.findPaymentMatches as PaymentMatchCandidate[] | undefined)?.length ? (
+                  ) : ((paymentMatchInvoice ? paymentMatchData?.findPaymentMatches : paymentMatchRecordData?.findPaymentMatchesForRecord) as PaymentMatchCandidate[] | undefined)?.length ? (
                     <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {(paymentMatchData.findPaymentMatches as PaymentMatchCandidate[]).map((match) => (
+                      {((paymentMatchInvoice ? paymentMatchData?.findPaymentMatches : paymentMatchRecordData?.findPaymentMatchesForRecord) as PaymentMatchCandidate[]).map((match) => (
                         <button
                           key={match.transactionId}
                           onClick={() => handleCreatePaymentMatch(match.transactionId, match.matchType)}
@@ -1508,6 +1919,7 @@ export function ImportedInvoiceList() {
           <DialogFooter>
             <Button variant="outline" onClick={() => {
               setPaymentMatchInvoice(null)
+              setPaymentMatchRecord(null)
               setTransactionSearch('')
             }}>
               {t('common.close')}

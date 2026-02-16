@@ -218,7 +218,9 @@ class TestLiquidityForecast:
     ):
         """Costs should reduce balance over time."""
         transaction_with_balance(Decimal("10000.00"), date.today())
-        recurring_pattern(amount=Decimal("-100.00"))
+        # Use a day_of_month that's always in the future this month
+        future_day = min(date.today().day + 5, 28)
+        recurring_pattern(amount=Decimal("-100.00"), day_of_month=future_day)
 
         forecast = get_liquidity_forecast(tenant, months=3)
 

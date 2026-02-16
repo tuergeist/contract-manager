@@ -1,11 +1,11 @@
-import { useState, useMemo, Fragment } from 'react'
+import { useState, useMemo, useEffect, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation } from '@apollo/client'
 import { gql } from '@apollo/client'
 import { format } from 'date-fns'
 import { de, enUS } from 'date-fns/locale'
-import { FileDown, FileSpreadsheet, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { FileDown, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Loader2, ShieldCheck } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Checkbox } from '@/components/ui/checkbox'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 const INVOICES_FOR_MONTH = gql`
@@ -82,8 +83,8 @@ const CHECK_LEGAL_DATA = gql`
 `
 
 const GENERATE_INVOICES = gql`
-  mutation GenerateInvoices($year: Int!, $month: Int!) {
-    generateInvoices(year: $year, month: $month) {
+  mutation GenerateInvoices($year: Int!, $month: Int!, $contractIds: [Int!]) {
+    generateInvoices(year: $year, month: $month, contractIds: $contractIds) {
       success
       error
       count
@@ -165,6 +166,7 @@ export function InvoiceExportPage() {
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [expandedInvoices, setExpandedInvoices] = useState<Set<number>>(new Set())
+  const [selectedForGeneration, setSelectedForGeneration] = useState<Set<number>>(new Set())
   const [exportingFormat, setExportingFormat] = useState<string | null>(null)
   const [showConfirm, setShowConfirm] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -196,10 +198,21 @@ export function InvoiceExportPage() {
     return map
   }, [records])
 
-  // Count ungenerated invoices
-  const ungeneratedCount = useMemo(() => {
-    return invoices.filter(inv => !recordByContract.has(inv.contractId)).length
+  // Ungenerated invoice contract IDs
+  const ungeneratedContractIds = useMemo(() => {
+    return invoices.filter(inv => !recordByContract.has(inv.contractId)).map(inv => inv.contractId)
   }, [invoices, recordByContract])
+
+  // Default all ungenerated invoices to selected
+  useEffect(() => {
+    setSelectedForGeneration(new Set(ungeneratedContractIds))
+  }, [ungeneratedContractIds])
+
+  const ungeneratedCount = ungeneratedContractIds.length
+
+  const hasFinalizedInvoices = useMemo(() => {
+    return records.some(r => r.status === 'finalized')
+  }, [records])
 
   // Calculate totals including tax
   const totals = useMemo(() => {
@@ -244,7 +257,7 @@ export function InvoiceExportPage() {
     setShowConfirm(false)
     try {
       const { data: result } = await generateInvoices({
-        variables: { year, month },
+        variables: { year, month, contractIds: [...selectedForGeneration] },
       })
       if (result?.generateInvoices?.success) {
         setToast({ type: 'success', message: t('invoices.generateSuccess', { count: result.generateInvoices.count }) })
@@ -258,7 +271,7 @@ export function InvoiceExportPage() {
     setTimeout(() => setToast(null), 4000)
   }
 
-  const handleExport = async (exportFormat: 'pdf' | 'pdf-individual' | 'excel') => {
+  const handleExport = async (exportFormat: 'pdf' | 'pdf-individual' | 'zugferd') => {
     setExportingFormat(exportFormat)
     try {
       const token = localStorage.getItem('auth_token')
@@ -278,7 +291,7 @@ export function InvoiceExportPage() {
       } else {
         if (exportFormat === 'pdf') filename += '.pdf'
         else if (exportFormat === 'pdf-individual') filename += '.zip'
-        else filename += '.xlsx'
+        else filename += '-zugferd.zip'
       }
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
@@ -402,8 +415,8 @@ export function InvoiceExportPage() {
           <>
             {showConfirm ? (
               <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2">
-                <p className="text-sm text-blue-800">{t('invoices.generateConfirm', { count: ungeneratedCount })}</p>
-                <Button size="sm" onClick={handleGenerate} disabled={generating}>
+                <p className="text-sm text-blue-800">{t('invoices.generateConfirm', { count: selectedForGeneration.size })}</p>
+                <Button size="sm" onClick={handleGenerate} disabled={generating || selectedForGeneration.size === 0}>
                   {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {generating ? t('invoices.generating') : t('common.save')}
                 </Button>
@@ -412,9 +425,9 @@ export function InvoiceExportPage() {
                 </Button>
               </div>
             ) : (
-              <Button onClick={() => setShowConfirm(true)} data-testid="generate-invoices-button">
+              <Button onClick={() => setShowConfirm(true)} disabled={selectedForGeneration.size === 0} data-testid="generate-invoices-button">
                 <CheckCircle className="mr-2 h-4 w-4" />
-                {t('invoices.generateInvoices')} ({ungeneratedCount})
+                {t('invoices.generateInvoices')} ({selectedForGeneration.size}/{ungeneratedCount})
               </Button>
             )}
           </>
@@ -440,12 +453,13 @@ export function InvoiceExportPage() {
         </Button>
         <Button
           variant="outline"
-          onClick={() => handleExport('excel')}
-          disabled={invoices.length === 0 || exportingFormat !== null}
-          data-testid="export-excel-button"
+          onClick={() => handleExport('zugferd')}
+          disabled={!hasFinalizedInvoices || exportingFormat !== null || !legalDataComplete}
+          title={!hasFinalizedInvoices ? t('invoices.export.zugferdNoFinalized') : t('invoices.export.zugferdTooltip')}
+          data-testid="export-zugferd-button"
         >
-          <FileSpreadsheet className="mr-2 h-4 w-4" />
-          {exportingFormat === 'excel' ? t('invoices.export.exporting') : t('invoices.export.exportExcel')}
+          <ShieldCheck className="mr-2 h-4 w-4" />
+          {exportingFormat === 'zugferd' ? t('invoices.export.exporting') : t('invoices.export.exportZugferd')}
         </Button>
       </div>
 
@@ -467,6 +481,17 @@ export function InvoiceExportPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8">
+                    {ungeneratedCount > 0 && (
+                      <Checkbox
+                        checked={selectedForGeneration.size === ungeneratedCount}
+                        onCheckedChange={(checked) => {
+                          setSelectedForGeneration(checked ? new Set(ungeneratedContractIds) : new Set())
+                        }}
+                        aria-label="Select all"
+                      />
+                    )}
+                  </TableHead>
                   <TableHead className="w-8"></TableHead>
                   <TableHead>{t('invoices.invoiceNo')}</TableHead>
                   <TableHead>{t('invoices.status')}</TableHead>
@@ -488,6 +513,22 @@ export function InvoiceExportPage() {
                         onClick={() => toggleExpand(invoice.contractId)}
                         data-testid={`invoice-row-${invoice.contractId}`}
                       >
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          {!record && (
+                            <Checkbox
+                              checked={selectedForGeneration.has(invoice.contractId)}
+                              onCheckedChange={(checked) => {
+                                setSelectedForGeneration(prev => {
+                                  const next = new Set(prev)
+                                  if (checked) next.add(invoice.contractId)
+                                  else next.delete(invoice.contractId)
+                                  return next
+                                })
+                              }}
+                              aria-label={`Select ${invoice.customerName}`}
+                            />
+                          )}
+                        </TableCell>
                         <TableCell>
                           {expandedInvoices.has(invoice.contractId) ? (
                             <ChevronDown className="h-4 w-4" />
@@ -532,7 +573,7 @@ export function InvoiceExportPage() {
                       </TableRow>
                       {expandedInvoices.has(invoice.contractId) && (
                         <TableRow>
-                          <TableCell colSpan={9} className="bg-muted/30 p-0">
+                          <TableCell colSpan={10} className="bg-muted/30 p-0">
                             <Table>
                               <TableHeader>
                                 <TableRow>

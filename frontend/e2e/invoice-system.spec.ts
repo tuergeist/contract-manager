@@ -207,6 +207,67 @@ test.describe('Invoice System', () => {
     })
   })
 
+  test.describe('ZUGFeRD Export', () => {
+    test('shows ZUGFeRD export button on invoice export page', async ({ page }) => {
+      await page.goto('/invoices/export')
+      await page.waitForTimeout(2000)
+
+      const zugferdButton = page.locator('[data-testid="export-zugferd-button"]')
+      await expect(zugferdButton).toBeVisible()
+    })
+
+    test('ZUGFeRD button is disabled when no invoices exist', async ({ page }) => {
+      await page.goto('/invoices/export')
+      await page.waitForTimeout(2000)
+
+      const noInvoices = page.locator('[data-testid="no-invoices"]')
+      if (await noInvoices.isVisible().catch(() => false)) {
+        const zugferdButton = page.locator('[data-testid="export-zugferd-button"]')
+        await expect(zugferdButton).toBeDisabled()
+      }
+    })
+  })
+
+  test.describe('ZUGFeRD Settings', () => {
+    test('navigates to ZUGFeRD settings tab', async ({ page }) => {
+      await page.goto('/settings/invoices/zugferd')
+      await page.waitForTimeout(1000)
+
+      // Should show ZUGFeRD settings content
+      const toggle = page.locator('[data-testid="zugferd-default-toggle"]')
+      await expect(toggle).toBeVisible()
+    })
+
+    test('ZUGFeRD tab appears in invoice settings tabs', async ({ page }) => {
+      await page.goto('/settings/invoices')
+      await page.waitForTimeout(1000)
+
+      const zugferdTab = page.locator('button[role="tab"]').filter({ hasText: 'ZUGFeRD' })
+      await expect(zugferdTab).toBeVisible()
+    })
+
+    test('can toggle ZUGFeRD default setting', async ({ page }) => {
+      await page.goto('/settings/invoices/zugferd')
+      await page.waitForTimeout(1000)
+
+      const toggle = page.locator('[data-testid="zugferd-default-toggle"]')
+      await expect(toggle).toBeVisible()
+
+      // Click toggle
+      await toggle.click()
+      await page.waitForTimeout(1000)
+    })
+
+    test('shows info section about ZUGFeRD format', async ({ page }) => {
+      await page.goto('/settings/invoices/zugferd')
+      await page.waitForTimeout(1000)
+
+      // Should show info about EN 16931
+      const infoText = page.locator('text=/EN 16931/')
+      await expect(infoText.first()).toBeVisible()
+    })
+  })
+
   test.describe('End-to-End Invoice Generation Flow', () => {
     test('configure legal data, generate invoices, and verify', async ({ page }) => {
       // Step 1: Configure company legal data

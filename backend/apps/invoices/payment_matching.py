@@ -1,15 +1,18 @@
-"""Service for matching imported invoices to bank transactions (payments)."""
+"""Service for matching invoices to bank transactions (payments).
+
+Supports both ImportedInvoice and InvoiceRecord via duck typing.
+"""
 
 import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import List, Optional, Protocol
+from typing import List, Optional, Protocol, Union
 
 from django.db.models import Q
 
 from apps.banking.models import BankTransaction
-from apps.invoices.models import ImportedInvoice, InvoicePaymentMatch
+from apps.invoices.models import ImportedInvoice, InvoicePaymentMatch, InvoiceRecord
 
 
 @dataclass
@@ -25,12 +28,25 @@ class PaymentMatchCandidate:
     confidence: Decimal
 
 
+class InvoiceRecordAdapter:
+    """Adapter to make InvoiceRecord duck-type compatible with ImportedInvoice for matching."""
+
+    def __init__(self, record: InvoiceRecord):
+        self._record = record
+        self.invoice_number = record.invoice_number
+        self.invoice_date = record.billing_date
+        self.total_amount = record.total_gross
+        self.customer = record.customer
+        self.customer_id = record.customer_id
+        self.tenant = record.tenant
+
+
 class MatchingStrategy(Protocol):
     """Protocol for payment matching strategies."""
 
     def find_matches(
         self,
-        invoice: ImportedInvoice,
+        invoice: Union[ImportedInvoice, InvoiceRecordAdapter],
         transactions: list[BankTransaction],
     ) -> List[PaymentMatchCandidate]:
         """Find matching transactions for the given invoice."""
@@ -157,7 +173,7 @@ class PaymentMatcher:
 
     def find_matches(
         self,
-        invoice: ImportedInvoice,
+        invoice: Union[ImportedInvoice, InvoiceRecordAdapter],
         days_after: int = 90,
     ) -> List[PaymentMatchCandidate]:
         """
@@ -166,7 +182,7 @@ class PaymentMatcher:
         Searches credit transactions within a date window after the invoice date.
 
         Args:
-            invoice: The imported invoice to find payments for
+            invoice: The imported invoice or adapted record to find payments for
             days_after: How many days after invoice date to search (default 90)
 
         Returns:
@@ -179,19 +195,20 @@ class PaymentMatcher:
         start_date = invoice.invoice_date
         end_date = invoice.invoice_date + timedelta(days=days_after)
 
-        transactions = list(
-            BankTransaction.objects.filter(
-                tenant=invoice.tenant,
-                amount__gt=0,  # Credits only
-                entry_date__gte=start_date,
-                entry_date__lte=end_date,
-            )
-            .select_related("counterparty")
-            .exclude(
-                # Exclude transactions already matched to this invoice
-                invoice_matches__invoice=invoice
-            )
-        )
+        qs = BankTransaction.objects.filter(
+            tenant=invoice.tenant,
+            amount__gt=0,  # Credits only
+            entry_date__gte=start_date,
+            entry_date__lte=end_date,
+        ).select_related("counterparty")
+
+        # Exclude transactions already matched to this invoice
+        if isinstance(invoice, InvoiceRecordAdapter):
+            qs = qs.exclude(invoice_matches__invoice_record=invoice._record)
+        else:
+            qs = qs.exclude(invoice_matches__invoice=invoice)
+
+        transactions = list(qs)
 
         # Run all strategies and collect matches
         all_matches: dict[int, PaymentMatchCandidate] = {}
