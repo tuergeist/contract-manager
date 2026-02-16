@@ -23,7 +23,6 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Download,
 } from 'lucide-react'
 import {
   Dialog,
@@ -1328,9 +1327,9 @@ export function ImportedInvoiceList() {
                               href={`/api/invoices/${row.generated.id}/pdf/`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              title={t('invoices.import.viewPdfGenerated')}
+                              title={t('invoices.import.viewPdf')}
                             >
-                              <Download className="w-4 h-4" />
+                              <Eye className="w-4 h-4" />
                             </a>
                           </Button>
                           {row.contractId && (
