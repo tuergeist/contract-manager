@@ -25,3 +25,6 @@ CACHES = {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
     }
 }
+
+# Run Celery tasks synchronously in tests (no Redis/broker dependency)
+CELERY_TASK_ALWAYS_EAGER = True

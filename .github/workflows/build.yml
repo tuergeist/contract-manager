@@ -13,6 +13,7 @@ env:
 
 jobs:
   build-backend:
+    needs: [test-backend, test-frontend]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -57,6 +58,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   build-frontend:
+    needs: [test-backend, test-frontend]
     runs-on: ubuntu-latest
     permissions:
       contents: read
