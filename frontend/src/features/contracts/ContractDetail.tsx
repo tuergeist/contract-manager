@@ -219,6 +219,21 @@ const CONTRACT_INVOICES_QUERY = gql`
   }
 `
 
+const CONTRACT_GENERATED_INVOICES_QUERY = gql`
+  query ContractGeneratedInvoices($contractId: Int!) {
+    invoiceRecords(contractId: $contractId, limit: 100) {
+      items {
+        id
+        invoiceNumber
+        billingDate
+        totalGross
+        status
+      }
+      totalCount
+    }
+  }
+`
+
 const PRODUCTS_FOR_SELECT_QUERY = gql`
   query ProductsForSelect($search: String) {
     products(search: $search, page: 1, pageSize: 50, sortBy: "name", sortOrder: "asc") {
@@ -595,6 +610,11 @@ export function ContractDetail() {
     skip: !id,
   })
 
+  const { data: generatedInvoicesData, loading: generatedInvoicesLoading } = useQuery(CONTRACT_GENERATED_INVOICES_QUERY, {
+    variables: { contractId: parseInt(id!, 10) },
+    skip: !id,
+  })
+
   const [updateNotes, { loading: savingNotes }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
   const [updateInvoiceText, { loading: savingInvoiceText }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
   const [reorderItems] = useMutation(REORDER_CONTRACT_ITEMS_MUTATION)
@@ -949,7 +969,7 @@ export function ContractDetail() {
             }`}
           >
             <Receipt className="h-4 w-4" />
-            {t('nav.importedInvoices')} ({invoicesData?.importedInvoices?.totalCount || 0})
+            {t('nav.importedInvoices')} ({(invoicesData?.importedInvoices?.totalCount || 0) + (generatedInvoicesData?.invoiceRecords?.totalCount || 0)})
           </button>
           <button
             onClick={() => setActiveTab('amendments')}
@@ -1408,11 +1428,11 @@ export function ContractDetail() {
       {/* Invoices Tab */}
       {activeTab === 'invoices' && (
         <div>
-          {invoicesLoading ? (
+          {(invoicesLoading && generatedInvoicesLoading) ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
             </div>
-          ) : (invoicesData?.importedInvoices?.items?.length || 0) === 0 ? (
+          ) : ((invoicesData?.importedInvoices?.items?.length || 0) + (generatedInvoicesData?.invoiceRecords?.items?.length || 0)) === 0 ? (
             <div className="rounded-lg border bg-white p-8 text-center">
               <p className="text-gray-500">{t('contracts.noInvoices')}</p>
             </div>
@@ -1431,7 +1451,7 @@ export function ContractDetail() {
                       {t('invoices.import.colAmount')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      {t('invoices.import.colPayment')}
+                      {t('invoices.import.colStatus')}
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                       {t('common.actions')}
@@ -1439,8 +1459,39 @@ export function ContractDetail() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
+                  {/* Generated invoices */}
+                  {generatedInvoicesData?.invoiceRecords?.items?.map((record: { id: number; invoiceNumber: string; billingDate: string; totalGross: string; status: string }) => (
+                    <tr key={`gen-${record.id}`} className="hover:bg-gray-50">
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <span className="font-medium">{record.invoiceNumber}</span>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                        {formatDate(record.billingDate)}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
+                        {new Intl.NumberFormat(i18n.language, { style: 'currency', currency: 'EUR' }).format(parseFloat(record.totalGross))}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-blue-100 text-blue-800 w-fit">
+                          {t(`invoices.import.generatedStatus.${record.status}`, record.status)}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right">
+                        <a
+                          href={`/api/invoices/${record.id}/pdf/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800"
+                          title={t('invoices.import.viewPdfGenerated')}
+                        >
+                          <Download className="h-4 w-4 inline" />
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                  {/* Imported invoices */}
                   {invoicesData?.importedInvoices?.items?.map((invoice: { id: string; invoiceNumber: string; invoiceDate: string | null; totalAmount: string | null; currency: string; isPaid: boolean; paidAt: string | null; firstPaymentTransactionId: number | null; pdfUrl: string | null }) => (
-                    <tr key={invoice.id} className="hover:bg-gray-50">
+                    <tr key={`imp-${invoice.id}`} className="hover:bg-gray-50">
                       <td className="whitespace-nowrap px-6 py-4">
                         <span className="font-medium">
                           {invoice.invoiceNumber || '-'}

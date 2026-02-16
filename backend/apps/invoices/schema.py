@@ -574,6 +574,7 @@ class InvoiceQuery:
         self,
         info: Info,
         search: str | None = None,
+        contract_id: int | None = None,
         sort_by: str | None = None,
         sort_order: str | None = "desc",
         offset: int = 0,
@@ -587,6 +588,9 @@ class InvoiceQuery:
         qs = InvoiceRecord.objects.filter(
             tenant=user.tenant,
         ).exclude(status=InvoiceRecord.Status.DRAFT)
+
+        if contract_id:
+            qs = qs.filter(contract_id=contract_id)
 
         if search:
             qs = qs.filter(
