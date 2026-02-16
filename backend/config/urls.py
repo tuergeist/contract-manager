@@ -23,6 +23,7 @@ class AuthenticatedGraphQLView(GraphQLView):
         return get_context(request)
 
 
+from apps.core.version_views import VersionView, BackendLicensesView
 from apps.invoices.views import InvoiceExportView, InvoicePreviewView, InvoiceRecordPdfView
 from apps.contracts.views import AttachmentDownloadView, ContractExportView
 from apps.customers.views import CustomerAttachmentDownloadView
@@ -32,6 +33,8 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("graphql", csrf_exempt(AuthenticatedGraphQLView.as_view(schema=schema))),
     path("api/health", health_check),
+    path("api/version/", VersionView.as_view(), name="version"),
+    path("api/version/licenses/", BackendLicensesView.as_view(), name="version-licenses"),
     path("api/invoices/export/", InvoiceExportView.as_view(), name="invoice-export"),
     path("api/invoices/preview/", InvoicePreviewView.as_view(), name="invoice-preview"),
     path("api/invoices/<int:record_id>/pdf/", InvoiceRecordPdfView.as_view(), name="invoice-record-pdf"),

@@ -11,6 +11,7 @@
     "liquidityForecast": "Liquiditätsvorschau",
     "auditLog": "Änderungsprotokoll",
     "banking": "Bankkonten",
+    "about": "Info",
     "settings": "Einstellungen"
   },
   "common": {
@@ -1201,6 +1202,19 @@
     "customerDetail": "Kundendetails",
     "contractDetail": "Vertragsdetails",
     "contractEdit": "Vertrag bearbeiten"
+  },
+  "about": {
+    "title": "Info",
+    "versionInfo": "Versionsinformationen",
+    "frontend": "Frontend",
+    "backend": "Backend",
+    "frontendDependencies": "Frontend-Abhängigkeiten",
+    "backendDependencies": "Backend-Abhängigkeiten",
+    "searchPackages": "Pakete suchen...",
+    "noDependencies": "Keine Abhängigkeitsinformationen verfügbar",
+    "packageName": "Paket",
+    "packageVersion": "Version",
+    "packageLicense": "Lizenz"
   },
   "helpVideo": {
     "button": "Kurze Anleitung",
