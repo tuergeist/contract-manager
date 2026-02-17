@@ -555,8 +555,8 @@ export function InvoiceList() {
       uploadStatus: uploadStatus === 'ALL' ? null : uploadStatus,
       sortBy: sortField,
       sortOrder: sortField ? sortOrder : null,
-      offset: (page - 1) * pageSize,
-      limit: pageSize,
+      offset: sourceFilter === 'ALL' ? 0 : (page - 1) * pageSize,
+      limit: sourceFilter === 'ALL' ? 200 : pageSize,
     },
     fetchPolicy: 'cache-and-network',
   })
