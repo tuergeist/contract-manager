@@ -828,11 +828,11 @@ def calculate_dashboard_kpis(tenant) -> dict:
     next_year_start = date(today.year + 1, 1, 1)
     next_year_end = date(today.year + 1, 12, 31)
 
-    # Get all active contracts for this tenant
+    # Get all active contracts with items, products, and price_periods prefetched
     active_contracts = Contract.objects.filter(
         tenant=tenant,
         status=Contract.Status.ACTIVE,
-    ).prefetch_related("items", "items__price_periods")
+    ).prefetch_related("items", "items__product", "items__price_periods")
 
     total_active_contracts = active_contracts.count()
     total_contract_value = Decimal("0")
@@ -842,12 +842,16 @@ def calculate_dashboard_kpis(tenant) -> dict:
     next_year_forecast = Decimal("0")
 
     for contract in active_contracts:
-        # TCV: monthly value × duration months
-        items = contract.items.all()
+        # Use prefetched items (avoids re-querying)
+        items = list(contract.items.all())
         monthly_value = Decimal("0")
         for item in items:
             if not item.is_one_off:
-                monthly_unit_price = item.get_price_at(today, normalize_to_monthly=True)
+                # Use cached price lookup to avoid N+1 queries
+                item_price_periods = list(item.price_periods.all())
+                monthly_unit_price = item.get_price_at_cached(
+                    today, item_price_periods, normalize_to_monthly=True
+                )
                 monthly_value += monthly_unit_price * item.quantity
 
         duration_months = contract.get_duration_months()
@@ -862,35 +866,34 @@ def calculate_dashboard_kpis(tenant) -> dict:
         # ARR: annualized recurring revenue (monthly × 12)
         annual_recurring_revenue += monthly_value * 12
 
-        # YTD Revenue: use recognition schedule from Jan 1 to today
-        ytd_schedule = contract.get_recognition_schedule(
-            from_date=current_year_start,
-            to_date=today,
-            include_history=True,
-        )
-        for event in ytd_schedule:
-            year_to_date_revenue += event["total"]
-
-        # Current Year Forecast: Jan 1 to Dec 31
-        current_year_schedule = contract.get_recognition_schedule(
-            from_date=current_year_start,
-            to_date=current_year_end,
-            include_history=True,
-        )
-        for event in current_year_schedule:
-            current_year_forecast += event["total"]
-
-        # Next Year Forecast: Jan 1 to Dec 31 of next year
-        # Only include contracts that will still be active next year
+        # Single recognition schedule spanning current year start to next year end,
+        # then split events into YTD, current year, and next year buckets
         contract_end = contract.end_date or contract.get_effective_end_date()
-        if not contract_end or contract_end >= next_year_start:
-            next_year_schedule = contract.get_recognition_schedule(
-                from_date=next_year_start,
-                to_date=next_year_end,
-                include_history=True,
-            )
-            for event in next_year_schedule:
-                next_year_forecast += event["total"]
+        include_next_year = not contract_end or contract_end >= next_year_start
+        schedule_end = next_year_end if include_next_year else current_year_end
+
+        full_schedule = contract.get_recognition_schedule(
+            from_date=current_year_start,
+            to_date=schedule_end,
+            include_history=True,
+            items=items,
+        )
+
+        for event in full_schedule:
+            event_date = event["date"]
+            event_total = event["total"]
+
+            # YTD: events from current year start up to today
+            if event_date <= today:
+                year_to_date_revenue += event_total
+
+            # Current year: events within current year
+            if event_date <= current_year_end:
+                current_year_forecast += event_total
+
+            # Next year: events in next year (only if contract spans into next year)
+            if include_next_year and event_date >= next_year_start:
+                next_year_forecast += event_total
 
     return {
         "total_active_contracts": total_active_contracts,

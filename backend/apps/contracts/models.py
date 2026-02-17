@@ -542,7 +542,7 @@ class Contract(TenantModel):
             })
             events[billing_date]["total"] += amount
 
-    def get_recognition_schedule(self, from_date=None, to_date=None, include_history=False):
+    def get_recognition_schedule(self, from_date=None, to_date=None, include_history=False, items=None):
         """
         Calculate the recognition schedule for all contract items.
 
@@ -554,6 +554,7 @@ class Contract(TenantModel):
             from_date: Start of the forecast period (default: today)
             to_date: End of the forecast period (default: from_date + 13 months)
             include_history: Include past recognition periods (default: False)
+            items: Pre-loaded items queryset (default: None, queries DB)
 
         Returns:
             List of dicts with:
@@ -579,8 +580,9 @@ class Contract(TenantModel):
         interval_months = self.get_interval_months()
         events = defaultdict(lambda: {"items": [], "total": Decimal("0")})
 
-        # Get all active items with prefetched price_periods to avoid N+1 queries
-        items = self.items.select_related("product").prefetch_related("price_periods").all()
+        # Use pre-loaded items if provided, otherwise query from DB
+        if items is None:
+            items = self.items.select_related("product").prefetch_related("price_periods").all()
 
         for item in items:
             # Skip descriptive-only items (no product = no billing)

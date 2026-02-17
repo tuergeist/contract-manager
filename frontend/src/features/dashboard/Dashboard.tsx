@@ -42,28 +42,6 @@ const MY_TODOS_QUERY = gql`
   }
 `
 
-const TEAM_TODOS_QUERY = gql`
-  query TeamTodos($limit: Int) {
-    teamTodos(limit: $limit) {
-      id
-      text
-      reminderDate
-      isPublic
-      isCompleted
-      completedAt
-      entityType
-      entityName
-      entityId
-      createdById
-      createdByName
-      assignedToId
-      assignedToName
-      contractId
-      contractItemId
-      customerId
-    }
-  }
-`
 
 interface DashboardKPIs {
   totalActiveContracts: number
@@ -80,25 +58,19 @@ interface DashboardKPIsData {
 
 interface TodosData {
   myTodos?: TodoItem[]
-  teamTodos?: TodoItem[]
 }
 
 export function Dashboard() {
   const { t } = useTranslation()
   const [myClosedDays, setMyClosedDays] = useState<'none' | '2' | '14'>('2')
-  const [teamClosedDays, setTeamClosedDays] = useState<'none' | '2' | '14'>('2')
 
   const { data: kpisData, loading: kpisLoading, error: kpisError } = useQuery<DashboardKPIsData>(DASHBOARD_KPIS_QUERY)
   const { data: myTodosData, loading: myTodosLoading, refetch: refetchMyTodos } = useQuery<TodosData>(MY_TODOS_QUERY, {
-    variables: { limit: 50 },  // Fetch more to account for filtering
-  })
-  const { data: teamTodosData, loading: teamTodosLoading, refetch: refetchTeamTodos } = useQuery<TodosData>(TEAM_TODOS_QUERY, {
-    variables: { limit: 50 },  // Fetch more to account for filtering
+    variables: { limit: 50 },
   })
 
   const handleTodoUpdate = () => {
     refetchMyTodos()
-    refetchTeamTodos()
   }
 
   // Filter todos: show completed based on selected days window
@@ -116,11 +88,6 @@ export function Dashboard() {
   const myTodos = useMemo(
     () => filterTodos(myTodosData?.myTodos || [], myClosedDays),
     [myTodosData, myClosedDays]
-  )
-
-  const teamTodos = useMemo(
-    () => filterTodos(teamTodosData?.teamTodos || [], teamClosedDays),
-    [teamTodosData, teamClosedDays]
   )
 
   if (kpisLoading) {
@@ -189,8 +156,7 @@ export function Dashboard() {
       </div>
 
       {/* Todos Section */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* My Todos */}
+      <div>
         <div className="rounded-lg border bg-card p-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">{t('todos.myTodos')}</h2>
@@ -218,39 +184,6 @@ export function Dashboard() {
               todos={myTodos}
               onUpdate={handleTodoUpdate}
               canDelete={() => true}
-            />
-          )}
-        </div>
-
-        {/* Team Todos */}
-        <div className="rounded-lg border bg-card p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">{t('todos.teamTodos')}</h2>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>{t('todos.showCompleted')}</span>
-              <div className="inline-flex rounded-md border">
-                {(['none', '2', '14'] as const).map((val) => (
-                  <button
-                    key={val}
-                    onClick={() => setTeamClosedDays(val)}
-                    className={`px-2 py-1 text-xs first:rounded-l-md last:rounded-r-md ${teamClosedDays === val ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                  >
-                    {val === 'none' ? t('todos.closedNone') : t('todos.closedDays', { days: val })}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-          {teamTodosLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <TodoList
-              todos={teamTodos}
-              showCreator
-              onUpdate={handleTodoUpdate}
-              canDelete={() => false}
             />
           )}
         </div>
