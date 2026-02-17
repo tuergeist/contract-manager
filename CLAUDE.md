@@ -121,6 +121,10 @@ Status transition buttons (Activate, Pause, Cancel, etc.) appear only in Detail 
 
 When modifying Docker build for production, edit `Dockerfile.prod` files. CI (`.github/workflows/build.yml`) uses these to build and push images to ghcr.io.
 
+## Release Tags
+
+Tags have **no `v` prefix**: use `1.7.2`, not `v1.7.2`. The CI workflow triggers on `[0-9]*`.
+
 ## Key Conventions
 
 - All development happens inside Docker containers
