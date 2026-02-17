@@ -345,8 +345,8 @@ class Contract(TenantModel):
         items = self.items.select_related("product").prefetch_related("price_periods").all()
 
         for item in items:
-            # Skip descriptive-only items (no product = no billing)
-            if not item.product:
+            # Skip descriptive-only items (no product and no price)
+            if not item.product and not item.unit_price:
                 continue
 
             # Cache the prefetched price_periods as a list for in-memory lookups
@@ -431,7 +431,7 @@ class Contract(TenantModel):
                     amount = item.quantity * price_at_date * interval_months
                     events[billing_date]["items"].append({
                         "item_id": item.id,
-                        "product_name": item.product.name,
+                        "product_name": item.product.name if item.product else (item.description or "Discount"),
                         "quantity": item.quantity,
                         "unit_price": price_at_date,
                         "amount": amount,
@@ -470,7 +470,7 @@ class Contract(TenantModel):
             amount = item.quantity * price_at_date * interval_months * prorate_factor
             events[start_date]["items"].append({
                 "item_id": item.id,
-                "product_name": item.product.name,
+                "product_name": item.product.name if item.product else (item.description or "Discount"),
                 "quantity": item.quantity,
                 "unit_price": price_at_date,
                 "amount": amount.quantize(Decimal("0.01")),
@@ -502,7 +502,7 @@ class Contract(TenantModel):
                     amount = item.quantity * price_at_date * interval_months
                     events[billing_date]["items"].append({
                         "item_id": item.id,
-                        "product_name": item.product.name,
+                        "product_name": item.product.name if item.product else (item.description or "Discount"),
                         "quantity": item.quantity,
                         "unit_price": price_at_date,
                         "amount": amount,
@@ -531,7 +531,7 @@ class Contract(TenantModel):
             amount = item.quantity * price_at_date
             events[billing_date]["items"].append({
                 "item_id": item.id,
-                "product_name": item.product.name,
+                "product_name": item.product.name if item.product else (item.description or "Discount"),
                 "quantity": item.quantity,
                 "unit_price": price_at_date,
                 "amount": amount,
@@ -584,8 +584,8 @@ class Contract(TenantModel):
             items = self.items.select_related("product").prefetch_related("price_periods").all()
 
         for item in items:
-            # Skip descriptive-only items (no product = no billing)
-            if not item.product:
+            # Skip descriptive-only items (no product and no price)
+            if not item.product and not item.unit_price:
                 continue
 
             # Cache the prefetched price_periods as a list for in-memory lookups
@@ -670,7 +670,7 @@ class Contract(TenantModel):
                     amount = item.quantity * price_at_date * interval_months
                     events[recognition_date]["items"].append({
                         "item_id": item.id,
-                        "product_name": item.product.name,
+                        "product_name": item.product.name if item.product else (item.description or "Discount"),
                         "quantity": item.quantity,
                         "unit_price": price_at_date,
                         "amount": amount,
@@ -706,7 +706,7 @@ class Contract(TenantModel):
             amount = item.quantity * price_at_date * interval_months * prorate_factor
             events[start_date]["items"].append({
                 "item_id": item.id,
-                "product_name": item.product.name,
+                "product_name": item.product.name if item.product else (item.description or "Discount"),
                 "quantity": item.quantity,
                 "unit_price": price_at_date,
                 "amount": amount.quantize(Decimal("0.01")),
@@ -738,7 +738,7 @@ class Contract(TenantModel):
                     amount = item.quantity * price_at_date * interval_months
                     events[recognition_date]["items"].append({
                         "item_id": item.id,
-                        "product_name": item.product.name,
+                        "product_name": item.product.name if item.product else (item.description or "Discount"),
                         "quantity": item.quantity,
                         "unit_price": price_at_date,
                         "amount": amount,
@@ -767,7 +767,7 @@ class Contract(TenantModel):
             amount = item.quantity * price_at_date
             events[recognition_date]["items"].append({
                 "item_id": item.id,
-                "product_name": item.product.name,
+                "product_name": item.product.name if item.product else (item.description or "Discount"),
                 "quantity": item.quantity,
                 "unit_price": price_at_date,
                 "amount": amount,

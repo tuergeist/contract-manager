@@ -670,6 +670,70 @@ class TestOneOffItemBillingSchedule:
         event = schedule[0]
         assert event["items"][0]["amount"] == Decimal("500.00")
 
+    def test_discount_item_included_in_billing_schedule(self, tenant, annual_contract, product):
+        """Discount items (no product, negative price) should appear in the billing schedule."""
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("1200.00"),
+            price_period="annual",
+        )
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=None,
+            description="Volume Discount",
+            quantity=1,
+            unit_price=Decimal("-120.00"),
+            price_period="annual",
+        )
+
+        schedule = annual_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1),
+            to_date=date(2025, 12, 31),
+        )
+
+        assert len(schedule) == 1
+        event = schedule[0]
+        assert len(event["items"]) == 2
+        # Product: 1200/12*12 = 1200, Discount: -120/12*12 = -120
+        assert event["total"] == Decimal("1080.00")
+
+    def test_discount_item_included_in_recognition_schedule(self, tenant, annual_contract, product):
+        """Discount items (no product, negative price) should appear in the recognition schedule."""
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("1200.00"),
+            price_period="annual",
+        )
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=None,
+            description="Volume Discount",
+            quantity=1,
+            unit_price=Decimal("-120.00"),
+            price_period="annual",
+        )
+
+        schedule = annual_contract.get_recognition_schedule(
+            from_date=date(2025, 1, 1),
+            to_date=date(2025, 12, 31),
+            include_history=True,
+        )
+
+        # Annual contract = 1 recognition event per year
+        assert len(schedule) == 1
+        event = schedule[0]
+        assert len(event["items"]) == 2
+        # Product: 1200/12*12 = 1200, Discount: -120/12*12 = -120
+        assert event["total"] == Decimal("1080.00")
+
     def test_one_off_recognition_uses_full_price(self, tenant, annual_contract, product):
         """Recognition schedule should also use the full price for one-off items."""
         item = ContractItem.objects.create(
