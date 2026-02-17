@@ -284,7 +284,7 @@ class TenantQuery:
         return None
 
     @strawberry.field
-    def current_tenant(self, info) -> TenantType | None:
+    def current_tenant(self, info: Info[Context, None]) -> TenantType | None:
         tenant = getattr(info.context.request, "tenant", None)
         return tenant
 
