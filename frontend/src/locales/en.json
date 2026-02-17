@@ -95,7 +95,9 @@
     "invoiceLanguageDefault": "System Default (German)",
     "invoiceLanguageDe": "German (Deutsch)",
     "invoiceLanguageEn": "English",
-    "invoiceLanguageHint": "Language used for invoice PDF labels and headers for this customer"
+    "invoiceLanguageHint": "Language used for invoice PDF labels and headers for this customer",
+    "contractGroups": "Contract Groups",
+    "ungrouped": "Ungrouped"
   },
   "products": {
     "title": "Products",

@@ -32,7 +32,7 @@ import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 type SortField = 'name' | 'status' | 'startDate' | 'endDate' | 'arr' | 'totalValue' | 'remainingMonths' | null
 type SortOrder = 'asc' | 'desc'
-type Tab = 'contracts' | 'invoices' | 'attachments' | 'activity' | 'todos'
+type Tab = 'contracts' | 'groups' | 'invoices' | 'attachments' | 'activity' | 'todos'
 
 const CUSTOMER_QUERY = gql`
   query Customer($id: ID!) {
@@ -1027,6 +1027,19 @@ export function CustomerDetail() {
             <FileText className="h-4 w-4" />
             {t('contracts.title')} ({customer.contracts.length})
           </button>
+          {contractGroups.length > 0 && (
+            <button
+              onClick={() => setActiveTab('groups')}
+              className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium ${
+                activeTab === 'groups'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+              }`}
+            >
+              <FolderOpen className="h-4 w-4" />
+              {t('customers.contractGroups')} ({contractGroups.length})
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('invoices')}
             className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium ${
@@ -1280,6 +1293,67 @@ export function CustomerDetail() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Contract Groups Tab */}
+      {activeTab === 'groups' && (
+        <div data-testid="customer-groups-section">
+          <div className="overflow-hidden rounded-lg border">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('contracts.group.title')}
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('contracts.title')}
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('contracts.detail.totalValue')}
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('contracts.detail.arr')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {(() => {
+                  const visibleContracts = customer.contracts.filter((c) => c.status !== 'deleted')
+
+                  const rows = contractGroups.map((group) => {
+                    const groupContracts = visibleContracts.filter((c) => String(c.group?.id) === String(group.id))
+                    const totalValue = groupContracts.reduce((sum, c) => sum + parseFloat(c.totalValue || '0'), 0)
+                    const arr = groupContracts.reduce((sum, c) => sum + parseFloat(c.arr || '0'), 0)
+                    return (
+                      <tr key={group.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{group.name}</td>
+                        <td className="px-6 py-4 text-right text-sm text-gray-500">{groupContracts.length}</td>
+                        <td className="px-6 py-4 text-right text-sm font-medium text-gray-900">{formatCurrency(totalValue.toString())}</td>
+                        <td className="px-6 py-4 text-right text-sm font-medium text-gray-900">{formatCurrency(arr.toString())}</td>
+                      </tr>
+                    )
+                  })
+
+                  const ungroupedContracts = visibleContracts.filter((c) => !c.group)
+                  if (ungroupedContracts.length > 0) {
+                    const totalValue = ungroupedContracts.reduce((sum, c) => sum + parseFloat(c.totalValue || '0'), 0)
+                    const arr = ungroupedContracts.reduce((sum, c) => sum + parseFloat(c.arr || '0'), 0)
+                    rows.push(
+                      <tr key="ungrouped" className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm text-gray-500 italic">{t('customers.ungrouped')}</td>
+                        <td className="px-6 py-4 text-right text-sm text-gray-500">{ungroupedContracts.length}</td>
+                        <td className="px-6 py-4 text-right text-sm font-medium text-gray-900">{formatCurrency(totalValue.toString())}</td>
+                        <td className="px-6 py-4 text-right text-sm font-medium text-gray-900">{formatCurrency(arr.toString())}</td>
+                      </tr>
+                    )
+                  }
+
+                  return rows
+                })()}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

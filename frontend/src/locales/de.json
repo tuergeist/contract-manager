@@ -95,7 +95,9 @@
     "invoiceLanguageDefault": "Systemstandard (Deutsch)",
     "invoiceLanguageDe": "Deutsch",
     "invoiceLanguageEn": "Englisch (English)",
-    "invoiceLanguageHint": "Sprache für Rechnungs-PDF Bezeichnungen und Kopfzeilen dieses Kunden"
+    "invoiceLanguageHint": "Sprache für Rechnungs-PDF Bezeichnungen und Kopfzeilen dieses Kunden",
+    "contractGroups": "Vertragsgruppen",
+    "ungrouped": "Ohne Gruppe"
   },
   "products": {
     "title": "Produkte",
