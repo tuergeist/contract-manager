@@ -1,14 +1,14 @@
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Liquidity forecast page accessible from navigation
-The system SHALL provide a "Liquidity Forecast" menu item in the main sidebar navigation that opens the forecast page at `/liquidity-forecast`.
+The system SHALL provide the liquidity forecast as a tab within the unified Forecasts page at `/forecasts?tab=liquidity`. The liquidity forecast SHALL NOT have a dedicated sidebar navigation entry.
 
 #### Scenario: Navigate to liquidity forecast
-- **WHEN** user clicks "Liquidity Forecast" in sidebar
-- **THEN** browser navigates to `/liquidity-forecast` and displays the forecast page
+- **WHEN** user clicks "Forecasts" in sidebar and then selects "Liquidity" tab
+- **THEN** the liquidity forecast content is displayed at `/forecasts?tab=liquidity`
 
 #### Scenario: Page requires authentication
-- **WHEN** unauthenticated user accesses `/liquidity-forecast`
+- **WHEN** unauthenticated user accesses `/forecasts?tab=liquidity`
 - **THEN** user is redirected to login page
 
 ### Requirement: Display cash-flow forecast chart

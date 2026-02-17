@@ -1,4 +1,4 @@
-## ADDED Requirements
+## Requirements
 
 ### Requirement: User can upload multiple invoice PDFs at once
 The system SHALL allow users to upload multiple PDF files in a single operation.
@@ -15,10 +15,10 @@ The system SHALL allow users to upload multiple PDF files in a single operation.
 - **WHEN** user initiates a bulk upload of 10 PDFs
 - **THEN** system shows upload progress and individual file status as each completes
 
-## MODIFIED Requirements
-
 ### Requirement: Imported invoice stores metadata
 The system SHALL store the following fields for each imported invoice: invoice_number, invoice_date, total_amount, currency, customer_name, customer (FK, nullable), pdf_file, extraction_status, created_by, import_batch (FK, nullable), expected_filename, receiver_emails, and upload_status.
+
+The Django model SHALL remain named `ImportedInvoice` with its existing database table. The GraphQL type exposed to the frontend SHALL be named `InvoiceType`.
 
 #### Scenario: Invoice record created on upload
 - **WHEN** a PDF is successfully uploaded
@@ -35,3 +35,19 @@ The system SHALL store the following fields for each imported invoice: invoice_n
 #### Scenario: Invoice updated when PDF matches expected
 - **WHEN** a PDF is uploaded that matches an expected_filename
 - **THEN** system updates the existing record with pdf_file and sets upload_status="uploaded"
+
+#### Scenario: GraphQL type name reflects generic invoice concept
+- **WHEN** the frontend queries for invoices
+- **THEN** the GraphQL schema SHALL expose the type as `InvoiceType` (not `ImportedInvoiceType`)
+
+### Requirement: GraphQL invoice query names
+The system SHALL expose invoice queries as `invoices` and `invoice` (not `importedInvoices`/`importedInvoice`).
+
+### Requirement: GraphQL invoice mutation names
+The system SHALL expose invoice mutations as `updateInvoice`, `deleteInvoice`, `confirmInvoice` (not `updateImportedInvoice`/`deleteImportedInvoice`/`confirmImportedInvoice`).
+
+### Requirement: GraphQL invoice type names
+The system SHALL use `InvoiceType`, `InvoiceConnection`, `InvoiceResult`, `UpdateInvoiceInput` (not `ImportedInvoiceType`/`ImportedInvoiceConnection`/`ImportedInvoiceResult`/`UpdateImportedInvoiceInput`).
+
+### Requirement: Frontend component and interface names
+The system SHALL use `InvoiceList` component (file: `InvoiceList.tsx`), `Invoice` interface, `InvoiceImportBatch` interface (not `ImportedInvoiceList`/`ImportedInvoice`/`ImportBatch`).
