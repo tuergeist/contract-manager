@@ -523,12 +523,11 @@ class Contract(TenantModel):
 
         # Only include if within our date range
         if billing_date >= from_date and billing_date <= to_date:
-            # Use cached price lookup if price_periods provided, else fallback
+            # One-off items use the full price, not monthly-normalized
             if price_periods_list is not None:
-                price_at_date = item.get_price_at_cached(billing_date, price_periods_list)
+                price_at_date = item.get_price_at_cached(billing_date, price_periods_list, normalize_to_monthly=False)
             else:
-                price_at_date = item.get_price_at(billing_date)
-            # One-off items use the raw price (not multiplied by interval)
+                price_at_date = item.get_price_at(billing_date, normalize_to_monthly=False)
             amount = item.quantity * price_at_date
             events[billing_date]["items"].append({
                 "item_id": item.id,
@@ -760,12 +759,11 @@ class Contract(TenantModel):
 
         # Only include if within our date range
         if recognition_date >= from_date and recognition_date <= to_date:
-            # Use cached price lookup if price_periods provided, else fallback
+            # One-off items use the full price, not monthly-normalized
             if price_periods_list is not None:
-                price_at_date = item.get_price_at_cached(recognition_date, price_periods_list)
+                price_at_date = item.get_price_at_cached(recognition_date, price_periods_list, normalize_to_monthly=False)
             else:
-                price_at_date = item.get_price_at(recognition_date)
-            # One-off items use the raw price (not multiplied by interval)
+                price_at_date = item.get_price_at(recognition_date, normalize_to_monthly=False)
             amount = item.quantity * price_at_date
             events[recognition_date]["items"].append({
                 "item_id": item.id,

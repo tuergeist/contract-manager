@@ -621,6 +621,81 @@ class TestBillingScheduleWithPricePeriods:
         assert event["total"] == Decimal("600.00")
 
 
+class TestOneOffItemBillingSchedule:
+    """Test that one-off items use the full stated price, not monthly-normalized."""
+
+    def test_one_off_annual_price_billed_in_full(self, tenant, annual_contract, product):
+        """A one-off item priced at 150,000/year should bill 150,000 — not 12,500."""
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("150000.00"),
+            price_period="annual",
+            is_one_off=True,
+            billing_start_date=date(2025, 1, 1),
+        )
+
+        schedule = annual_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1),
+            to_date=date(2025, 12, 31),
+        )
+
+        assert len(schedule) == 1
+        event = schedule[0]
+        assert event["items"][0]["is_one_off"] is True
+        assert event["items"][0]["amount"] == Decimal("150000.00")
+        assert event["total"] == Decimal("150000.00")
+
+    def test_one_off_monthly_price_billed_in_full(self, tenant, monthly_contract, product):
+        """A one-off item priced at 500/month should bill exactly 500."""
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=monthly_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("500.00"),
+            price_period="monthly",
+            is_one_off=True,
+            billing_start_date=date(2025, 1, 1),
+        )
+
+        schedule = monthly_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1),
+            to_date=date(2025, 12, 31),
+        )
+
+        assert len(schedule) == 1
+        event = schedule[0]
+        assert event["items"][0]["amount"] == Decimal("500.00")
+
+    def test_one_off_recognition_uses_full_price(self, tenant, annual_contract, product):
+        """Recognition schedule should also use the full price for one-off items."""
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=2,
+            unit_price=Decimal("10000.00"),
+            price_period="annual",
+            is_one_off=True,
+            start_date=date(2025, 3, 1),
+            billing_start_date=date(2025, 3, 1),
+        )
+
+        schedule = annual_contract.get_recognition_schedule(
+            from_date=date(2025, 1, 1),
+            to_date=date(2025, 12, 31),
+        )
+
+        assert len(schedule) == 1
+        event = schedule[0]
+        # 2 x €10,000 = €20,000
+        assert event["items"][0]["amount"] == Decimal("20000.00")
+        assert event["total"] == Decimal("20000.00")
+
+
 class TestContractDurationCalculation:
     """Test contract duration calculation methods."""
 
