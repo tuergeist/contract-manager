@@ -114,6 +114,9 @@ class AuditLogQuery:
         user_id: Optional[int] = None,
         action: Optional[str] = None,
         include_related: bool = False,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        search: Optional[str] = None,
         first: int = 25,
         after: Optional[str] = None,
     ) -> AuditLogConnection:
@@ -125,6 +128,9 @@ class AuditLogQuery:
             user_id: Filter by user ID
             action: Filter by action type ('create', 'update', 'delete')
             include_related: Include related entity changes (e.g., contract items for contracts)
+            date_from: Filter entries on or after this datetime
+            date_to: Filter entries on or before this datetime
+            search: Case-insensitive text search on entity name
             first: Number of items to fetch (max 100)
             after: Cursor for pagination
         """
@@ -154,6 +160,15 @@ class AuditLogQuery:
 
         if action:
             queryset = queryset.filter(action=action)
+
+        if date_from:
+            queryset = queryset.filter(timestamp__gte=date_from)
+
+        if date_to:
+            queryset = queryset.filter(timestamp__lte=date_to)
+
+        if search:
+            queryset = queryset.filter(entity_repr__icontains=search)
 
         # Order by timestamp descending (newest first)
         queryset = queryset.order_by("-timestamp", "-id")

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
-import { Loader2, Filter, ChevronDown } from 'lucide-react'
+import { Loader2, Filter, ChevronDown, Search } from 'lucide-react'
 import { AuditLogTable, AuditLogEntry } from './AuditLogTable'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 
@@ -9,12 +9,20 @@ const AUDIT_LOGS_QUERY = gql`
   query AuditLogs(
     $entityType: String
     $action: String
+    $userId: Int
+    $dateFrom: DateTime
+    $dateTo: DateTime
+    $search: String
     $first: Int
     $after: String
   ) {
     auditLogs(
       entityType: $entityType
       action: $action
+      userId: $userId
+      dateFrom: $dateFrom
+      dateTo: $dateTo
+      search: $search
       first: $first
       after: $after
     ) {
@@ -47,6 +55,16 @@ const AUDIT_LOGS_QUERY = gql`
   }
 `
 
+const USERS_QUERY = gql`
+  query UsersForAuditFilter {
+    users {
+      id
+      fullName
+      email
+    }
+  }
+`
+
 interface AuditLogsData {
   auditLogs: {
     edges: Array<{
@@ -61,6 +79,14 @@ interface AuditLogsData {
   }
 }
 
+interface UsersData {
+  users: Array<{
+    id: string
+    fullName: string
+    email: string
+  }>
+}
+
 const ENTITY_TYPES = ['contract', 'contract_item', 'customer', 'product'] as const
 const ACTIONS = ['create', 'update', 'delete'] as const
 const PAGE_SIZE = 25
@@ -69,11 +95,33 @@ export function AuditLogPage() {
   const { t } = useTranslation()
   const [entityTypeFilter, setEntityTypeFilter] = useState<string>('')
   const [actionFilter, setActionFilter] = useState<string>('')
+  const [userFilter, setUserFilter] = useState<string>('')
+  const [dateFrom, setDateFrom] = useState<string>('')
+  const [dateTo, setDateTo] = useState<string>('')
+  const [searchInput, setSearchInput] = useState<string>('')
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setSearchQuery(searchInput)
+    }, 300)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [searchInput])
+
+  const { data: usersData } = useQuery<UsersData>(USERS_QUERY)
 
   const { data, loading, error, fetchMore } = useQuery<AuditLogsData>(AUDIT_LOGS_QUERY, {
     variables: {
       entityType: entityTypeFilter || null,
       action: actionFilter || null,
+      userId: userFilter ? parseInt(userFilter, 10) : null,
+      dateFrom: dateFrom ? new Date(dateFrom + 'T00:00:00').toISOString() : null,
+      dateTo: dateTo ? new Date(dateTo + 'T23:59:59').toISOString() : null,
+      search: searchQuery || null,
       first: PAGE_SIZE,
       after: null,
     },
@@ -151,6 +199,49 @@ export function AuditLogPage() {
             ))}
           </select>
           <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        </div>
+
+        <div className="relative">
+          <select
+            value={userFilter}
+            onChange={(e) => setUserFilter(e.target.value)}
+            className="appearance-none rounded-md border border-gray-300 bg-white py-2 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="">{t('audit.allUsers')}</option>
+            {usersData?.users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.fullName || u.email}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        </div>
+
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          placeholder={t('audit.dateFrom')}
+          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        />
+
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          placeholder={t('audit.dateTo')}
+          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        />
+
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder={t('audit.searchPlaceholder')}
+            className="rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
         </div>
       </div>
 

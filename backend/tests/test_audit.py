@@ -1,8 +1,9 @@
 """Tests for audit logging."""
 
 import pytest
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
+from django.utils import timezone
 
 from apps.audit.models import AuditLog
 from apps.audit.services import AuditLogService, set_current_user, clear_current_user
@@ -418,3 +419,129 @@ class TestAuditLogGraphQL:
         for edge in data["data"]["auditLogs"]["edges"]:
             assert edge["node"]["entityType"] == "contract"
             assert edge["node"]["entityId"] == contract.id
+
+    def test_query_filter_by_date_range(self, db, tenant, user, customer, client):
+        """Test filtering audit logs by date range."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Date Filter Test",
+            status=Contract.Status.DRAFT,
+            start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+
+        from apps.core.auth import create_access_token
+
+        token = create_access_token(user)
+
+        # Query with dateFrom in the future — should return 0
+        future = (timezone.now() + timedelta(days=1)).isoformat()
+        response = client.post(
+            "/graphql",
+            content_type="application/json",
+            data={
+                "query": f"""
+                    query {{
+                        auditLogs(dateFrom: "{future}", first: 10) {{
+                            totalCount
+                        }}
+                    }}
+                """
+            },
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "errors" not in data
+        assert data["data"]["auditLogs"]["totalCount"] == 0
+
+        # Query with dateTo in the future — should return results
+        response = client.post(
+            "/graphql",
+            content_type="application/json",
+            data={
+                "query": f"""
+                    query {{
+                        auditLogs(dateTo: "{future}", first: 10) {{
+                            totalCount
+                        }}
+                    }}
+                """
+            },
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "errors" not in data
+        assert data["data"]["auditLogs"]["totalCount"] > 0
+
+    def test_query_filter_by_search(self, db, tenant, user, customer, client):
+        """Test filtering audit logs by entity name search."""
+        Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="UniqueSearchName123",
+            status=Contract.Status.DRAFT,
+            start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+
+        from apps.core.auth import create_access_token
+
+        token = create_access_token(user)
+        response = client.post(
+            "/graphql",
+            content_type="application/json",
+            data={
+                "query": """
+                    query {
+                        auditLogs(search: "UniqueSearchName123", first: 10) {
+                            edges {
+                                node {
+                                    entityRepr
+                                }
+                            }
+                            totalCount
+                        }
+                    }
+                """
+            },
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "errors" not in data
+        assert data["data"]["auditLogs"]["totalCount"] >= 1
+        for edge in data["data"]["auditLogs"]["edges"]:
+            assert "UniqueSearchName123" in edge["node"]["entityRepr"]
+
+    def test_query_filter_by_search_no_match(self, db, tenant, user, customer, client):
+        """Test search with no matching results."""
+        from apps.core.auth import create_access_token
+
+        token = create_access_token(user)
+        response = client.post(
+            "/graphql",
+            content_type="application/json",
+            data={
+                "query": """
+                    query {
+                        auditLogs(search: "XyzNonExistent999", first: 10) {
+                            totalCount
+                        }
+                    }
+                """
+            },
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "errors" not in data
+        assert data["data"]["auditLogs"]["totalCount"] == 0
