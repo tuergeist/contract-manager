@@ -685,6 +685,10 @@
     "showing": "{{count}} von {{total}} angezeigt",
     "allEntityTypes": "Alle Typen",
     "allActions": "Alle Aktionen",
+    "allUsers": "Alle Benutzer",
+    "dateFrom": "Von",
+    "dateTo": "Bis",
+    "searchPlaceholder": "Objekt suchen...",
     "systemUser": "System",
     "actions": {
       "create": "Erstellt",
@@ -947,7 +951,10 @@
       "filtersSaved": "Filter erfolgreich gespeichert",
       "filtersSaveFailed": "Filter konnten nicht gespeichert werden",
       "selectProperty": "Eigenschaft auswählen...",
-      "noPropertiesFound": "Keine Eigenschaften gefunden"
+      "noPropertiesFound": "Keine Eigenschaften gefunden",
+      "autoSync": "Automatische Synchronisierung alle 6 Stunden",
+      "autoSyncDescription": "Kunden, Produkte und Deals automatisch im Hintergrund synchronisieren",
+      "lastAutoSync": "Letzte Auto-Sync"
     }
   },
   "timeTracking": {

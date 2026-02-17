@@ -51,6 +51,10 @@ const HUBSPOT_SETTINGS_QUERY = gql`
       lastSync
       lastProductSync
       lastDealSync
+      autoSyncEnabled
+      lastAutoSyncCustomers
+      lastAutoSyncProducts
+      lastAutoSyncDeals
       companyFilters {
         propertyName
         values
@@ -119,6 +123,15 @@ const SAVE_COMPANY_FILTERS = gql`
   }
 `
 
+const SET_HUBSPOT_AUTO_SYNC = gql`
+  mutation SetHubSpotAutoSync($enabled: Boolean!) {
+    setHubspotAutoSync(enabled: $enabled) {
+      success
+      error
+    }
+  }
+`
+
 interface SettingsProps {
   showHeader?: boolean
 }
@@ -151,6 +164,7 @@ export function Settings({ showHeader = true }: SettingsProps) {
   const [syncProducts, { loading: syncingProducts }] = useMutation(SYNC_HUBSPOT_PRODUCTS)
   const [syncDeals, { loading: syncingDeals }] = useMutation(SYNC_HUBSPOT_DEALS)
   const [saveFilters, { loading: savingFilters }] = useMutation(SAVE_COMPANY_FILTERS)
+  const [setAutoSync] = useMutation(SET_HUBSPOT_AUTO_SYNC)
 
   // Initialize time tracking show revenue from settings
   useEffect(() => {
@@ -368,6 +382,20 @@ export function Settings({ showHeader = true }: SettingsProps) {
   const lastDealSync = hubspotSettings?.lastDealSync
     ? formatDateTime(hubspotSettings.lastDealSync)
     : null
+  const lastAutoSyncCustomers = hubspotSettings?.lastAutoSyncCustomers
+    ? formatDateTime(hubspotSettings.lastAutoSyncCustomers)
+    : null
+  const lastAutoSyncProducts = hubspotSettings?.lastAutoSyncProducts
+    ? formatDateTime(hubspotSettings.lastAutoSyncProducts)
+    : null
+  const lastAutoSyncDeals = hubspotSettings?.lastAutoSyncDeals
+    ? formatDateTime(hubspotSettings.lastAutoSyncDeals)
+    : null
+
+  const handleToggleAutoSync = async (enabled: boolean) => {
+    await setAutoSync({ variables: { enabled } })
+    refetchSettings()
+  }
 
   return (
     <div>
@@ -653,6 +681,38 @@ export function Settings({ showHeader = true }: SettingsProps) {
                       {dealSyncMessage.text}
                     </p>
                   )}
+                </div>
+
+                {/* Auto-sync toggle */}
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-900">{t('settings.hubspot.autoSync')}</h3>
+                      <p className="text-xs text-gray-500">{t('settings.hubspot.autoSyncDescription')}</p>
+                      {(lastAutoSyncCustomers || lastAutoSyncProducts || lastAutoSyncDeals) && (
+                        <div className="mt-1 space-y-0.5">
+                          {lastAutoSyncCustomers && (
+                            <p className="text-xs text-gray-400">{t('settings.hubspot.lastAutoSync')}: {t('settings.hubspot.customers')} {lastAutoSyncCustomers}</p>
+                          )}
+                          {lastAutoSyncProducts && (
+                            <p className="text-xs text-gray-400">{t('settings.hubspot.lastAutoSync')}: {t('settings.hubspot.products')} {lastAutoSyncProducts}</p>
+                          )}
+                          {lastAutoSyncDeals && (
+                            <p className="text-xs text-gray-400">{t('settings.hubspot.lastAutoSync')}: {t('settings.hubspot.deals')} {lastAutoSyncDeals}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <label className="relative inline-flex cursor-pointer items-center">
+                      <input
+                        type="checkbox"
+                        checked={hubspotSettings?.autoSyncEnabled || false}
+                        onChange={(e) => handleToggleAutoSync(e.target.checked)}
+                        className="peer sr-only"
+                      />
+                      <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300" />
+                    </label>
+                  </div>
                 </div>
               </div>
             )}

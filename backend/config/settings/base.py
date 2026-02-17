@@ -213,4 +213,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.contracts.tasks.refresh_all_time_tracking_data",
         "schedule": 43200,  # every 12 hours
     },
+    "sync-hubspot-all-tenants": {
+        "task": "apps.customers.tasks.sync_all_hubspot_tenants",
+        "schedule": 21600,  # every 6 hours
+    },
 }

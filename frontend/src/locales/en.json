@@ -685,6 +685,10 @@
     "showing": "Showing {{count}} of {{total}}",
     "allEntityTypes": "All types",
     "allActions": "All actions",
+    "allUsers": "All users",
+    "dateFrom": "From",
+    "dateTo": "To",
+    "searchPlaceholder": "Search entity...",
     "systemUser": "System",
     "actions": {
       "create": "Created",
@@ -947,7 +951,10 @@
       "filtersSaved": "Filters saved successfully",
       "filtersSaveFailed": "Failed to save filters",
       "selectProperty": "Select property...",
-      "noPropertiesFound": "No properties found"
+      "noPropertiesFound": "No properties found",
+      "autoSync": "Automatic sync every 6 hours",
+      "autoSyncDescription": "Automatically sync customers, products, and deals in the background",
+      "lastAutoSync": "Last auto-sync"
     }
   },
   "timeTracking": {

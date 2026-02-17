@@ -168,6 +168,10 @@ class HubSpotSettings:
     last_product_sync: str | None
     last_deal_sync: str | None
     company_filters: list[HubSpotCompanyFilter]
+    auto_sync_enabled: bool = False
+    last_auto_sync_customers: str | None = None
+    last_auto_sync_products: str | None = None
+    last_auto_sync_deals: str | None = None
 
 
 @strawberry.type
@@ -395,6 +399,10 @@ class TenantQuery:
             last_product_sync=config.get("last_product_sync"),
             last_deal_sync=config.get("last_deal_sync"),
             company_filters=company_filters,
+            auto_sync_enabled=config.get("auto_sync_enabled", False),
+            last_auto_sync_customers=config.get("last_auto_sync_customers"),
+            last_auto_sync_products=config.get("last_auto_sync_products"),
+            last_auto_sync_deals=config.get("last_auto_sync_deals"),
         )
 
     @strawberry.field
@@ -631,6 +639,26 @@ class TenantMutation:
             {"property_name": f.property_name, "values": f.values}
             for f in filters
         ]
+        tenant.save(update_fields=["hubspot_config"])
+
+        return HubSpotTestResult(success=True, error=None)
+
+    @strawberry.mutation
+    def set_hubspot_auto_sync(
+        self,
+        info: Info[Context, None],
+        enabled: bool,
+    ) -> HubSpotTestResult:
+        """Enable or disable automatic HubSpot sync."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return HubSpotTestResult(success=False, error="No tenant assigned")
+
+        tenant = user.tenant
+        if not tenant.hubspot_config:
+            tenant.hubspot_config = {}
+
+        tenant.hubspot_config["auto_sync_enabled"] = enabled
         tenant.save(update_fields=["hubspot_config"])
 
         return HubSpotTestResult(success=True, error=None)
