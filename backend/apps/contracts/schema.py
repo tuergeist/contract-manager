@@ -563,14 +563,14 @@ class UpdateContractItemInput:
     unit_price: Decimal | None = None
     price_period: str | None = None  # Period the price refers to (monthly, quarterly, annual, etc.)
     price_source: str | None = None
-    start_date: date | None = None
-    billing_start_date: date | None = None
-    billing_end_date: date | None = None
-    align_to_contract_at: date | None = None
+    start_date: date | None = UNSET
+    billing_start_date: date | None = UNSET
+    billing_end_date: date | None = UNSET
+    align_to_contract_at: date | None = UNSET
     is_one_off: bool | None = None
     order_confirmation_number: str | None = None
     price_locked: bool | None = None
-    price_locked_until: date | None = None
+    price_locked_until: date | None = UNSET
 
 
 @strawberry.input
@@ -2326,13 +2326,13 @@ class ContractMutation:
                     item.price_period = input.price_period
                 if input.price_source is not None:
                     item.price_source = input.price_source
-                if input.start_date is not None:
+                if input.start_date is not UNSET:
                     item.start_date = input.start_date
-                if input.billing_start_date is not None:
+                if input.billing_start_date is not UNSET:
                     item.billing_start_date = input.billing_start_date
-                if input.billing_end_date is not None:
+                if input.billing_end_date is not UNSET:
                     item.billing_end_date = input.billing_end_date
-                if input.align_to_contract_at is not None:
+                if input.align_to_contract_at is not UNSET:
                     item.align_to_contract_at = input.align_to_contract_at
                 if input.is_one_off is not None:
                     item.is_one_off = input.is_one_off
@@ -2340,7 +2340,7 @@ class ContractMutation:
                     item.order_confirmation_number = input.order_confirmation_number
                 if input.price_locked is not None:
                     item.price_locked = input.price_locked
-                if input.price_locked_until is not None:
+                if input.price_locked_until is not UNSET:
                     item.price_locked_until = input.price_locked_until
 
                 item.save()

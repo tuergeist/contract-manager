@@ -791,7 +791,6 @@ class HubSpotService:
         customer = Customer.objects.filter(
             tenant=self.tenant,
             hubspot_id=company_hubspot_id,
-            is_active=True,
         ).first()
 
         if not customer:
@@ -929,7 +928,8 @@ class HubSpotService:
         if current_price and current_price.price == unit_price:
             price_source = ContractItem.PriceSource.LIST
 
-        # Create contract item
+        # Create contract item (start_date and billing_start_date
+        # default to the contract's values when left null)
         ContractItem.objects.create(
             tenant=self.tenant,
             contract=contract,
@@ -937,8 +937,6 @@ class HubSpotService:
             quantity=quantity,
             unit_price=unit_price,
             price_source=price_source,
-            start_date=contract.start_date,
-            billing_start_date=contract.billing_start_date,
         )
 
     def _update_contract_billing_interval_from_items(self, contract: Contract) -> None:

@@ -29,6 +29,7 @@ import {
   Scan,
   GripVertical,
   ChevronDown,
+  X,
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear } from '@/lib/utils'
 import { getToken } from '@/lib/auth'
@@ -2712,22 +2713,38 @@ function EditItemModal({
                     {t('contracts.item.startDate')}{' '}
                     <span className="text-muted-foreground font-normal">{t('contracts.item.startDateSubtitle')}</span>
                   </label>
-                  <Input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                  />
+                  <div className="flex gap-1">
+                    <Input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="flex-1"
+                    />
+                    {startDate && (
+                      <Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => setStartDate('')}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
                     {t('contracts.item.billingStartDate')}{' '}
                     <span className="text-muted-foreground font-normal">{t('contracts.item.billingStartDateSubtitle')}</span>
                   </label>
-                  <Input
-                    type="date"
-                    value={billingStartDate}
-                    onChange={(e) => setBillingStartDate(e.target.value)}
-                  />
+                  <div className="flex gap-1">
+                    <Input
+                      type="date"
+                      value={billingStartDate}
+                      onChange={(e) => setBillingStartDate(e.target.value)}
+                      className="flex-1"
+                    />
+                    {billingStartDate && (
+                      <Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => setBillingStartDate('')}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -2735,22 +2752,38 @@ function EditItemModal({
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">{t('contracts.item.billingEndDate')}</label>
-                  <Input
-                    type="date"
-                    value={billingEndDate}
-                    onChange={(e) => setBillingEndDate(e.target.value)}
-                  />
+                  <div className="flex gap-1">
+                    <Input
+                      type="date"
+                      value={billingEndDate}
+                      onChange={(e) => setBillingEndDate(e.target.value)}
+                      className="flex-1"
+                    />
+                    {billingEndDate && (
+                      <Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => setBillingEndDate('')}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {t('contracts.item.billingEndDateHint')}
                   </p>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">{t('contracts.item.alignToContractAt')}</label>
-                  <Input
-                    type="date"
-                    value={alignToContractAt}
-                    onChange={(e) => setAlignToContractAt(e.target.value)}
-                  />
+                  <div className="flex gap-1">
+                    <Input
+                      type="date"
+                      value={alignToContractAt}
+                      onChange={(e) => setAlignToContractAt(e.target.value)}
+                      className="flex-1"
+                    />
+                    {alignToContractAt && (
+                      <Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => setAlignToContractAt('')}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                   {item.suggestedAlignmentDate && (
                     <p className="text-xs text-muted-foreground">
                       {t('contracts.item.suggestedDate')}: {formatDate(item.suggestedAlignmentDate)}
