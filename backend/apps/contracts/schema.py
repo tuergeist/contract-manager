@@ -960,6 +960,7 @@ class TimeTrackingSummaryType:
     by_service: list[ServiceBreakdown]
     by_month: list[MonthlyBreakdown]
     mappings: list[TimeTrackingMappingType]
+    last_synced: datetime | None = None
 
 
 @strawberry.type
@@ -1842,8 +1843,8 @@ class ContractQuery:
     def time_tracking_summary(
         self, info: Info[Context, None], contract_id: strawberry.ID
     ) -> TimeTrackingSummaryType | None:
-        """Get time tracking summary for a contract's mapped projects."""
-        from apps.contracts.services.time_tracking import get_provider
+        """Get time tracking summary for a contract's mapped projects (from DB cache)."""
+        from apps.contracts.services.time_tracking import get_cached_summary
 
         user = require_perm(info, "contracts", "read")
         if not user.tenant:
@@ -1869,8 +1870,7 @@ class ContractQuery:
             for m in mappings
         ]
 
-        project_ids = [m.external_project_id for m in mappings]
-        if not project_ids:
+        if not mappings.exists():
             return TimeTrackingSummaryType(
                 total_hours=0,
                 total_revenue=0,
@@ -1879,27 +1879,17 @@ class ContractQuery:
                 mappings=mapping_types,
             )
 
-        provider = get_provider(user.tenant)
-        if not provider:
-            return TimeTrackingSummaryType(
-                total_hours=0,
-                total_revenue=0,
-                by_service=[],
-                by_month=[],
-                mappings=mapping_types,
-            )
-
-        summary = provider.get_time_summary(project_ids)
+        cached = get_cached_summary(mappings)
         return TimeTrackingSummaryType(
-            total_hours=summary.total_hours,
-            total_revenue=summary.total_revenue,
+            total_hours=cached["total_hours"],
+            total_revenue=cached["total_revenue"],
             by_service=[
                 ServiceBreakdown(
                     service_name=s["service_name"],
                     hours=s["hours"],
                     revenue=s["revenue"],
                 )
-                for s in summary.by_service
+                for s in cached["by_service"]
             ],
             by_month=[
                 MonthlyBreakdown(
@@ -1907,9 +1897,10 @@ class ContractQuery:
                     hours=m["hours"],
                     revenue=m["revenue"],
                 )
-                for m in summary.by_month
+                for m in cached["by_month"]
             ],
             mappings=mapping_types,
+            last_synced=cached["last_synced"],
         )
 
     @strawberry.field
@@ -3016,6 +3007,11 @@ class ContractMutation:
             external_project_name=external_project_name,
             external_customer_name=external_customer_name,
         )
+
+        # Trigger async sync so cached data is available quickly
+        from apps.contracts.tasks import sync_time_tracking_mapping_task
+        sync_time_tracking_mapping_task.delay(mapping.id)
+
         return TimeTrackingMappingResult(
             success=True,
             mapping=TimeTrackingMappingType(

@@ -14,6 +14,7 @@ const TIME_TRACKING_SUMMARY_QUERY = gql`
     timeTrackingSummary(contractId: $contractId) {
       totalHours
       totalRevenue
+      lastSynced
       byService {
         serviceName
         hours
@@ -219,6 +220,15 @@ export function TimeTrackingTab({ contractId, customerName }: TimeTrackingTabPro
             )}
           </div>
 
+          {/* Data freshness */}
+          <p className="text-xs text-gray-400">
+            {summary.lastSynced
+              ? t('timeTracking.lastUpdated', {
+                  time: new Date(summary.lastSynced).toLocaleString(),
+                })
+              : t('timeTracking.dataLoading')}
+          </p>
+
           {/* By Service */}
           {summary.byService.length > 0 && (
             <div className="rounded-lg border bg-white p-6">
@@ -384,7 +394,11 @@ function LinkProjectDialog({
                   </tr>
                 </thead>
                 <tbody>
-                  {projects.map((project) => {
+                  {[...projects].sort((a, b) => {
+                    const aLinked = linkedProjectIds.includes(a.id) ? 1 : 0
+                    const bLinked = linkedProjectIds.includes(b.id) ? 1 : 0
+                    return aLinked - bLinked
+                  }).map((project) => {
                     const isLinked = linkedProjectIds.includes(project.id)
                     return (
                       <tr key={project.id} className="border-b last:border-0">

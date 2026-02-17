@@ -972,7 +972,9 @@
     "revenue": "Revenue",
     "month": "Month",
     "noData": "No time data available",
-    "noProvider": "Time tracking not configured. Go to Settings to connect your provider."
+    "noProvider": "Time tracking not configured. Go to Settings to connect your provider.",
+    "lastUpdated": "Last updated: {{time}}",
+    "dataLoading": "Data is syncing..."
   },
   "todos": {
     "title": "Todos",

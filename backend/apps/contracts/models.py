@@ -1215,6 +1215,13 @@ class TimeTrackingProjectMapping(TenantModel):
     external_project_name = models.CharField(max_length=255)
     external_customer_name = models.CharField(max_length=255, blank=True, default="")
 
+    # Cached time tracking data (refreshed by Celery Beat)
+    cached_total_hours = models.FloatField(default=0)
+    cached_total_revenue = models.FloatField(default=0)
+    cached_by_service = models.JSONField(default=list)  # [{service_name, hours, revenue}]
+    cached_by_month = models.JSONField(default=list)  # [{month, hours, revenue}]
+    last_synced = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["external_customer_name", "external_project_name"]
         unique_together = ["tenant", "external_project_id"]

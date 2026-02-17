@@ -98,6 +98,24 @@ services:
     volumes:
       - media_data:/app/media
 
+  celery-beat:
+    image: ghcr.io/tuergeist/contract-manager/backend:main
+    restart: unless-stopped
+    command: celery -A config beat -l INFO
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      DATABASE_URL: postgres://${POSTGRES_USER:-contract_manager}:${POSTGRES_PASSWORD:-contract_manager}@db:5432/${POSTGRES_DB:-contract_manager}
+      REDIS_URL: redis://redis:6379/0
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
+
   frontend:
     image: ghcr.io/tuergeist/contract-manager/frontend:main
     restart: unless-stopped

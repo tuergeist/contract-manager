@@ -1,5 +1,6 @@
 """Clockodo time tracking provider implementation."""
 import logging
+import time
 from collections import defaultdict
 from datetime import date
 
@@ -32,15 +33,20 @@ class ClockodoProvider(TimeTrackingProvider):
         }
 
     def _get(self, endpoint: str, params: dict | None = None) -> dict:
-        """Make a GET request to the Clockodo API.
-
-        Args:
-            endpoint: Path relative to API_BASE, e.g. "projects" or "entries"
-        """
+        """Make a GET request to the Clockodo API with retry on 429."""
         url = f"{self.API_BASE}/{endpoint}"
-        response = httpx.get(url, headers=self._get_headers(), params=params, timeout=30)
+        for attempt in range(3):
+            response = httpx.get(url, headers=self._get_headers(), params=params, timeout=30)
+            if response.status_code == 429:
+                wait = 2**attempt  # 1s, 2s, 4s
+                logger.warning("Clockodo 429 rate limit on %s, retrying in %ss", endpoint, wait)
+                time.sleep(wait)
+                continue
+            response.raise_for_status()
+            return response.json()
+        # Final attempt failed with 429
         response.raise_for_status()
-        return response.json()
+        return response.json()  # unreachable but satisfies type checker
 
     def _get_all_pages(self, endpoint: str, key: str, params: dict | None = None) -> list:
         """Fetch all pages for a paginated endpoint.
@@ -166,6 +172,8 @@ class ClockodoProvider(TimeTrackingProvider):
                     total_hours += duration_hours
                     total_revenue += revenue
 
+                time.sleep(0.3)  # Pace API calls to avoid 429
+
                 # Get breakdown by service
                 params_by_service = {
                     "time_since": time_since,
@@ -182,6 +190,8 @@ class ClockodoProvider(TimeTrackingProvider):
                     revenue = float(group.get("revenue", 0) or 0)
                     service_data[service_name]["hours"] += duration_hours
                     service_data[service_name]["revenue"] += revenue
+
+                time.sleep(0.3)  # Pace API calls to avoid 429
 
                 # Get breakdown by month
                 params_by_month = {

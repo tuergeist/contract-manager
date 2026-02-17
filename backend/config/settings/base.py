@@ -208,3 +208,9 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_ACKS_LATE = True  # Ensure tasks aren't lost on worker crash
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_BEAT_SCHEDULE = {
+    "refresh-time-tracking-data": {
+        "task": "apps.contracts.tasks.refresh_all_time_tracking_data",
+        "schedule": 43200,  # every 12 hours
+    },
+}

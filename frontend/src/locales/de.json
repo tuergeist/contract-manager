@@ -972,7 +972,9 @@
     "revenue": "Umsatz",
     "month": "Monat",
     "noData": "Keine Zeitdaten verfügbar",
-    "noProvider": "Zeiterfassung nicht konfiguriert. Gehen Sie zu Einstellungen, um Ihren Anbieter zu verbinden."
+    "noProvider": "Zeiterfassung nicht konfiguriert. Gehen Sie zu Einstellungen, um Ihren Anbieter zu verbinden.",
+    "lastUpdated": "Zuletzt aktualisiert: {{time}}",
+    "dataLoading": "Daten werden synchronisiert..."
   },
   "todos": {
     "title": "Aufgaben",
