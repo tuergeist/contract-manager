@@ -694,6 +694,9 @@ export function InvoiceList() {
 
     if (sourceFilter !== 'IMPORTED') {
       for (const rec of generatedInvoices) {
+        // Apply payment status filter client-side for generated invoices
+        if (paymentStatus === 'PAID' && !rec.isPaid) continue
+        if (paymentStatus === 'UNPAID' && rec.isPaid) continue
         rows.push({
           key: `gen-${rec.id}`,
           source: 'generated',
@@ -978,26 +981,6 @@ export function InvoiceList() {
     setTransactionSearch('')
   }
 
-  const getStatusBadge = (invoice: Invoice) => {
-    const status = invoice.extractionStatus
-    switch (status) {
-      case 'pending':
-        return <Badge variant="secondary">{t('invoices.import.statusPending')}</Badge>
-      case 'extracting':
-        return <Badge variant="secondary"><Loader2 className="w-3 h-3 mr-1 animate-spin" />{t('invoices.import.statusExtracting')}</Badge>
-      case 'extracted':
-        return <Badge variant="default">{t('invoices.import.statusExtracted')}</Badge>
-      case 'extraction_failed':
-        return <Badge variant="destructive">{t('invoices.import.statusFailed')}</Badge>
-      case 'duplicate':
-        return <Badge variant="outline" className="text-orange-600 border-orange-600">{t('invoices.import.statusDuplicate')}</Badge>
-      case 'confirmed':
-        return <Badge variant="default" className="bg-green-500">{t('invoices.import.statusConfirmed')}</Badge>
-      default:
-        return <Badge variant="secondary">{status}</Badge>
-    }
-  }
-
   const getPaymentBadge = (invoice: Invoice) => {
     if (invoice.isPaid) {
       return <Badge variant="default" className="bg-green-500"><Check className="w-3 h-3 mr-1" />{t('invoices.import.paid')}</Badge>
@@ -1010,25 +993,6 @@ export function InvoiceList() {
       return <Badge variant="secondary">{t('invoices.import.uploadPending')}</Badge>
     }
     return null
-  }
-
-  const getGeneratedStatusBadge = (status: string) => {
-    switch (status) {
-      case 'finalized':
-        return <Badge variant="default">{t('invoices.import.generatedStatus.finalized')}</Badge>
-      case 'sent':
-        return <Badge variant="default" className="bg-blue-500">{t('invoices.import.generatedStatus.sent')}</Badge>
-      case 'paid':
-        return <Badge variant="default" className="bg-green-500">{t('invoices.import.generatedStatus.paid')}</Badge>
-      case 'dunning':
-        return <Badge variant="destructive">{t('invoices.import.generatedStatus.dunning')}</Badge>
-      case 'storno':
-        return <Badge variant="outline" className="text-orange-600 border-orange-600">{t('invoices.import.generatedStatus.storno')}</Badge>
-      case 'cancelled':
-        return <Badge variant="secondary">{t('invoices.import.generatedStatus.cancelled')}</Badge>
-      default:
-        return <Badge variant="secondary">{status}</Badge>
-    }
   }
 
   const canWrite = hasPermission('invoices', 'generate')
@@ -1131,9 +1095,8 @@ export function InvoiceList() {
             </button>
           ))}
         </div>
-        {/* Payment status filter - only for imported */}
-        {sourceFilter !== 'GENERATED' && (
-          <div className="inline-flex rounded-md border border-input">
+        {/* Payment status filter */}
+        <div className="inline-flex rounded-md border border-input">
             {[
               { value: 'ALL', label: t('invoices.import.filterAll') },
               { value: 'PAID', label: t('invoices.import.filterPaid') },
@@ -1152,8 +1115,7 @@ export function InvoiceList() {
                 {opt.label}
               </button>
             ))}
-          </div>
-        )}
+        </div>
         {/* Upload status filter - only for imported with pending batches */}
         {sourceFilter !== 'GENERATED' && hasPendingUploads && (
           <div className="inline-flex rounded-md border border-input">
@@ -1215,7 +1177,6 @@ export function InvoiceList() {
               {sourceFilter === 'ALL' && (
                 <th className="px-4 py-3">{t('invoices.import.source')}</th>
               )}
-              <th className="px-4 py-3">{t('invoices.import.colStatus')}</th>
               <th className="px-4 py-3">{t('invoices.import.colPayment')}</th>
               <th className="px-4 py-3 text-right">{t('common.actions')}</th>
             </tr>
@@ -1223,13 +1184,13 @@ export function InvoiceList() {
           <tbody>
             {isLoading && displayRows.length === 0 ? (
               <tr>
-                <td colSpan={sourceFilter === 'ALL' ? 8 : 7} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={sourceFilter === 'ALL' ? 7 : 6} className="px-4 py-8 text-center text-gray-500">
                   <Loader2 className="w-6 h-6 mx-auto animate-spin" />
                 </td>
               </tr>
             ) : displayRows.length === 0 ? (
               <tr>
-                <td colSpan={sourceFilter === 'ALL' ? 8 : 7} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={sourceFilter === 'ALL' ? 7 : 6} className="px-4 py-8 text-center text-gray-500">
                   {t('invoices.import.noInvoicesUnified')}
                 </td>
               </tr>
@@ -1335,14 +1296,6 @@ export function InvoiceList() {
                       )}
                     </td>
                   )}
-                  {/* Status */}
-                  <td className="px-4 py-3">
-                    {row.source === 'imported' && row.imported
-                      ? getStatusBadge(row.imported)
-                      : row.generated
-                        ? getGeneratedStatusBadge(row.generated.status)
-                        : null}
-                  </td>
                   {/* Payment */}
                   <td className="px-4 py-3">
                     {row.source === 'imported' && row.imported ? (
@@ -1501,25 +1454,32 @@ export function InvoiceList() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-500">
-            {t('common.showingOf', { from: (page - 1) * pageSize + 1, to: Math.min(page * pageSize, totalCount), total: totalCount })}
+            {t('common.pagination.showing', {
+              from: (page - 1) * pageSize + 1,
+              to: Math.min(page * pageSize, totalCount),
+              total: totalCount,
+            })}
           </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
+          <div className="flex items-center gap-2">
+            <button
               onClick={() => setPage(p => p - 1)}
               disabled={page === 1}
+              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
+              <ChevronLeft className="h-4 w-4" />
+              {t('common.pagination.previous')}
+            </button>
+            <span className="text-sm text-gray-500">
+              {t('common.pagination.page', { page, totalPages })}
+            </span>
+            <button
               onClick={() => setPage(p => p + 1)}
               disabled={!hasNextPage}
+              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
+              {t('common.pagination.next')}
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
       )}
