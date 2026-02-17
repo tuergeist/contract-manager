@@ -7,6 +7,7 @@ documents using the drafthorse library.
 import logging
 from datetime import date
 from decimal import Decimal
+from io import BytesIO
 from typing import Optional
 
 from drafthorse.models.accounting import ApplicableTradeTax
@@ -16,6 +17,16 @@ from drafthorse.models.party import TaxRegistration
 from drafthorse.models.payment import PaymentMeans
 from drafthorse.models.tradelines import LineItem
 from drafthorse.pdf import attach_xml
+from PIL import ImageCms
+from pypdf import PdfReader, PdfWriter
+from pypdf.generic import (
+    ArrayObject,
+    DecodedStreamObject,
+    DictionaryObject,
+    NameObject,
+    NumberObject,
+    create_string_object,
+)
 
 from apps.invoices.models import CompanyLegalData, InvoiceRecord
 from apps.invoices.types import InvoiceData
@@ -71,6 +82,61 @@ def _resolve_country_code(country: str) -> str:
     if len(country_stripped) == 2 and country_stripped.isalpha():
         return country_stripped.upper()
     return COUNTRY_CODE_MAP.get(country_stripped.lower(), "DE")
+
+
+def _add_pdfa_output_intent(pdf_bytes: bytes) -> bytes:
+    """Add sRGB OutputIntent required for PDF/A-3b compliance.
+
+    drafthorse's attach_xml() only preserves existing OutputIntents from the
+    input PDF. Since WeasyPrint produces regular PDFs without OutputIntents,
+    the resulting document lacks the ICC color profile that PDF/A-3b requires.
+    This function adds a GTS_PDFA1 OutputIntent with an sRGB ICC profile.
+    """
+    reader = PdfReader(BytesIO(pdf_bytes))
+
+    # Skip if OutputIntents already present
+    try:
+        root = reader.trailer["/Root"]
+        if "/OutputIntents" in root:
+            return pdf_bytes
+    except KeyError:
+        pass
+
+    writer = PdfWriter(clone_from=reader)
+
+    # Generate sRGB ICC profile via Pillow
+    srgb_profile = ImageCms.createProfile("sRGB")
+    icc_data = ImageCms.ImageCmsProfile(srgb_profile).tobytes()
+
+    icc_stream = DecodedStreamObject()
+    icc_stream.set_data(icc_data)
+    icc_stream.update({
+        NameObject("/N"): NumberObject(3),  # RGB = 3 components
+    })
+    icc_ref = writer._add_object(icc_stream)
+
+    output_intent = DictionaryObject({
+        NameObject("/Type"): NameObject("/OutputIntent"),
+        NameObject("/S"): NameObject("/GTS_PDFA1"),
+        NameObject("/OutputConditionIdentifier"): create_string_object(
+            "sRGB IEC61966-2.1"
+        ),
+        NameObject("/RegistryName"): create_string_object(
+            "http://www.color.org"
+        ),
+        NameObject("/Info"): create_string_object("sRGB IEC61966-2.1"),
+        NameObject("/DestOutputProfile"): icc_ref,
+    })
+    output_intent_ref = writer._add_object(output_intent)
+
+    writer._root_object[NameObject("/OutputIntents")] = ArrayObject(
+        [output_intent_ref]
+    )
+
+    buf = BytesIO()
+    writer.write(buf)
+    buf.seek(0)
+    return buf.read()
 
 
 class ZugferdService:
@@ -363,12 +429,13 @@ class ZugferdService:
             PDF/A-3b bytes with embedded ZUGFeRD XML.
         """
         pdf_metadata = metadata or {}
-        return attach_xml(
+        result = attach_xml(
             original_pdf=pdf_bytes,
             xml_data=xml_bytes,
             level="EN 16931",
             metadata=pdf_metadata if pdf_metadata else None,
         )
+        return _add_pdfa_output_intent(result)
 
     def generate_zugferd_pdf(
         self,
