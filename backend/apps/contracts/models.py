@@ -383,8 +383,8 @@ class Contract(TenantModel):
             # Use item-level alignment, or fall back to contract-level alignment
             align_date = item.align_to_contract_at or self.billing_alignment_date
 
-            # Only use alignment if it's after the item's billing start
-            if align_date and align_date > item_billing_start:
+            # Use alignment if it's on or after the item's billing start
+            if align_date and align_date >= item_billing_start:
                 # Item has alignment - generate dates before and after alignment
                 self._add_pre_alignment_events(
                     events, item, item_billing_start, align_date,
@@ -458,7 +458,8 @@ class Contract(TenantModel):
         from dateutil.relativedelta import relativedelta
 
         # First billing is at start_date (pro-rated period until align_date)
-        if start_date >= from_date and start_date <= to_date:
+        # Skip if start_date equals align_date (no pre-alignment period)
+        if start_date >= from_date and start_date <= to_date and start_date < align_date:
             # Calculate proration factor using months
             # Count full months between start_date and align_date
             months_in_period = (
@@ -630,8 +631,8 @@ class Contract(TenantModel):
             # Use item-level alignment, or fall back to contract-level alignment
             align_date = item.align_to_contract_at or self.billing_alignment_date
 
-            # Only use alignment if it's after the item's recognition start
-            if align_date and align_date > item_recognition_start:
+            # Use alignment if it's on or after the item's recognition start
+            if align_date and align_date >= item_recognition_start:
                 # Item has alignment - generate dates before and after alignment
                 self._add_pre_alignment_recognition_events(
                     events, item, item_recognition_start, align_date,
@@ -705,7 +706,8 @@ class Contract(TenantModel):
         from dateutil.relativedelta import relativedelta
 
         # First recognition is at start_date (pro-rated period until align_date)
-        if start_date >= from_date and start_date <= to_date:
+        # Skip if start_date equals align_date (no pre-alignment period)
+        if start_date >= from_date and start_date <= to_date and start_date < align_date:
             # Calculate proration factor using months
             months_in_period = (
                 (align_date.year - start_date.year) * 12 +
@@ -1181,9 +1183,10 @@ class ContractItemPrice(TenantModel):
         ordering = ["valid_from"]
 
     def __str__(self):
+        item_name = self.item.product.name if self.item.product else (self.item.description or f"Item #{self.item_id}")
         if self.valid_to:
-            return f"{self.item.product.name}: €{self.unit_price} ({self.valid_from} - {self.valid_to})"
-        return f"{self.item.product.name}: €{self.unit_price} (from {self.valid_from})"
+            return f"{item_name}: €{self.unit_price} ({self.valid_from} - {self.valid_to})"
+        return f"{item_name}: €{self.unit_price} (from {self.valid_from})"
 
 
 class ContractAttachment(TenantModel):
