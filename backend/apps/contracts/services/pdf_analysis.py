@@ -169,31 +169,40 @@ def analyze_pdf_attachment(
     if not attachment.original_filename.lower().endswith(".pdf"):
         return PdfAnalysisResult(error="Only PDF files can be analyzed")
 
-    # Check cache for extraction result
-    cache_key = _get_cache_key(attachment)
-    cached_data = django_cache.get(cache_key)
-
-    if cached_data is not None:
-        logger.info("PDF extraction cache hit for attachment %s", attachment.id)
-        data = cached_data
+    # Check persistent DB cache first, then Redis, then call API
+    if attachment.extracted_data:
+        logger.info("PDF extraction DB cache hit for attachment %s", attachment.id)
+        data = attachment.extracted_data
     else:
-        # Read PDF
-        try:
-            pdf_data = attachment.file.read()
-        except Exception as e:
-            return PdfAnalysisResult(error=f"Failed to read PDF file: {e}")
+        cache_key = _get_cache_key(attachment)
+        cached_data = django_cache.get(cache_key)
 
-        # Call Claude API
-        try:
-            data = _extract_from_pdf(pdf_data)
-        except json.JSONDecodeError as e:
-            return PdfAnalysisResult(error=f"Failed to parse extraction result: {e}")
-        except Exception as e:
-            return PdfAnalysisResult(error=f"Claude API error: {e}")
+        if cached_data is not None:
+            logger.info("PDF extraction Redis cache hit for attachment %s", attachment.id)
+            data = cached_data
+            # Persist to DB so we never need to call the API again
+            attachment.extracted_data = data
+            attachment.save(update_fields=["extracted_data"])
+        else:
+            # Read PDF
+            try:
+                pdf_data = attachment.file.read()
+            except Exception as e:
+                return PdfAnalysisResult(error=f"Failed to read PDF file: {e}")
 
-        # Cache the raw extraction (not product matches — those depend on current catalog)
-        django_cache.set(cache_key, data, PDF_EXTRACTION_CACHE_TTL)
-        logger.info("PDF extraction cached for attachment %s", attachment.id)
+            # Call Claude API
+            try:
+                data = _extract_from_pdf(pdf_data)
+            except json.JSONDecodeError as e:
+                return PdfAnalysisResult(error=f"Failed to parse extraction result: {e}")
+            except Exception as e:
+                return PdfAnalysisResult(error=f"Claude API error: {e}")
+
+            # Persist to DB (permanent) and Redis (fast short-term)
+            attachment.extracted_data = data
+            attachment.save(update_fields=["extracted_data"])
+            django_cache.set(cache_key, data, PDF_EXTRACTION_CACHE_TTL)
+            logger.info("PDF extraction persisted for attachment %s", attachment.id)
 
     # Build extracted items
     extracted_items = _parse_line_items(data.get("line_items", []))

@@ -1180,6 +1180,11 @@ class ContractAttachment(TenantModel):
         blank=True,
         help_text="Optional description of the attachment",
     )
+    extracted_data = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Cached AI extraction result (line items + metadata). Persisted to avoid repeated API calls.",
+    )
 
     class Meta:
         ordering = ["-created_at"]
