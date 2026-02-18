@@ -236,7 +236,9 @@
       "modePeriodSpecificDescription": "Create a new price period entry for each item (preserves price history)",
       "priceIncreaseSuccess": "Price increase applied to {{count}} items",
       "priceIncreasePartial": "Price increase applied to {{changed}} items, {{skipped}} skipped",
-      "priceIncreaseApply": "Apply Increase"
+      "priceIncreaseApply": "Apply Increase",
+      "priceIncreaseWarningTitle": "Caution:",
+      "priceIncreaseWarning": "This will change the prices of all recurring line items. This action cannot be undone."
     },
     "item": {
       "product": "Product",

@@ -236,7 +236,9 @@
       "modePeriodSpecificDescription": "Einen neuen Preiszeitraum pro Position anlegen (Preishistorie bleibt erhalten)",
       "priceIncreaseSuccess": "Preiserhöhung auf {{count}} Positionen angewendet",
       "priceIncreasePartial": "Preiserhöhung auf {{changed}} Positionen angewendet, {{skipped}} übersprungen",
-      "priceIncreaseApply": "Erhöhung anwenden"
+      "priceIncreaseApply": "Erhöhung anwenden",
+      "priceIncreaseWarningTitle": "Achtung:",
+      "priceIncreaseWarning": "Dies ändert die Preise aller wiederkehrenden Positionen. Diese Aktion kann nicht rückgängig gemacht werden."
     },
     "item": {
       "product": "Produkt",

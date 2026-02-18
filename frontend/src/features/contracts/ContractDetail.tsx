@@ -1703,7 +1703,9 @@ function PriceIncreaseModal({
   onSuccess: () => void
 }) {
   const { t } = useTranslation()
-  const nextJan1 = `${new Date().getFullYear() + 1}-01-01`
+  const now = new Date()
+  const jan1Year = now.getMonth() < 3 ? now.getFullYear() : now.getFullYear() + 1
+  const nextJan1 = `${jan1Year}-01-01`
   const [percentage, setPercentage] = useState('')
   const [effectiveDate, setEffectiveDate] = useState(nextJan1)
   const [mode, setMode] = useState<'period_specific' | 'direct'>('period_specific')
@@ -1881,11 +1883,16 @@ function PriceIncreaseModal({
               </div>
             </div>
 
+            <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <strong>{t('contracts.detail.priceIncreaseWarningTitle')}</strong>{' '}
+              {t('contracts.detail.priceIncreaseWarning')}
+            </div>
+
             <DialogFooter>
               <Button variant="outline" onClick={onClose}>
                 {t('contracts.actions.cancel')}
               </Button>
-              <Button onClick={handleSubmit} disabled={loading || !percentage}>
+              <Button variant="destructive" onClick={handleSubmit} disabled={loading || !percentage}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {t('contracts.detail.priceIncreaseApply')}
               </Button>
