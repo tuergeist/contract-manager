@@ -224,7 +224,19 @@
       "invoiceText": "Rechnungstext",
       "invoiceTextHint": "Dieser Text wird auf generierten Rechnungen angezeigt",
       "invoiceTextPlaceholder": "Optionaler Text für Rechnungen unterhalb der Positionen...",
-      "noInvoiceText": "Kein Rechnungstext"
+      "noInvoiceText": "Kein Rechnungstext",
+      "priceIncrease": "Preiserhöhung",
+      "priceIncreaseDescription": "Prozentuale Preiserhöhung auf alle wiederkehrenden Positionen anwenden",
+      "increasePercentage": "Erhöhung (%)",
+      "effectiveDate": "Gültig ab",
+      "priceIncreaseMode": "Modus",
+      "modeDirect": "Grundpreis aktualisieren",
+      "modeDirectDescription": "Den Einzelpreis jeder Position direkt aktualisieren",
+      "modePeriodSpecific": "Periodenspezifischen Preis erstellen",
+      "modePeriodSpecificDescription": "Einen neuen Preiszeitraum pro Position anlegen (Preishistorie bleibt erhalten)",
+      "priceIncreaseSuccess": "Preiserhöhung auf {{count}} Positionen angewendet",
+      "priceIncreasePartial": "Preiserhöhung auf {{changed}} Positionen angewendet, {{skipped}} übersprungen",
+      "priceIncreaseApply": "Erhöhung anwenden"
     },
     "item": {
       "product": "Produkt",
@@ -309,7 +321,15 @@
       "cancel": "Abbrechen",
       "delete": "Löschen",
       "edit": "Bearbeiten",
-      "confirmCancel": "Möchten Sie diesen Vertrag wirklich kündigen?"
+      "confirmCancel": "Möchten Sie diesen Vertrag wirklich kündigen?",
+      "changeCustomer": "Ändern"
+    },
+    "changeCustomer": {
+      "title": "Kunde ändern",
+      "searchPlaceholder": "Kunden suchen...",
+      "noResults": "Keine Kunden gefunden.",
+      "selected": "Ausgewählt",
+      "confirm": "Kunde ändern"
     },
     "deleteConfirm": {
       "title": "Vertrag löschen",
@@ -321,12 +341,14 @@
       "resume": "Fortsetzen",
       "cancel": "Kündigen",
       "end": "Beenden",
+      "resetToDraft": "Zurück zu Entwurf",
       "confirmTitle": "Status ändern",
-      "confirmActivate": "Möchten Sie diesen Vertrag aktivieren?",
+      "confirmActivate": "Nur aktivieren, wenn alle Positionen und Vertragsdaten korrekt sind. Den Vertrag nach Aktivierung nicht ohne guten Grund ändern. Nach der Aktivierung ist die automatische Rechnungsstellung möglich.",
       "confirmPause": "Möchten Sie diesen Vertrag pausieren?",
       "confirmResume": "Möchten Sie diesen Vertrag fortsetzen?",
       "confirmCancel": "Möchten Sie diesen Vertrag kündigen?",
       "confirmEnd": "Möchten Sie diesen Vertrag beenden?",
+      "confirmResetToDraft": "Möchten Sie diesen Vertrag zurück auf Entwurf setzen? Alle Nachträge werden gelöscht.",
       "warningIrreversible": "Diese Aktion kann nicht rückgängig gemacht werden.",
       "warningReversible": "Der Vertrag kann später wieder aktiviert werden."
     },

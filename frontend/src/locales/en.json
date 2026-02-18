@@ -224,7 +224,19 @@
       "invoiceText": "Invoice Text",
       "invoiceTextHint": "This text will be displayed on generated invoices",
       "invoiceTextPlaceholder": "Optional text to show on invoices below line items...",
-      "noInvoiceText": "No invoice text"
+      "noInvoiceText": "No invoice text",
+      "priceIncrease": "Price Increase",
+      "priceIncreaseDescription": "Apply a percentage price increase to all recurring items",
+      "increasePercentage": "Increase (%)",
+      "effectiveDate": "Effective Date",
+      "priceIncreaseMode": "Mode",
+      "modeDirect": "Update base price",
+      "modeDirectDescription": "Directly update the unit price of each item",
+      "modePeriodSpecific": "Create period-specific price",
+      "modePeriodSpecificDescription": "Create a new price period entry for each item (preserves price history)",
+      "priceIncreaseSuccess": "Price increase applied to {{count}} items",
+      "priceIncreasePartial": "Price increase applied to {{changed}} items, {{skipped}} skipped",
+      "priceIncreaseApply": "Apply Increase"
     },
     "item": {
       "product": "Product",
@@ -309,7 +321,15 @@
       "cancel": "Cancel",
       "delete": "Delete",
       "edit": "Edit",
-      "confirmCancel": "Are you sure you want to cancel this contract?"
+      "confirmCancel": "Are you sure you want to cancel this contract?",
+      "changeCustomer": "Change"
+    },
+    "changeCustomer": {
+      "title": "Change Customer",
+      "searchPlaceholder": "Search customers...",
+      "noResults": "No customers found.",
+      "selected": "Selected",
+      "confirm": "Change Customer"
     },
     "deleteConfirm": {
       "title": "Delete Contract",
@@ -321,12 +341,14 @@
       "resume": "Resume",
       "cancel": "Cancel",
       "end": "End",
+      "resetToDraft": "Reset to Draft",
       "confirmTitle": "Change Status",
-      "confirmActivate": "Do you want to activate this contract?",
+      "confirmActivate": "Only activate if you're sure that all line items and contract dates are correct. Do not change the contract without a good reason after activation. Automated invoicing will be possible after activation.",
       "confirmPause": "Do you want to pause this contract?",
       "confirmResume": "Do you want to resume this contract?",
       "confirmCancel": "Do you want to cancel this contract?",
       "confirmEnd": "Do you want to end this contract?",
+      "confirmResetToDraft": "Do you want to reset this contract to draft? All amendments will be deleted.",
       "warningIrreversible": "This action cannot be undone.",
       "warningReversible": "The contract can be reactivated later."
     },

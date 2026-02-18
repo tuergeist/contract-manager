@@ -87,6 +87,7 @@ const CONTRACT_QUERY = gql`
         id
         name
       }
+      hasInvoices
     }
   }
 `
@@ -124,6 +125,22 @@ const TRANSITION_CONTRACT_STATUS_MUTATION = gql`
       contract {
         id
         status
+      }
+    }
+  }
+`
+
+const CHANGE_CONTRACT_CUSTOMER_MUTATION = gql`
+  mutation ChangeContractCustomer($contractId: ID!, $customerId: ID!) {
+    changeContractCustomer(contractId: $contractId, customerId: $customerId) {
+      success
+      error
+      contract {
+        id
+        customer {
+          id
+          name
+        }
       }
     }
   }
@@ -202,6 +219,7 @@ interface Contract {
   noticePeriodAnchor: string
   group: { id: string; name: string } | null
   customer: Customer
+  hasInvoices: boolean
 }
 
 const formSchema = z.object({
@@ -245,6 +263,7 @@ const STATUS_TRANSITIONS: StatusTransition[] = [
   { from: 'paused', to: 'active', label: 'resume', confirmKey: 'confirmResume', isReversible: true },
   { from: 'paused', to: 'cancelled', label: 'cancel', confirmKey: 'confirmCancel', isReversible: false },
   { from: 'cancelled', to: 'ended', label: 'end', confirmKey: 'confirmEnd', isReversible: false },
+  { from: 'active', to: 'draft', label: 'resetToDraft', confirmKey: 'confirmResetToDraft', isReversible: false },
 ]
 
 const getStatusBadgeClass = (status: string) => {
@@ -277,6 +296,7 @@ export function ContractForm() {
   const [isEditing, setIsEditing] = useState(!isEdit) // New contracts start in edit mode
   const [statusTransition, setStatusTransition] = useState<StatusTransition | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showChangeCustomer, setShowChangeCustomer] = useState(false)
   const [groupPopoverOpen, setGroupPopoverOpen] = useState(false)
   const [groupSearchTerm, setGroupSearchTerm] = useState('')
   const billingStartManuallyChanged = useRef(false)
@@ -464,6 +484,7 @@ export function ContractForm() {
   // Get available transitions for current status
   const availableTransitions = contract
     ? STATUS_TRANSITIONS.filter((t) => t.from === contract.status)
+        .filter((t) => !(t.to === 'draft' && contract.hasInvoices))
     : []
 
   return (
@@ -544,7 +565,20 @@ export function ContractForm() {
               {isEdit ? (
                 <div className="md:col-span-2">
                   <p className="text-sm font-medium">{t('contracts.customer')}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{contract?.customer.name}</p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <p className="text-sm text-muted-foreground">{contract?.customer.name}</p>
+                    {contract?.status === 'draft' && !isEditing && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => setShowChangeCustomer(true)}
+                      >
+                        {t('contracts.actions.changeCustomer')}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <FormField
@@ -1200,7 +1234,115 @@ export function ContractForm() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Change Customer Dialog */}
+      {showChangeCustomer && id && (
+        <ChangeCustomerDialog
+          contractId={id}
+          onClose={() => setShowChangeCustomer(false)}
+          onSuccess={() => {
+            setShowChangeCustomer(false)
+            window.location.reload()
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+// Change Customer Dialog Component
+function ChangeCustomerDialog({
+  contractId,
+  onClose,
+  onSuccess,
+}: {
+  contractId: string
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const { t } = useTranslation()
+  const [search, setSearch] = useState('')
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const { data: customersData } = useQuery(CUSTOMERS_SEARCH_QUERY, {
+    variables: { search: search || null },
+  })
+
+  const [changeCustomer, { loading }] = useMutation(CHANGE_CONTRACT_CUSTOMER_MUTATION)
+
+  const handleConfirm = async () => {
+    if (!selectedCustomerId) return
+    setError(null)
+    try {
+      const result = await changeCustomer({
+        variables: { contractId, customerId: selectedCustomerId },
+      })
+      if (result.data?.changeContractCustomer.success) {
+        onSuccess()
+      } else {
+        setError(result.data?.changeContractCustomer.error || 'Failed to change customer')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    }
+  }
+
+  const customers = customersData?.customers?.items || []
+  const selectedCustomer = customers.find((c: { id: string }) => String(c.id) === selectedCustomerId)
+
+  return (
+    <Dialog open onOpenChange={() => onClose()}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>{t('contracts.changeCustomer.title')}</DialogTitle>
+        </DialogHeader>
+        <div className="py-4">
+          <Command shouldFilter={false}>
+            <CommandInput
+              placeholder={t('contracts.changeCustomer.searchPlaceholder')}
+              value={search}
+              onValueChange={setSearch}
+            />
+            <CommandList>
+              <CommandEmpty>{t('contracts.changeCustomer.noResults')}</CommandEmpty>
+              <CommandGroup>
+                {customers.map((customer: { id: string; name: string }) => (
+                  <CommandItem
+                    key={customer.id}
+                    value={String(customer.id)}
+                    onSelect={() => setSelectedCustomerId(String(customer.id))}
+                  >
+                    <Check
+                      className={cn(
+                        'mr-2 h-4 w-4',
+                        selectedCustomerId === String(customer.id) ? 'opacity-100' : 'opacity-0'
+                      )}
+                    />
+                    {customer.name}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+          {selectedCustomer && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              {t('contracts.changeCustomer.selected')}: <strong>{selectedCustomer.name}</strong>
+            </p>
+          )}
+          {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {t('contracts.actions.cancel')}
+          </Button>
+          <Button onClick={handleConfirm} disabled={loading || !selectedCustomerId}>
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {t('contracts.changeCustomer.confirm')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

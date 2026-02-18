@@ -5,7 +5,7 @@ from datetime import date
 from decimal import Decimal
 from dateutil.relativedelta import relativedelta
 
-from apps.contracts.models import Contract, ContractItem, ContractAttachment
+from apps.contracts.models import Contract, ContractItem, ContractAmendment, ContractAttachment
 from apps.customers.models import Customer
 from apps.products.models import Product
 
@@ -1227,3 +1227,260 @@ class TestContractTotalValueWithPricePeriods:
         # Expected: 2 quantity × €50/month × 12 months = €1200
         expected = Decimal("1200.00")
         assert total == expected, f"Expected {expected}, got {total}"
+
+
+class TestResetContractToDraft:
+    """Test resetting an active contract to draft status."""
+
+    TRANSITION_MUTATION = """
+        mutation TransitionContractStatus($contractId: ID!, $newStatus: String!) {
+            transitionContractStatus(contractId: $contractId, newStatus: $newStatus) {
+                success
+                error
+                contract {
+                    id
+                    status
+                }
+            }
+        }
+    """
+
+    def _execute(self, client, user, contract_id, new_status="draft"):
+        from apps.core.auth import create_access_token
+
+        token = create_access_token(user)
+        return client.post(
+            "/graphql",
+            content_type="application/json",
+            data={
+                "query": self.TRANSITION_MUTATION,
+                "variables": {
+                    "contractId": str(contract_id),
+                    "newStatus": new_status,
+                },
+            },
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+
+    def test_reset_active_contract_no_invoices(self, db, tenant, user, customer, client):
+        """Reset active contract with no invoices succeeds, amendments deleted."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Active Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+        # Create some amendments
+        ContractAmendment.objects.create(
+            tenant=tenant,
+            contract=contract,
+            effective_date=date(2026, 1, 15),
+            type=ContractAmendment.AmendmentType.TERMS_CHANGED,
+            description="Some change",
+            changes={"action": "test"},
+        )
+        assert contract.amendments.count() == 1
+
+        response = self._execute(client, user, contract.id)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["transitionContractStatus"]["success"] is True
+        assert data["data"]["transitionContractStatus"]["contract"]["status"] == "draft"
+
+        contract.refresh_from_db()
+        assert contract.status == Contract.Status.DRAFT
+        assert contract.amendments.count() == 0
+
+    def test_reset_active_contract_with_generated_invoices(self, db, tenant, user, customer, client):
+        """Reset blocked when generated invoices exist."""
+        from apps.invoices.models import InvoiceRecord
+
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Invoiced Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+        InvoiceRecord.objects.create(
+            tenant=tenant,
+            contract=contract,
+            customer=customer,
+            invoice_number="INV-001",
+            billing_date=date(2026, 1, 1),
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+            total_net=Decimal("100.00"),
+            tax_rate=Decimal("19.00"),
+            tax_amount=Decimal("19.00"),
+            total_gross=Decimal("119.00"),
+            line_items_snapshot=[],
+            company_data_snapshot={},
+            customer_name=customer.name,
+            contract_name=contract.name,
+        )
+
+        response = self._execute(client, user, contract.id)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["transitionContractStatus"]["success"] is False
+        assert "invoices" in data["data"]["transitionContractStatus"]["error"]
+
+        contract.refresh_from_db()
+        assert contract.status == Contract.Status.ACTIVE
+
+    def test_reset_active_contract_with_imported_invoices(self, db, tenant, user, customer, client):
+        """Reset blocked when imported invoices exist."""
+        from apps.invoices.models import ImportedInvoice
+
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Imported Invoice Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+        ImportedInvoice.objects.create(
+            tenant=tenant,
+            contract=contract,
+            invoice_number="IMP-001",
+            invoice_date=date(2026, 1, 1),
+            total_amount=Decimal("119.00"),
+            pdf_file="test.pdf",
+            original_filename="test.pdf",
+            file_size=1024,
+        )
+
+        response = self._execute(client, user, contract.id)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["transitionContractStatus"]["success"] is False
+        assert "invoices" in data["data"]["transitionContractStatus"]["error"]
+
+    def test_reset_non_active_contract_fails(self, db, tenant, user, customer, client):
+        """Reset from draft/paused/cancelled/ended returns error."""
+        for status in [Contract.Status.DRAFT, Contract.Status.PAUSED]:
+            contract = Contract.objects.create(
+                tenant=tenant,
+                customer=customer,
+                name=f"Contract {status}",
+                status=status,
+                start_date=date(2026, 1, 1),
+                billing_start_date=date(2026, 1, 1),
+                billing_interval=Contract.BillingInterval.MONTHLY,
+            )
+
+            response = self._execute(client, user, contract.id)
+
+            data = response.json()
+            assert data["data"]["transitionContractStatus"]["success"] is False
+            assert "Cannot transition" in data["data"]["transitionContractStatus"]["error"]
+
+
+class TestChangeContractCustomer:
+    """Test changing the customer of a draft contract."""
+
+    CHANGE_CUSTOMER_MUTATION = """
+        mutation ChangeContractCustomer($contractId: ID!, $customerId: ID!) {
+            changeContractCustomer(contractId: $contractId, customerId: $customerId) {
+                success
+                error
+                contract {
+                    id
+                    customer {
+                        id
+                    }
+                }
+            }
+        }
+    """
+
+    def _execute(self, client, user, contract_id, customer_id):
+        from apps.core.auth import create_access_token
+
+        token = create_access_token(user)
+        return client.post(
+            "/graphql",
+            content_type="application/json",
+            data={
+                "query": self.CHANGE_CUSTOMER_MUTATION,
+                "variables": {
+                    "contractId": str(contract_id),
+                    "customerId": str(customer_id),
+                },
+            },
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+
+    def test_change_customer_on_draft_contract(self, db, tenant, user, customer, client):
+        """Change customer on draft contract succeeds, group set to null."""
+        from apps.contracts.models import ContractGroup
+
+        other_customer = Customer.objects.create(
+            tenant=tenant,
+            name="Other Customer",
+            is_active=True,
+        )
+        group = ContractGroup.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Test Group",
+        )
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Draft Contract",
+            status=Contract.Status.DRAFT,
+            start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+            group=group,
+        )
+
+        response = self._execute(client, user, contract.id, other_customer.id)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["changeContractCustomer"]["success"] is True
+        assert data["data"]["changeContractCustomer"]["contract"]["customer"]["id"] == str(other_customer.id)
+
+        contract.refresh_from_db()
+        assert contract.customer_id == other_customer.id
+        assert contract.group is None
+
+    def test_change_customer_on_non_draft_contract_fails(self, db, tenant, user, customer, client):
+        """Change customer on active contract returns error."""
+        other_customer = Customer.objects.create(
+            tenant=tenant,
+            name="Other Customer 2",
+            is_active=True,
+        )
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Active Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+
+        response = self._execute(client, user, contract.id, other_customer.id)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["changeContractCustomer"]["success"] is False
+        assert "draft" in data["data"]["changeContractCustomer"]["error"]
+
+        contract.refresh_from_db()
+        assert contract.customer_id == customer.id

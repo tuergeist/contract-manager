@@ -261,6 +261,11 @@ class ContractType:
     customer: CustomerType
 
     @strawberry.field
+    def has_invoices(self) -> bool:
+        """Check if contract has any generated or imported invoices."""
+        return self.invoice_records.exists() or self.imported_invoices.exists()
+
+    @strawberry.field
     def group(self) -> ContractGroupType | None:
         """Get the contract's group."""
         if not self.group_id:
@@ -623,6 +628,36 @@ class ContractGroupResult:
     error: str | None = None
 
 
+@strawberry.input
+class BulkPriceIncreaseInput:
+    """Input for bulk price increase across all recurring items."""
+    contract_id: strawberry.ID
+    percentage: Decimal
+    effective_date: date
+    mode: str = "period_specific"  # "direct" or "period_specific"
+
+
+@strawberry.type
+class BulkPriceIncreaseItemResult:
+    """Result for a single item in a bulk price increase."""
+    item_id: int
+    item_description: str
+    old_price: Decimal
+    new_price: Decimal
+    skipped: bool = False
+    skip_reason: str | None = None
+
+
+@strawberry.type
+class BulkPriceIncreaseResult:
+    """Result of a bulk price increase operation."""
+    success: bool = False
+    error: str | None = None
+    items_changed: int = 0
+    items_skipped: int = 0
+    details: List[BulkPriceIncreaseItemResult] = strawberry.field(default_factory=list)
+
+
 # =============================================================================
 # Contract Attachment Types
 # =============================================================================
@@ -934,6 +969,7 @@ class TimeTrackingMappingType:
     external_project_name: str
     external_customer_name: str
     contract_item_id: int | None
+    cached_total_hours: float = 0
 
 
 @strawberry.type
@@ -1866,6 +1902,7 @@ class ContractQuery:
                 external_project_name=m.external_project_name,
                 external_customer_name=m.external_customer_name,
                 contract_item_id=m.contract_item_id,
+                cached_total_hours=m.cached_total_hours,
             )
             for m in mappings
         ]
@@ -2581,7 +2618,7 @@ class ContractMutation:
 
         Allowed transitions:
         - draft -> active
-        - active -> paused, cancelled
+        - active -> paused, cancelled, draft (if no invoices)
         - paused -> active, cancelled
         - cancelled -> ended
         """
@@ -2600,7 +2637,7 @@ class ContractMutation:
         # Define allowed transitions
         allowed_transitions = {
             Contract.Status.DRAFT: [Contract.Status.ACTIVE],
-            Contract.Status.ACTIVE: [Contract.Status.PAUSED, Contract.Status.CANCELLED],
+            Contract.Status.ACTIVE: [Contract.Status.PAUSED, Contract.Status.CANCELLED, Contract.Status.DRAFT],
             Contract.Status.PAUSED: [Contract.Status.ACTIVE, Contract.Status.CANCELLED],
             Contract.Status.CANCELLED: [Contract.Status.ENDED],
             Contract.Status.ENDED: [],
@@ -2614,8 +2651,26 @@ class ContractMutation:
                 error=f"Cannot transition from {current_status} to {new_status}"
             )
 
+        # Guard: reset to draft blocked if invoices exist
+        if new_status == Contract.Status.DRAFT:
+            if contract.invoice_records.exists() or contract.imported_invoices.exists():
+                return ContractResult(
+                    error="Cannot reset to draft: contract has invoices"
+                )
+
         try:
             with transaction.atomic():
+                # Re-fetch with lock for reset to draft (prevents race with invoice generation)
+                if new_status == Contract.Status.DRAFT:
+                    contract = Contract.objects.select_for_update().get(
+                        tenant=user.tenant, id=contract_id
+                    )
+                    # Re-check invoices under lock
+                    if contract.invoice_records.exists() or contract.imported_invoices.exists():
+                        return ContractResult(
+                            error="Cannot reset to draft: contract has invoices"
+                        )
+
                 old_status = contract.status
                 contract.status = new_status
 
@@ -2626,8 +2681,12 @@ class ContractMutation:
 
                 contract.save()
 
-                # Create amendment for status change (not for drafts)
-                if old_status != Contract.Status.DRAFT:
+                # Reset to draft: delete all amendments
+                if new_status == Contract.Status.DRAFT:
+                    contract.amendments.all().delete()
+
+                # Create amendment for status change (not for drafts, not for reset to draft)
+                if old_status != Contract.Status.DRAFT and new_status != Contract.Status.DRAFT:
                     ContractAmendment.objects.create(
                         tenant=user.tenant,
                         contract=contract,
@@ -2644,6 +2703,41 @@ class ContractMutation:
             return ContractResult(contract=contract, success=True)
         except Exception as e:
             return ContractResult(error=str(e))
+
+    @strawberry.mutation
+    def change_contract_customer(
+        self,
+        info: Info[Context, None],
+        contract_id: strawberry.ID,
+        customer_id: strawberry.ID,
+    ) -> ContractResult:
+        """Change the customer of a draft contract."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractResult(error=err)
+        if not user.tenant:
+            return ContractResult(error="No tenant assigned")
+
+        contract = Contract.objects.filter(
+            tenant=user.tenant, id=contract_id
+        ).first()
+        if not contract:
+            return ContractResult(error="Contract not found")
+
+        if contract.status != Contract.Status.DRAFT:
+            return ContractResult(error="Can only change customer on draft contracts")
+
+        customer = Customer.objects.filter(
+            tenant=user.tenant, id=customer_id
+        ).first()
+        if not customer:
+            return ContractResult(error="Customer not found")
+
+        contract.customer = customer
+        contract.group = None
+        contract.save()
+
+        return ContractResult(contract=contract, success=True)
 
     @strawberry.mutation
     def add_contract_item_price(
@@ -3020,6 +3114,7 @@ class ContractMutation:
                 external_project_name=mapping.external_project_name,
                 external_customer_name=mapping.external_customer_name,
                 contract_item_id=mapping.contract_item_id,
+                cached_total_hours=mapping.cached_total_hours,
             ),
         )
 
@@ -3800,3 +3895,156 @@ class ContractImportMutation:
             return DeleteResult(success=True)
         except Exception as e:
             return DeleteResult(error=str(e))
+
+    @strawberry.mutation
+    def bulk_price_increase(
+        self, info: Info[Context, None], input: BulkPriceIncreaseInput
+    ) -> BulkPriceIncreaseResult:
+        """Apply a percentage price increase to all recurring items of a contract."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return BulkPriceIncreaseResult(error=err)
+        if not user.tenant:
+            return BulkPriceIncreaseResult(error="No tenant assigned")
+
+        if input.percentage <= 0:
+            return BulkPriceIncreaseResult(error="Percentage must be greater than 0")
+
+        if input.mode not in ("direct", "period_specific"):
+            return BulkPriceIncreaseResult(error="Mode must be 'direct' or 'period_specific'")
+
+        contract = Contract.objects.filter(
+            tenant=user.tenant, id=input.contract_id
+        ).first()
+        if not contract:
+            return BulkPriceIncreaseResult(error="Contract not found")
+
+        items = ContractItem.objects.filter(
+            contract=contract, is_one_off=False
+        ).select_related("product")
+
+        if not items.exists():
+            return BulkPriceIncreaseResult(error="No recurring items found")
+
+        details = []
+        items_changed = 0
+        items_skipped = 0
+        multiplier = 1 + input.percentage / Decimal("100")
+
+        try:
+            with transaction.atomic():
+                for item in items:
+                    item_name = item.product.name if item.product else item.description[:50]
+
+                    # Check price lock
+                    is_price_locked = item.price_locked and (
+                        item.price_locked_until is None
+                        or item.price_locked_until >= input.effective_date
+                    )
+                    if is_price_locked:
+                        details.append(BulkPriceIncreaseItemResult(
+                            item_id=item.id,
+                            item_description=item_name,
+                            old_price=item.unit_price,
+                            new_price=item.unit_price,
+                            skipped=True,
+                            skip_reason="Price locked",
+                        ))
+                        items_skipped += 1
+                        continue
+
+                    if input.mode == "direct":
+                        old_price = item.unit_price
+                        new_price = (old_price * multiplier).quantize(Decimal("0.01"))
+                        item.unit_price = new_price
+                        item.save(update_fields=["unit_price"])
+                    else:
+                        # period_specific: use effective price at the date
+                        effective_price, effective_period = item.get_effective_price_info(
+                            input.effective_date
+                        )
+                        old_price = effective_price
+                        new_price = (old_price * multiplier).quantize(Decimal("0.01"))
+
+                        # Close any existing ongoing period that covers effective_date
+                        from datetime import timedelta
+                        overlapping = item.price_periods.filter(
+                            valid_from__lte=input.effective_date,
+                        ).filter(
+                            Q(valid_to__gte=input.effective_date)
+                            | Q(valid_to__isnull=True)
+                        )
+                        for period in overlapping:
+                            day_before = input.effective_date - timedelta(days=1)
+                            if period.valid_from <= day_before:
+                                period.valid_to = day_before
+                                period.save(update_fields=["valid_to"])
+                            else:
+                                # Period starts on effective_date itself — remove it
+                                period.delete()
+
+                        ContractItemPrice.objects.create(
+                            tenant=user.tenant,
+                            item=item,
+                            valid_from=input.effective_date,
+                            valid_to=None,
+                            unit_price=new_price,
+                            price_period=item.price_period,
+                            source=ContractItemPrice.PriceSource.FIXED,
+                        )
+
+                    details.append(BulkPriceIncreaseItemResult(
+                        item_id=item.id,
+                        item_description=item_name,
+                        old_price=old_price,
+                        new_price=new_price,
+                    ))
+                    items_changed += 1
+
+                # Create amendment for non-draft contracts
+                if contract.status != Contract.Status.DRAFT and items_changed > 0:
+                    ContractAmendment.objects.create(
+                        tenant=user.tenant,
+                        contract=contract,
+                        effective_date=input.effective_date,
+                        type=ContractAmendment.AmendmentType.PRICE_CHANGED,
+                        description=(
+                            f"Bulk price increase: {input.percentage}% "
+                            f"effective {input.effective_date.isoformat()} "
+                            f"({input.mode}), {items_changed} items"
+                        ),
+                        changes={
+                            "type": "bulk_price_increase",
+                            "percentage": str(input.percentage),
+                            "effective_date": input.effective_date.isoformat(),
+                            "mode": input.mode,
+                            "items_changed": [
+                                {
+                                    "item_id": d.item_id,
+                                    "description": d.item_description,
+                                    "old_price": str(d.old_price),
+                                    "new_price": str(d.new_price),
+                                }
+                                for d in details
+                                if not d.skipped
+                            ],
+                            "items_skipped": [
+                                {
+                                    "item_id": d.item_id,
+                                    "description": d.item_description,
+                                    "reason": d.skip_reason,
+                                }
+                                for d in details
+                                if d.skipped
+                            ],
+                        },
+                    )
+
+            return BulkPriceIncreaseResult(
+                success=True,
+                items_changed=items_changed,
+                items_skipped=items_skipped,
+                details=details,
+            )
+        except Exception as e:
+            return BulkPriceIncreaseResult(error=str(e))
