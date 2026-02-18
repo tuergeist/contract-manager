@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.0.1",
+    "date": "2026-02-18",
+    "title": "Contract Group Selection Fix",
+    "description": "Fixed contract group selector rejecting numeric IDs with a validation error.",
+    "type": "bugfix",
+    "details": []
+  },
+  {
     "version": "2.0.0",
     "date": "2026-02-18",
     "title": "Projects, Delivery Tracking & Contract Operations",
