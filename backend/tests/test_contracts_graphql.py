@@ -5,7 +5,7 @@ from decimal import Decimal
 from unittest.mock import Mock
 
 from config.schema import schema
-from apps.contracts.models import Contract, ContractItem
+from apps.contracts.models import Contract, ContractAmendment, ContractItem, ContractItemPrice
 from apps.customers.models import Customer
 from apps.products.models import Product
 from apps.tenants.models import Role, Tenant, User
@@ -966,3 +966,435 @@ class TestNoticePeriodAfterMinGraphQL:
         assert result.data["contract"]["noticePeriodMonths"] == 3
         assert result.data["contract"]["noticePeriodAfterMinMonths"] == 1
         assert result.data["contract"]["minDurationMonths"] == 24
+
+
+BULK_PRICE_INCREASE_MUTATION = """
+    mutation BulkPriceIncrease($input: BulkPriceIncreaseInput!) {
+        bulkPriceIncrease(input: $input) {
+            success
+            error
+            itemsChanged
+            itemsSkipped
+            details {
+                itemId
+                itemDescription
+                oldPrice
+                newPrice
+                skipped
+                skipReason
+            }
+        }
+    }
+"""
+
+
+class TestBulkPriceIncrease:
+    """Tests for the bulk_price_increase mutation."""
+
+    def test_direct_mode_basic(self, user, tenant, annual_contract, product):
+        """Direct mode updates unit_price on each item."""
+        item1 = ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+        )
+        item2 = ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract,
+            description="Support Service", quantity=1, unit_price=Decimal("200.00"),
+        )
+
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "10",
+                "effectiveDate": "2027-01-01",
+                "mode": "direct",
+            }
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["bulkPriceIncrease"]
+        assert data["success"] is True
+        assert data["itemsChanged"] == 2
+        assert data["itemsSkipped"] == 0
+
+        item1.refresh_from_db()
+        item2.refresh_from_db()
+        assert item1.unit_price == Decimal("110.00")
+        assert item2.unit_price == Decimal("220.00")
+
+    def test_period_specific_mode_basic(self, user, tenant, annual_contract, product):
+        """Period-specific mode creates ContractItemPrice records."""
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+        )
+
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "5",
+                "effectiveDate": "2027-01-01",
+                "mode": "period_specific",
+            }
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["bulkPriceIncrease"]
+        assert data["success"] is True
+        assert data["itemsChanged"] == 1
+
+        # Original price unchanged
+        item.refresh_from_db()
+        assert item.unit_price == Decimal("100.00")
+
+        # New price period created
+        price_period = ContractItemPrice.objects.get(item=item)
+        assert price_period.valid_from == date(2027, 1, 1)
+        assert price_period.valid_to is None
+        assert price_period.unit_price == Decimal("105.00")
+        assert price_period.source == "fixed"
+
+    def test_direct_mode_multiple_increases(self, user, tenant, annual_contract, product):
+        """Direct mode can be applied multiple times, compounding."""
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+        )
+
+        # First increase: 10%
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "10",
+                "effectiveDate": "2027-01-01",
+                "mode": "direct",
+            }
+        }, make_context(user))
+        assert result.data["bulkPriceIncrease"]["success"] is True
+        item.refresh_from_db()
+        assert item.unit_price == Decimal("110.00")
+
+        # Second increase: 5%
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "5",
+                "effectiveDate": "2028-01-01",
+                "mode": "direct",
+            }
+        }, make_context(user))
+        assert result.data["bulkPriceIncrease"]["success"] is True
+        item.refresh_from_db()
+        assert item.unit_price == Decimal("115.50")
+
+    def test_period_specific_mode_multiple_increases(self, user, tenant, annual_contract, product):
+        """Period-specific mode compounds: second increase uses effective price from first."""
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+        )
+
+        # First increase: 10% from 2027-01-01
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "10",
+                "effectiveDate": "2027-01-01",
+                "mode": "period_specific",
+            }
+        }, make_context(user))
+        assert result.data["bulkPriceIncrease"]["success"] is True
+
+        pp1 = ContractItemPrice.objects.get(item=item)
+        assert pp1.valid_from == date(2027, 1, 1)
+        assert pp1.valid_to is None
+        assert pp1.unit_price == Decimal("110.00")
+
+        # Second increase: 5% from 2028-01-01
+        # Should base on 110.00 (the effective price at 2028-01-01)
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "5",
+                "effectiveDate": "2028-01-01",
+                "mode": "period_specific",
+            }
+        }, make_context(user))
+        assert result.data["bulkPriceIncrease"]["success"] is True
+
+        # First period should be closed
+        pp1.refresh_from_db()
+        assert pp1.valid_to == date(2027, 12, 31)
+
+        # New period created
+        pp2 = ContractItemPrice.objects.filter(item=item, valid_from=date(2028, 1, 1)).first()
+        assert pp2 is not None
+        assert pp2.valid_to is None
+        assert pp2.unit_price == Decimal("115.50")
+
+    def test_period_specific_three_consecutive_increases(self, user, tenant, annual_contract, product):
+        """Three consecutive yearly increases all compound correctly."""
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract, product=product,
+            quantity=1, unit_price=Decimal("1000.00"),
+        )
+
+        for year, pct in [(2027, "3"), (2028, "3"), (2029, "3")]:
+            result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+                "input": {
+                    "contractId": str(annual_contract.id),
+                    "percentage": pct,
+                    "effectiveDate": f"{year}-01-01",
+                    "mode": "period_specific",
+                }
+            }, make_context(user))
+            assert result.data["bulkPriceIncrease"]["success"] is True
+
+        periods = list(ContractItemPrice.objects.filter(item=item).order_by("valid_from"))
+        assert len(periods) == 3
+
+        # 2027: 1000 * 1.03 = 1030
+        assert periods[0].valid_from == date(2027, 1, 1)
+        assert periods[0].valid_to == date(2027, 12, 31)
+        assert periods[0].unit_price == Decimal("1030.00")
+
+        # 2028: 1030 * 1.03 = 1060.90
+        assert periods[1].valid_from == date(2028, 1, 1)
+        assert periods[1].valid_to == date(2028, 12, 31)
+        assert periods[1].unit_price == Decimal("1060.90")
+
+        # 2029: 1060.90 * 1.03 = 1092.73 (rounded)
+        assert periods[2].valid_from == date(2029, 1, 1)
+        assert periods[2].valid_to is None
+        assert periods[2].unit_price == Decimal("1092.73")
+
+    def test_skips_one_off_items(self, user, tenant, annual_contract, product):
+        """One-off items are not included in the increase."""
+        recurring = ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract, product=product,
+            quantity=1, unit_price=Decimal("100.00"), is_one_off=False,
+        )
+        one_off = ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract,
+            description="Setup Fee", quantity=1,
+            unit_price=Decimal("500.00"), is_one_off=True,
+        )
+
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "10",
+                "effectiveDate": "2027-01-01",
+                "mode": "direct",
+            }
+        }, make_context(user))
+
+        assert result.data["bulkPriceIncrease"]["success"] is True
+        assert result.data["bulkPriceIncrease"]["itemsChanged"] == 1
+
+        recurring.refresh_from_db()
+        one_off.refresh_from_db()
+        assert recurring.unit_price == Decimal("110.00")
+        assert one_off.unit_price == Decimal("500.00")  # unchanged
+
+    def test_skips_price_locked_items(self, user, tenant, annual_contract, product):
+        """Price-locked items are skipped with a reason."""
+        locked = ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+            price_locked=True, price_locked_until=date(2028, 12, 31),
+        )
+        unlocked = ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract,
+            description="Unlocked Item", quantity=1, unit_price=Decimal("200.00"),
+        )
+
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "10",
+                "effectiveDate": "2027-01-01",
+                "mode": "direct",
+            }
+        }, make_context(user))
+
+        data = result.data["bulkPriceIncrease"]
+        assert data["success"] is True
+        assert data["itemsChanged"] == 1
+        assert data["itemsSkipped"] == 1
+
+        skipped = [d for d in data["details"] if d["skipped"]]
+        assert len(skipped) == 1
+        assert skipped[0]["skipReason"] == "Price locked"
+
+        locked.refresh_from_db()
+        unlocked.refresh_from_db()
+        assert locked.unit_price == Decimal("100.00")
+        assert unlocked.unit_price == Decimal("220.00")
+
+    def test_price_locked_until_before_effective_date_not_skipped(self, user, tenant, annual_contract, product):
+        """Item locked until before effective date is NOT skipped."""
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+            price_locked=True, price_locked_until=date(2026, 6, 30),
+        )
+
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "10",
+                "effectiveDate": "2027-01-01",
+                "mode": "direct",
+            }
+        }, make_context(user))
+
+        assert result.data["bulkPriceIncrease"]["success"] is True
+        assert result.data["bulkPriceIncrease"]["itemsChanged"] == 1
+
+        item.refresh_from_db()
+        assert item.unit_price == Decimal("110.00")
+
+    def test_creates_amendment_for_active_contract(self, user, tenant, annual_contract, product):
+        """Active contract gets an amendment record."""
+        assert annual_contract.status == Contract.Status.ACTIVE
+
+        ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+        )
+
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "5",
+                "effectiveDate": "2027-01-01",
+                "mode": "direct",
+            }
+        }, make_context(user))
+
+        assert result.data["bulkPriceIncrease"]["success"] is True
+
+        amendment = ContractAmendment.objects.get(contract=annual_contract)
+        assert amendment.type == ContractAmendment.AmendmentType.PRICE_CHANGED
+        assert "5" in amendment.description
+        assert amendment.effective_date == date(2027, 1, 1)
+        assert amendment.changes["type"] == "bulk_price_increase"
+        assert len(amendment.changes["items_changed"]) == 1
+
+    def test_no_amendment_for_draft_contract(self, user, tenant, customer, product):
+        """Draft contract does not get an amendment record."""
+        draft = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Draft Contract",
+            status=Contract.Status.DRAFT, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+        )
+        ContractItem.objects.create(
+            tenant=tenant, contract=draft, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+        )
+
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(draft.id),
+                "percentage": "10",
+                "effectiveDate": "2027-01-01",
+                "mode": "direct",
+            }
+        }, make_context(user))
+
+        assert result.data["bulkPriceIncrease"]["success"] is True
+        assert ContractAmendment.objects.filter(contract=draft).count() == 0
+
+    def test_error_zero_percentage(self, user, tenant, annual_contract, product):
+        """Zero percentage is rejected."""
+        ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+        )
+
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "0",
+                "effectiveDate": "2027-01-01",
+                "mode": "direct",
+            }
+        }, make_context(user))
+
+        assert result.data["bulkPriceIncrease"]["success"] is False
+        assert "greater than 0" in result.data["bulkPriceIncrease"]["error"]
+
+    def test_error_invalid_mode(self, user, tenant, annual_contract, product):
+        """Invalid mode is rejected."""
+        ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+        )
+
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "5",
+                "effectiveDate": "2027-01-01",
+                "mode": "invalid",
+            }
+        }, make_context(user))
+
+        assert result.data["bulkPriceIncrease"]["success"] is False
+        assert "Mode" in result.data["bulkPriceIncrease"]["error"]
+
+    def test_error_no_recurring_items(self, user, tenant, annual_contract):
+        """Contract with no recurring items returns error."""
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "5",
+                "effectiveDate": "2027-01-01",
+                "mode": "direct",
+            }
+        }, make_context(user))
+
+        assert result.data["bulkPriceIncrease"]["success"] is False
+        assert "No recurring items" in result.data["bulkPriceIncrease"]["error"]
+
+    def test_fractional_percentage(self, user, tenant, annual_contract, product):
+        """Fractional percentages (e.g. 3.5%) work correctly."""
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+        )
+
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "3.5",
+                "effectiveDate": "2027-01-01",
+                "mode": "direct",
+            }
+        }, make_context(user))
+
+        assert result.data["bulkPriceIncrease"]["success"] is True
+        item.refresh_from_db()
+        assert item.unit_price == Decimal("103.50")
+
+    def test_multiple_amendments_from_multiple_increases(self, user, tenant, annual_contract, product):
+        """Each bulk increase on an active contract creates a separate amendment."""
+        ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+        )
+
+        for year in [2027, 2028]:
+            result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+                "input": {
+                    "contractId": str(annual_contract.id),
+                    "percentage": "5",
+                    "effectiveDate": f"{year}-01-01",
+                    "mode": "direct",
+                }
+            }, make_context(user))
+            assert result.data["bulkPriceIncrease"]["success"] is True
+
+        amendments = ContractAmendment.objects.filter(contract=annual_contract)
+        assert amendments.count() == 2

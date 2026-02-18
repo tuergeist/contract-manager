@@ -39,6 +39,7 @@ import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -594,6 +595,7 @@ export function ContractDetail() {
   const { id } = useParams<{ id: string }>()
   const [activeTab, setActiveTab] = useState<Tab>('items')
   const [showAddItemModal, setShowAddItemModal] = useState(false)
+  const [showPriceIncreaseModal, setShowPriceIncreaseModal] = useState(false)
   const [editingItem, setEditingItem] = useState<ContractItem | null>(null)
   const [isEditingNotes, setIsEditingNotes] = useState(false)
   const [editedNotes, setEditedNotes] = useState('')
@@ -1057,7 +1059,16 @@ export function ContractDetail() {
       {activeTab === 'items' && (
         <div>
           {canEdit && (
-            <div className="mb-4 flex justify-end">
+            <div className="mb-4 flex justify-end gap-2">
+              {recurringItems.length > 0 && (
+                <button
+                  onClick={() => setShowPriceIncreaseModal(true)}
+                  className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  <TrendingUp className="h-4 w-4" />
+                  {t('contracts.detail.priceIncrease')}
+                </button>
+              )}
               <button
                 onClick={() => setShowAddItemModal(true)}
                 className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
@@ -1625,6 +1636,18 @@ export function ContractDetail() {
         />
       )}
 
+      {/* Price Increase Modal */}
+      {showPriceIncreaseModal && (
+        <PriceIncreaseModal
+          contractId={id!}
+          onClose={() => setShowPriceIncreaseModal(false)}
+          onSuccess={() => {
+            setShowPriceIncreaseModal(false)
+            refetch()
+          }}
+        />
+      )}
+
       {/* Edit Item Modal */}
       {editingItem && (
         <EditItemModal
@@ -1650,6 +1673,229 @@ export function ContractDetail() {
 }
 
 // Sub-components for modals and actions
+
+const BULK_PRICE_INCREASE_MUTATION = gql`
+  mutation BulkPriceIncrease($input: BulkPriceIncreaseInput!) {
+    bulkPriceIncrease(input: $input) {
+      success
+      error
+      itemsChanged
+      itemsSkipped
+      details {
+        itemId
+        itemDescription
+        oldPrice
+        newPrice
+        skipped
+        skipReason
+      }
+    }
+  }
+`
+
+function PriceIncreaseModal({
+  contractId,
+  onClose,
+  onSuccess,
+}: {
+  contractId: string
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const { t } = useTranslation()
+  const nextJan1 = `${new Date().getFullYear() + 1}-01-01`
+  const [percentage, setPercentage] = useState('')
+  const [effectiveDate, setEffectiveDate] = useState(nextJan1)
+  const [mode, setMode] = useState<'period_specific' | 'direct'>('period_specific')
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<{
+    itemsChanged: number
+    itemsSkipped: number
+    details: Array<{
+      itemDescription: string
+      oldPrice: string
+      newPrice: string
+      skipped: boolean
+      skipReason: string | null
+    }>
+  } | null>(null)
+
+  const [bulkIncrease, { loading }] = useMutation(BULK_PRICE_INCREASE_MUTATION)
+
+  const handleSubmit = async () => {
+    setError(null)
+    if (!percentage || parseFloat(percentage) <= 0) {
+      setError(t('contracts.detail.increasePercentage') + ' > 0')
+      return
+    }
+    if (!effectiveDate) {
+      setError(t('contracts.detail.effectiveDate') + ' required')
+      return
+    }
+
+    try {
+      const res = await bulkIncrease({
+        variables: {
+          input: {
+            contractId,
+            percentage,
+            effectiveDate,
+            mode,
+          },
+        },
+      })
+
+      const data = res.data?.bulkPriceIncrease
+      if (data?.success) {
+        if (data.itemsSkipped > 0) {
+          setResult(data)
+        } else {
+          onSuccess()
+        }
+      } else {
+        setError(data?.error || 'Failed')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    }
+  }
+
+  return (
+    <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>{t('contracts.detail.priceIncrease')}</DialogTitle>
+          <DialogDescription>{t('contracts.detail.priceIncreaseDescription')}</DialogDescription>
+        </DialogHeader>
+
+        {error && (
+          <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+            {error}
+          </div>
+        )}
+
+        {result ? (
+          <div className="space-y-3">
+            <div className="rounded border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+              {result.itemsSkipped > 0
+                ? t('contracts.detail.priceIncreasePartial', {
+                    changed: result.itemsChanged,
+                    skipped: result.itemsSkipped,
+                  })
+                : t('contracts.detail.priceIncreaseSuccess', {
+                    count: result.itemsChanged,
+                  })}
+            </div>
+            <div className="max-h-60 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-gray-500">
+                    <th className="pb-1">{t('contracts.item.description')}</th>
+                    <th className="pb-1 text-right">{t('contracts.item.unitPrice')}</th>
+                    <th className="pb-1 text-right">{t('contracts.item.unitPrice')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.details.map((d, i) => (
+                    <tr key={i} className={cn('border-b', d.skipped && 'text-gray-400')}>
+                      <td className="py-1">{d.itemDescription}</td>
+                      <td className="py-1 text-right">{parseFloat(d.oldPrice).toFixed(2)}</td>
+                      <td className="py-1 text-right">
+                        {d.skipped ? d.skipReason : parseFloat(d.newPrice).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <DialogFooter>
+              <Button onClick={onSuccess}>{t('common.close')}</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-4 py-2">
+              <div>
+                <Label>{t('contracts.detail.increasePercentage')}</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  value={percentage}
+                  onChange={(e) => setPercentage(e.target.value)}
+                  placeholder="3.5"
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label>{t('contracts.detail.effectiveDate')}</Label>
+                <Input
+                  type="date"
+                  value={effectiveDate}
+                  onChange={(e) => setEffectiveDate(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label>{t('contracts.detail.priceIncreaseMode')}</Label>
+                <div className="mt-1 space-y-2">
+                  <label
+                    className={cn(
+                      'flex cursor-pointer items-start gap-3 rounded-md border p-3',
+                      mode === 'period_specific' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="mode"
+                      checked={mode === 'period_specific'}
+                      onChange={() => setMode('period_specific')}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="font-medium text-sm">{t('contracts.detail.modePeriodSpecific')}</div>
+                      <div className="text-xs text-gray-500">{t('contracts.detail.modePeriodSpecificDescription')}</div>
+                    </div>
+                  </label>
+                  <label
+                    className={cn(
+                      'flex cursor-pointer items-start gap-3 rounded-md border p-3',
+                      mode === 'direct' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="mode"
+                      checked={mode === 'direct'}
+                      onChange={() => setMode('direct')}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="font-medium text-sm">{t('contracts.detail.modeDirect')}</div>
+                      <div className="text-xs text-gray-500">{t('contracts.detail.modeDirectDescription')}</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose}>
+                {t('contracts.actions.cancel')}
+              </Button>
+              <Button onClick={handleSubmit} disabled={loading || !percentage}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {t('contracts.detail.priceIncreaseApply')}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 function AddItemModal({
   contractId,

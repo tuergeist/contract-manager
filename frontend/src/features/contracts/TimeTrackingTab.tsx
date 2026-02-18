@@ -31,6 +31,7 @@ const TIME_TRACKING_SUMMARY_QUERY = gql`
         externalProjectName
         externalCustomerName
         contractItemId
+        cachedTotalHours
       }
     }
     timeTrackingSettings {
@@ -91,6 +92,7 @@ interface Mapping {
   externalProjectName: string
   externalCustomerName: string
   contractItemId: number | null
+  cachedTotalHours: number
 }
 
 interface ExternalProject {
@@ -165,6 +167,7 @@ export function TimeTrackingTab({ contractId, customerName }: TimeTrackingTabPro
                 <tr className="border-b text-left text-gray-500">
                   <th className="pb-2 font-medium">{t('timeTracking.projectName')}</th>
                   <th className="pb-2 font-medium">{t('timeTracking.customerName')}</th>
+                  <th className="pb-2 text-right font-medium">{t('timeTracking.hours')}</th>
                   <th className="pb-2 font-medium"></th>
                 </tr>
               </thead>
@@ -185,6 +188,7 @@ export function TimeTrackingTab({ contractId, customerName }: TimeTrackingTabPro
                       </div>
                     </td>
                     <td className="py-2 text-gray-600">{m.externalCustomerName}</td>
+                    <td className="py-2 text-right text-gray-600">{m.cachedTotalHours.toFixed(1)}h</td>
                     <td className="py-2 text-right">
                       <button
                         onClick={() => handleUnlink(m.id)}
