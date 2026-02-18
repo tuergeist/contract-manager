@@ -97,6 +97,13 @@ contract-manager/
 - [Detailed Specification](docs/SPECIFICATION.md) - Requirements, data model, architecture decisions
 - [CLAUDE.md](CLAUDE.md) - Development guidelines for AI assistants
 
+## License
+
+This project is dual-licensed:
+
+- **Open Source**: [GNU General Public License v3.0](LICENSE) — free to use, modify, and distribute under GPLv3 terms.
+- **Commercial**: A commercial license is available for use without copyleft obligations. See [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md) for details or contact [Christoph Becker](https://ch-becker.de).
+
 ## Development Guidelines
 
 - Use TDD - write tests first
