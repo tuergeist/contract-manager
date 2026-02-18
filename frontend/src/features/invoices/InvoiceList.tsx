@@ -39,6 +39,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn, formatCurrency, formatDate } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
+import { CustomerPickerDialog } from '@/components/CustomerPickerDialog'
 
 // --- GraphQL ---
 
@@ -387,19 +388,6 @@ const CREATE_PAYMENT_MATCH_FOR_RECORD = gql`
   }
 `
 
-const SEARCH_CUSTOMERS = gql`
-  query SearchCustomers($search: String!) {
-    customers(search: $search) {
-      items {
-        id
-        name
-        address
-        hubspotId
-      }
-    }
-  }
-`
-
 interface GeneratedInvoice {
   id: number
   invoiceNumber: string
@@ -536,8 +524,6 @@ export function InvoiceList() {
   const [paymentMatchRecord, setPaymentMatchRecord] = useState<GeneratedInvoice | null>(null)
   const [transactionSearch, setTransactionSearch] = useState('')
   const [debouncedTxSearch, setDebouncedTxSearch] = useState('')
-  const [customerSearch, setCustomerSearch] = useState('')
-  const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('')
 
   // File upload
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -630,12 +616,6 @@ export function InvoiceList() {
     return () => clearTimeout(timer)
   }, [transactionSearch])
 
-  // Debounce customer search
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedCustomerSearch(customerSearch), 300)
-    return () => clearTimeout(timer)
-  }, [customerSearch])
-
   // Fetch payment matches when invoice selected
   useEffect(() => {
     if (paymentMatchInvoice) {
@@ -658,13 +638,6 @@ export function InvoiceList() {
     }
   )
 
-  const { data: customerSearchData, loading: loadingCustomerSearch } = useQuery(
-    SEARCH_CUSTOMERS,
-    {
-      variables: { search: debouncedCustomerSearch },
-      skip: !customerMatchInvoice || !debouncedCustomerSearch || debouncedCustomerSearch.length < 2,
-    }
-  )
 
   const invoices: Invoice[] = data?.invoices?.items ?? []
   const generatedInvoices: GeneratedInvoice[] = generatedData?.invoiceRecords?.items ?? []
@@ -1640,109 +1613,46 @@ export function InvoiceList() {
       </Dialog>
 
       {/* Customer Match Modal */}
-      <Dialog open={!!customerMatchInvoice} onOpenChange={(open: boolean) => {
-        if (!open) {
-          setCustomerMatchInvoice(null)
-          setCustomerSearch('')
-        }
-      }}>
-        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{t('invoices.import.matchCustomerTitle')}</DialogTitle>
-            <DialogDescription>
-              {t('invoices.import.matchCustomerDescription', { name: customerMatchInvoice?.customerName })}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            {/* Search input */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input
-                value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
-                placeholder={t('invoices.import.searchCustomers')}
-                className="pl-9"
-              />
-            </div>
-
-            {/* Search results */}
-            {debouncedCustomerSearch && debouncedCustomerSearch.length >= 2 && (
-              <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">{t('invoices.import.searchResults')}</h4>
-                {loadingCustomerSearch ? (
-                  <div className="text-center py-2">
-                    <Loader2 className="w-4 h-4 mx-auto animate-spin" />
-                  </div>
-                ) : customerSearchData?.customers?.items?.length > 0 ? (
-                  <div className="space-y-2 max-h-72 overflow-y-auto">
-                    {customerSearchData.customers.items.map((customer: { id: number; name: string; address?: { city?: string | null } | null; hubspotId: string | null }) => (
-                      <button
-                        key={customer.id}
-                        onClick={() => handleConfirmCustomer(customer.id)}
-                        className="w-full flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 text-left"
-                      >
-                        <div>
-                          <div className="font-medium">{customer.name}</div>
-                          <div className="text-xs text-gray-500">
-                            CUS-{customer.id}{customer.address?.city && ` · ${customer.address.city}`}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 text-center py-2">{t('invoices.import.noSearchResults')}</p>
-                )}
-              </div>
-            )}
-
-            {/* Suggested matches */}
-            {!debouncedCustomerSearch && (
-              <>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">{t('invoices.import.suggestedCustomers')}</h4>
-                {loadingCustomerMatches ? (
-                  <div className="text-center py-4">
-                    <Loader2 className="w-6 h-6 mx-auto animate-spin" />
-                  </div>
-                ) : customerMatchData?.customerMatchSuggestions?.length > 0 ? (
-                  <div className="space-y-2">
-                    {(customerMatchData.customerMatchSuggestions as CustomerMatch[]).map((match) => (
-                      <button
-                        key={match.customerId}
-                        onClick={() => handleConfirmCustomer(match.customerId)}
-                        className="w-full flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 text-left"
-                      >
-                        <div>
-                          <div className="font-medium">{match.customerName}</div>
-                          <div className="text-xs text-gray-500">
-                            CUS-{match.customerId}{match.city && ` · ${match.city}`}
-                          </div>
-                        </div>
-                        <Badge variant="secondary">
-                          {Math.round(parseFloat(match.similarity) * 100)}% match
-                        </Badge>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-4 text-gray-500">
-                    <AlertCircle className="w-8 h-8 mx-auto mb-2" />
-                    <p>{t('invoices.import.noCustomerMatches')}</p>
-                  </div>
-                )}
-              </>
-            )}
+      <CustomerPickerDialog
+        open={!!customerMatchInvoice}
+        onOpenChange={(open) => { if (!open) setCustomerMatchInvoice(null) }}
+        title={t('invoices.import.matchCustomerTitle')}
+        description={t('invoices.import.matchCustomerDescription', { name: customerMatchInvoice?.customerName })}
+        onSelect={(customerId) => handleConfirmCustomer(customerId)}
+      >
+        {/* Suggested matches */}
+        <h4 className="text-sm font-medium text-gray-700 mb-2">{t('invoices.import.suggestedCustomers')}</h4>
+        {loadingCustomerMatches ? (
+          <div className="text-center py-4">
+            <Loader2 className="w-6 h-6 mx-auto animate-spin" />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setCustomerMatchInvoice(null)
-              setCustomerSearch('')
-            }}>
-              {t('common.close')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        ) : customerMatchData?.customerMatchSuggestions?.length > 0 ? (
+          <div className="space-y-2">
+            {(customerMatchData.customerMatchSuggestions as CustomerMatch[]).map((match) => (
+              <button
+                key={match.customerId}
+                onClick={() => handleConfirmCustomer(match.customerId)}
+                className="w-full flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 text-left"
+              >
+                <div>
+                  <div className="font-medium">{match.customerName}</div>
+                  <div className="text-xs text-gray-500">
+                    CUS-{match.customerId}{match.city && ` · ${match.city}`}
+                  </div>
+                </div>
+                <Badge variant="secondary">
+                  {Math.round(parseFloat(match.similarity) * 100)}% match
+                </Badge>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-4 text-gray-500">
+            <AlertCircle className="w-8 h-8 mx-auto mb-2" />
+            <p>{t('invoices.import.noCustomerMatches')}</p>
+          </div>
+        )}
+      </CustomerPickerDialog>
 
       {/* Payment Match Modal */}
       <Dialog open={!!paymentMatchInvoice || !!paymentMatchRecord} onOpenChange={(open: boolean) => {
