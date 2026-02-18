@@ -1,5 +1,25 @@
 [
   {
+    "version": "2.0.0",
+    "date": "2026-02-18",
+    "title": "Projects, Delivery Tracking & Contract Operations",
+    "description": "Major release adding delivery tracking for contract items, item dependencies that control billing, a dedicated Projects page, and several contract management improvements.",
+    "type": "feature",
+    "details": [
+      "Delivery tracking for contract items (pending/delivered status)",
+      "Item dependencies — billing is skipped until dependencies are delivered",
+      "New Projects page listing all deliverable items across contracts",
+      "Clockodo time tracking can be linked to specific deliverable items",
+      "Configurable activation checklist for contracts",
+      "Bulk price increase feature with confirmation modal",
+      "Reset-to-draft and change-customer operations for contracts",
+      "Changelog tab on About page",
+      "Persist PDF extraction results to avoid repeated API calls",
+      "Shared CustomerPickerDialog component",
+      "Dual licensing (GPLv3 + commercial)"
+    ]
+  },
+  {
     "version": "1.8.0",
     "date": "2026-02-17",
     "title": "Audit Log Filters & Auto-Sync",
