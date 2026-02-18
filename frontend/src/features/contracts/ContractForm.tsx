@@ -232,7 +232,7 @@ const formSchema = z.object({
   netsuiteUrl: z.string().optional().nullable(),
   poNumber: z.string().optional().nullable(),
   orderConfirmationNumber: z.string().optional().nullable(),
-  groupId: z.string().optional().nullable(),
+  groupId: z.coerce.string().optional().nullable(),
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().optional(),
   billingStartDate: z.string().optional(),
