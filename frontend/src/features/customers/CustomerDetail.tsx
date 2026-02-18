@@ -1148,18 +1148,11 @@ export function CustomerDetail() {
                       {getSortIcon('arr')}
                     </th>
                     <th
-                      className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                      className="hidden 2xl:table-cell px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('totalValue')}
                     >
                       {t('contracts.value')}
                       {getSortIcon('totalValue')}
-                    </th>
-                    <th
-                      className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                      onClick={() => handleSort('remainingMonths')}
-                    >
-                      {t('contracts.remainingMonths')}
-                      {getSortIcon('remainingMonths')}
                     </th>
                   </tr>
                 </thead>
@@ -1281,11 +1274,8 @@ export function CustomerDetail() {
                       <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
                         {formatCurrency(contract.arr)}
                       </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
+                      <td className="hidden 2xl:table-cell whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
                         {formatCurrency(contract.totalValue)}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-500">
-                        {contract.remainingMonths > 0 ? contract.remainingMonths : '-'}
                       </td>
                     </tr>
                   ))}
