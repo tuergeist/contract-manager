@@ -1,11 +1,14 @@
 [
   {
-    "version": "2.0.1",
+    "version": "2.0.2",
     "date": "2026-02-18",
-    "title": "Contract Group Selection Fix",
-    "description": "Fixed contract group selector rejecting numeric IDs with a validation error.",
+    "title": "Bulk Price Increase Fix",
+    "description": "Fixed bulk price increase crashing on contracts with discount or descriptive-only items.",
     "type": "bugfix",
-    "details": []
+    "details": [
+      "Skip items without a product and zero price in bulk price increase",
+      "Fix contract group selector rejecting numeric IDs"
+    ]
   },
   {
     "version": "2.0.0",
