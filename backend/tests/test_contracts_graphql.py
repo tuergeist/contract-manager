@@ -1525,3 +1525,306 @@ class TestActivationChecklist:
         data = result.data["setActivationRequiredFields"]
         assert data["success"] is False
         assert "invalid_field" in data["error"]
+
+
+# =============================================================================
+# Item Dependencies & Delivery Tests
+# =============================================================================
+
+MARK_ITEM_DELIVERED_MUTATION = """
+    mutation MarkItemDelivered($itemId: ID!, $deliveredAt: Date!) {
+        markItemDelivered(itemId: $itemId, deliveredAt: $deliveredAt) {
+            success
+            error
+            dependentItems {
+                id
+                name
+                hasBillingStartDate
+            }
+        }
+    }
+"""
+
+REVERT_ITEM_DELIVERY_MUTATION = """
+    mutation RevertItemDelivery($itemId: ID!) {
+        revertItemDelivery(itemId: $itemId) {
+            success
+            error
+        }
+    }
+"""
+
+DELIVERABLE_ITEMS_QUERY = """
+    query DeliverableItems($status: String, $customerId: ID) {
+        deliverableItems(status: $status, customerId: $customerId) {
+            id
+            productName
+            description
+            isOneOff
+            deliveryStatus
+            deliveredAt
+            contractId
+            contractName
+            customerName
+            customerId
+            dependentItemsCount
+        }
+    }
+"""
+
+UPDATE_ITEM_DEPENDENCY_MUTATION = """
+    mutation UpdateContractItem($input: UpdateContractItemInput!) {
+        updateContractItem(input: $input) {
+            success
+            error
+            item {
+                id
+                deliveryStatus
+                dependsOn {
+                    id
+                }
+            }
+        }
+    }
+"""
+
+
+class TestItemDependencies:
+    """Tests for item delivery tracking and dependencies."""
+
+    @pytest.fixture
+    def active_contract(self, db, tenant, customer):
+        return Contract.objects.create(
+            tenant=tenant, customer=customer, name="Active Contract",
+            status=Contract.Status.ACTIVE, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+        )
+
+    @pytest.fixture
+    def product(self, db, tenant):
+        return Product.objects.create(
+            tenant=tenant, name="Dev Workshop",
+        )
+
+    def test_pending_item_excluded_from_billing(self, db, tenant, active_contract, product):
+        """Item with delivery_status='pending' excluded from billing schedule."""
+        ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("5000"), is_one_off=True,
+            billing_start_date=date(2025, 1, 1),
+            delivery_status="pending",
+        )
+        schedule = active_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2025, 12, 31)
+        )
+        assert len(schedule) == 0
+
+    def test_delivered_item_included_in_billing(self, db, tenant, active_contract, product):
+        """Item with delivery_status='delivered' included in billing schedule."""
+        ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("5000"), is_one_off=True,
+            billing_start_date=date(2025, 3, 1),
+            delivery_status="delivered", delivered_at=date(2025, 3, 1),
+        )
+        schedule = active_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2025, 12, 31)
+        )
+        assert len(schedule) == 1
+        assert schedule[0]["total"] == Decimal("5000")
+
+    def test_item_blocked_by_pending_dependency(self, db, tenant, active_contract, product):
+        """Recurring item depending on pending item excluded from billing."""
+        one_off = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("5000"), is_one_off=True,
+            billing_start_date=date(2025, 1, 1),
+            delivery_status="pending",
+        )
+        ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("100"),
+            billing_start_date=date(2025, 1, 1),
+            depends_on=one_off,
+        )
+        schedule = active_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2025, 12, 31)
+        )
+        assert len(schedule) == 0
+
+    def test_item_unblocked_after_dependency_delivered(self, db, tenant, active_contract, product):
+        """Recurring item depending on delivered item included in billing."""
+        one_off = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("5000"), is_one_off=True,
+            billing_start_date=date(2025, 1, 1),
+            delivery_status="delivered", delivered_at=date(2025, 1, 15),
+        )
+        ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("100"),
+            billing_start_date=date(2025, 2, 1),
+            depends_on=one_off,
+        )
+        schedule = active_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2025, 12, 31)
+        )
+        # Should include both: one-off on Jan 1 and recurring monthly from Feb
+        assert len(schedule) > 0
+        all_item_ids = set()
+        for event in schedule:
+            for item_info in event["items"]:
+                all_item_ids.add(item_info["item_id"])
+        assert len(all_item_ids) == 2
+
+    def test_mark_item_delivered_mutation(self, user, tenant, active_contract, product):
+        """mark_item_delivered sets status and date, returns dependents."""
+        one_off = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("5000"), is_one_off=True,
+            delivery_status="pending",
+        )
+        dep = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("100"),
+            depends_on=one_off,
+        )
+
+        result = run_graphql(MARK_ITEM_DELIVERED_MUTATION, {
+            "itemId": str(one_off.id),
+            "deliveredAt": "2025-03-15",
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["markItemDelivered"]
+        assert data["success"] is True
+        assert len(data["dependentItems"]) == 1
+        assert data["dependentItems"][0]["id"] == dep.id
+
+        one_off.refresh_from_db()
+        assert one_off.delivery_status == "delivered"
+        assert one_off.delivered_at == date(2025, 3, 15)
+
+    def test_revert_item_delivery_mutation(self, user, tenant, active_contract, product):
+        """revert_item_delivery clears status and date."""
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("5000"), is_one_off=True,
+            delivery_status="delivered", delivered_at=date(2025, 3, 15),
+        )
+
+        result = run_graphql(REVERT_ITEM_DELIVERY_MUTATION, {
+            "itemId": str(item.id),
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["revertItemDelivery"]
+        assert data["success"] is True
+
+        item.refresh_from_db()
+        assert item.delivery_status == "pending"
+        assert item.delivered_at is None
+
+    def test_dependency_must_be_same_contract(self, user, tenant, customer, product):
+        """Setting dependency to item in different contract is rejected."""
+        contract_a = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Contract A",
+            status=Contract.Status.ACTIVE, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+        )
+        contract_b = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Contract B",
+            status=Contract.Status.ACTIVE, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+        )
+        item_a = ContractItem.objects.create(
+            tenant=tenant, contract=contract_a, product=product,
+            quantity=1, unit_price=Decimal("100"),
+        )
+        item_b = ContractItem.objects.create(
+            tenant=tenant, contract=contract_b, product=product,
+            quantity=1, unit_price=Decimal("100"),
+        )
+
+        result = run_graphql(UPDATE_ITEM_DEPENDENCY_MUTATION, {
+            "input": {"id": str(item_a.id), "dependsOnItemId": str(item_b.id)},
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["updateContractItem"]
+        assert data["success"] is False
+        assert "not found in this contract" in data["error"]
+
+    def test_self_dependency_rejected(self, user, tenant, active_contract, product):
+        """Setting dependency to itself is rejected."""
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("100"),
+        )
+
+        result = run_graphql(UPDATE_ITEM_DEPENDENCY_MUTATION, {
+            "input": {"id": str(item.id), "dependsOnItemId": str(item.id)},
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["updateContractItem"]
+        assert data["success"] is False
+        assert "cannot depend on itself" in data["error"]
+
+    def test_deleting_dependency_target_sets_null(self, db, tenant, active_contract, product):
+        """Deleting dependency target sets depends_on=NULL on dependents."""
+        one_off = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("5000"), is_one_off=True,
+            delivery_status="pending",
+        )
+        dep = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("100"),
+            depends_on=one_off,
+        )
+        one_off.delete()
+        dep.refresh_from_db()
+        assert dep.depends_on is None
+
+    def test_deliverable_items_query(self, user, tenant, active_contract, product):
+        """deliverable_items returns correct items with filters."""
+        pending = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("5000"), is_one_off=True,
+            delivery_status="pending",
+        )
+        delivered = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("3000"), is_one_off=True,
+            delivery_status="delivered", delivered_at=date(2025, 2, 1),
+        )
+        # Normal item without delivery tracking — should NOT appear
+        ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("100"),
+        )
+
+        # Query all
+        result = run_graphql(DELIVERABLE_ITEMS_QUERY, {}, make_context(user))
+        assert result.errors is None
+        items = result.data["deliverableItems"]
+        assert len(items) == 2
+
+        # Query pending only
+        result = run_graphql(DELIVERABLE_ITEMS_QUERY, {
+            "status": "pending",
+        }, make_context(user))
+        assert result.errors is None
+        items = result.data["deliverableItems"]
+        assert len(items) == 1
+        assert items[0]["id"] == pending.id
+
+        # Query delivered only
+        result = run_graphql(DELIVERABLE_ITEMS_QUERY, {
+            "status": "delivered",
+        }, make_context(user))
+        assert result.errors is None
+        items = result.data["deliverableItems"]
+        assert len(items) == 1
+        assert items[0]["id"] == delivered.id

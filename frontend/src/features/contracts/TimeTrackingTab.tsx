@@ -8,6 +8,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 const TIME_TRACKING_SUMMARY_QUERY = gql`
   query TimeTrackingSummary($contractId: ID!) {
@@ -31,6 +38,7 @@ const TIME_TRACKING_SUMMARY_QUERY = gql`
         externalProjectName
         externalCustomerName
         contractItemId
+        contractItemName
         cachedTotalHours
       }
     }
@@ -59,12 +67,14 @@ const MAP_PROJECT_MUTATION = gql`
     $externalProjectId: String!
     $externalProjectName: String!
     $externalCustomerName: String!
+    $contractItemId: ID
   ) {
     mapTimeTrackingProject(
       contractId: $contractId
       externalProjectId: $externalProjectId
       externalProjectName: $externalProjectName
       externalCustomerName: $externalCustomerName
+      contractItemId: $contractItemId
     ) {
       success
       error
@@ -81,9 +91,15 @@ const UNMAP_PROJECT_MUTATION = gql`
   }
 `
 
+export interface DeliveryItem {
+  id: string
+  name: string
+}
+
 interface TimeTrackingTabProps {
   contractId: string
   customerName: string
+  deliveryItems?: DeliveryItem[]
 }
 
 interface Mapping {
@@ -92,6 +108,7 @@ interface Mapping {
   externalProjectName: string
   externalCustomerName: string
   contractItemId: number | null
+  contractItemName: string | null
   cachedTotalHours: number
 }
 
@@ -102,7 +119,7 @@ interface ExternalProject {
   active: boolean
 }
 
-export function TimeTrackingTab({ contractId, customerName }: TimeTrackingTabProps) {
+export function TimeTrackingTab({ contractId, customerName, deliveryItems = [] }: TimeTrackingTabProps) {
   const { t } = useTranslation()
   const [showLinkDialog, setShowLinkDialog] = useState(false)
 
@@ -167,6 +184,7 @@ export function TimeTrackingTab({ contractId, customerName }: TimeTrackingTabPro
                 <tr className="border-b text-left text-gray-500">
                   <th className="pb-2 font-medium">{t('timeTracking.projectName')}</th>
                   <th className="pb-2 font-medium">{t('timeTracking.customerName')}</th>
+                  <th className="pb-2 font-medium">{t('timeTracking.linkedItem')}</th>
                   <th className="pb-2 text-right font-medium">{t('timeTracking.hours')}</th>
                   <th className="pb-2 font-medium"></th>
                 </tr>
@@ -188,6 +206,7 @@ export function TimeTrackingTab({ contractId, customerName }: TimeTrackingTabPro
                       </div>
                     </td>
                     <td className="py-2 text-gray-600">{m.externalCustomerName}</td>
+                    <td className="py-2 text-gray-500 text-xs">{m.contractItemName || '-'}</td>
                     <td className="py-2 text-right text-gray-600">{m.cachedTotalHours.toFixed(1)}h</td>
                     <td className="py-2 text-right">
                       <button
@@ -306,6 +325,7 @@ export function TimeTrackingTab({ contractId, customerName }: TimeTrackingTabPro
           contractId={contractId}
           customerName={customerName}
           linkedProjectIds={mappings.map((m) => m.externalProjectId)}
+          deliveryItems={deliveryItems}
           onClose={() => setShowLinkDialog(false)}
           onLinked={() => {
             setShowLinkDialog(false)
@@ -321,6 +341,7 @@ interface LinkProjectDialogProps {
   contractId: string
   customerName: string
   linkedProjectIds: string[]
+  deliveryItems: DeliveryItem[]
   onClose: () => void
   onLinked: () => void
 }
@@ -329,11 +350,13 @@ function LinkProjectDialog({
   contractId,
   customerName,
   linkedProjectIds,
+  deliveryItems,
   onClose,
   onLinked,
 }: LinkProjectDialogProps) {
   const { t } = useTranslation()
   const [search, setSearch] = useState(customerName)
+  const [selectedItemId, setSelectedItemId] = useState('none')
 
   const { data, loading } = useQuery(TIME_TRACKING_PROJECTS_QUERY, {
     variables: { search },
@@ -351,6 +374,7 @@ function LinkProjectDialog({
         externalProjectId: project.id,
         externalProjectName: project.name,
         externalCustomerName: project.customerName,
+        contractItemId: selectedItemId !== 'none' ? selectedItemId : null,
       },
     })
     if (result.data?.mapTimeTrackingProject?.success) {
@@ -377,6 +401,25 @@ function LinkProjectDialog({
               autoFocus
             />
           </div>
+
+          {deliveryItems.length > 0 && (
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                {t('timeTracking.linkToItem')}
+              </label>
+              <Select value={selectedItemId} onValueChange={setSelectedItemId}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t('timeTracking.noItemLink')}</SelectItem>
+                  {deliveryItems.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {loading ? (
             <div className="flex justify-center py-8">

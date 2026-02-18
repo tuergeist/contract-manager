@@ -226,6 +226,11 @@ class ContractItemType:
     price_locked: bool = False
     price_locked_until: date | None = None
     sort_order: int | None = None
+    # Delivery tracking
+    delivery_status: str | None = None
+    delivered_at: date | None = None
+    depends_on: "ContractItemType | None" = None
+    dependent_items: List["ContractItemType"] = strawberry.field(default_factory=list)
     # Year-specific pricing
     price_periods: List[ContractItemPriceType] = strawberry.field(default_factory=list)
 
@@ -301,7 +306,7 @@ class ContractType:
     @strawberry.field
     def items(self) -> List[ContractItemType]:
         """Get all contract items."""
-        items = ContractItem.objects.filter(contract=self).select_related("product", "contract").prefetch_related("price_periods")
+        items = ContractItem.objects.filter(contract=self).select_related("product", "contract", "depends_on", "depends_on__product").prefetch_related("price_periods", "dependent_items", "dependent_items__product")
         result = []
         today = date.today()
         for item in items:
@@ -341,6 +346,41 @@ class ContractType:
                     price_locked=item.price_locked,
                     price_locked_until=item.price_locked_until,
                     sort_order=item.sort_order,
+                    delivery_status=item.delivery_status,
+                    delivered_at=item.delivered_at,
+                    depends_on=ContractItemType(
+                        id=item.depends_on.id,
+                        quantity=item.depends_on.quantity,
+                        unit_price=item.depends_on.unit_price,
+                        price_period=item.depends_on.price_period,
+                        price_source=item.depends_on.price_source,
+                        total_price=item.depends_on.total_price,
+                        effective_price=item.depends_on.unit_price,
+                        effective_price_period=item.depends_on.price_period,
+                        product=item.depends_on.product,
+                        description=item.depends_on.description,
+                        is_one_off=item.depends_on.is_one_off,
+                        delivery_status=item.depends_on.delivery_status,
+                        delivered_at=item.depends_on.delivered_at,
+                    ) if item.depends_on else None,
+                    dependent_items=[
+                        ContractItemType(
+                            id=dep.id,
+                            quantity=dep.quantity,
+                            unit_price=dep.unit_price,
+                            price_period=dep.price_period,
+                            price_source=dep.price_source,
+                            total_price=dep.total_price,
+                            effective_price=dep.unit_price,
+                            effective_price_period=dep.price_period,
+                            product=dep.product,
+                            description=dep.description,
+                            is_one_off=dep.is_one_off,
+                            delivery_status=dep.delivery_status,
+                            delivered_at=dep.delivered_at,
+                        )
+                        for dep in item.dependent_items.all()
+                    ],
                     price_periods=price_periods,
                 )
             )
@@ -557,6 +597,8 @@ class ContractItemInput:
     align_to_contract_at: date | None = None
     is_one_off: bool = False
     order_confirmation_number: str | None = None
+    delivery_tracking: bool = False
+    depends_on_item_id: strawberry.ID | None = None
 
 
 @strawberry.input
@@ -576,6 +618,8 @@ class UpdateContractItemInput:
     order_confirmation_number: str | None = None
     price_locked: bool | None = None
     price_locked_until: date | None = UNSET
+    delivery_tracking: bool | None = None
+    depends_on_item_id: strawberry.ID | None = UNSET
 
 
 @strawberry.input
@@ -656,6 +700,38 @@ class BulkPriceIncreaseResult:
     items_changed: int = 0
     items_skipped: int = 0
     details: List[BulkPriceIncreaseItemResult] = strawberry.field(default_factory=list)
+
+
+@strawberry.type
+class DependentItemInfo:
+    """Info about a dependent item that may need billing_start_date."""
+    id: int
+    name: str
+    has_billing_start_date: bool
+
+
+@strawberry.type
+class DeliverItemResult:
+    """Result of marking an item as delivered."""
+    success: bool = False
+    error: str | None = None
+    dependent_items: List[DependentItemInfo] = strawberry.field(default_factory=list)
+
+
+@strawberry.type
+class DeliverableItemType:
+    """An item with delivery tracking, for the projects overview."""
+    id: int
+    product_name: str | None
+    description: str
+    is_one_off: bool
+    delivery_status: str | None
+    delivered_at: date | None
+    contract_id: int
+    contract_name: str
+    customer_name: str
+    customer_id: int
+    dependent_items_count: int
 
 
 # =============================================================================
@@ -969,6 +1045,7 @@ class TimeTrackingMappingType:
     external_project_name: str
     external_customer_name: str
     contract_item_id: int | None
+    contract_item_name: str | None = None
     cached_total_hours: float = 0
 
 
@@ -1894,7 +1971,7 @@ class ContractQuery:
 
         mappings = TimeTrackingProjectMapping.objects.filter(
             tenant=user.tenant, contract=contract
-        )
+        ).select_related("contract_item", "contract_item__product")
         mapping_types = [
             TimeTrackingMappingType(
                 id=m.id,
@@ -1902,6 +1979,11 @@ class ContractQuery:
                 external_project_name=m.external_project_name,
                 external_customer_name=m.external_customer_name,
                 contract_item_id=m.contract_item_id,
+                contract_item_name=(
+                    m.contract_item.product.name if m.contract_item and m.contract_item.product
+                    else m.contract_item.description[:50] if m.contract_item
+                    else None
+                ),
                 cached_total_hours=m.cached_total_hours,
             )
             for m in mappings
@@ -1987,6 +2069,49 @@ class ContractQuery:
 
         result = do_analyze(attachment, user.tenant)
         return _build_pdf_analysis_result(result)
+
+    @strawberry.field
+    def deliverable_items(
+        self,
+        info: Info[Context, None],
+        status: str | None = None,
+        customer_id: strawberry.ID | None = None,
+    ) -> List[DeliverableItemType]:
+        """List all items with delivery tracking for the projects overview."""
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+
+        qs = ContractItem.objects.filter(
+            tenant=user.tenant,
+            delivery_status__isnull=False,
+        ).select_related("contract", "contract__customer", "product")
+
+        if status:
+            qs = qs.filter(delivery_status=status)
+
+        if customer_id:
+            qs = qs.filter(contract__customer_id=customer_id)
+
+        from django.db.models import Count
+        qs = qs.annotate(dep_count=Count("dependent_items"))
+
+        return [
+            DeliverableItemType(
+                id=item.id,
+                product_name=item.product.name if item.product else None,
+                description=item.description,
+                is_one_off=item.is_one_off,
+                delivery_status=item.delivery_status,
+                delivered_at=item.delivered_at,
+                contract_id=item.contract_id,
+                contract_name=item.contract.name or "",
+                customer_name=item.contract.customer.name,
+                customer_id=item.contract.customer_id,
+                dependent_items_count=item.dep_count,
+            )
+            for item in qs.order_by("-contract__created_at")
+        ]
 
 
 def _check_price_period_overlap(
@@ -2242,6 +2367,17 @@ class ContractMutation:
         elif not input.description:
             return ContractItemResult(error="Either product or description is required")
 
+        # Validate depends_on if provided
+        depends_on_item = None
+        if input.depends_on_item_id:
+            depends_on_item = ContractItem.objects.filter(
+                contract=contract, id=input.depends_on_item_id
+            ).first()
+            if not depends_on_item:
+                return ContractItemResult(error="Dependency item not found in this contract")
+            if not depends_on_item.delivery_status:
+                return ContractItemResult(error="Dependency target must have delivery tracking enabled")
+
         try:
             with transaction.atomic():
                 item = ContractItem.objects.create(
@@ -2258,6 +2394,8 @@ class ContractMutation:
                     align_to_contract_at=input.align_to_contract_at,
                     is_one_off=input.is_one_off,
                     order_confirmation_number=input.order_confirmation_number,
+                    delivery_status="pending" if input.delivery_tracking else None,
+                    depends_on=depends_on_item,
                 )
 
                 # Create amendment record only for non-draft contracts
@@ -2302,6 +2440,10 @@ class ContractMutation:
                     price_locked=item.price_locked,
                     price_locked_until=item.price_locked_until,
                     sort_order=item.sort_order,
+                    delivery_status=item.delivery_status,
+                    delivered_at=item.delivered_at,
+                    depends_on=None,
+                    dependent_items=[],
                     price_periods=[],  # Newly created items have no price periods
                 ),
                 success=True,
@@ -2379,6 +2521,27 @@ class ContractMutation:
                     item.price_locked = input.price_locked
                 if input.price_locked_until is not UNSET:
                     item.price_locked_until = input.price_locked_until
+                if input.delivery_tracking is not None:
+                    if input.delivery_tracking:
+                        if not item.delivery_status:
+                            item.delivery_status = "pending"
+                    else:
+                        item.delivery_status = None
+                        item.delivered_at = None
+                if input.depends_on_item_id is not UNSET:
+                    if input.depends_on_item_id is None:
+                        item.depends_on = None
+                    else:
+                        if str(input.depends_on_item_id) == str(item.id):
+                            return ContractItemResult(error="An item cannot depend on itself")
+                        dep_item = ContractItem.objects.filter(
+                            contract=item.contract, id=input.depends_on_item_id
+                        ).first()
+                        if not dep_item:
+                            return ContractItemResult(error="Dependency item not found in this contract")
+                        if not dep_item.delivery_status:
+                            return ContractItemResult(error="Dependency target must have delivery tracking enabled")
+                        item.depends_on = dep_item
 
                 item.save()
 
@@ -2466,6 +2629,10 @@ class ContractMutation:
                     price_locked=item.price_locked,
                     price_locked_until=item.price_locked_until,
                     sort_order=item.sort_order,
+                    delivery_status=item.delivery_status,
+                    delivered_at=item.delivered_at,
+                    depends_on=None,
+                    dependent_items=[],
                     price_periods=price_periods,
                 ),
                 success=True,
@@ -3090,6 +3257,7 @@ class ContractMutation:
         external_project_id: str,
         external_project_name: str,
         external_customer_name: str = "",
+        contract_item_id: strawberry.ID | None = None,
     ) -> TimeTrackingMappingResult:
         """Map an external time tracking project to a contract."""
         user, err = check_perm(info, "contracts", "write")
@@ -3112,9 +3280,21 @@ class ContractMutation:
                 success=False, error="Project is already mapped"
             )
 
+        # Validate contract_item belongs to this contract
+        contract_item = None
+        if contract_item_id:
+            contract_item = ContractItem.objects.filter(
+                contract=contract, id=contract_item_id
+            ).first()
+            if not contract_item:
+                return TimeTrackingMappingResult(
+                    success=False, error="Item not found in this contract"
+                )
+
         mapping = TimeTrackingProjectMapping.objects.create(
             tenant=user.tenant,
             contract=contract,
+            contract_item=contract_item,
             external_project_id=external_project_id,
             external_project_name=external_project_name,
             external_customer_name=external_customer_name,
@@ -3132,6 +3312,11 @@ class ContractMutation:
                 external_project_name=mapping.external_project_name,
                 external_customer_name=mapping.external_customer_name,
                 contract_item_id=mapping.contract_item_id,
+                contract_item_name=(
+                    contract_item.product.name if contract_item and contract_item.product
+                    else contract_item.description[:50] if contract_item
+                    else None
+                ),
                 cached_total_hours=mapping.cached_total_hours,
             ),
         )
@@ -4066,3 +4251,73 @@ class ContractImportMutation:
             )
         except Exception as e:
             return BulkPriceIncreaseResult(error=str(e))
+
+    @strawberry.mutation
+    def mark_item_delivered(
+        self,
+        info: Info[Context, None],
+        item_id: strawberry.ID,
+        delivered_at: date,
+    ) -> DeliverItemResult:
+        """Mark a contract item as delivered."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return DeliverItemResult(error=err)
+        if not user.tenant:
+            return DeliverItemResult(error="No tenant assigned")
+
+        item = ContractItem.objects.filter(
+            tenant=user.tenant, id=item_id
+        ).select_related("product").first()
+        if not item:
+            return DeliverItemResult(error="Item not found")
+
+        if item.delivery_status != "pending":
+            return DeliverItemResult(error="Item is not pending delivery")
+
+        item.delivery_status = "delivered"
+        item.delivered_at = delivered_at
+        item.save(update_fields=["delivery_status", "delivered_at"])
+
+        # Find dependent items that need billing_start_date
+        dependents = ContractItem.objects.filter(
+            depends_on=item
+        ).select_related("product")
+        dependent_infos = [
+            DependentItemInfo(
+                id=dep.id,
+                name=dep.product.name if dep.product else dep.description[:50],
+                has_billing_start_date=dep.billing_start_date is not None,
+            )
+            for dep in dependents
+        ]
+
+        return DeliverItemResult(success=True, dependent_items=dependent_infos)
+
+    @strawberry.mutation
+    def revert_item_delivery(
+        self,
+        info: Info[Context, None],
+        item_id: strawberry.ID,
+    ) -> DeliverItemResult:
+        """Revert a delivered item back to pending."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return DeliverItemResult(error=err)
+        if not user.tenant:
+            return DeliverItemResult(error="No tenant assigned")
+
+        item = ContractItem.objects.filter(
+            tenant=user.tenant, id=item_id
+        ).first()
+        if not item:
+            return DeliverItemResult(error="Item not found")
+
+        if item.delivery_status != "delivered":
+            return DeliverItemResult(error="Item is not delivered")
+
+        item.delivery_status = "pending"
+        item.delivered_at = None
+        item.save(update_fields=["delivery_status", "delivered_at"])
+
+        return DeliverItemResult(success=True)

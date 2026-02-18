@@ -5,6 +5,7 @@
     "customers": "Customers",
     "products": "Products",
     "contracts": "Contracts",
+    "projects": "Projects",
     "invoices": "Invoices",
     "forecasts": "Forecasts",
     "auditLog": "Audit Log",
@@ -246,6 +247,7 @@
       "priceIncreaseWarning": "This will change the prices of all recurring line items. This action cannot be undone."
     },
     "item": {
+      "oneOff": "one-off",
       "product": "Product",
       "description": "Description",
       "descriptionPlaceholder": "Optional description or notes...",
@@ -322,6 +324,22 @@
       "quantity_changed": "Quantity changed",
       "price_changed": "Price changed",
       "terms_changed": "Terms changed"
+    },
+    "delivery": {
+      "pending": "Pending",
+      "delivered": "Delivered",
+      "dependsOn": "Depends on",
+      "markDelivered": "Mark as Delivered",
+      "markDeliveredTitle": "Mark Item as Delivered",
+      "deliveredAt": "Delivery Date",
+      "revertToPending": "Revert to Pending",
+      "confirmRevert": "Revert this item back to pending?",
+      "dependentsTitle": "Dependent Items",
+      "dependentsDescription": "The following items depend on this delivery and still need a billing start date:",
+      "needsBillingStart": "Needs billing start date",
+      "trackDelivery": "Delivery Tracking",
+      "trackDeliveryHint": "Track delivery status for this item",
+      "noDependency": "No dependency"
     },
     "actions": {
       "save": "Save Contract",
@@ -1027,7 +1045,10 @@
     "noData": "No time data available",
     "noProvider": "Time tracking not configured. Go to Settings to connect your provider.",
     "lastUpdated": "Last updated: {{time}}",
-    "dataLoading": "Data is syncing..."
+    "dataLoading": "Data is syncing...",
+    "linkedItem": "Item",
+    "linkToItem": "Link to item",
+    "noItemLink": "No item (contract-level)"
   },
   "todos": {
     "title": "Todos",
@@ -1295,5 +1316,18 @@
       "saved": "Help videos saved",
       "saveFailed": "Failed to save"
     }
+  },
+  "projects": {
+    "title": "Projects",
+    "item": "Item",
+    "customer": "Customer",
+    "contract": "Contract",
+    "status": "Status",
+    "deliveredAt": "Delivered",
+    "dependents": "Dependents",
+    "noItems": "No deliverable items found",
+    "allStatuses": "All Statuses",
+    "dependentCount": "{{count}} dependent items",
+    "dependentCount_one": "{{count}} dependent item"
   }
 }

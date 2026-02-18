@@ -30,6 +30,9 @@ import {
   GripVertical,
   ChevronDown,
   X,
+  CheckCircle2,
+  CircleDot,
+  Undo2,
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear } from '@/lib/utils'
 import { getToken } from '@/lib/auth'
@@ -141,6 +144,24 @@ const CONTRACT_DETAIL_QUERY = gql`
         priceLocked
         priceLockedUntil
         sortOrder
+        deliveryStatus
+        deliveredAt
+        dependsOn {
+          id
+          product {
+            id
+            name
+          }
+          description
+        }
+        dependentItems {
+          id
+          product {
+            id
+            name
+          }
+          description
+        }
         pricePeriods {
           id
           validFrom
@@ -277,6 +298,29 @@ const UPDATE_CONTRACT_ITEM_MUTATION = gql`
 const REMOVE_CONTRACT_ITEM_MUTATION = gql`
   mutation RemoveContractItem($itemId: ID!) {
     removeContractItem(itemId: $itemId) {
+      success
+      error
+    }
+  }
+`
+
+const MARK_ITEM_DELIVERED_MUTATION = gql`
+  mutation MarkItemDelivered($itemId: ID!, $deliveredAt: Date!) {
+    markItemDelivered(itemId: $itemId, deliveredAt: $deliveredAt) {
+      success
+      error
+      dependentItems {
+        id
+        name
+        hasBillingStartDate
+      }
+    }
+  }
+`
+
+const REVERT_ITEM_DELIVERY_MUTATION = gql`
+  mutation RevertItemDelivery($itemId: ID!) {
+    revertItemDelivery(itemId: $itemId) {
       success
       error
     }
@@ -479,6 +523,18 @@ interface ContractItem {
   priceLocked: boolean
   priceLockedUntil: string | null
   sortOrder: number | null
+  deliveryStatus: string | null
+  deliveredAt: string | null
+  dependsOn: {
+    id: string
+    product: { id: string; name: string } | null
+    description: string
+  } | null
+  dependentItems: {
+    id: string
+    product: { id: string; name: string } | null
+    description: string
+  }[]
   pricePeriods: PricePeriod[] | null
   product: {
     id: string
@@ -622,6 +678,12 @@ export function ContractDetail() {
   const [updateNotes, { loading: savingNotes }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
   const [updateInvoiceText, { loading: savingInvoiceText }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
   const [reorderItems] = useMutation(REORDER_CONTRACT_ITEMS_MUTATION)
+  const [markDelivered] = useMutation(MARK_ITEM_DELIVERED_MUTATION)
+  const [revertDelivery] = useMutation(REVERT_ITEM_DELIVERY_MUTATION)
+  const [deliveryItem, setDeliveryItem] = useState<ContractItem | null>(null)
+  const [deliveryDate, setDeliveryDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [deliveryDependents, setDeliveryDependents] = useState<{ id: number; name: string; hasBillingStartDate: boolean }[]>([])
+  const [showDeliveryDependents, setShowDeliveryDependents] = useState(false)
 
   const contract = data?.contract as Contract | undefined
 
@@ -662,6 +724,31 @@ export function ContractDetail() {
         },
       },
     })
+    refetch()
+  }
+
+  const handleMarkDelivered = async () => {
+    if (!deliveryItem) return
+    const result = await markDelivered({
+      variables: { itemId: deliveryItem.id, deliveredAt: deliveryDate },
+    })
+    const data = result.data?.markItemDelivered
+    if (data?.success) {
+      setDeliveryItem(null)
+      if (data.dependentItems?.length > 0) {
+        const needsBilling = data.dependentItems.filter((d: { hasBillingStartDate: boolean }) => !d.hasBillingStartDate)
+        if (needsBilling.length > 0) {
+          setDeliveryDependents(needsBilling)
+          setShowDeliveryDependents(true)
+        }
+      }
+      refetch()
+    }
+  }
+
+  const handleRevertDelivery = async (item: ContractItem) => {
+    if (!confirm(t('contracts.delivery.confirmRevert'))) return
+    await revertDelivery({ variables: { itemId: item.id } })
     refetch()
   }
 
@@ -1148,12 +1235,31 @@ export function ContractDetail() {
                                       </td>
                                     )}
                                     <td className="px-6 py-4">
-                                      <span className="font-medium text-gray-900">{itemName}</span>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-medium text-gray-900">{itemName}</span>
+                                        {item.deliveryStatus === 'pending' && (
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                                            <CircleDot className="h-3 w-3" />
+                                            {t('contracts.delivery.pending')}
+                                          </span>
+                                        )}
+                                        {item.deliveryStatus === 'delivered' && (
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            {t('contracts.delivery.delivered')}
+                                          </span>
+                                        )}
+                                      </div>
                                       {item.product?.sku && (
                                         <div className="text-xs text-gray-500">{item.product.sku}</div>
                                       )}
                                       {item.product && item.description && (
                                         <div className="text-xs text-gray-500 whitespace-pre-wrap">{item.description}</div>
+                                      )}
+                                      {item.dependsOn && (
+                                        <div className="text-xs text-gray-500">
+                                          {t('contracts.delivery.dependsOn')}: {item.dependsOn.product?.name || item.dependsOn.description}
+                                        </div>
                                       )}
                                     </td>
                                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
@@ -1206,6 +1312,24 @@ export function ContractDetail() {
                                     </td>
                                     {canEdit && (
                                       <td className="whitespace-nowrap px-6 py-4 text-right">
+                                        {item.deliveryStatus === 'pending' && (
+                                          <button
+                                            onClick={() => { setDeliveryItem(item); setDeliveryDate(new Date().toISOString().slice(0, 10)) }}
+                                            className="mr-2 text-gray-400 hover:text-green-600"
+                                            title={t('contracts.delivery.markDelivered')}
+                                          >
+                                            <CheckCircle2 className="h-4 w-4" />
+                                          </button>
+                                        )}
+                                        {item.deliveryStatus === 'delivered' && (
+                                          <button
+                                            onClick={() => handleRevertDelivery(item)}
+                                            className="mr-2 text-gray-400 hover:text-amber-600"
+                                            title={t('contracts.delivery.revertToPending')}
+                                          >
+                                            <Undo2 className="h-4 w-4" />
+                                          </button>
+                                        )}
                                         <button
                                           onClick={() => setEditingItem(item)}
                                           className="mr-2 text-gray-400 hover:text-blue-600"
@@ -1285,12 +1409,31 @@ export function ContractDetail() {
                                         </td>
                                       )}
                                       <td className="px-6 py-4">
-                                        <span className="font-medium text-gray-900">{itemName}</span>
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-medium text-gray-900">{itemName}</span>
+                                          {item.deliveryStatus === 'pending' && (
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                                              <CircleDot className="h-3 w-3" />
+                                              {t('contracts.delivery.pending')}
+                                            </span>
+                                          )}
+                                          {item.deliveryStatus === 'delivered' && (
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                                              <CheckCircle2 className="h-3 w-3" />
+                                              {t('contracts.delivery.delivered')}
+                                            </span>
+                                          )}
+                                        </div>
                                         {item.product?.sku && (
                                           <div className="text-xs text-gray-500">{item.product.sku}</div>
                                         )}
                                         {item.product && item.description && (
                                           <div className="text-xs text-gray-500 whitespace-pre-wrap">{item.description}</div>
+                                        )}
+                                        {item.dependsOn && (
+                                          <div className="text-xs text-gray-500">
+                                            {t('contracts.delivery.dependsOn')}: {item.dependsOn.product?.name || item.dependsOn.description}
+                                          </div>
                                         )}
                                       </td>
                                       <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
@@ -1311,6 +1454,24 @@ export function ContractDetail() {
                                       </td>
                                       {canEdit && (
                                         <td className="whitespace-nowrap px-6 py-4 text-right">
+                                          {item.deliveryStatus === 'pending' && (
+                                            <button
+                                              onClick={() => { setDeliveryItem(item); setDeliveryDate(new Date().toISOString().slice(0, 10)) }}
+                                              className="mr-2 text-gray-400 hover:text-green-600"
+                                              title={t('contracts.delivery.markDelivered')}
+                                            >
+                                              <CheckCircle2 className="h-4 w-4" />
+                                            </button>
+                                          )}
+                                          {item.deliveryStatus === 'delivered' && (
+                                            <button
+                                              onClick={() => handleRevertDelivery(item)}
+                                              className="mr-2 text-gray-400 hover:text-amber-600"
+                                              title={t('contracts.delivery.revertToPending')}
+                                            >
+                                              <Undo2 className="h-4 w-4" />
+                                            </button>
+                                          )}
                                           <button
                                             onClick={() => setEditingItem(item)}
                                             className="mr-2 text-gray-400 hover:text-blue-600"
@@ -1616,7 +1777,14 @@ export function ContractDetail() {
 
       {/* Time Tracking Tab */}
       {activeTab === 'timeTracking' && (
-        <TimeTrackingTab contractId={id!} customerName={contract.customer.name} />
+        <TimeTrackingTab
+          contractId={id!}
+          customerName={contract.customer.name}
+          deliveryItems={contract.items
+            .filter(item => item.deliveryStatus != null)
+            .map(item => ({ id: item.id, name: item.product?.name || item.description || '-' }))
+          }
+        />
       )}
 
       {/* Activity Tab */}
@@ -1652,6 +1820,7 @@ export function ContractDetail() {
       {editingItem && (
         <EditItemModal
           item={editingItem}
+          siblingItems={contract?.items || []}
           onClose={() => setEditingItem(null)}
           onSuccess={() => {
             setEditingItem(null)
@@ -1659,6 +1828,62 @@ export function ContractDetail() {
           }}
         />
       )}
+
+      {/* Mark Delivered Dialog */}
+      <Dialog open={!!deliveryItem} onOpenChange={(open) => !open && setDeliveryItem(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('contracts.delivery.markDeliveredTitle')}</DialogTitle>
+            <DialogDescription>
+              {deliveryItem && (deliveryItem.product?.name || deliveryItem.description)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium text-gray-700">{t('contracts.delivery.deliveredAt')}</label>
+              <Input
+                type="date"
+                value={deliveryDate}
+                onChange={(e) => setDeliveryDate(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeliveryItem(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={handleMarkDelivered}>
+              {t('contracts.delivery.markDelivered')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dependent Items Billing Prompt */}
+      <Dialog open={showDeliveryDependents} onOpenChange={(open) => !open && setShowDeliveryDependents(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('contracts.delivery.dependentsTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('contracts.delivery.dependentsDescription')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-4">
+            {deliveryDependents.map((dep) => (
+              <div key={dep.id} className="flex items-center justify-between rounded-lg border p-3">
+                <span className="text-sm font-medium">{dep.name}</span>
+                <span className="text-xs text-amber-600">{t('contracts.delivery.needsBillingStart')}</span>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowDeliveryDependents(false)}>
+              {t('common.close')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Todo Modal */}
       <TodoModal
@@ -1925,6 +2150,8 @@ function AddItemModal({
   const [alignToContractAt, setAlignToContractAt] = useState('')
   const [isOneOff, setIsOneOff] = useState(false)
   const [orderConfirmationNumber, setOrderConfirmationNumber] = useState('')
+  const [deliveryTracking, setDeliveryTracking] = useState(false)
+  const [dependsOnItemId, setDependsOnItemId] = useState('none')
   const [error, setError] = useState<string | null>(null)
   const [productSearchOpen, setProductSearchOpen] = useState(false)
   const [productSearchTerm, setProductSearchTerm] = useState('')
@@ -1938,6 +2165,11 @@ function AddItemModal({
     variables: { contractId, billingStartDate },
     skip: !billingStartDate,
   })
+
+  const { data: contractData } = useQuery(CONTRACT_DETAIL_QUERY, {
+    variables: { id: contractId },
+  })
+  const existingItems = (contractData?.contract?.items || []) as ContractItem[]
 
   const [addItem, { loading }] = useMutation(ADD_CONTRACT_ITEM_MUTATION)
 
@@ -2006,6 +2238,8 @@ function AddItemModal({
             alignToContractAt: alignToContractAt || null,
             isOneOff,
             orderConfirmationNumber: orderConfirmationNumber || null,
+            deliveryTracking,
+            dependsOnItemId: dependsOnItemId && dependsOnItemId !== 'none' ? dependsOnItemId : null,
           },
         },
       })
@@ -2213,6 +2447,34 @@ function AddItemModal({
                 />
               </div>
 
+              {/* Delivery Tracking + Depends On */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="delivery-tracking"
+                    checked={deliveryTracking}
+                    onCheckedChange={setDeliveryTracking}
+                  />
+                  <Label htmlFor="delivery-tracking">{t('contracts.delivery.trackDelivery')}</Label>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t('contracts.delivery.dependsOn')}</label>
+                  <Select value={dependsOnItemId} onValueChange={setDependsOnItemId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('contracts.delivery.noDependency')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t('contracts.delivery.noDependency')}</SelectItem>
+                      {existingItems.filter((ei) => ei.deliveryStatus != null).map((existingItem) => (
+                        <SelectItem key={existingItem.id} value={existingItem.id}>
+                          {existingItem.product?.name || existingItem.description || '-'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               {/* Start Date + Billing Start Date - 2 columns */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -2300,10 +2562,12 @@ function AddItemModal({
 
 function EditItemModal({
   item,
+  siblingItems,
   onClose,
   onSuccess,
 }: {
   item: ContractItem
+  siblingItems: ContractItem[]
   onClose: () => void
   onSuccess: () => void
 }) {
@@ -2331,6 +2595,8 @@ function EditItemModal({
   const [newPeriodPrice, setNewPeriodPrice] = useState('')
   const [newPeriodPricePeriod, setNewPeriodPricePeriod] = useState('monthly')
   const [newPeriodSource, setNewPeriodSource] = useState('fixed')
+  const [deliveryTracking, setDeliveryTracking] = useState(!!item.deliveryStatus)
+  const [dependsOnItemId, setDependsOnItemId] = useState(item.dependsOn?.id || 'none')
   const [error, setError] = useState<string | null>(null)
 
   const { data: productsData, loading: loadingProducts } = useQuery(PRODUCTS_FOR_SELECT_QUERY, {
@@ -2493,6 +2759,8 @@ function EditItemModal({
             orderConfirmationNumber: orderConfirmationNumber || null,
             priceLocked,
             priceLockedUntil: priceLockedUntil || null,
+            deliveryTracking,
+            dependsOnItemId: dependsOnItemId && dependsOnItemId !== 'none' ? dependsOnItemId : null,
           },
         },
       })
@@ -2940,6 +3208,41 @@ function EditItemModal({
               checked={isOneOff}
               onCheckedChange={setIsOneOff}
             />
+          </div>
+
+          {/* Delivery Tracking Switch */}
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="deliveryTrackingEdit" className="text-sm font-medium">
+                {t('contracts.delivery.trackDelivery')}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {t('contracts.delivery.trackDeliveryHint')}
+              </p>
+            </div>
+            <Switch
+              id="deliveryTrackingEdit"
+              checked={deliveryTracking}
+              onCheckedChange={setDeliveryTracking}
+            />
+          </div>
+
+          {/* Depends On */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{t('contracts.delivery.dependsOn')}</label>
+            <Select value={dependsOnItemId} onValueChange={setDependsOnItemId}>
+              <SelectTrigger>
+                <SelectValue placeholder={t('contracts.delivery.noDependency')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">{t('contracts.delivery.noDependency')}</SelectItem>
+                {siblingItems.filter(si => si.id !== item.id && si.deliveryStatus != null).map((si) => (
+                  <SelectItem key={si.id} value={si.id}>
+                    {si.product?.name || si.description || '-'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Item-specific overrides - auto-open if any field has a value */}

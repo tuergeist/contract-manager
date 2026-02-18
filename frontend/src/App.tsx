@@ -21,6 +21,7 @@ import { BankingPage } from './features/banking/BankingPage'
 import { CounterpartyDetailPage } from './features/banking/CounterpartyDetailPage'
 import { TodoBoard } from './features/todos/TodoBoard'
 import { AboutPage } from './features/about/AboutPage'
+import { ProjectList } from './features/projects/ProjectList'
 
 function App() {
   return (
@@ -44,6 +45,7 @@ function App() {
         <Route path="contracts/new" element={<ContractForm />} />
         <Route path="contracts/:id" element={<ContractDetail />} />
         <Route path="contracts/:id/edit" element={<ContractForm />} />
+        <Route path="projects" element={<ProjectList />} />
         <Route path="forecasts" element={<ForecastsPage />} />
         <Route path="settings" element={<SettingsLayout />} />
         <Route path="settings/general" element={<SettingsLayout />} />

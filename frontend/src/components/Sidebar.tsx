@@ -21,6 +21,7 @@ import {
   Landmark,
   ListTodo,
   Info,
+  FolderKanban,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
@@ -65,6 +66,7 @@ const navItems: NavItem[] = [
   { to: '/customers', icon: Users, labelKey: 'nav.customers' },
   { to: '/products', icon: Package, labelKey: 'nav.products' },
   { to: '/contracts', icon: FileText, labelKey: 'nav.contracts' },
+  { to: '/projects', icon: FolderKanban, labelKey: 'nav.projects' },
   { to: '/invoices', icon: FileUp, labelKey: 'nav.invoices', permission: 'invoices.read' },
   { to: '/banking', icon: Landmark, labelKey: 'nav.banking', permission: 'banking.read' },
   { to: '/forecasts', icon: TrendingUp, labelKey: 'nav.forecasts' },

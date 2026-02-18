@@ -5,6 +5,7 @@
     "customers": "Kunden",
     "products": "Produkte",
     "contracts": "Verträge",
+    "projects": "Projekte",
     "invoices": "Rechnungen",
     "forecasts": "Vorschauen",
     "auditLog": "Änderungsprotokoll",
@@ -246,6 +247,7 @@
       "priceIncreaseWarning": "Dies ändert die Preise aller wiederkehrenden Positionen. Diese Aktion kann nicht rückgängig gemacht werden."
     },
     "item": {
+      "oneOff": "einmalig",
       "product": "Produkt",
       "description": "Beschreibung",
       "descriptionPlaceholder": "Optionale Beschreibung oder Notizen...",
@@ -322,6 +324,22 @@
       "quantity_changed": "Menge geändert",
       "price_changed": "Preis geändert",
       "terms_changed": "Konditionen geändert"
+    },
+    "delivery": {
+      "pending": "Ausstehend",
+      "delivered": "Geliefert",
+      "dependsOn": "Abhängig von",
+      "markDelivered": "Als geliefert markieren",
+      "markDeliveredTitle": "Position als geliefert markieren",
+      "deliveredAt": "Lieferdatum",
+      "revertToPending": "Auf ausstehend zurücksetzen",
+      "confirmRevert": "Diese Position zurück auf ausstehend setzen?",
+      "dependentsTitle": "Abhängige Positionen",
+      "dependentsDescription": "Die folgenden Positionen sind von dieser Lieferung abhängig und benötigen noch ein Abrechnungsstartdatum:",
+      "needsBillingStart": "Abrechnungsstart erforderlich",
+      "trackDelivery": "Lieferverfolgung",
+      "trackDeliveryHint": "Lieferstatus für diese Position verfolgen",
+      "noDependency": "Keine Abhängigkeit"
     },
     "actions": {
       "save": "Vertrag speichern",
@@ -1027,7 +1045,10 @@
     "noData": "Keine Zeitdaten verfügbar",
     "noProvider": "Zeiterfassung nicht konfiguriert. Gehen Sie zu Einstellungen, um Ihren Anbieter zu verbinden.",
     "lastUpdated": "Zuletzt aktualisiert: {{time}}",
-    "dataLoading": "Daten werden synchronisiert..."
+    "dataLoading": "Daten werden synchronisiert...",
+    "linkedItem": "Position",
+    "linkToItem": "Mit Position verknüpfen",
+    "noItemLink": "Keine Position (Vertragsebene)"
   },
   "todos": {
     "title": "Aufgaben",
@@ -1295,5 +1316,18 @@
       "saved": "Hilfe-Videos gespeichert",
       "saveFailed": "Fehler beim Speichern"
     }
+  },
+  "projects": {
+    "title": "Projekte",
+    "item": "Position",
+    "customer": "Kunde",
+    "contract": "Vertrag",
+    "status": "Status",
+    "deliveredAt": "Geliefert",
+    "dependents": "Abhängigkeiten",
+    "noItems": "Keine lieferbaren Positionen gefunden",
+    "allStatuses": "Alle Status",
+    "dependentCount": "{{count}} abhängige Positionen",
+    "dependentCount_one": "{{count}} abhängige Position"
   }
 }

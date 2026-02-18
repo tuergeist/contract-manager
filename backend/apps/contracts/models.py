@@ -342,11 +342,19 @@ class Contract(TenantModel):
         events = defaultdict(lambda: {"items": [], "total": Decimal("0")})
 
         # Get all active items with prefetched price_periods to avoid N+1 queries
-        items = self.items.select_related("product").prefetch_related("price_periods").all()
+        items = self.items.select_related("product", "depends_on").prefetch_related("price_periods").all()
 
         for item in items:
             # Skip descriptive-only items (no product and no price)
             if not item.product and not item.unit_price:
+                continue
+
+            # Skip items with pending delivery
+            if item.delivery_status == "pending":
+                continue
+
+            # Skip items whose dependency is not yet delivered
+            if item.depends_on and item.depends_on.delivery_status == "pending":
                 continue
 
             # Cache the prefetched price_periods as a list for in-memory lookups
@@ -581,11 +589,19 @@ class Contract(TenantModel):
 
         # Use pre-loaded items if provided, otherwise query from DB
         if items is None:
-            items = self.items.select_related("product").prefetch_related("price_periods").all()
+            items = self.items.select_related("product", "depends_on").prefetch_related("price_periods").all()
 
         for item in items:
             # Skip descriptive-only items (no product and no price)
             if not item.product and not item.unit_price:
+                continue
+
+            # Skip items with pending delivery
+            if item.delivery_status == "pending":
+                continue
+
+            # Skip items whose dependency is not yet delivered
+            if item.depends_on and item.depends_on.delivery_status == "pending":
                 continue
 
             # Cache the prefetched price_periods as a list for in-memory lookups
@@ -879,6 +895,26 @@ class ContractItem(TenantModel):
         null=True,
         blank=True,
         related_name="added_items",
+    )
+    delivery_status = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        choices=[("pending", "Pending"), ("delivered", "Delivered")],
+        help_text="Delivery tracking: NULL = no tracking, pending = awaiting delivery, delivered = completed.",
+    )
+    delivered_at = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date when this item was delivered.",
+    )
+    depends_on = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dependent_items",
+        help_text="Item that must be delivered before this one can be billed.",
     )
 
     class Meta:
