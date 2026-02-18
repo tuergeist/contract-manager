@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.1.0",
+    "date": "2026-02-18",
+    "title": "Microsoft 365 Email Integration & Settings Reorganization",
+    "description": "Send invoices via Microsoft 365 Graph API, test email configuration end-to-end, and reorganized General settings into sub-tabs for better navigation.",
+    "type": "feature",
+    "details": [
+      "Microsoft 365 email integration for sending invoices via Graph API",
+      "Send test email button to verify M365 configuration",
+      "Collapsible Azure AD setup guide in M365 settings",
+      "General settings split into sub-tabs: HubSpot, Time Tracking, Email, Contracts, Help Videos",
+      "Removed remaining months column from customer contracts table",
+      "Responsive value column hidden on smaller screens"
+    ]
+  },
+  {
     "version": "2.0.4",
     "date": "2026-02-18",
     "title": "HubSpot Customer Filter Fix",
