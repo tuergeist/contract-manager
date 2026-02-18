@@ -1272,7 +1272,16 @@
     "noDependencies": "No dependency information available",
     "packageName": "Package",
     "packageVersion": "Version",
-    "packageLicense": "License"
+    "packageLicense": "License",
+    "changelog": {
+      "tab": "Changelog",
+      "aboutTab": "About",
+      "noEntries": "No changelog entries yet",
+      "feature": "Feature",
+      "bugfix": "Bugfix",
+      "improvement": "Improvement",
+      "security": "Security"
+    }
   },
   "helpVideo": {
     "button": "Quick Guide",

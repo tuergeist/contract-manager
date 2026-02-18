@@ -1272,7 +1272,16 @@
     "noDependencies": "Keine Abhängigkeitsinformationen verfügbar",
     "packageName": "Paket",
     "packageVersion": "Version",
-    "packageLicense": "Lizenz"
+    "packageLicense": "Lizenz",
+    "changelog": {
+      "tab": "Änderungsprotokoll",
+      "aboutTab": "Info",
+      "noEntries": "Noch keine Einträge",
+      "feature": "Neues Feature",
+      "bugfix": "Fehlerbehebung",
+      "improvement": "Verbesserung",
+      "security": "Sicherheit"
+    }
   },
   "helpVideo": {
     "button": "Kurze Anleitung",

@@ -1,0 +1,180 @@
+[
+  {
+    "version": "1.8.0",
+    "date": "2026-02-17",
+    "title": "Audit Log Filters & Auto-Sync",
+    "description": "Enhanced audit log with filtering capabilities and added automatic HubSpot synchronization.",
+    "type": "feature",
+    "details": [
+      "Filter audit log by user, date range, and text search",
+      "Automatic HubSpot sync every 6 hours via Celery Beat"
+    ]
+  },
+  {
+    "version": "1.7.3",
+    "date": "2026-02-17",
+    "title": "Deal Sync, Contract Groups & ZUGFeRD Fixes",
+    "description": "Improved HubSpot deal sync, added contract groups to customer detail, and fixed ZUGFeRD compliance.",
+    "type": "improvement",
+    "details": [
+      "HubSpot deal sync fixes and resettable item date fields",
+      "Contract groups tab on customer detail page",
+      "ZUGFeRD PDF/A-3b compliance fix (sRGB ICC OutputIntent)",
+      "Fix discount items excluded from billing and recognition schedules"
+    ]
+  },
+  {
+    "version": "1.7.2",
+    "date": "2026-02-17",
+    "title": "Billing Fixes & Performance",
+    "description": "Fixed billing calculations for one-off items and optimized dashboard performance.",
+    "type": "bugfix",
+    "details": [
+      "Fix one-off items using monthly-normalized price in billing/recognition",
+      "Fix paid filter for generated invoices",
+      "Cache Clockodo time tracking data in DB to avoid API rate limits",
+      "Optimize dashboard KPI computation"
+    ]
+  },
+  {
+    "version": "1.7.0",
+    "date": "2026-02-16",
+    "title": "About Page & Invoice API Cleanup",
+    "description": "Added About page with version info and OSS attributions, consolidated navigation, and cleaned up the invoice API.",
+    "type": "feature",
+    "details": [
+      "About page with frontend/backend version info and dependency licenses",
+      "Consolidated invoices/export and forecasts navigation entries",
+      "Removed 'imported' prefix from invoice GraphQL API",
+      "Added frontend unit test infrastructure"
+    ]
+  },
+  {
+    "version": "1.6.0",
+    "date": "2026-02-16",
+    "title": "ZUGFeRD Invoicing & Unified Invoice Table",
+    "description": "Implemented ZUGFeRD electronic invoicing (EN 16931), unified imported and generated invoices into a single table, and added per-customer invoice language settings.",
+    "type": "feature",
+    "details": [
+      "ZUGFeRD PDF/A-3 invoice generation with embedded XML",
+      "Unified invoices table merging imported and generated invoices",
+      "Selective invoice generation with per-row checkboxes",
+      "Per-customer invoice language setting (German/English)",
+      "Generated invoices shown on contract detail page",
+      "Background ZUGFeRD PDF generation and payment matching",
+      "Fix contract group creation and invoice PDF auth"
+    ]
+  },
+  {
+    "version": "1.5.1",
+    "date": "2026-02-13",
+    "title": "Permission Hints",
+    "description": "Added permission combination hints to the role editing dialog to help administrators understand required permission pairs.",
+    "type": "improvement",
+    "details": []
+  },
+  {
+    "version": "1.5.0",
+    "date": "2026-02-13",
+    "title": "Help Video Links",
+    "description": "Added contextual help video buttons that can be configured per screen, providing quick access to tutorial videos.",
+    "type": "feature",
+    "details": [
+      "Configurable help video links per screen in settings",
+      "Green button appears on pages with configured videos"
+    ]
+  },
+  {
+    "version": "1.4.0",
+    "date": "2026-02-13",
+    "title": "Contract Groups & Invoice UX",
+    "description": "Added contract groups for organizing contracts within a customer, improved invoice list UX, and added invoice permissions.",
+    "type": "feature",
+    "details": [
+      "Contract groups for organizing contracts within a customer",
+      "Contract group selector on contract form",
+      "Improved invoice list UX with eye icon and conditional filters",
+      "Added invoices.write and invoices.delete permissions",
+      "Enlarged customer link modal for invoice import"
+    ]
+  },
+  {
+    "version": "1.3.0",
+    "date": "2026-02-12",
+    "title": "Background PDF Extraction",
+    "description": "Added background PDF extraction with Celery for imported invoices, including automatic duplicate detection.",
+    "type": "feature",
+    "details": [
+      "Background PDF data extraction via Celery",
+      "Automatic duplicate invoice detection"
+    ]
+  },
+  {
+    "version": "1.2.1",
+    "date": "2026-02-12",
+    "title": "Permission & Migration Fixes",
+    "description": "Fixed invoice permissions and removed redundant S3 migration from startup.",
+    "type": "bugfix",
+    "details": [
+      "Fix invoice permissions: change invoices.update to invoices.generate",
+      "Remove redundant role badges from user name column",
+      "Remove S3 file migration from production startup"
+    ]
+  },
+  {
+    "version": "1.2.0",
+    "date": "2026-02-12",
+    "title": "Invoice Import & Payment Matching",
+    "description": "Added invoice import system with PDF extraction and payment matching, plus time tracking improvements and revenue forecast enhancements.",
+    "type": "feature",
+    "details": [
+      "Invoice import system with PDF extraction",
+      "Payment matching for imported invoices",
+      "Revenue forecast invoice matching",
+      "Time tracking show/hide revenue setting",
+      "Fix Clockodo time tracking integration",
+      "Fix contract status filter for effective_status"
+    ]
+  },
+  {
+    "version": "1.1.0",
+    "date": "2026-02-11",
+    "title": "Todo Board & Comments",
+    "description": "Added extended todo management with a board view, team sharing, and comment threads.",
+    "type": "feature",
+    "details": [
+      "Todo board view with drag-and-drop",
+      "Team todo sharing (public/private)",
+      "Comment threads on todos",
+      "Assignee management"
+    ]
+  },
+  {
+    "version": "1.0.1",
+    "date": "2026-02-11",
+    "title": "S3 Migration Fix",
+    "description": "Fixed S3 migration wrapping bytes in ContentFile for storage.save().",
+    "type": "bugfix",
+    "details": []
+  },
+  {
+    "version": "1.0.0",
+    "date": "2026-02-11",
+    "title": "Initial Release",
+    "description": "First production release of Contract Manager with full contract lifecycle management, customer sync, invoicing, banking, and time tracking.",
+    "type": "feature",
+    "details": [
+      "Contract management with amendments and flexible pricing",
+      "Customer sync from HubSpot",
+      "Invoice generation with PDF export",
+      "Banking module with MT940 import",
+      "Liquidity forecast with pattern detection",
+      "Time tracking integration (Clockodo)",
+      "RBAC with role management",
+      "Audit logging",
+      "Dashboard with KPIs",
+      "Todo management",
+      "S3-compatible file storage"
+    ]
+  }
+]
