@@ -105,8 +105,8 @@ def _is_domestic_customer(company_country: str, customer_address: dict) -> bool:
     company = _normalize_country(company_country)
     customer = _normalize_country(customer_address.get("country", ""))
     if not company or not customer:
-        # If either country is unknown, assume domestic (safe default)
-        return True
+        # If either country is unknown, assume non-domestic (no VAT / reverse charge)
+        return False
     # Match common variants (e.g., "Deutschland" == "Germany" == "DE")
     _aliases = {
         "deutschland": "DE", "germany": "DE", "de": "DE",

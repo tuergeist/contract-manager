@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.0.3",
+    "date": "2026-02-18",
+    "title": "Invoice & VAT Fixes",
+    "description": "Fixed invoice list pagination showing empty pages, improved VAT handling for foreign customers, and pre-filled price increase percentage.",
+    "type": "bugfix",
+    "details": [
+      "Fix invoice list showing empty pages after page 11 due to mismatched totalCount",
+      "Default to reverse charge (no VAT) when customer country is unknown",
+      "Pre-fill bulk price increase percentage with 3.5%"
+    ]
+  },
+  {
     "version": "2.0.2",
     "date": "2026-02-18",
     "title": "Bulk Price Increase Fix",

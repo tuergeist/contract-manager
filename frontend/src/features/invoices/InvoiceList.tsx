@@ -542,7 +542,7 @@ export function InvoiceList() {
       sortBy: sortField,
       sortOrder: sortField ? sortOrder : null,
       offset: sourceFilter === 'ALL' ? 0 : (page - 1) * pageSize,
-      limit: sourceFilter === 'ALL' ? 200 : pageSize,
+      limit: sourceFilter === 'ALL' ? 1000 : pageSize,
     },
     fetchPolicy: 'cache-and-network',
   })
@@ -553,7 +553,7 @@ export function InvoiceList() {
       sortBy: sortField,
       sortOrder: sortField ? sortOrder : null,
       offset: 0,
-      limit: 200,
+      limit: 1000,
     },
     skip: sourceFilter === 'IMPORTED',
     fetchPolicy: 'cache-and-network',
@@ -699,11 +699,11 @@ export function InvoiceList() {
   })()
 
   // Client-side pagination over unified rows
-  const totalCount = sourceFilter === 'GENERATED'
-    ? unifiedRows.length
-    : (sourceFilter === 'IMPORTED'
-      ? (data?.invoices?.totalCount ?? 0)
-      : (data?.invoices?.totalCount ?? 0) + (generatedData?.invoiceRecords?.totalCount ?? 0))
+  // When sourceFilter is ALL or GENERATED, both sources are fetched with a fixed limit
+  // and merged client-side, so totalCount must reflect actual fetched rows, not server totals.
+  const totalCount = sourceFilter === 'IMPORTED'
+    ? (data?.invoices?.totalCount ?? 0)
+    : unifiedRows.length
   const paginatedRows = sourceFilter === 'ALL'
     ? unifiedRows.slice((page - 1) * pageSize, page * pageSize)
     : unifiedRows

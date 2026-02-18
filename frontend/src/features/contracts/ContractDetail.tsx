@@ -1931,7 +1931,7 @@ function PriceIncreaseModal({
   const now = new Date()
   const jan1Year = now.getMonth() < 3 ? now.getFullYear() : now.getFullYear() + 1
   const nextJan1 = `${jan1Year}-01-01`
-  const [percentage, setPercentage] = useState('')
+  const [percentage, setPercentage] = useState('3.5')
   const [effectiveDate, setEffectiveDate] = useState(nextJan1)
   const [mode, setMode] = useState<'period_specific' | 'direct'>('period_specific')
   const [error, setError] = useState<string | null>(null)
