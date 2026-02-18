@@ -37,7 +37,7 @@ def customer(db, tenant):
     return Customer.objects.create(
         tenant=tenant,
         name="Acme Corp",
-        address={"street": "Hauptstraße 1", "city": "Berlin", "zip": "10115"},
+        address={"street": "Hauptstraße 1", "city": "Berlin", "zip": "10115", "country": "Deutschland"},
         is_active=True,
     )
 

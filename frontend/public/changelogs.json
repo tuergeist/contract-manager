@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.0.4",
+    "date": "2026-02-18",
+    "title": "HubSpot Customer Filter Fix",
+    "description": "Fixed HubSpot sync not fetching filter properties, causing all customers to be marked inactive.",
+    "type": "bugfix",
+    "details": [
+      "Dynamically include configured filter properties in HubSpot company sync",
+      "Fix customer_journey_stage not being fetched during sync"
+    ]
+  },
+  {
     "version": "2.0.3",
     "date": "2026-02-18",
     "title": "Invoice & VAT Fixes",

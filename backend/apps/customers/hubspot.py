@@ -125,6 +125,15 @@ class HubSpotService:
         """Get company filters from tenant config."""
         return self.config.get("company_filters", [])
 
+    def _get_company_properties(self) -> str:
+        """Build the list of HubSpot properties to fetch, including filter properties."""
+        base = {"name", "address", "city", "zip", "country", "phone", "website", "domain", "lifecyclestage"}
+        for f in self._get_company_filters():
+            prop = f.get("property_name", "")
+            if prop:
+                base.add(prop)
+        return ",".join(sorted(base))
+
     def list_company_properties(self) -> dict[str, Any]:
         """List all available company properties from HubSpot.
 
@@ -298,7 +307,7 @@ class HubSpotService:
                 while has_more:
                     params = {
                         "limit": 100,
-                        "properties": "name,address,city,zip,country,phone,website,domain,lifecyclestage",
+                        "properties": self._get_company_properties(),
                     }
                     if after:
                         params["after"] = after
