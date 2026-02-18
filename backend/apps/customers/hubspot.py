@@ -6,10 +6,10 @@ from decimal import Decimal
 from typing import Any
 
 import httpx
-from django.db import models
+from django.db import models, transaction
 
-from apps.customers.models import Customer
-from apps.contracts.models import Contract, ContractItem
+from apps.customers.models import Customer, CustomerNote, CustomerAttachment, CustomerLink
+from apps.contracts.models import Contract, ContractGroup, ContractItem
 from apps.products.models import Product, ProductPrice
 from apps.tenants.models import Tenant
 
@@ -127,7 +127,7 @@ class HubSpotService:
 
     def _get_company_properties(self) -> str:
         """Build the list of HubSpot properties to fetch, including filter properties."""
-        base = {"name", "address", "city", "zip", "country", "phone", "website", "domain", "lifecyclestage"}
+        base = {"name", "address", "city", "zip", "country", "phone", "website", "domain", "lifecyclestage", "hs_merged_object_ids"}
         for f in self._get_company_filters():
             prop = f.get("property_name", "")
             if prop:
@@ -412,10 +412,10 @@ class HubSpotService:
             customer.synced_at = datetime.now(timezone.utc)
             customer.hubspot_deleted_at = None
             customer.save()
-            return "updated"
+            result = "updated"
         else:
             # Create new
-            Customer.objects.create(
+            customer = Customer.objects.create(
                 tenant=self.tenant,
                 hubspot_id=hubspot_id,
                 name=properties.get("name", "") or f"Company {hubspot_id}",
@@ -423,7 +423,85 @@ class HubSpotService:
                 is_active=is_active,
                 synced_at=datetime.now(timezone.utc),
             )
-            return "created"
+            result = "created"
+
+        # Handle HubSpot company merges
+        merged_ids_raw = properties.get("hs_merged_object_ids") or ""
+        if merged_ids_raw:
+            old_ids = [
+                mid.strip() for mid in merged_ids_raw.split(";")
+                if mid.strip() and mid.strip() != hubspot_id
+            ]
+            if old_ids:
+                old_customers = Customer.objects.filter(
+                    hubspot_id__in=old_ids, tenant=self.tenant
+                )
+                for old_customer in old_customers:
+                    logger.info(
+                        "Detected HubSpot merge: %s (%s) -> %s (%s)",
+                        old_customer.hubspot_id, old_customer.name,
+                        hubspot_id, customer.name,
+                    )
+                    self._merge_customer(old_customer, customer)
+
+        return result
+
+    def _merge_customer(self, source: Customer, target: Customer) -> None:
+        """Merge source customer into target by reassigning all dependent objects.
+
+        After reassignment, source is deactivated (not deleted) to preserve
+        audit trail and prevent re-creation on next sync.
+        """
+        from apps.todos.models import TodoItem
+        from apps.invoices.models import InvoiceRecord, ImportedInvoice
+        from apps.banking.models import Counterparty
+
+        with transaction.atomic():
+            # Contracts (PROTECT — must reassign before any deletion)
+            contracts_moved = Contract.objects.filter(customer=source).update(customer=target)
+
+            # ContractGroups — consolidate duplicates by name
+            groups_moved = 0
+            groups_deleted = 0
+            for src_group in ContractGroup.objects.filter(customer=source):
+                existing_target_group = ContractGroup.objects.filter(
+                    customer=target, name=src_group.name
+                ).first()
+                if existing_target_group:
+                    # Move contracts from source group to existing target group
+                    Contract.objects.filter(group=src_group).update(group=existing_target_group)
+                    src_group.delete()
+                    groups_deleted += 1
+                else:
+                    src_group.customer = target
+                    src_group.save(update_fields=["customer"])
+                    groups_moved += 1
+
+            # Simple reassignments
+            notes_moved = CustomerNote.objects.filter(customer=source).update(customer=target)
+            attachments_moved = CustomerAttachment.objects.filter(customer=source).update(customer=target)
+            links_moved = CustomerLink.objects.filter(customer=source).update(customer=target)
+            todos_moved = TodoItem.objects.filter(customer=source).update(customer=target)
+            invoices_moved = InvoiceRecord.objects.filter(customer=source).update(customer=target)
+            imported_moved = ImportedInvoice.objects.filter(customer=source).update(customer=target)
+            counterparties_moved = Counterparty.objects.filter(customer=source).update(customer=target)
+
+            # Deactivate the old customer
+            source.is_active = False
+            source.hubspot_deleted_at = datetime.now(timezone.utc)
+            source.save(update_fields=["is_active", "hubspot_deleted_at"])
+
+        logger.info(
+            "Merged customer '%s' (hubspot_id=%s) into '%s' (hubspot_id=%s): "
+            "%d contracts, %d groups moved, %d groups consolidated, "
+            "%d notes, %d attachments, %d links, %d todos, "
+            "%d invoices, %d imported invoices, %d counterparties",
+            source.name, source.hubspot_id,
+            target.name, target.hubspot_id,
+            contracts_moved, groups_moved, groups_deleted,
+            notes_moved, attachments_moved, links_moved, todos_moved,
+            invoices_moved, imported_moved, counterparties_moved,
+        )
 
     def sync_products(self) -> dict[str, Any]:
         """Sync products from HubSpot to local products."""

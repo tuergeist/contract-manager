@@ -252,6 +252,8 @@ const CONTRACT_GENERATED_INVOICES_QUERY = gql`
         totalGross
         status
         pdfUrl
+        emailSentAt
+        emailSentTo
       }
       totalCount
     }
@@ -1634,7 +1636,7 @@ export function ContractDetail() {
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {/* Generated invoices */}
-                  {generatedInvoicesData?.invoiceRecords?.items?.map((record: { id: number; invoiceNumber: string; billingDate: string; totalGross: string; status: string; pdfUrl: string | null }) => (
+                  {generatedInvoicesData?.invoiceRecords?.items?.map((record: { id: number; invoiceNumber: string; billingDate: string; totalGross: string; status: string; pdfUrl: string | null; emailSentAt: string | null; emailSentTo: string[] }) => (
                     <tr key={`gen-${record.id}`} className="hover:bg-gray-50">
                       <td className="whitespace-nowrap px-6 py-4">
                         <span className="font-medium">{record.invoiceNumber}</span>

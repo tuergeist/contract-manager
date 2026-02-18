@@ -233,6 +233,38 @@ class HubSpotPropertiesResult:
 
 
 @strawberry.type
+class M365Settings:
+    """Microsoft 365 integration settings."""
+    is_configured: bool
+    sender_mailbox: str | None = None
+    client_id_masked: str | None = None
+    azure_tenant_id_masked: str | None = None
+
+
+@strawberry.type
+class M365MailboxType:
+    """A mailbox discovered from M365."""
+    email: str
+    display_name: str
+
+
+@strawberry.type
+class M365TestResult:
+    """Result of M365 connection test."""
+    success: bool
+    error: str | None = None
+    organization: str | None = None
+
+
+@strawberry.type
+class M365MailboxesResult:
+    """Result of M365 mailbox discovery."""
+    success: bool
+    error: str | None = None
+    mailboxes: list[M365MailboxType] | None = None
+
+
+@strawberry.type
 class TimeTrackingSettings:
     """Time tracking integration settings."""
     provider: str | None
@@ -474,6 +506,25 @@ class TenantQuery:
             success=result.get("success", False),
             error=result.get("error"),
             properties=properties,
+        )
+
+    @strawberry.field
+    def m365_settings(self, info: Info[Context, None]) -> M365Settings | None:
+        """Get M365 integration settings for current tenant."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return None
+        config = (user.tenant.settings or {}).get("m365", {})
+        client_id = config.get("client_id", "")
+        azure_tid = config.get("tenant_id", "")
+        is_configured = bool(
+            config.get("tenant_id") and config.get("client_id") and config.get("client_secret")
+        )
+        return M365Settings(
+            is_configured=is_configured,
+            sender_mailbox=config.get("sender_mailbox"),
+            client_id_masked=f"...{client_id[-4:]}" if len(client_id) > 4 else client_id or None,
+            azure_tenant_id_masked=f"...{azure_tid[-4:]}" if len(azure_tid) > 4 else azure_tid or None,
         )
 
     @strawberry.field
@@ -1206,4 +1257,113 @@ class TenantMutation:
                     )
 
         target_user.roles.set(new_roles)
+        return OperationResult(success=True)
+
+    # M365 Integration Mutations
+
+    @strawberry.mutation
+    def save_m365_settings(
+        self,
+        info: Info[Context, None],
+        azure_tenant_id: str,
+        client_id: str,
+        client_secret: str,
+    ) -> OperationResult:
+        """Save M365 credentials. Requires settings.write."""
+        user = require_perm(info, "settings", "write")
+        tenant = user.tenant
+        if not tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        if not tenant.settings:
+            tenant.settings = {}
+
+        existing = tenant.settings.get("m365", {})
+        tenant.settings["m365"] = {
+            "tenant_id": azure_tenant_id.strip() or existing.get("tenant_id", ""),
+            "client_id": client_id.strip() or existing.get("client_id", ""),
+            "client_secret": client_secret.strip() or existing.get("client_secret", ""),
+            "sender_mailbox": existing.get("sender_mailbox", ""),
+        }
+        tenant.save(update_fields=["settings"])
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def test_m365_connection(self, info: Info[Context, None]) -> M365TestResult:
+        """Test M365 connection with stored credentials."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return M365TestResult(success=False, error="No tenant assigned")
+
+        from apps.core.m365 import M365Error, test_connection
+        try:
+            result = test_connection(user.tenant)
+            return M365TestResult(
+                success=True,
+                organization=result.get("organization"),
+            )
+        except M365Error as e:
+            return M365TestResult(success=False, error=str(e))
+
+    @strawberry.mutation
+    def discover_m365_mailboxes(self, info: Info[Context, None]) -> M365MailboxesResult:
+        """Discover available mailboxes from M365."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return M365MailboxesResult(success=False, error="No tenant assigned")
+
+        from apps.core.m365 import M365Error, list_mailboxes
+        try:
+            mailboxes = list_mailboxes(user.tenant)
+            return M365MailboxesResult(
+                success=True,
+                mailboxes=[
+                    M365MailboxType(email=m["email"], display_name=m["display_name"])
+                    for m in mailboxes
+                ],
+            )
+        except M365Error as e:
+            return M365MailboxesResult(success=False, error=str(e))
+
+    @strawberry.mutation
+    def send_m365_test_email(self, info: Info[Context, None]) -> OperationResult:
+        """Send a test email via M365 to verify end-to-end configuration."""
+        user = require_perm(info, "settings", "write")
+        if not user.tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        from apps.core.m365 import M365Error, send_mail
+        try:
+            send_mail(
+                user.tenant,
+                to=[user.email],
+                subject="Test Email from Contract Manager",
+                body_html="<p>This is a test email sent from Contract Manager via Microsoft 365.</p>"
+                          "<p>If you received this, your M365 email integration is working correctly.</p>",
+            )
+            return OperationResult(success=True)
+        except M365Error as e:
+            return OperationResult(success=False, error=str(e))
+
+    @strawberry.mutation
+    def select_m365_mailbox(
+        self,
+        info: Info[Context, None],
+        mailbox: str,
+    ) -> OperationResult:
+        """Select a sender mailbox for M365 email sending."""
+        user = require_perm(info, "settings", "write")
+        tenant = user.tenant
+        if not tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        config = (tenant.settings or {}).get("m365", {})
+        if not config.get("client_id"):
+            return OperationResult(success=False, error="M365 not configured")
+
+        config["sender_mailbox"] = mailbox.strip()
+        if not tenant.settings:
+            tenant.settings = {}
+        tenant.settings["m365"] = config
+        tenant.save(update_fields=["settings"])
         return OperationResult(success=True)

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, gql } from '@apollo/client'
-import { RefreshCw, CheckCircle, XCircle, Loader2, Upload, Plus, X } from 'lucide-react'
+import { RefreshCw, CheckCircle, XCircle, Loader2, Upload, Plus, X, Info } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
 import { HelpVideoSettings } from './HelpVideoSettings'
 
@@ -150,11 +150,60 @@ const SET_HUBSPOT_AUTO_SYNC = gql`
   }
 `
 
+const M365_SETTINGS_QUERY = gql`
+  query M365Settings {
+    m365Settings {
+      isConfigured
+      senderMailbox
+      clientIdMasked
+      azureTenantIdMasked
+    }
+  }
+`
+
+const SAVE_M365_SETTINGS = gql`
+  mutation SaveM365Settings($azureTenantId: String!, $clientId: String!, $clientSecret: String!) {
+    saveM365Settings(azureTenantId: $azureTenantId, clientId: $clientId, clientSecret: $clientSecret) {
+      success
+      error
+    }
+  }
+`
+
+const TEST_M365_CONNECTION = gql`
+  mutation TestM365Connection {
+    testM365Connection {
+      success
+      error
+      organization
+    }
+  }
+`
+
+const SELECT_M365_MAILBOX = gql`
+  mutation SelectM365Mailbox($mailbox: String!) {
+    selectM365Mailbox(mailbox: $mailbox) {
+      success
+      error
+    }
+  }
+`
+
+const SEND_M365_TEST_EMAIL = gql`
+  mutation SendM365TestEmail {
+    sendM365TestEmail {
+      success
+      error
+    }
+  }
+`
+
 interface SettingsProps {
   showHeader?: boolean
+  section?: 'hubspot' | 'timeTracking' | 'email' | 'contracts' | 'helpVideos'
 }
 
-export function Settings({ showHeader = true }: SettingsProps) {
+export function Settings({ showHeader = true, section }: SettingsProps) {
   const { t } = useTranslation()
   const [ttProvider, setTtProvider] = useState('clockodo')
   const [ttApiEmail, setTtApiEmail] = useState('')
@@ -188,6 +237,19 @@ export function Settings({ showHeader = true }: SettingsProps) {
   const [syncDeals, { loading: syncingDeals }] = useMutation(SYNC_HUBSPOT_DEALS)
   const [saveFilters, { loading: savingFilters }] = useMutation(SAVE_COMPANY_FILTERS)
   const [setAutoSync] = useMutation(SET_HUBSPOT_AUTO_SYNC)
+
+  // M365 state
+  const [m365AzureTenantId, setM365AzureTenantId] = useState('')
+  const [m365ClientId, setM365ClientId] = useState('')
+  const [m365ClientSecret, setM365ClientSecret] = useState('')
+  const [m365Message, setM365Message] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [m365SenderMailbox, setM365SenderMailbox] = useState('')
+
+  const { data: m365Data, refetch: refetchM365 } = useQuery(M365_SETTINGS_QUERY)
+  const [saveM365, { loading: savingM365 }] = useMutation(SAVE_M365_SETTINGS)
+  const [testM365, { loading: testingM365 }] = useMutation(TEST_M365_CONNECTION)
+  const [selectMailbox] = useMutation(SELECT_M365_MAILBOX)
+  const [sendTestEmail, { loading: sendingTestEmail }] = useMutation(SEND_M365_TEST_EMAIL)
 
   // Initialize time tracking show revenue from settings
   useEffect(() => {
@@ -443,15 +505,110 @@ export function Settings({ showHeader = true }: SettingsProps) {
     refetchSettings()
   }
 
+  const handleSaveM365 = async () => {
+    setM365Message(null)
+    try {
+      const result = await saveM365({
+        variables: {
+          azureTenantId: m365AzureTenantId,
+          clientId: m365ClientId,
+          clientSecret: m365ClientSecret,
+        },
+      })
+      if (result.data?.saveM365Settings?.success) {
+        setM365Message({ type: 'success', text: t('settings.m365.saved') })
+        setM365ClientSecret('')
+        refetchM365()
+      } else {
+        setM365Message({ type: 'error', text: result.data?.saveM365Settings?.error || t('settings.m365.saveFailed') })
+      }
+    } catch {
+      setM365Message({ type: 'error', text: t('settings.m365.saveFailed') })
+    }
+  }
+
+  const handleTestM365 = async () => {
+    setM365Message(null)
+    try {
+      const result = await testM365()
+      if (result.data?.testM365Connection?.success) {
+        setM365Message({
+          type: 'success',
+          text: t('settings.m365.connectionSuccess', { org: result.data.testM365Connection.organization || '' }),
+        })
+      } else {
+        setM365Message({ type: 'error', text: result.data?.testM365Connection?.error || t('settings.m365.connectionFailed') })
+      }
+    } catch {
+      setM365Message({ type: 'error', text: t('settings.m365.connectionFailed') })
+    }
+  }
+
+  const handleSelectMailbox = async (mailbox: string) => {
+    setM365Message(null)
+    try {
+      const result = await selectMailbox({ variables: { mailbox } })
+      if (result.data?.selectM365Mailbox?.success) {
+        setM365Message({ type: 'success', text: t('settings.m365.mailboxSelected') })
+        refetchM365()
+      } else {
+        setM365Message({ type: 'error', text: result.data?.selectM365Mailbox?.error || t('settings.m365.selectFailed') })
+      }
+    } catch {
+      setM365Message({ type: 'error', text: t('settings.m365.selectFailed') })
+    }
+  }
+
+  const handleSendTestEmail = async () => {
+    setM365Message(null)
+    try {
+      const result = await sendTestEmail()
+      if (result.data?.sendM365TestEmail?.success) {
+        setM365Message({ type: 'success', text: t('settings.m365.testEmailSent') })
+      } else {
+        setM365Message({ type: 'error', text: result.data?.sendM365TestEmail?.error || t('settings.m365.testEmailFailed') })
+      }
+    } catch {
+      setM365Message({ type: 'error', text: t('settings.m365.testEmailFailed') })
+    }
+  }
+
   return (
     <div>
       {showHeader && <h1 className="text-2xl font-bold">{t('nav.settings')}</h1>}
 
       <div className={showHeader ? "mt-6 space-y-6" : "space-y-6"}>
         {/* HubSpot Integration */}
-        <div className="rounded-lg border bg-white p-6">
+        {(!section || section === 'hubspot') && <div className="rounded-lg border bg-white p-6">
           <h2 className="text-lg font-medium">{t('settings.hubspot.title')}</h2>
           <p className="mt-1 text-sm text-gray-500">{t('settings.hubspot.description')}</p>
+
+          <details className="mt-3 rounded-md border border-blue-100 bg-blue-50">
+            <summary className="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm font-medium text-blue-700">
+              <Info className="h-4 w-4" />
+              {t('settings.hubspot.setupGuide')}
+            </summary>
+            <div className="px-4 pb-3 text-sm text-blue-900 space-y-2">
+              <p>{t('settings.hubspot.setup.intro')}</p>
+              <ul className="list-disc ml-4 space-y-0.5">
+                <li><code className="text-xs bg-blue-100 px-1 rounded">crm.objects.companies.read</code></li>
+                <li><code className="text-xs bg-blue-100 px-1 rounded">crm.schemas.companies.read</code></li>
+                <li><code className="text-xs bg-blue-100 px-1 rounded">crm.objects.products.read</code></li>
+                <li><code className="text-xs bg-blue-100 px-1 rounded">crm.objects.deals.read</code></li>
+                <li><code className="text-xs bg-blue-100 px-1 rounded">crm.objects.contacts.read</code></li>
+              </ul>
+              <p className="text-xs text-blue-700 mt-2">
+                <a
+                  href="https://app-eu1.hubspot.com/service-keys/147076455"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-blue-900"
+                >
+                  {t('settings.hubspot.setup.createKeyLink')}
+                </a>
+              </p>
+            </div>
+          </details>
 
           <div className="mt-4 space-y-4">
             {/* Connection Status */}
@@ -763,10 +920,10 @@ export function Settings({ showHeader = true }: SettingsProps) {
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
         {/* Time Tracking */}
-        <div className="rounded-lg border bg-white p-6">
+        {(!section || section === 'timeTracking') && <div className="rounded-lg border bg-white p-6">
           <h2 className="text-lg font-medium">{t('settings.timeTracking.title')}</h2>
           <p className="mt-1 text-sm text-gray-500">{t('settings.timeTracking.description')}</p>
 
@@ -862,9 +1019,10 @@ export function Settings({ showHeader = true }: SettingsProps) {
               </label>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Contract Import */}
+        {(!section || section === 'contracts') && <>
         <div className="rounded-lg border bg-white p-6">
           <h2 className="text-lg font-medium">{t('import.title')}</h2>
           <p className="mt-1 text-sm text-gray-500">{t('import.description')}</p>
@@ -916,8 +1074,157 @@ export function Settings({ showHeader = true }: SettingsProps) {
           )}
         </div>
 
+        </>}
+
         {/* Help Video Links */}
-        <HelpVideoSettings />
+        {(!section || section === 'helpVideos') && <HelpVideoSettings />}
+
+        {/* Microsoft 365 Email */}
+        {(!section || section === 'email') && <div className="rounded-lg border bg-white p-6">
+          <h2 className="text-lg font-medium">{t('settings.m365.title')}</h2>
+          <p className="mt-1 text-sm text-gray-500">{t('settings.m365.description')}</p>
+
+          <details className="mt-3 rounded-md border border-blue-100 bg-blue-50">
+            <summary className="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm font-medium text-blue-700">
+              <Info className="h-4 w-4" />
+              {t('settings.m365.setupGuide')}
+            </summary>
+            <div className="px-4 pb-3 text-sm text-blue-900 space-y-2">
+              <ol className="list-decimal ml-4 space-y-1">
+                <li>{t('settings.m365.setup.step1')}</li>
+                <li>{t('settings.m365.setup.step2')}</li>
+                <li>{t('settings.m365.setup.step3')}</li>
+                <li>{t('settings.m365.setup.step4')}</li>
+                <li>{t('settings.m365.setup.step5')}</li>
+              </ol>
+              <p className="text-xs text-blue-700 mt-2">{t('settings.m365.setup.restrictNote')}</p>
+            </div>
+          </details>
+
+          <div className="mt-4 space-y-4">
+            {/* Connection Status */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">{t('settings.m365.status')}:</span>
+              {m365Data?.m365Settings?.isConfigured ? (
+                <>
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <span className="text-sm text-green-600">{t('settings.m365.connected')}</span>
+                  {m365Data.m365Settings.senderMailbox && (
+                    <span className="text-sm text-gray-500">
+                      ({t('settings.m365.sender')}: {m365Data.m365Settings.senderMailbox})
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm text-gray-500">{t('settings.m365.notConfigured')}</span>
+                </>
+              )}
+            </div>
+
+            {/* Credential Fields */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                {t('settings.m365.azureTenantId')}
+              </label>
+              <input
+                type="text"
+                value={m365AzureTenantId}
+                onChange={(e) => setM365AzureTenantId(e.target.value)}
+                placeholder={m365Data?.m365Settings?.azureTenantIdMasked || ''}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                {t('settings.m365.clientId')}
+              </label>
+              <input
+                type="text"
+                value={m365ClientId}
+                onChange={(e) => setM365ClientId(e.target.value)}
+                placeholder={m365Data?.m365Settings?.clientIdMasked || ''}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                {t('settings.m365.clientSecret')}
+              </label>
+              <input
+                type="password"
+                value={m365ClientSecret}
+                onChange={(e) => setM365ClientSecret(e.target.value)}
+                placeholder="••••••••"
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveM365}
+                disabled={savingM365 || (!m365AzureTenantId && !m365ClientId && !m365ClientSecret)}
+                className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {savingM365 && <Loader2 className="h-4 w-4 animate-spin" />}
+                {t('settings.m365.save')}
+              </button>
+
+              {m365Data?.m365Settings?.isConfigured && (
+                <>
+                  <button
+                    onClick={handleTestM365}
+                    disabled={testingM365}
+                    className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {testingM365 && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {t('settings.m365.testConnection')}
+                  </button>
+                  {m365Data.m365Settings.senderMailbox && (
+                    <button
+                      onClick={handleSendTestEmail}
+                      disabled={sendingTestEmail}
+                      className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {sendingTestEmail && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {t('settings.m365.sendTestEmail')}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Sender Mailbox */}
+            {m365Data?.m365Settings?.isConfigured && (
+              <div className="border-t pt-4 space-y-3">
+                <h3 className="text-sm font-medium text-gray-700">{t('settings.m365.senderMailbox')}</h3>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={m365SenderMailbox}
+                    onChange={(e) => setM365SenderMailbox(e.target.value)}
+                    placeholder={m365Data?.m365Settings?.senderMailbox || t('settings.m365.senderMailboxPlaceholder')}
+                    className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={() => handleSelectMailbox(m365SenderMailbox)}
+                    disabled={!m365SenderMailbox}
+                    className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {t('settings.m365.saveMailbox')}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {m365Message && (
+              <p className={`text-sm ${m365Message.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                {m365Message.text}
+              </p>
+            )}
+          </div>
+        </div>}
       </div>
     </div>
   )

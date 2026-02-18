@@ -2,10 +2,10 @@ import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useAuth } from '@/lib/auth'
-import { Settings } from './Settings'
 import { UserSettings } from './UserSettings'
 import { TeamSettingsTabs } from './TeamSettingsTabs'
 import { InvoiceSettingsTabs } from './InvoiceSettingsTabs'
+import { GeneralSettingsTabs } from './GeneralSettingsTabs'
 
 export function SettingsLayout() {
   const { t } = useTranslation()
@@ -63,7 +63,7 @@ export function SettingsLayout() {
         </TabsContent>
 
         <TabsContent value="general">
-          <Settings showHeader={false} />
+          <GeneralSettingsTabs />
         </TabsContent>
 
         {canViewUsers && (

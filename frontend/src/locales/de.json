@@ -504,6 +504,10 @@
     "generating": "Wird erstellt...",
     "generateSuccess": "{{count}} Rechnungen erfolgreich erstellt",
     "generateFailed": "Rechnungen konnten nicht erstellt werden",
+    "sendEmail": "Per E-Mail senden",
+    "sendEmailConfirm": "Rechnung {{invoice}} per E-Mail an die Rechnungsadressen des Kunden senden?",
+    "sendEmailRecipients": "Rechnungs-E-Mail-Adressen",
+    "sendEmailFailed": "E-Mail-Versand fehlgeschlagen",
     "legalDataIncomplete": "Die Firmenstammdaten sind unvollständig. Bitte in den Einstellungen konfigurieren.",
     "goToSettings": "Zu den Einstellungen",
     "companyData": {
@@ -879,6 +883,13 @@
       "team": "Team",
       "invoices": "Rechnungen"
     },
+    "generalTabs": {
+      "hubspot": "HubSpot",
+      "timeTracking": "Zeiterfassung",
+      "email": "E-Mail (M365)",
+      "contracts": "Verträge",
+      "helpVideos": "Hilfe-Videos"
+    },
     "team": {
       "users": "Benutzer",
       "roles": "Rollen & Berechtigungen"
@@ -999,9 +1010,52 @@
       "filtersSaveFailed": "Filter konnten nicht gespeichert werden",
       "selectProperty": "Eigenschaft auswählen...",
       "noPropertiesFound": "Keine Eigenschaften gefunden",
+      "setupGuide": "Service-Key Anforderungen",
+      "setup": {
+        "intro": "Ein HubSpot Service-Key mit folgenden Berechtigungen wird benötigt:",
+        "createKeyLink": "Service-Key in den HubSpot-Einstellungen erstellen"
+      },
       "autoSync": "Automatische Synchronisierung alle 6 Stunden",
       "autoSyncDescription": "Kunden, Produkte und Deals automatisch im Hintergrund synchronisieren",
       "lastAutoSync": "Letzte Auto-Sync"
+    },
+    "m365": {
+      "title": "Microsoft 365 E-Mail",
+      "description": "Microsoft 365 konfigurieren, um Rechnungen per E-Mail über die Graph API zu versenden",
+      "status": "Status",
+      "connected": "Verbunden",
+      "notConfigured": "Nicht konfiguriert",
+      "azureTenantId": "Azure Tenant ID",
+      "clientId": "Client ID",
+      "clientSecret": "Client Secret",
+      "save": "Zugangsdaten speichern",
+      "saved": "Zugangsdaten gespeichert",
+      "saveFailed": "Fehler beim Speichern der Zugangsdaten",
+      "testConnection": "Verbindung testen",
+      "connectionSuccess": "Verbunden mit {{org}}",
+      "connectionFailed": "Verbindungstest fehlgeschlagen",
+      "senderMailbox": "Absender-Postfach",
+      "discoverMailboxes": "Postfächer erkennen",
+      "selectMailbox": "Postfach auswählen...",
+      "senderMailboxPlaceholder": "z.B. rechnungen@firma.de",
+      "saveMailbox": "Speichern",
+      "mailboxSelected": "Absender-Postfach gespeichert",
+      "selectFailed": "Fehler beim Auswählen des Postfachs",
+      "noMailboxes": "Keine Postfächer gefunden",
+      "discoverFailed": "Fehler beim Erkennen der Postfächer",
+      "sender": "Absender",
+      "sendTestEmail": "Test-E-Mail senden",
+      "testEmailSent": "Test-E-Mail an Ihre E-Mail-Adresse gesendet",
+      "testEmailFailed": "Fehler beim Senden der Test-E-Mail",
+      "setupGuide": "Woher bekomme ich die Zugangsdaten?",
+      "setup": {
+        "step1": "Öffnen Sie portal.azure.com → Microsoft Entra ID → App-Registrierungen → Neue Registrierung",
+        "step2": "Benennen Sie die App (z.B. \"Contract Manager Email\") und registrieren Sie sie",
+        "step3": "Auf der Übersichtsseite: Anwendungs-ID (Client) → Client ID, Verzeichnis-ID (Mandant) → Azure Tenant ID",
+        "step4": "Unter Zertifikate & Geheimnisse → Neuer geheimer Clientschlüssel → Spalte \"Wert\" kopieren (nicht die Geheimnis-ID) → Client Secret",
+        "step5": "Unter API-Berechtigungen → Berechtigung hinzufügen → Microsoft Graph → Anwendungsberechtigungen → Mail.Send hinzufügen → Administratorzustimmung erteilen",
+        "restrictNote": "Optional: Um einzuschränken, von welchen Postfächern die App senden darf, richten Sie eine Application Access Policy in Exchange Online PowerShell ein."
+      }
     },
     "activationChecklist": {
       "title": "Aktivierungs-Checkliste",

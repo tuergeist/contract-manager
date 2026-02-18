@@ -326,6 +326,11 @@ class InvoiceRecord(TenantModel):
     invoice_text = models.TextField(blank=True)
     pdf_file = models.FileField(upload_to=invoice_record_upload_path, blank=True)
 
+    # Email sending tracking
+    email_sent_at = models.DateTimeField(null=True, blank=True)
+    email_sent_to = models.JSONField(default=list, blank=True)
+    email_message_id = models.CharField(max_length=255, blank=True)
+
     class Meta:
         ordering = ["-billing_date", "-generated_at"]
         constraints = [

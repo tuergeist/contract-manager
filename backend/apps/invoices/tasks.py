@@ -4,6 +4,7 @@ import logging
 
 from celery import shared_task
 from django.core.files.base import ContentFile
+from django.utils import timezone
 
 from apps.invoices.extraction import run_extraction
 from apps.invoices.models import ImportedInvoice, InvoiceRecord
@@ -133,3 +134,104 @@ def generate_invoice_pdf_task(self, record_id: int) -> bool:
             )
             return False
         raise
+
+
+EMAIL_TEMPLATES = {
+    "de": {
+        "subject": "Rechnung {invoice_number}",
+        "body": """\
+<p>Sehr geehrte Damen und Herren,</p>
+<p>anbei erhalten Sie unsere Rechnung <strong>{invoice_number}</strong> \
+über {total_gross} {currency} für den Zeitraum {period_start} – {period_end}.</p>
+<p>Die Rechnung finden Sie als PDF im Anhang.</p>
+<p>Mit freundlichen Grüßen<br>{company_name}</p>""",
+    },
+    "en": {
+        "subject": "Invoice {invoice_number}",
+        "body": """\
+<p>Dear Sir or Madam,</p>
+<p>Please find attached our invoice <strong>{invoice_number}</strong> \
+for {total_gross} {currency} covering the period {period_start} – {period_end}.</p>
+<p>The invoice is attached as a PDF.</p>
+<p>Best regards,<br>{company_name}</p>""",
+    },
+}
+
+
+@shared_task(bind=True, acks_late=True)
+def send_invoice_email_task(self, record_id: int) -> bool:
+    """Send an invoice email via M365 Graph API.
+
+    No automatic retry to avoid duplicate sends.
+    """
+    from apps.core.m365 import M365Error, send_mail
+
+    try:
+        record = InvoiceRecord.objects.select_related(
+            "customer", "tenant"
+        ).get(id=record_id)
+    except InvoiceRecord.DoesNotExist:
+        logger.error("InvoiceRecord %s not found for email sending", record_id)
+        return False
+
+    customer = record.customer
+    if not customer:
+        logger.error("InvoiceRecord %s has no customer", record_id)
+        return False
+
+    recipients = customer.billing_emails or []
+    if not recipients:
+        logger.error("Customer %s has no billing_emails", customer.id)
+        return False
+
+    if not record.pdf_file:
+        logger.error("InvoiceRecord %s has no PDF file", record_id)
+        return False
+
+    # Determine language
+    lang = getattr(customer, "invoice_language", "") or "de"
+    if lang not in EMAIL_TEMPLATES:
+        lang = "de"
+
+    template = EMAIL_TEMPLATES[lang]
+    company_data = record.company_data_snapshot or {}
+    company_name = company_data.get("company_name", "")
+    currency = record.tenant.currency if record.tenant else "EUR"
+
+    subject = template["subject"].format(invoice_number=record.invoice_number)
+    body_html = template["body"].format(
+        invoice_number=record.invoice_number,
+        total_gross=f"{record.total_gross:,.2f}",
+        currency=currency,
+        period_start=record.period_start.strftime("%d.%m.%Y"),
+        period_end=record.period_end.strftime("%d.%m.%Y"),
+        company_name=company_name,
+    )
+
+    # Read PDF attachment
+    pdf_bytes = record.pdf_file.read()
+    attachments = [
+        {
+            "name": f"{record.invoice_number}.pdf",
+            "content_type": "application/pdf",
+            "content_bytes": pdf_bytes,
+        }
+    ]
+
+    try:
+        message_id = send_mail(
+            record.tenant,
+            to=recipients,
+            subject=subject,
+            body_html=body_html,
+            attachments=attachments,
+        )
+        record.email_sent_at = timezone.now()
+        record.email_sent_to = recipients
+        record.email_message_id = message_id or ""
+        record.save(update_fields=["email_sent_at", "email_sent_to", "email_message_id"])
+        logger.info("Invoice email sent for record %s to %s", record_id, recipients)
+        return True
+    except M365Error as e:
+        logger.error("Failed to send invoice email for record %s: %s", record_id, e)
+        return False

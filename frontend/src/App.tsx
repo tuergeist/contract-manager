@@ -49,6 +49,10 @@ function App() {
         <Route path="forecasts" element={<ForecastsPage />} />
         <Route path="settings" element={<SettingsLayout />} />
         <Route path="settings/general" element={<SettingsLayout />} />
+        <Route path="settings/general/time-tracking" element={<SettingsLayout />} />
+        <Route path="settings/general/email" element={<SettingsLayout />} />
+        <Route path="settings/general/contracts" element={<SettingsLayout />} />
+        <Route path="settings/general/help-videos" element={<SettingsLayout />} />
         <Route path="settings/team" element={<SettingsLayout />} />
         <Route path="settings/team/roles" element={<SettingsLayout />} />
         <Route path="settings/invoices" element={<SettingsLayout />} />

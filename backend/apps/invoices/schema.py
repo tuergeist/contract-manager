@@ -294,6 +294,9 @@ class InvoiceRecordType:
     pdf_url: str | None
     is_paid: bool
     payment_matches: List[PaymentMatchType]
+    email_sent_at: str | None
+    email_sent_to: list[str]
+    email_message_id: str
 
 
 @strawberry.type
@@ -2159,6 +2162,42 @@ class InvoiceMutation:
         batch.delete()
         return DeleteResult(success=True)
 
+    @strawberry.mutation
+    def send_invoice_email(
+        self, info: Info[Context, None], invoice_record_id: strawberry.ID
+    ) -> DeleteResult:
+        """Send an invoice email via M365. Requires invoices.write."""
+        user, err = check_perm(info, "invoices", "write")
+        if err:
+            return DeleteResult(success=False, error=err)
+
+        try:
+            record = InvoiceRecord.objects.select_related("customer", "tenant").get(
+                id=invoice_record_id, tenant=user.tenant
+            )
+        except InvoiceRecord.DoesNotExist:
+            return DeleteResult(success=False, error="Invoice record not found")
+
+        # Validate preconditions
+        if record.status != InvoiceRecord.Status.FINALIZED:
+            return DeleteResult(success=False, error="Only finalized invoices can be sent")
+
+        if not record.pdf_file:
+            return DeleteResult(success=False, error="PDF must be generated first")
+
+        customer = record.customer
+        if not customer or not customer.billing_emails:
+            return DeleteResult(success=False, error="Customer has no billing email addresses")
+
+        # Check M365 is configured
+        m365_config = (user.tenant.settings or {}).get("m365", {})
+        if not m365_config.get("client_id") or not m365_config.get("sender_mailbox"):
+            return DeleteResult(success=False, error="M365 email sending is not configured")
+
+        from apps.invoices.tasks import send_invoice_email_task
+        send_invoice_email_task.delay(record.id)
+        return DeleteResult(success=True)
+
 
 # =========================================================================
 # Converters
@@ -2213,6 +2252,9 @@ def _convert_record(record) -> InvoiceRecordType:
         pdf_url=record.pdf_file.url if record.pdf_file else None,
         is_paid=len(payment_matches) > 0,
         payment_matches=[_convert_payment_match(m) for m in payment_matches],
+        email_sent_at=record.email_sent_at.isoformat() if record.email_sent_at else None,
+        email_sent_to=record.email_sent_to or [],
+        email_message_id=record.email_message_id or "",
     )
 
 

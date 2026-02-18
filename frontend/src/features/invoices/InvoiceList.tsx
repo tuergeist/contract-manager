@@ -340,6 +340,8 @@ const INVOICE_RECORDS = gql`
         generatedAt
         pdfUrl
         isPaid
+        emailSentAt
+        emailSentTo
         paymentMatches {
           id
           transactionId
@@ -388,6 +390,24 @@ const CREATE_PAYMENT_MATCH_FOR_RECORD = gql`
   }
 `
 
+const M365_SETTINGS_QUERY = gql`
+  query M365SettingsForInvoices {
+    m365Settings {
+      isConfigured
+      senderMailbox
+    }
+  }
+`
+
+const SEND_INVOICE_EMAIL = gql`
+  mutation SendInvoiceEmail($invoiceRecordId: ID!) {
+    sendInvoiceEmail(invoiceRecordId: $invoiceRecordId) {
+      success
+      error
+    }
+  }
+`
+
 interface GeneratedInvoice {
   id: number
   invoiceNumber: string
@@ -401,6 +421,8 @@ interface GeneratedInvoice {
   generatedAt: string
   pdfUrl: string | null
   isPaid: boolean
+  emailSentAt: string | null
+  emailSentTo: string[]
   paymentMatches: {
     id: number
     transactionId: number
@@ -591,6 +613,8 @@ export function InvoiceList() {
   const [createPaymentMatchMutation] = useMutation(CREATE_PAYMENT_MATCH)
   const [createPaymentMatchForRecordMutation] = useMutation(CREATE_PAYMENT_MATCH_FOR_RECORD)
   const [deletePaymentMatchMutation] = useMutation(DELETE_PAYMENT_MATCH)
+  const { data: m365Data } = useQuery(M365_SETTINGS_QUERY)
+  const [sendInvoiceEmail, { loading: sendingEmail }] = useMutation(SEND_INVOICE_EMAIL)
 
   const [findPaymentMatches, { data: paymentMatchData, loading: loadingPaymentMatches }] = useLazyQuery(
     FIND_PAYMENT_MATCHES,
@@ -946,6 +970,24 @@ export function InvoiceList() {
     setPaymentMatchInvoice(invoice)
     setPaymentMatchRecord(null)
     setTransactionSearch('')
+  }
+
+  const handleSendEmail = async (record: GeneratedInvoice) => {
+    if (!window.confirm(t('invoices.sendEmailConfirm', { invoice: record.invoiceNumber }))) {
+      return
+    }
+    try {
+      const result = await sendInvoiceEmail({
+        variables: { invoiceRecordId: String(record.id) },
+      })
+      if (result.data?.sendInvoiceEmail?.success) {
+        generatedRefetch()
+      } else {
+        window.alert(result.data?.sendInvoiceEmail?.error || t('invoices.sendEmailFailed'))
+      }
+    } catch {
+      window.alert(t('invoices.sendEmailFailed'))
+    }
   }
 
   const openPaymentMatchRecordModal = (record: GeneratedInvoice) => {
@@ -1372,6 +1414,29 @@ export function InvoiceList() {
                         </>
                       ) : row.generated ? (
                         <>
+                          {/* Send email button */}
+                          {m365Data?.m365Settings?.isConfigured &&
+                           row.generated.status === 'finalized' &&
+                           !row.generated.emailSentAt &&
+                           row.generated.pdfUrl && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleSendEmail(row.generated!)}
+                              disabled={sendingEmail}
+                              title={t('invoices.sendEmail')}
+                              className="text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                            >
+                              <Mail className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {/* Sent indicator */}
+                          {row.generated.emailSentAt && (
+                            <span className="text-xs text-green-600 flex items-center gap-1" title={row.generated.emailSentTo.join(', ')}>
+                              <Mail className="w-3 h-3" />
+                              {new Date(row.generated.emailSentAt).toLocaleDateString()}
+                            </span>
+                          )}
                           {!row.generated.isPaid && (
                             <Button
                               variant="ghost"

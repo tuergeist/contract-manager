@@ -504,6 +504,10 @@
     "generating": "Generating...",
     "generateSuccess": "{{count}} invoices generated successfully",
     "generateFailed": "Failed to generate invoices",
+    "sendEmail": "Send by email",
+    "sendEmailConfirm": "Send invoice {{invoice}} by email to the customer's billing addresses?",
+    "sendEmailRecipients": "billing email addresses",
+    "sendEmailFailed": "Failed to send email",
     "legalDataIncomplete": "Company legal data is incomplete. Please configure it in Settings.",
     "goToSettings": "Go to Settings",
     "companyData": {
@@ -879,6 +883,13 @@
       "team": "Team",
       "invoices": "Invoicing"
     },
+    "generalTabs": {
+      "hubspot": "HubSpot",
+      "timeTracking": "Time Tracking",
+      "email": "Email (M365)",
+      "contracts": "Contracts",
+      "helpVideos": "Help Videos"
+    },
     "team": {
       "users": "Users",
       "roles": "Roles & Permissions"
@@ -999,9 +1010,52 @@
       "filtersSaveFailed": "Failed to save filters",
       "selectProperty": "Select property...",
       "noPropertiesFound": "No properties found",
+      "setupGuide": "Service key requirements",
+      "setup": {
+        "intro": "A HubSpot service key is required with the following scopes:",
+        "createKeyLink": "Create a service key in HubSpot settings"
+      },
       "autoSync": "Automatic sync every 6 hours",
       "autoSyncDescription": "Automatically sync customers, products, and deals in the background",
       "lastAutoSync": "Last auto-sync"
+    },
+    "m365": {
+      "title": "Microsoft 365 Email",
+      "description": "Configure Microsoft 365 to send invoices by email via Graph API",
+      "status": "Status",
+      "connected": "Connected",
+      "notConfigured": "Not configured",
+      "azureTenantId": "Azure Tenant ID",
+      "clientId": "Client ID",
+      "clientSecret": "Client Secret",
+      "save": "Save Credentials",
+      "saved": "Credentials saved",
+      "saveFailed": "Failed to save credentials",
+      "testConnection": "Test Connection",
+      "connectionSuccess": "Connected to {{org}}",
+      "connectionFailed": "Connection test failed",
+      "senderMailbox": "Sender Mailbox",
+      "discoverMailboxes": "Discover Mailboxes",
+      "selectMailbox": "Select a mailbox...",
+      "senderMailboxPlaceholder": "e.g. invoices@company.com",
+      "saveMailbox": "Save",
+      "mailboxSelected": "Sender mailbox saved",
+      "selectFailed": "Failed to select mailbox",
+      "noMailboxes": "No mailboxes found",
+      "discoverFailed": "Failed to discover mailboxes",
+      "sender": "Sender",
+      "sendTestEmail": "Send Test Email",
+      "testEmailSent": "Test email sent to your email address",
+      "testEmailFailed": "Failed to send test email",
+      "setupGuide": "How to get these credentials",
+      "setup": {
+        "step1": "Go to portal.azure.com → Microsoft Entra ID → App registrations → New registration",
+        "step2": "Name it (e.g. \"Contract Manager Email\") and register",
+        "step3": "From the app overview: Application (client) ID → Client ID, Directory (tenant) ID → Azure Tenant ID",
+        "step4": "Go to Certificates & secrets → New client secret → copy the \"Value\" column (not the Secret ID) → Client Secret",
+        "step5": "Go to API permissions → Add permission → Microsoft Graph → Application permissions → add Mail.Send → Grant admin consent",
+        "restrictNote": "Optional: To restrict which mailboxes the app can send from, set up an Application Access Policy in Exchange Online PowerShell."
+      }
     },
     "activationChecklist": {
       "title": "Activation Checklist",

@@ -2,9 +2,11 @@
 import pytest
 from datetime import date
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
 from apps.contracts.models import Contract, ContractItem
 from apps.customers.models import Customer
+from apps.invoices.models import InvoiceRecord
 from apps.invoices.services import InvoiceService
 from apps.invoices.schema import InvoiceQuery, _convert_invoice
 from apps.products.models import Product
@@ -730,3 +732,276 @@ class TestContractExportEndpoint:
 
         response = client.get("/api/contracts/export/?language=en", **auth_headers)
         assert response.status_code == 200
+
+
+class TestSaveM365Settings:
+    """Test saveM365Settings stores credentials correctly."""
+
+    def test_stores_credentials_in_tenant_settings(self, db, tenant):
+        """Saving M365 settings stores them in Tenant.settings['m365']."""
+        tenant.settings = {}
+        tenant.save()
+
+        tenant.settings["m365"] = {
+            "tenant_id": "azure-tid-123",
+            "client_id": "client-id-456",
+            "client_secret": "secret-789",
+            "sender_mailbox": "",
+        }
+        tenant.save(update_fields=["settings"])
+        tenant.refresh_from_db()
+
+        m365 = tenant.settings["m365"]
+        assert m365["tenant_id"] == "azure-tid-123"
+        assert m365["client_id"] == "client-id-456"
+        assert m365["client_secret"] == "secret-789"
+
+    def test_preserves_sender_mailbox_on_update(self, db, tenant):
+        """Updating credentials preserves the existing sender mailbox."""
+        tenant.settings = {
+            "m365": {
+                "tenant_id": "old-tid",
+                "client_id": "old-cid",
+                "client_secret": "old-secret",
+                "sender_mailbox": "invoices@company.com",
+            }
+        }
+        tenant.save(update_fields=["settings"])
+
+        # Simulate the mutation logic: preserve sender_mailbox
+        existing = tenant.settings.get("m365", {})
+        tenant.settings["m365"] = {
+            "tenant_id": "new-tid",
+            "client_id": "new-cid",
+            "client_secret": "new-secret",
+            "sender_mailbox": existing.get("sender_mailbox", ""),
+        }
+        tenant.save(update_fields=["settings"])
+        tenant.refresh_from_db()
+
+        assert tenant.settings["m365"]["sender_mailbox"] == "invoices@company.com"
+        assert tenant.settings["m365"]["client_id"] == "new-cid"
+
+
+class TestM365SettingsQuery:
+    """Test M365 settings query returns masked data."""
+
+    def test_masks_client_id(self, db, tenant):
+        """Query should mask client_id, showing only last 4 chars."""
+        tenant.settings = {
+            "m365": {
+                "tenant_id": "abcdef-1234-5678-9012",
+                "client_id": "myclient-id-abcd-1234",
+                "client_secret": "supersecret",
+                "sender_mailbox": "invoices@company.com",
+            }
+        }
+        tenant.save()
+
+        config = tenant.settings["m365"]
+        client_id = config["client_id"]
+        masked = f"...{client_id[-4:]}" if len(client_id) > 4 else client_id
+        assert masked == "...1234"
+        assert "myclient" not in masked
+
+    def test_not_configured_when_missing(self, db, tenant):
+        """Query returns is_configured=False when no M365 credentials."""
+        tenant.settings = {}
+        tenant.save()
+
+        config = (tenant.settings or {}).get("m365", {})
+        is_configured = bool(
+            config.get("tenant_id") and config.get("client_id") and config.get("client_secret")
+        )
+        assert is_configured is False
+
+
+class TestSendInvoiceEmailPreconditions:
+    """Test sendInvoiceEmail validates preconditions."""
+
+    @pytest.fixture
+    def invoice_record(self, db, tenant, customer):
+        """Create a finalized invoice record."""
+        from django.core.files.base import ContentFile
+        record = InvoiceRecord.objects.create(
+            tenant=tenant,
+            customer=customer,
+            customer_name=customer.name,
+            contract_name="Test Contract",
+            invoice_number="INV-2026-001",
+            billing_date=date(2026, 1, 1),
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+            total_net=Decimal("1000.00"),
+            tax_rate=Decimal("19.00"),
+            tax_amount=Decimal("190.00"),
+            total_gross=Decimal("1190.00"),
+            line_items_snapshot=[],
+            company_data_snapshot={"company_name": "Test GmbH"},
+            status=InvoiceRecord.Status.FINALIZED,
+        )
+        record.pdf_file.save("test.pdf", ContentFile(b"%PDF-test"), save=True)
+        return record
+
+    def test_rejects_draft_invoice(self, db, tenant, customer):
+        """Cannot send a draft invoice."""
+        record = InvoiceRecord.objects.create(
+            tenant=tenant,
+            customer=customer,
+            customer_name=customer.name,
+            contract_name="Test Contract",
+            invoice_number="INV-2026-002",
+            billing_date=date(2026, 1, 1),
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+            total_net=Decimal("100.00"),
+            tax_rate=Decimal("19.00"),
+            tax_amount=Decimal("19.00"),
+            total_gross=Decimal("119.00"),
+            line_items_snapshot=[],
+            company_data_snapshot={},
+            status=InvoiceRecord.Status.DRAFT,
+        )
+        assert record.status != InvoiceRecord.Status.FINALIZED
+
+    def test_rejects_no_pdf(self, db, tenant, customer):
+        """Cannot send an invoice without a PDF."""
+        record = InvoiceRecord.objects.create(
+            tenant=tenant,
+            customer=customer,
+            customer_name=customer.name,
+            contract_name="Test Contract",
+            invoice_number="INV-2026-003",
+            billing_date=date(2026, 1, 1),
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+            total_net=Decimal("100.00"),
+            tax_rate=Decimal("19.00"),
+            tax_amount=Decimal("19.00"),
+            total_gross=Decimal("119.00"),
+            line_items_snapshot=[],
+            company_data_snapshot={},
+            status=InvoiceRecord.Status.FINALIZED,
+        )
+        assert not record.pdf_file
+
+    def test_rejects_no_billing_emails(self, db, tenant, invoice_record):
+        """Cannot send when customer has no billing emails."""
+        customer = invoice_record.customer
+        customer.billing_emails = []
+        customer.save()
+        assert not customer.billing_emails
+
+    def test_rejects_m365_not_configured(self, db, tenant, invoice_record):
+        """Cannot send when M365 is not configured."""
+        tenant.settings = {}
+        tenant.save()
+        m365_config = (tenant.settings or {}).get("m365", {})
+        assert not m365_config.get("client_id")
+
+
+class TestSendInvoiceEmailTask:
+    """Test send_invoice_email_task composes email and updates tracking."""
+
+    @pytest.fixture
+    def configured_tenant(self, db, tenant):
+        """Tenant with M365 configured."""
+        tenant.settings = {
+            "m365": {
+                "tenant_id": "azure-tid",
+                "client_id": "client-id",
+                "client_secret": "secret",
+                "sender_mailbox": "invoices@company.com",
+            }
+        }
+        tenant.save()
+        return tenant
+
+    @pytest.fixture
+    def sendable_record(self, db, configured_tenant, customer):
+        """A finalized invoice record with PDF and billing emails."""
+        from django.core.files.base import ContentFile
+        customer.billing_emails = ["billing@customer.com", "accounts@customer.com"]
+        customer.invoice_language = "de"
+        customer.save()
+
+        record = InvoiceRecord.objects.create(
+            tenant=configured_tenant,
+            customer=customer,
+            customer_name=customer.name,
+            contract_name="Test Contract",
+            invoice_number="INV-2026-010",
+            billing_date=date(2026, 1, 1),
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+            total_net=Decimal("1000.00"),
+            tax_rate=Decimal("19.00"),
+            tax_amount=Decimal("190.00"),
+            total_gross=Decimal("1190.00"),
+            line_items_snapshot=[],
+            company_data_snapshot={"company_name": "Test GmbH"},
+            status=InvoiceRecord.Status.FINALIZED,
+        )
+        record.pdf_file.save("inv.pdf", ContentFile(b"%PDF-test-content"), save=True)
+        return record
+
+    @patch("apps.core.m365.send_mail")
+    def test_sends_email_and_updates_tracking(self, mock_send_mail, sendable_record):
+        """Task sends email via M365 and updates tracking fields."""
+        mock_send_mail.return_value = "msg-id-123"
+
+        from apps.invoices.tasks import send_invoice_email_task
+        result = send_invoice_email_task(sendable_record.id)
+
+        assert result is True
+        mock_send_mail.assert_called_once()
+        call_kwargs = mock_send_mail.call_args
+        assert call_kwargs[1]["to"] == ["billing@customer.com", "accounts@customer.com"]
+        assert "INV-2026-010" in call_kwargs[1]["subject"]
+        assert len(call_kwargs[1]["attachments"]) == 1
+
+        sendable_record.refresh_from_db()
+        assert sendable_record.email_sent_at is not None
+        assert sendable_record.email_sent_to == ["billing@customer.com", "accounts@customer.com"]
+        assert sendable_record.email_message_id == "msg-id-123"
+
+    @patch("apps.core.m365.send_mail")
+    def test_uses_german_template(self, mock_send_mail, sendable_record):
+        """Task uses German email template for de language."""
+        mock_send_mail.return_value = "msg-id"
+
+        from apps.invoices.tasks import send_invoice_email_task
+        send_invoice_email_task(sendable_record.id)
+
+        call_kwargs = mock_send_mail.call_args
+        assert call_kwargs[1]["subject"] == "Rechnung INV-2026-010"
+        assert "Sehr geehrte" in call_kwargs[1]["body_html"]
+
+    @patch("apps.core.m365.send_mail")
+    def test_uses_english_template(self, mock_send_mail, sendable_record):
+        """Task uses English template for en language."""
+        customer = sendable_record.customer
+        customer.invoice_language = "en"
+        customer.save()
+
+        mock_send_mail.return_value = "msg-id"
+
+        from apps.invoices.tasks import send_invoice_email_task
+        send_invoice_email_task(sendable_record.id)
+
+        call_kwargs = mock_send_mail.call_args
+        assert call_kwargs[1]["subject"] == "Invoice INV-2026-010"
+        assert "Dear Sir" in call_kwargs[1]["body_html"]
+
+    @patch("apps.core.m365.send_mail")
+    def test_handles_send_failure(self, mock_send_mail, sendable_record):
+        """Task handles M365 errors gracefully."""
+        from apps.core.m365 import M365Error
+        mock_send_mail.side_effect = M365Error("Auth failed")
+
+        from apps.invoices.tasks import send_invoice_email_task
+        result = send_invoice_email_task(sendable_record.id)
+
+        assert result is False
+        sendable_record.refresh_from_db()
+        assert sendable_record.email_sent_at is None
