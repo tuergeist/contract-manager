@@ -984,6 +984,21 @@
       "autoSync": "Automatic sync every 6 hours",
       "autoSyncDescription": "Automatically sync customers, products, and deals in the background",
       "lastAutoSync": "Last auto-sync"
+    },
+    "activationChecklist": {
+      "title": "Activation Checklist",
+      "description": "Configure which contract fields must be filled before a contract can be activated.",
+      "saved": "Activation checklist saved",
+      "saveFailed": "Failed to save activation checklist",
+      "fields": {
+        "po_number": "PO Number (Customer)",
+        "order_confirmation_number": "Order Confirmation No.",
+        "netsuite_sales_order_number": "NetSuite Sales Order No.",
+        "netsuite_contract_number": "NetSuite Contract No.",
+        "netsuite_url": "NetSuite URL"
+      },
+      "missingFieldsTitle": "Missing required fields",
+      "missingFieldsDescription": "The following fields must be filled before this contract can be activated:"
     }
   },
   "timeTracking": {

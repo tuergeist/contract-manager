@@ -1398,3 +1398,130 @@ class TestBulkPriceIncrease:
 
         amendments = ContractAmendment.objects.filter(contract=annual_contract)
         assert amendments.count() == 2
+
+
+UPDATE_CONTRACT_STATUS_MUTATION = """
+    mutation TransitionContractStatus($contractId: ID!, $newStatus: String!) {
+        transitionContractStatus(contractId: $contractId, newStatus: $newStatus) {
+            success
+            error
+            contract {
+                id
+                status
+            }
+        }
+    }
+"""
+
+SET_ACTIVATION_FIELDS_MUTATION = """
+    mutation SetActivationRequiredFields($fields: [String!]!) {
+        setActivationRequiredFields(fields: $fields) {
+            success
+            error
+        }
+    }
+"""
+
+
+class TestActivationChecklist:
+    """Tests for the activation checklist feature."""
+
+    @pytest.fixture
+    def draft_contract(self, db, tenant, customer):
+        return Contract.objects.create(
+            tenant=tenant, customer=customer, name="Draft Contract",
+            status=Contract.Status.DRAFT, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+        )
+
+    def test_activation_blocked_missing_fields(self, user, tenant, draft_contract):
+        """Activation fails when required fields are missing."""
+        tenant.settings = {"activation_required_fields": ["po_number", "netsuite_url"]}
+        tenant.save(update_fields=["settings"])
+
+        result = run_graphql(UPDATE_CONTRACT_STATUS_MUTATION, {
+            "contractId": str(draft_contract.id),
+            "newStatus": "active",
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["transitionContractStatus"]
+        assert data["success"] is False
+        assert "po_number" in data["error"]
+        assert "netsuite_url" in data["error"]
+
+        draft_contract.refresh_from_db()
+        assert draft_contract.status == Contract.Status.DRAFT
+
+    def test_activation_succeeds_all_fields_filled(self, user, tenant, draft_contract):
+        """Activation succeeds when all required fields are present."""
+        tenant.settings = {"activation_required_fields": ["po_number"]}
+        tenant.save(update_fields=["settings"])
+
+        draft_contract.po_number = "PO-123"
+        draft_contract.save(update_fields=["po_number"])
+
+        result = run_graphql(UPDATE_CONTRACT_STATUS_MUTATION, {
+            "contractId": str(draft_contract.id),
+            "newStatus": "active",
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["transitionContractStatus"]
+        assert data["success"] is True
+
+        draft_contract.refresh_from_db()
+        assert draft_contract.status == Contract.Status.ACTIVE
+
+    def test_activation_succeeds_no_required_fields(self, user, tenant, draft_contract):
+        """Activation succeeds when no required fields are configured (default)."""
+        # No settings configured at all
+        result = run_graphql(UPDATE_CONTRACT_STATUS_MUTATION, {
+            "contractId": str(draft_contract.id),
+            "newStatus": "active",
+        }, make_context(user))
+
+        assert result.errors is None
+        assert result.data["transitionContractStatus"]["success"] is True
+
+    def test_paused_to_active_not_blocked(self, user, tenant, customer):
+        """Paused → active transition is not blocked by checklist."""
+        contract = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Paused Contract",
+            status=Contract.Status.PAUSED, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+        )
+        tenant.settings = {"activation_required_fields": ["po_number"]}
+        tenant.save(update_fields=["settings"])
+        # po_number is NOT set, but transition should still work
+
+        result = run_graphql(UPDATE_CONTRACT_STATUS_MUTATION, {
+            "contractId": str(contract.id),
+            "newStatus": "active",
+        }, make_context(user))
+
+        assert result.errors is None
+        assert result.data["transitionContractStatus"]["success"] is True
+
+    def test_set_activation_fields_valid(self, user, tenant):
+        """Setting valid activation fields works."""
+        result = run_graphql(SET_ACTIVATION_FIELDS_MUTATION, {
+            "fields": ["po_number", "netsuite_url"],
+        }, make_context(user))
+
+        assert result.errors is None
+        assert result.data["setActivationRequiredFields"]["success"] is True
+
+        tenant.refresh_from_db()
+        assert tenant.settings["activation_required_fields"] == ["po_number", "netsuite_url"]
+
+    def test_set_activation_fields_rejects_invalid(self, user, tenant):
+        """Setting invalid field names returns an error."""
+        result = run_graphql(SET_ACTIVATION_FIELDS_MUTATION, {
+            "fields": ["po_number", "invalid_field"],
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["setActivationRequiredFields"]
+        assert data["success"] is False
+        assert "invalid_field" in data["error"]

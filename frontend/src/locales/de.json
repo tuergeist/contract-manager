@@ -984,6 +984,21 @@
       "autoSync": "Automatische Synchronisierung alle 6 Stunden",
       "autoSyncDescription": "Kunden, Produkte und Deals automatisch im Hintergrund synchronisieren",
       "lastAutoSync": "Letzte Auto-Sync"
+    },
+    "activationChecklist": {
+      "title": "Aktivierungs-Checkliste",
+      "description": "Konfigurieren Sie, welche Vertragsfelder ausgefüllt sein müssen, bevor ein Vertrag aktiviert werden kann.",
+      "saved": "Aktivierungs-Checkliste gespeichert",
+      "saveFailed": "Fehler beim Speichern der Aktivierungs-Checkliste",
+      "fields": {
+        "po_number": "Bestellnummer (Kunde)",
+        "order_confirmation_number": "Auftragsbestätigungsnr.",
+        "netsuite_sales_order_number": "NetSuite Sales Order Nr.",
+        "netsuite_contract_number": "NetSuite Vertragsnr.",
+        "netsuite_url": "NetSuite URL"
+      },
+      "missingFieldsTitle": "Fehlende Pflichtfelder",
+      "missingFieldsDescription": "Die folgenden Felder müssen ausgefüllt werden, bevor dieser Vertrag aktiviert werden kann:"
     }
   },
   "timeTracking": {

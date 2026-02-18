@@ -66,6 +66,7 @@ const CONTRACT_QUERY = gql`
       id
       name
       netsuiteSalesOrderNumber
+      netsuiteContractNumber
       netsuiteUrl
       poNumber
       orderConfirmationNumber
@@ -204,6 +205,7 @@ interface Contract {
   id: string
   name: string
   netsuiteSalesOrderNumber: string | null
+  netsuiteContractNumber: string | null
   netsuiteUrl: string | null
   poNumber: string | null
   orderConfirmationNumber: string | null
@@ -1199,9 +1201,10 @@ export function ContractForm() {
       </Form>
 
       {/* Status Transition Modal */}
-      {statusTransition && id && (
+      {statusTransition && id && contract && (
         <StatusTransitionModal
           contractId={id}
+          contract={contract}
           transition={statusTransition}
           onClose={() => setStatusTransition(null)}
           onSuccess={() => {
@@ -1259,14 +1262,34 @@ export function ContractForm() {
   )
 }
 
+const ACTIVATION_CHECKLIST_QUERY = gql`
+  query ActivationChecklistSettings {
+    activationChecklistSettings {
+      availableFields
+      requiredFields
+    }
+  }
+`
+
+// Map backend field names to contract object keys
+const FIELD_KEY_MAP: Record<string, keyof Contract> = {
+  po_number: 'poNumber',
+  order_confirmation_number: 'orderConfirmationNumber',
+  netsuite_sales_order_number: 'netsuiteSalesOrderNumber',
+  netsuite_contract_number: 'netsuiteContractNumber',
+  netsuite_url: 'netsuiteUrl',
+}
+
 // Status Transition Modal Component
 function StatusTransitionModal({
   contractId,
+  contract,
   transition,
   onClose,
   onSuccess,
 }: {
   contractId: string
+  contract: Contract
   transition: StatusTransition
   onClose: () => void
   onSuccess: () => void
@@ -1274,7 +1297,22 @@ function StatusTransitionModal({
   const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
 
+  const isDraftToActive = transition.from === 'draft' && transition.to === 'active'
+  const { data: checklistData } = useQuery(ACTIVATION_CHECKLIST_QUERY, { skip: !isDraftToActive })
+
   const [transitionStatus, { loading }] = useMutation(TRANSITION_CONTRACT_STATUS_MUTATION)
+
+  // Determine missing required fields
+  const missingFields: string[] = []
+  if (isDraftToActive && checklistData?.activationChecklistSettings) {
+    const requiredFields: string[] = checklistData.activationChecklistSettings.requiredFields || []
+    for (const field of requiredFields) {
+      const key = FIELD_KEY_MAP[field]
+      if (key && !contract[key]) {
+        missingFields.push(field)
+      }
+    }
+  }
 
   const handleConfirm = async () => {
     setError(null)
@@ -1310,6 +1348,18 @@ function StatusTransitionModal({
           </div>
         )}
 
+        {missingFields.length > 0 && (
+          <div className="rounded border border-amber-200 bg-amber-50 p-3">
+            <p className="text-sm font-medium text-amber-800">{t('settings.activationChecklist.missingFieldsTitle')}</p>
+            <p className="mt-1 text-sm text-amber-700">{t('settings.activationChecklist.missingFieldsDescription')}</p>
+            <ul className="mt-2 list-inside list-disc text-sm text-amber-700">
+              {missingFields.map((field) => (
+                <li key={field}>{t(`settings.activationChecklist.fields.${field}`)}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="space-y-4 py-4">
           <p>{t(`contracts.statusTransition.${transition.confirmKey}`)}</p>
           <p className={`text-sm ${transition.isReversible ? 'text-muted-foreground' : 'text-destructive font-medium'}`}>
@@ -1326,7 +1376,7 @@ function StatusTransitionModal({
           <Button
             variant={transition.to === 'cancelled' || transition.to === 'ended' ? 'destructive' : 'default'}
             onClick={handleConfirm}
-            disabled={loading}
+            disabled={loading || missingFields.length > 0}
           >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {t(`contracts.statusTransition.${transition.label}`)}

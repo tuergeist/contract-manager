@@ -18,6 +18,24 @@ interface HubSpotProperty {
   options: string[] | null
 }
 
+const ACTIVATION_CHECKLIST_QUERY = gql`
+  query ActivationChecklistSettings {
+    activationChecklistSettings {
+      availableFields
+      requiredFields
+    }
+  }
+`
+
+const SET_ACTIVATION_REQUIRED_FIELDS = gql`
+  mutation SetActivationRequiredFields($fields: [String!]!) {
+    setActivationRequiredFields(fields: $fields) {
+      success
+      error
+    }
+  }
+`
+
 const TIME_TRACKING_SETTINGS_QUERY = gql`
   query TimeTrackingSettings {
     timeTrackingSettings {
@@ -153,6 +171,11 @@ export function Settings({ showHeader = true }: SettingsProps) {
   const [filterMessage, setFilterMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [propertySearch, setPropertySearch] = useState('')
   const [openPropertyDropdown, setOpenPropertyDropdown] = useState<number | null>(null)
+
+  const [checklistMessage, setChecklistMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  const { data: checklistData, refetch: refetchChecklist } = useQuery(ACTIVATION_CHECKLIST_QUERY)
+  const [setActivationFields, { loading: savingChecklist }] = useMutation(SET_ACTIVATION_REQUIRED_FIELDS)
 
   const { data: ttSettingsData, refetch: refetchTtSettings } = useQuery(TIME_TRACKING_SETTINGS_QUERY)
   const [saveTtSettings, { loading: savingTt }] = useMutation(SAVE_TIME_TRACKING_SETTINGS)
@@ -391,6 +414,29 @@ export function Settings({ showHeader = true }: SettingsProps) {
   const lastAutoSyncDeals = hubspotSettings?.lastAutoSyncDeals
     ? formatDateTime(hubspotSettings.lastAutoSyncDeals)
     : null
+
+  const handleToggleChecklistField = async (fieldName: string, enabled: boolean) => {
+    setChecklistMessage(null)
+    const currentFields: string[] = checklistData?.activationChecklistSettings?.requiredFields || []
+    const newFields = enabled
+      ? [...currentFields, fieldName]
+      : currentFields.filter((f: string) => f !== fieldName)
+
+    try {
+      const result = await setActivationFields({ variables: { fields: newFields } })
+      if (result.data?.setActivationRequiredFields?.success) {
+        setChecklistMessage({ type: 'success', text: t('settings.activationChecklist.saved') })
+        refetchChecklist()
+      } else {
+        setChecklistMessage({
+          type: 'error',
+          text: result.data?.setActivationRequiredFields?.error || t('settings.activationChecklist.saveFailed'),
+        })
+      }
+    } catch {
+      setChecklistMessage({ type: 'error', text: t('settings.activationChecklist.saveFailed') })
+    }
+  }
 
   const handleToggleAutoSync = async (enabled: boolean) => {
     await setAutoSync({ variables: { enabled } })
@@ -832,6 +878,42 @@ export function Settings({ showHeader = true }: SettingsProps) {
               {t('import.title')}
             </Link>
           </div>
+        </div>
+
+        {/* Activation Checklist */}
+        <div className="rounded-lg border bg-white p-6">
+          <h2 className="text-lg font-medium">{t('settings.activationChecklist.title')}</h2>
+          <p className="mt-1 text-sm text-gray-500">{t('settings.activationChecklist.description')}</p>
+
+          <div className="mt-4 space-y-3">
+            {(checklistData?.activationChecklistSettings?.availableFields || []).map((field: string) => {
+              const isRequired = (checklistData?.activationChecklistSettings?.requiredFields || []).includes(field)
+              return (
+                <div key={field} className="flex items-center justify-between">
+                  <label htmlFor={`checklist-${field}`} className="text-sm text-gray-700">
+                    {t(`settings.activationChecklist.fields.${field}`)}
+                  </label>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      id={`checklist-${field}`}
+                      type="checkbox"
+                      checked={isRequired}
+                      onChange={(e) => handleToggleChecklistField(field, e.target.checked)}
+                      disabled={savingChecklist}
+                      className="peer sr-only"
+                    />
+                    <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300" />
+                  </label>
+                </div>
+              )
+            })}
+          </div>
+
+          {checklistMessage && (
+            <p className={`mt-3 text-sm ${checklistMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+              {checklistMessage.text}
+            </p>
+          )}
         </div>
 
         {/* Help Video Links */}

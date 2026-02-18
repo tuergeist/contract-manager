@@ -2658,6 +2658,24 @@ class ContractMutation:
                     error="Cannot reset to draft: contract has invoices"
                 )
 
+        # Guard: activation checklist (only for draft → active)
+        if (
+            new_status == Contract.Status.ACTIVE
+            and current_status == Contract.Status.DRAFT
+        ):
+            tenant_settings = user.tenant.settings or {}
+            required_fields = tenant_settings.get("activation_required_fields", [])
+            missing = []
+            for field_name in required_fields:
+                if hasattr(contract, field_name):
+                    value = getattr(contract, field_name)
+                    if not value:
+                        missing.append(field_name)
+            if missing:
+                return ContractResult(
+                    error=f"Missing required fields: {', '.join(missing)}"
+                )
+
         try:
             with transaction.atomic():
                 # Re-fetch with lock for reset to draft (prevents race with invoice generation)

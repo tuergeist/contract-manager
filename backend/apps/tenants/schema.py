@@ -247,6 +247,29 @@ class TimeTrackingTestResult:
     error: str | None = None
 
 
+ACTIVATION_CHECKABLE_FIELDS = [
+    "po_number",
+    "order_confirmation_number",
+    "netsuite_sales_order_number",
+    "netsuite_contract_number",
+    "netsuite_url",
+]
+
+
+@strawberry.type
+class ActivationChecklistField:
+    """A field that can be required for contract activation."""
+    field_name: str
+    required: bool
+
+
+@strawberry.type
+class ActivationChecklistSettings:
+    """Activation checklist configuration."""
+    available_fields: list[str]
+    required_fields: list[str]
+
+
 @strawberry.type
 class HelpVideoLinkType:
     """A single help video link."""
@@ -403,6 +426,20 @@ class TenantQuery:
             last_auto_sync_customers=config.get("last_auto_sync_customers"),
             last_auto_sync_products=config.get("last_auto_sync_products"),
             last_auto_sync_deals=config.get("last_auto_sync_deals"),
+        )
+
+    @strawberry.field
+    def activation_checklist_settings(
+        self, info: Info[Context, None]
+    ) -> ActivationChecklistSettings | None:
+        """Get activation checklist configuration for current tenant."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return None
+        settings = user.tenant.settings or {}
+        return ActivationChecklistSettings(
+            available_fields=ACTIVATION_CHECKABLE_FIELDS,
+            required_fields=settings.get("activation_required_fields", []),
         )
 
     @strawberry.field
@@ -660,6 +697,33 @@ class TenantMutation:
 
         tenant.hubspot_config["auto_sync_enabled"] = enabled
         tenant.save(update_fields=["hubspot_config"])
+
+        return HubSpotTestResult(success=True, error=None)
+
+    @strawberry.mutation
+    def set_activation_required_fields(
+        self,
+        info: Info[Context, None],
+        fields: list[str],
+    ) -> HubSpotTestResult:
+        """Set which contract fields are required before activation."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return HubSpotTestResult(success=False, error="No tenant assigned")
+
+        # Validate field names
+        invalid = [f for f in fields if f not in ACTIVATION_CHECKABLE_FIELDS]
+        if invalid:
+            return HubSpotTestResult(
+                success=False,
+                error=f"Invalid field names: {', '.join(invalid)}",
+            )
+
+        tenant = user.tenant
+        if not tenant.settings:
+            tenant.settings = {}
+        tenant.settings["activation_required_fields"] = fields
+        tenant.save(update_fields=["settings"])
 
         return HubSpotTestResult(success=True, error=None)
 
