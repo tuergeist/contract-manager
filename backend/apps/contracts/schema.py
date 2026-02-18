@@ -2563,7 +2563,7 @@ class ContractMutation:
 
                     if has_changes:
                         # Determine amendment type
-                        item_name = item.product.name if item.product else item.description[:50]
+                        item_name = item.product.name if item.product else (item.description or "")[:50]
                         if input.product_id is not None and old_values["product_id"] != str(input.product_id):
                             amendment_type = ContractAmendment.AmendmentType.TERMS_CHANGED
                             description = f"Changed product from {old_values['product_name'] or 'none'} to {item_name}"
@@ -2661,7 +2661,7 @@ class ContractMutation:
             with transaction.atomic():
                 # Create amendment record only for non-draft contracts
                 if item.contract.status != Contract.Status.DRAFT:
-                    item_name = item.product.name if item.product else item.description[:50]
+                    item_name = item.product.name if item.product else (item.description or "")[:50]
                     ContractAmendment.objects.create(
                         tenant=user.tenant,
                         contract=item.contract,
@@ -4122,11 +4122,11 @@ class ContractImportMutation:
         if not contract:
             return BulkPriceIncreaseResult(error="Contract not found")
 
-        items = ContractItem.objects.filter(
+        items = list(ContractItem.objects.filter(
             contract=contract, is_one_off=False
-        ).select_related("product")
+        ).select_related("product"))
 
-        if not items.exists():
+        if not items:
             return BulkPriceIncreaseResult(error="No recurring items found")
 
         details = []
@@ -4137,7 +4137,11 @@ class ContractImportMutation:
         try:
             with transaction.atomic():
                 for item in items:
-                    item_name = item.product.name if item.product else item.description[:50]
+                    # Skip descriptive-only items (discounts, text lines)
+                    if not item.product and not item.unit_price:
+                        continue
+
+                    item_name = item.product.name if item.product else (item.description or "")[:50]
 
                     # Check price lock
                     is_price_locked = item.price_locked and (

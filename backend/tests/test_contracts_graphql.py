@@ -1399,6 +1399,40 @@ class TestBulkPriceIncrease:
         amendments = ContractAmendment.objects.filter(contract=annual_contract)
         assert amendments.count() == 2
 
+    def test_skips_discount_items_without_product(self, user, tenant, annual_contract, product):
+        """Discount/descriptive items without a product are skipped gracefully."""
+        # Regular item with product
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+        )
+        # Discount item — no product, zero price
+        ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract,
+            description="Discount -10%", quantity=1, unit_price=Decimal("0.00"),
+        )
+        # Descriptive-only item — no product, no price
+        ContractItem.objects.create(
+            tenant=tenant, contract=annual_contract,
+            description="", quantity=1, unit_price=Decimal("0.00"),
+        )
+
+        result = run_graphql(BULK_PRICE_INCREASE_MUTATION, {
+            "input": {
+                "contractId": str(annual_contract.id),
+                "percentage": "10",
+                "effectiveDate": "2027-01-01",
+                "mode": "direct",
+            }
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["bulkPriceIncrease"]
+        assert data["success"] is True
+        assert data["itemsChanged"] == 1
+        item.refresh_from_db()
+        assert item.unit_price == Decimal("110.00")
+
 
 UPDATE_CONTRACT_STATUS_MUTATION = """
     mutation TransitionContractStatus($contractId: ID!, $newStatus: String!) {
