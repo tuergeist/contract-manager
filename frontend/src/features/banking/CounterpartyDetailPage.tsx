@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { usePersistedState } from '@/lib/usePersistedState'
 import { useTranslation } from 'react-i18next'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, gql } from '@apollo/client'
@@ -284,8 +285,8 @@ export function CounterpartyDetailPage() {
   const [amountMin, setAmountMin] = useState('')
   const [amountMax, setAmountMax] = useState('')
   const [direction, setDirection] = useState<string>('all')
-  const [sortBy, setSortBy] = useState('date')
-  const [sortOrder, setSortOrder] = useState('desc')
+  const [sortBy, setSortBy] = usePersistedState('cm:counterpartyDetail:sortBy', 'date')
+  const [sortOrder, setSortOrder] = usePersistedState('cm:counterpartyDetail:sortOrder', 'desc')
   const [page, setPage] = useState(1)
   const pageSize = 50
 

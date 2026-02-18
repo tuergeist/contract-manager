@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { usePersistedState } from '@/lib/usePersistedState'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, gql } from '@apollo/client'
@@ -84,7 +85,7 @@ interface DeliverableItem {
 
 export function ProjectList() {
   const { t } = useTranslation()
-  const [statusFilter, setStatusFilter] = useState('pending')
+  const [statusFilter, setStatusFilter] = usePersistedState('cm:projectList:statusFilter', 'pending')
   const [deliveryItem, setDeliveryItem] = useState<DeliverableItem | null>(null)
   const [deliveryDate, setDeliveryDate] = useState(() => new Date().toISOString().slice(0, 10))
 

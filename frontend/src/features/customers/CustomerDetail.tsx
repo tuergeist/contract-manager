@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react'
+import { usePersistedState } from '@/lib/usePersistedState'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
@@ -337,9 +338,9 @@ interface CustomerData {
 export function CustomerDetail() {
   const { id } = useParams<{ id: string }>()
   const { t, i18n } = useTranslation()
-  const [activeTab, setActiveTab] = useState<Tab>('contracts')
-  const [sortField, setSortField] = useState<SortField>(null)
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
+  const [activeTab, setActiveTab] = usePersistedState<Tab>('cm:customerDetail:activeTab', 'contracts')
+  const [sortField, setSortField] = usePersistedState<SortField>('cm:customerDetail:sortBy', null)
+  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('cm:customerDetail:sortOrder', 'asc')
 
   // Attachment state
   const fileInputRef = useRef<HTMLInputElement>(null)

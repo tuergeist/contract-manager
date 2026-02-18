@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { usePersistedState } from '@/lib/usePersistedState'
 import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
 import { Loader2, Filter, ChevronDown, Search } from 'lucide-react'
@@ -93,8 +94,8 @@ const PAGE_SIZE = 25
 
 export function AuditLogPage() {
   const { t } = useTranslation()
-  const [entityTypeFilter, setEntityTypeFilter] = useState<string>('')
-  const [actionFilter, setActionFilter] = useState<string>('')
+  const [entityTypeFilter, setEntityTypeFilter] = usePersistedState<string>('cm:auditLog:entityTypeFilter', '')
+  const [actionFilter, setActionFilter] = usePersistedState<string>('cm:auditLog:actionFilter', '')
   const [userFilter, setUserFilter] = useState<string>('')
   const [dateFrom, setDateFrom] = useState<string>('')
   const [dateTo, setDateTo] = useState<string>('')

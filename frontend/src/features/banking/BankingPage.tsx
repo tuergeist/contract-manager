@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { usePersistedState } from '@/lib/usePersistedState'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, gql } from '@apollo/client'
@@ -283,13 +284,13 @@ export function BankingPage() {
   const [, setSearchParams] = useSearchParams()
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<'transactions' | 'counterparties'>('transactions')
+  const [activeTab, setActiveTab] = usePersistedState<'transactions' | 'counterparties'>('cm:banking:activeTab', 'transactions')
 
   // Counterparty list state
   const [cpSearch, setCpSearch] = useState('')
   const [cpDebouncedSearch, setCpDebouncedSearch] = useState('')
-  const [cpSortBy, setCpSortBy] = useState<string>('totalAmount')
-  const [cpSortOrder, setCpSortOrder] = useState<string>('desc')
+  const [cpSortBy, setCpSortBy] = usePersistedState<string>('cm:banking:cpSortBy', 'totalAmount')
+  const [cpSortOrder, setCpSortOrder] = usePersistedState<string>('cm:banking:cpSortOrder', 'desc')
   const [cpPage, setCpPage] = useState(1)
   const cpPageSize = 50
 
@@ -332,8 +333,8 @@ export function BankingPage() {
   const [amountMax, setAmountMax] = useState('')
   const [direction, setDirection] = useState<string>('all')
   const [unmatchedCredits, setUnmatchedCredits] = useState(false)
-  const [sortBy, setSortBy] = useState('date')
-  const [sortOrder, setSortOrder] = useState('desc')
+  const [sortBy, setSortBy] = usePersistedState('cm:banking:sortBy', 'date')
+  const [sortOrder, setSortOrder] = usePersistedState('cm:banking:sortOrder', 'desc')
   const [page, setPage] = useState(1)
   const pageSize = 50
 

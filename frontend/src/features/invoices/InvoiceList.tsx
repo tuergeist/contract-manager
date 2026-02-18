@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { usePersistedState } from '@/lib/usePersistedState'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useLazyQuery, gql } from '@apollo/client'
@@ -528,12 +529,12 @@ export function InvoiceList() {
 
   // State
   const [search, setSearch] = useState('')
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('ALL')
-  const [paymentStatus, setPaymentStatus] = useState<string>('ALL')
+  const [sourceFilter, setSourceFilter] = usePersistedState<SourceFilter>('cm:invoiceList:sourceFilter', 'ALL')
+  const [paymentStatus, setPaymentStatus] = usePersistedState<string>('cm:invoiceList:paymentStatus', 'ALL')
   const [uploadStatus, setUploadStatus] = useState<string>('ALL')
   const [page, setPage] = useState(1)
-  const [sortField, setSortField] = useState<string | null>(null)
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [sortField, setSortField] = usePersistedState<string | null>('cm:invoiceList:sortField', null)
+  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>('cm:invoiceList:sortOrder', 'desc')
   const pageSize = 20
 
   // Modals
