@@ -196,7 +196,7 @@ function CommentItem({
           </div>
         )}
       </div>
-      <div className="mt-1 text-sm prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0">
+      <div className="mt-1 text-sm [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0 [&_p]:my-1 [&_code]:bg-muted [&_code]:px-1 [&_code]:rounded [&_pre]:bg-muted [&_pre]:p-2 [&_pre]:rounded [&_pre]:my-1 [&_a]:text-blue-600 [&_a]:underline [&_strong]:font-semibold">
         <ReactMarkdown remarkPlugins={[remarkBreaks]}>{comment.text}</ReactMarkdown>
       </div>
     </div>
