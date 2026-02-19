@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, gql } from '@apollo/client'
 import ReactMarkdown from 'react-markdown'
+import remarkBreaks from 'remark-breaks'
 import { MessageSquare, Plus, Pencil, Trash2, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -196,7 +197,7 @@ function CommentItem({
         )}
       </div>
       <div className="mt-1 text-sm prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0">
-        <ReactMarkdown>{comment.text}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkBreaks]}>{comment.text}</ReactMarkdown>
       </div>
     </div>
   )
