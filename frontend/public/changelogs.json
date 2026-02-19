@@ -1,5 +1,23 @@
 [
   {
+    "version": "2.2.0",
+    "date": "2026-02-19",
+    "title": "Notification System, SMTP Service & Comments",
+    "description": "Per-user email notification subscriptions for todo assignments and HubSpot new contracts, SMTP notification service, invoice email templates, contract/customer comments, and persisted user view preferences.",
+    "type": "feature",
+    "details": [
+      "SMTP notification service with per-tenant configuration, connection test, and test email",
+      "Per-user notification subscriptions with opt-out toggles in profile settings",
+      "Email notifications for todo assignments and new HubSpot contracts",
+      "Custom invoice email templates per language with fallback to defaults",
+      "HubSpot billing contact sync via association labels",
+      "Comment system for contracts and customers with markdown support",
+      "Persist user view preferences (sort, filters, tabs) across navigation",
+      "Fix negative/discount line items excluded from billing and revenue forecasts",
+      "Fix markdown list rendering and line breaks in comments"
+    ]
+  },
+  {
     "version": "2.1.0",
     "date": "2026-02-18",
     "title": "Microsoft 365 Email Integration & Settings Reorganization",
