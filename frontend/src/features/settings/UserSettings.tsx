@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { ProfileEdit } from './ProfileEdit'
 import { PasswordChange } from './PasswordChange'
+import { NotificationPreferences } from './NotificationPreferences'
 
 export function UserSettings() {
   const { t, i18n } = useTranslation()
@@ -16,6 +17,9 @@ export function UserSettings() {
 
       {/* Password Change */}
       <PasswordChange />
+
+      {/* Notification Preferences */}
+      <NotificationPreferences />
 
       {/* Language */}
       <div className="rounded-lg border bg-white p-6">

@@ -102,6 +102,7 @@ class User(AbstractUser):
         related_name="users",
     )
     is_admin = models.BooleanField(default=False)
+    notification_preferences = models.JSONField(default=dict, blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []

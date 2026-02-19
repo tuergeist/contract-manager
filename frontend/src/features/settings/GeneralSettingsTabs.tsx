@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Settings } from './Settings'
+import { SmtpSettings } from './SmtpSettings'
 
 export function GeneralSettingsTabs() {
   const { t } = useTranslation()
@@ -11,6 +12,7 @@ export function GeneralSettingsTabs() {
   const getActiveSubTab = () => {
     if (location.pathname.includes('/general/time-tracking')) return 'timeTracking'
     if (location.pathname.includes('/general/email')) return 'email'
+    if (location.pathname.includes('/general/notifications')) return 'notifications'
     if (location.pathname.includes('/general/contracts')) return 'contracts'
     if (location.pathname.includes('/general/help-videos')) return 'helpVideos'
     return 'hubspot'
@@ -25,6 +27,9 @@ export function GeneralSettingsTabs() {
         break
       case 'email':
         navigate('/settings/general/email')
+        break
+      case 'notifications':
+        navigate('/settings/general/notifications')
         break
       case 'contracts':
         navigate('/settings/general/contracts')
@@ -43,6 +48,7 @@ export function GeneralSettingsTabs() {
         <TabsTrigger value="hubspot">{t('settings.generalTabs.hubspot')}</TabsTrigger>
         <TabsTrigger value="timeTracking">{t('settings.generalTabs.timeTracking')}</TabsTrigger>
         <TabsTrigger value="email">{t('settings.generalTabs.email')}</TabsTrigger>
+        <TabsTrigger value="notifications">{t('settings.generalTabs.notifications')}</TabsTrigger>
         <TabsTrigger value="contracts">{t('settings.generalTabs.contracts')}</TabsTrigger>
         <TabsTrigger value="helpVideos">{t('settings.generalTabs.helpVideos')}</TabsTrigger>
       </TabsList>
@@ -57,6 +63,10 @@ export function GeneralSettingsTabs() {
 
       <TabsContent value="email">
         <Settings showHeader={false} section="email" />
+      </TabsContent>
+
+      <TabsContent value="notifications">
+        <SmtpSettings />
       </TabsContent>
 
       <TabsContent value="contracts">

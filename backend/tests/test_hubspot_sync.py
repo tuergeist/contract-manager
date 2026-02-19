@@ -1,7 +1,9 @@
-"""Tests for HubSpot sync, specifically company merge handling."""
+"""Tests for HubSpot sync, specifically company merge handling and billing contacts."""
 import pytest
 from datetime import date, datetime, timezone
 from unittest.mock import patch, MagicMock
+
+import httpx
 
 from apps.customers.models import Customer, CustomerNote, CustomerLink
 from apps.contracts.models import Contract, ContractGroup
@@ -420,3 +422,287 @@ class TestSyncCompanyMergeDetection:
 
         result = hubspot_service._sync_company(company_data, is_active=True)
         assert result == "created"
+
+
+def _mock_response(status_code, json_data):
+    """Create a mock httpx.Response."""
+    resp = MagicMock(spec=httpx.Response)
+    resp.status_code = status_code
+    resp.json.return_value = json_data
+    return resp
+
+
+class TestBillingContactSync:
+    """Test syncing billing contact emails from HubSpot associations."""
+
+    def test_emails_synced_for_customer_with_active_contract(
+        self, hubspot_service, tenant_with_hubspot
+    ):
+        """Billing emails are fetched and stored for customers with active contracts."""
+        customer = Customer.objects.create(
+            tenant=tenant_with_hubspot,
+            hubspot_id="100",
+            name="Test Corp",
+            is_active=True,
+        )
+        Contract.objects.create(
+            tenant=tenant_with_hubspot,
+            customer=customer,
+            name="Active Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+            billing_anchor_day=1,
+        )
+
+        mock_client = MagicMock(spec=httpx.Client)
+        mock_client.get.side_effect = [
+            _mock_response(200, {
+                "results": [
+                    {
+                        "toObjectId": 999,
+                        "associationTypes": [
+                            {"typeId": 2, "label": "Contact with Primary Company"},
+                        ],
+                    },
+                    {
+                        "toObjectId": 888,
+                        "associationTypes": [
+                            {"typeId": 930, "label": "Billing Contact"},
+                        ],
+                    },
+                ]
+            }),
+            # contact fetch for 888
+            _mock_response(200, {
+                "properties": {"email": "billing@testcorp.com"},
+            }),
+        ]
+
+        errors = []
+        hubspot_service._sync_all_billing_contacts(mock_client, "Billing Contact", errors)
+
+        customer.refresh_from_db()
+        assert customer.billing_emails == ["billing@testcorp.com"]
+        assert errors == []
+
+    def test_multiple_billing_contacts(self, hubspot_service, tenant_with_hubspot):
+        """Multiple billing contacts produce multiple emails."""
+        customer = Customer.objects.create(
+            tenant=tenant_with_hubspot,
+            hubspot_id="200",
+            name="Multi Corp",
+            is_active=True,
+        )
+        Contract.objects.create(
+            tenant=tenant_with_hubspot,
+            customer=customer,
+            name="Active",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+            billing_anchor_day=1,
+        )
+
+        mock_client = MagicMock(spec=httpx.Client)
+        mock_client.get.side_effect = [
+            _mock_response(200, {
+                "results": [
+                    {
+                        "toObjectId": 111,
+                        "associationTypes": [{"typeId": 930, "label": "Billing Contact"}],
+                    },
+                    {
+                        "toObjectId": 222,
+                        "associationTypes": [{"typeId": 930, "label": "Billing Contact"}],
+                    },
+                ]
+            }),
+            _mock_response(200, {"properties": {"email": "B@corp.com"}}),
+            _mock_response(200, {"properties": {"email": "A@corp.com"}}),
+        ]
+
+        hubspot_service._sync_all_billing_contacts(mock_client, "Billing Contact", [])
+
+        customer.refresh_from_db()
+        assert customer.billing_emails == ["a@corp.com", "b@corp.com"]
+
+    def test_no_billing_contacts_clears_emails(self, hubspot_service, tenant_with_hubspot):
+        """When no billing contacts exist, billing_emails is cleared."""
+        customer = Customer.objects.create(
+            tenant=tenant_with_hubspot,
+            hubspot_id="300",
+            name="No Billing Corp",
+            is_active=True,
+            billing_emails=["old@corp.com"],
+        )
+        Contract.objects.create(
+            tenant=tenant_with_hubspot,
+            customer=customer,
+            name="Active",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+            billing_anchor_day=1,
+        )
+
+        mock_client = MagicMock(spec=httpx.Client)
+        mock_client.get.return_value = _mock_response(200, {"results": []})
+
+        hubspot_service._sync_all_billing_contacts(mock_client, "Billing Contact", [])
+
+        customer.refresh_from_db()
+        assert customer.billing_emails == []
+
+    def test_skips_customers_without_active_contracts(
+        self, hubspot_service, tenant_with_hubspot
+    ):
+        """Customers with only draft contracts are not synced."""
+        customer = Customer.objects.create(
+            tenant=tenant_with_hubspot,
+            hubspot_id="400",
+            name="Draft Only Corp",
+            is_active=True,
+        )
+        Contract.objects.create(
+            tenant=tenant_with_hubspot,
+            customer=customer,
+            name="Draft",
+            status=Contract.Status.DRAFT,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+            billing_anchor_day=1,
+        )
+
+        mock_client = MagicMock(spec=httpx.Client)
+
+        hubspot_service._sync_all_billing_contacts(mock_client, "Billing Contact", [])
+
+        # Client should never be called — no eligible customers
+        mock_client.get.assert_not_called()
+        customer.refresh_from_db()
+        assert customer.billing_emails == []
+
+    def test_paused_contract_still_triggers_sync(self, hubspot_service, tenant_with_hubspot):
+        """Customers with paused contracts still get billing contacts synced."""
+        customer = Customer.objects.create(
+            tenant=tenant_with_hubspot,
+            hubspot_id="500",
+            name="Paused Corp",
+            is_active=True,
+        )
+        Contract.objects.create(
+            tenant=tenant_with_hubspot,
+            customer=customer,
+            name="Paused",
+            status=Contract.Status.PAUSED,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+            billing_anchor_day=1,
+        )
+
+        mock_client = MagicMock(spec=httpx.Client)
+        mock_client.get.side_effect = [
+            _mock_response(200, {
+                "results": [
+                    {
+                        "toObjectId": 777,
+                        "associationTypes": [{"typeId": 930, "label": "Billing Contact"}],
+                    },
+                ]
+            }),
+            _mock_response(200, {"properties": {"email": "paused@corp.com"}}),
+        ]
+
+        hubspot_service._sync_all_billing_contacts(mock_client, "Billing Contact", [])
+
+        customer.refresh_from_db()
+        assert customer.billing_emails == ["paused@corp.com"]
+
+    def test_contact_fetch_error_does_not_crash(self, hubspot_service, tenant_with_hubspot):
+        """A failed contact fetch logs a warning but doesn't stop the sync."""
+        customer = Customer.objects.create(
+            tenant=tenant_with_hubspot,
+            hubspot_id="600",
+            name="Error Corp",
+            is_active=True,
+        )
+        Contract.objects.create(
+            tenant=tenant_with_hubspot,
+            customer=customer,
+            name="Active",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+            billing_anchor_day=1,
+        )
+
+        mock_client = MagicMock(spec=httpx.Client)
+        mock_client.get.side_effect = [
+            _mock_response(200, {
+                "results": [
+                    {
+                        "toObjectId": 666,
+                        "associationTypes": [{"typeId": 930, "label": "Billing Contact"}],
+                    },
+                ]
+            }),
+            _mock_response(403, {"error": "Missing scopes"}),
+        ]
+
+        errors = []
+        hubspot_service._sync_all_billing_contacts(mock_client, "Billing Contact", errors)
+
+        # No emails set, but no crash
+        customer.refresh_from_db()
+        assert customer.billing_emails == []
+
+    def test_custom_label_name_used(self, hubspot_service, tenant_with_hubspot):
+        """A custom label name (e.g. 'Purchasing Department') is matched correctly."""
+        customer = Customer.objects.create(
+            tenant=tenant_with_hubspot,
+            hubspot_id="700",
+            name="Custom Label Corp",
+            is_active=True,
+        )
+        Contract.objects.create(
+            tenant=tenant_with_hubspot,
+            customer=customer,
+            name="Active",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+            billing_anchor_day=1,
+        )
+
+        mock_client = MagicMock(spec=httpx.Client)
+        mock_client.get.side_effect = [
+            _mock_response(200, {
+                "results": [
+                    {
+                        "toObjectId": 111,
+                        "associationTypes": [{"typeId": 930, "label": "Billing Contact"}],
+                    },
+                    {
+                        "toObjectId": 222,
+                        "associationTypes": [{"typeId": 4, "label": "Purchasing Department"}],
+                    },
+                ]
+            }),
+            # Only contact 222 should be fetched
+            _mock_response(200, {"properties": {"email": "purchasing@corp.com"}}),
+        ]
+
+        hubspot_service._sync_all_billing_contacts(
+            mock_client, "Purchasing Department", []
+        )
+
+        customer.refresh_from_db()
+        assert customer.billing_emails == ["purchasing@corp.com"]

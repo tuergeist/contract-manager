@@ -254,6 +254,53 @@ class HubSpotService:
             logger.exception("HubSpot property check failed")
             return {"success": False, "error": str(e), "exists": False}
 
+    def list_contact_association_labels(self) -> dict[str, Any]:
+        """List available association labels for company-to-contact relationships.
+
+        Returns:
+            {
+                "success": bool,
+                "error": str | None,
+                "labels": list[dict] | None,  # [{type_id, label, category}]
+            }
+        """
+        if not self.is_configured:
+            return {"success": False, "error": "API key not configured", "labels": None}
+
+        try:
+            with httpx.Client() as client:
+                response = client.get(
+                    f"{HUBSPOT_API_BASE}/crm/v4/associations/companies/contacts/labels",
+                    headers=self._get_headers(),
+                    timeout=10.0,
+                )
+
+                if response.status_code != 200:
+                    return {
+                        "success": False,
+                        "error": f"API error: {response.status_code}",
+                        "labels": None,
+                    }
+
+                data = response.json()
+                labels = [
+                    {
+                        "type_id": r.get("typeId"),
+                        "label": r.get("label"),
+                        "category": r.get("category"),
+                    }
+                    for r in data.get("results", [])
+                    if r.get("label")  # Skip unlabeled associations
+                ]
+
+                return {"success": True, "error": None, "labels": labels}
+
+        except httpx.TimeoutException:
+            return {"success": False, "error": "Connection timeout", "labels": None}
+        except Exception as e:
+            logger.exception("HubSpot list association labels failed")
+            return {"success": False, "error": str(e), "labels": None}
+
     def _company_matches_filters(self, properties: dict) -> bool:
         """Check if a company matches the configured filters.
 
@@ -350,6 +397,11 @@ class HubSpotService:
                     next_page = paging.get("next", {})
                     after = next_page.get("after")
                     has_more = bool(after)
+
+                # Sync billing contacts (after all companies are synced)
+                billing_label = self.config.get("billing_contact_label")
+                if billing_label:
+                    self._sync_all_billing_contacts(client, billing_label, errors)
 
             # Update last sync time
             self.tenant.hubspot_config["last_sync"] = datetime.now(timezone.utc).isoformat()
@@ -502,6 +554,104 @@ class HubSpotService:
             notes_moved, attachments_moved, links_moved, todos_moved,
             invoices_moved, imported_moved, counterparties_moved,
         )
+
+    def _sync_all_billing_contacts(
+        self, client: httpx.Client, billing_label: str, errors: list[str]
+    ) -> None:
+        """Sync billing contact emails for all customers with active contracts."""
+        # Only sync for customers that have at least one active contract
+        customers_with_contracts = Customer.objects.filter(
+            tenant=self.tenant,
+            hubspot_id__isnull=False,
+            is_active=True,
+            contracts__status__in=[
+                Contract.Status.ACTIVE,
+                Contract.Status.PAUSED,
+            ],
+        ).exclude(hubspot_id="").distinct()
+
+        for customer in customers_with_contracts:
+            try:
+                self._sync_billing_contacts_for_customer(
+                    client, customer, billing_label
+                )
+            except Exception as e:
+                errors.append(
+                    f"Billing contacts for {customer.name} ({customer.hubspot_id}): {str(e)}"
+                )
+                logger.exception(
+                    "Failed to sync billing contacts for customer %s", customer.hubspot_id
+                )
+
+    def _sync_billing_contacts_for_customer(
+        self, client: httpx.Client, customer: Customer, billing_label: str
+    ) -> None:
+        """Fetch billing contacts from HubSpot and update customer billing_emails."""
+        # Get associations with labels via v4 API
+        response = client.get(
+            f"{HUBSPOT_API_BASE}/crm/v4/objects/companies/{customer.hubspot_id}/associations/contacts",
+            headers=self._get_headers(),
+            timeout=10.0,
+        )
+
+        if response.status_code != 200:
+            logger.warning(
+                "Failed to fetch contact associations for company %s: %s",
+                customer.hubspot_id, response.status_code,
+            )
+            return
+
+        data = response.json()
+
+        # Find contact IDs with the matching billing label
+        billing_contact_ids = []
+        for assoc in data.get("results", []):
+            for assoc_type in assoc.get("associationTypes", []):
+                if assoc_type.get("label") == billing_label:
+                    billing_contact_ids.append(str(assoc["toObjectId"]))
+                    break
+
+        if not billing_contact_ids:
+            # No billing contacts — clear if previously set by sync
+            if customer.billing_emails:
+                customer.billing_emails = []
+                customer.save(update_fields=["billing_emails"])
+            return
+
+        # Fetch email addresses for billing contacts
+        emails = []
+        for contact_id in billing_contact_ids:
+            contact_resp = client.get(
+                f"{HUBSPOT_API_BASE}/crm/v3/objects/contacts/{contact_id}",
+                headers=self._get_headers(),
+                params={"properties": "email"},
+                timeout=10.0,
+            )
+            if contact_resp.status_code == 200:
+                email = (
+                    contact_resp.json()
+                    .get("properties", {})
+                    .get("email", "")
+                )
+                if email:
+                    emails.append(email.strip().lower())
+            else:
+                logger.warning(
+                    "Failed to fetch contact %s for billing email: %s",
+                    contact_id, contact_resp.status_code,
+                )
+
+        # Deduplicate and sort
+        emails = sorted(set(emails))
+
+        # Update only if changed
+        if emails != (customer.billing_emails or []):
+            customer.billing_emails = emails
+            customer.save(update_fields=["billing_emails"])
+            logger.info(
+                "Updated billing emails for '%s' (%s): %s",
+                customer.name, customer.hubspot_id, emails,
+            )
 
     def sync_products(self) -> dict[str, Any]:
         """Sync products from HubSpot to local products."""
@@ -910,6 +1060,18 @@ class HubSpotService:
         # Fetch and create line items, then update billing interval from products
         self._sync_deal_line_items(contract, hubspot_deal_id, client)
         self._update_contract_billing_interval_from_items(contract)
+
+        # Notify all active tenant users about the new contract
+        from apps.core.notifications import notify
+        from apps.tenants.models import User
+        active_users = list(User.objects.filter(tenant=self.tenant, is_active=True))
+        notify(
+            self.tenant,
+            "hubspot_new_contract",
+            recipients=active_users,
+            contract_name=contract.name,
+            customer_name=customer.name,
+        )
 
         return "created"
 

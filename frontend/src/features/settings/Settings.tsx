@@ -77,6 +77,7 @@ const HUBSPOT_SETTINGS_QUERY = gql`
         propertyName
         values
       }
+      billingContactLabel
     }
     hubspotCompanyProperties {
       success
@@ -144,6 +145,28 @@ const SAVE_COMPANY_FILTERS = gql`
 const SET_HUBSPOT_AUTO_SYNC = gql`
   mutation SetHubSpotAutoSync($enabled: Boolean!) {
     setHubspotAutoSync(enabled: $enabled) {
+      success
+      error
+    }
+  }
+`
+
+const HUBSPOT_CONTACT_LABELS_QUERY = gql`
+  query HubSpotContactAssociationLabels {
+    hubspotContactAssociationLabels {
+      success
+      labels {
+        typeId
+        label
+        category
+      }
+    }
+  }
+`
+
+const SET_BILLING_CONTACT_LABEL = gql`
+  mutation SetHubSpotBillingContactLabel($label: String) {
+    setHubspotBillingContactLabel(label: $label) {
       success
       error
     }
@@ -237,6 +260,8 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
   const [syncDeals, { loading: syncingDeals }] = useMutation(SYNC_HUBSPOT_DEALS)
   const [saveFilters, { loading: savingFilters }] = useMutation(SAVE_COMPANY_FILTERS)
   const [setAutoSync] = useMutation(SET_HUBSPOT_AUTO_SYNC)
+  const { data: contactLabelsData } = useQuery(HUBSPOT_CONTACT_LABELS_QUERY)
+  const [setBillingContactLabel] = useMutation(SET_BILLING_CONTACT_LABEL)
 
   // M365 state
   const [m365AzureTenantId, setM365AzureTenantId] = useState('')
@@ -505,6 +530,14 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
     refetchSettings()
   }
 
+  const handleSetBillingContactLabel = async (label: string | null) => {
+    await setBillingContactLabel({ variables: { label } })
+    refetchSettings()
+  }
+
+  const contactLabels: { typeId: number; label: string; category: string }[] =
+    contactLabelsData?.hubspotContactAssociationLabels?.labels || []
+
   const handleSaveM365 = async () => {
     setM365Message(null)
     try {
@@ -598,14 +631,7 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
                 <li><code className="text-xs bg-blue-100 px-1 rounded">crm.objects.contacts.read</code></li>
               </ul>
               <p className="text-xs text-blue-700 mt-2">
-                <a
-                  href="https://app-eu1.hubspot.com/service-keys/147076455"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-blue-900"
-                >
-                  {t('settings.hubspot.setup.createKeyLink')}
-                </a>
+                {t('settings.hubspot.setup.createKeyLink')}
               </p>
             </div>
           </details>
@@ -916,6 +942,24 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
                       <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300" />
                     </label>
                   </div>
+                </div>
+
+                {/* Billing Contact Label */}
+                <div className="border-t pt-4">
+                  <h3 className="text-sm font-medium text-gray-900">{t('settings.hubspot.billingContactLabel')}</h3>
+                  <p className="text-xs text-gray-500 mt-1">{t('settings.hubspot.billingContactLabelDescription')}</p>
+                  <select
+                    className="mt-2 block w-full max-w-xs rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    value={hubspotSettings?.billingContactLabel || ''}
+                    onChange={(e) => handleSetBillingContactLabel(e.target.value || null)}
+                  >
+                    <option value="">{t('settings.hubspot.billingContactLabelNone')}</option>
+                    {contactLabels.map((cl) => (
+                      <option key={cl.typeId} value={cl.label}>
+                        {cl.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             )}

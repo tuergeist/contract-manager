@@ -344,6 +344,17 @@ class TodoMutation:
                 "created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer"
             ).get(pk=todo.pk)
 
+            # Notify if assigned to someone else
+            if todo.assigned_to_id and todo.assigned_to_id != user.id:
+                from apps.core.notifications import notify
+                notify(
+                    user.tenant,
+                    "todo_assigned",
+                    recipients=[todo.assigned_to],
+                    todo=todo,
+                    assigner=user,
+                )
+
             return TodoCreateResult(success=True, todo=todo_to_type(todo))
         except Exception as e:
             return TodoCreateResult(success=False, error=str(e))
@@ -386,6 +397,7 @@ class TodoMutation:
                 if text is not None or reminder_date is not strawberry.UNSET or is_public is not None or assigned_to_id is not strawberry.UNSET:
                     return TodoUpdateResult(success=False, error="Only the creator can edit this todo")
 
+            old_assigned_to_id = todo.assigned_to_id
             update_fields = ["updated_at"]
 
             if text is not None and is_creator:
@@ -428,6 +440,21 @@ class TodoMutation:
             todo = TodoItem.objects.select_related(
                 "created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer"
             ).get(pk=todo.pk)
+
+            # Notify if reassigned to a different user (not the creator)
+            if (
+                todo.assigned_to_id
+                and todo.assigned_to_id != old_assigned_to_id
+                and todo.assigned_to_id != todo.created_by_id
+            ):
+                from apps.core.notifications import notify
+                notify(
+                    user.tenant,
+                    "todo_assigned",
+                    recipients=[todo.assigned_to],
+                    todo=todo,
+                    assigner=user,
+                )
 
             return TodoUpdateResult(success=True, todo=todo_to_type(todo))
         except TodoItem.DoesNotExist:

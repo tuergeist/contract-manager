@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { CompanyDataSettings } from '@/features/invoices/CompanyDataSettings'
+import { EmailTemplateSettings } from '@/features/invoices/EmailTemplateSettings'
 import { NumberSchemeSettings } from '@/features/invoices/NumberSchemeSettings'
 import { TemplateSettings } from '@/features/invoices/TemplateSettings'
 import { ZugferdSettings } from '@/features/invoices/ZugferdSettings'
@@ -14,6 +15,7 @@ export function InvoiceSettingsTabs() {
   // Determine active sub-tab from URL
   const getActiveSubTab = () => {
     if (location.pathname.includes('/numbering')) return 'numbering'
+    if (location.pathname.includes('/email-template')) return 'email-template'
     if (location.pathname.includes('/template')) return 'template'
     if (location.pathname.includes('/zugferd')) return 'zugferd'
     return 'company'
@@ -25,6 +27,9 @@ export function InvoiceSettingsTabs() {
     switch (value) {
       case 'numbering':
         navigate('/settings/invoices/numbering')
+        break
+      case 'email-template':
+        navigate('/settings/invoices/email-template')
         break
       case 'template':
         navigate('/settings/invoices/template')
@@ -43,6 +48,7 @@ export function InvoiceSettingsTabs() {
         <TabsTrigger value="company">{t('invoices.companyData.title')}</TabsTrigger>
         <TabsTrigger value="numbering">{t('invoices.numberScheme.title')}</TabsTrigger>
         <TabsTrigger value="template">{t('invoices.template.title')}</TabsTrigger>
+        <TabsTrigger value="email-template">{t('settings.emailTemplate.tabTitle')}</TabsTrigger>
         <TabsTrigger value="zugferd">{t('invoices.zugferd.title')}</TabsTrigger>
       </TabsList>
 
@@ -56,6 +62,10 @@ export function InvoiceSettingsTabs() {
 
       <TabsContent value="template">
         <TemplateSettings showHeader={false} />
+      </TabsContent>
+
+      <TabsContent value="email-template">
+        <EmailTemplateSettings showHeader={false} />
       </TabsContent>
 
       <TabsContent value="zugferd">

@@ -158,6 +158,22 @@ for {total_gross} {currency} covering the period {period_start} – {period_end}
 }
 
 
+def _get_email_template(tenant, lang: str) -> dict:
+    """Get email template for a language, preferring tenant custom templates.
+
+    Returns dict with 'subject' and 'body' keys.
+    Falls back to hardcoded EMAIL_TEMPLATES defaults.
+    """
+    if lang not in EMAIL_TEMPLATES:
+        lang = "de"
+
+    custom = (tenant.settings or {}).get("invoice_email_templates", {}).get(lang, {})
+    if custom.get("subject") and custom.get("body"):
+        return {"subject": custom["subject"], "body": custom["body"]}
+
+    return EMAIL_TEMPLATES[lang]
+
+
 @shared_task(bind=True, acks_late=True)
 def send_invoice_email_task(self, record_id: int) -> bool:
     """Send an invoice email via M365 Graph API.
@@ -193,13 +209,12 @@ def send_invoice_email_task(self, record_id: int) -> bool:
     if lang not in EMAIL_TEMPLATES:
         lang = "de"
 
-    template = EMAIL_TEMPLATES[lang]
+    template = _get_email_template(record.tenant, lang)
     company_data = record.company_data_snapshot or {}
     company_name = company_data.get("company_name", "")
     currency = record.tenant.currency if record.tenant else "EUR"
 
-    subject = template["subject"].format(invoice_number=record.invoice_number)
-    body_html = template["body"].format(
+    format_kwargs = dict(
         invoice_number=record.invoice_number,
         total_gross=f"{record.total_gross:,.2f}",
         currency=currency,
@@ -207,6 +222,18 @@ def send_invoice_email_task(self, record_id: int) -> bool:
         period_end=record.period_end.strftime("%d.%m.%Y"),
         company_name=company_name,
     )
+
+    try:
+        subject = template["subject"].format(**format_kwargs)
+        body_html = template["body"].format(**format_kwargs)
+    except (KeyError, ValueError) as e:
+        logger.warning(
+            "Custom email template rendering failed for record %s, falling back to default: %s",
+            record_id, e,
+        )
+        fallback = EMAIL_TEMPLATES[lang]
+        subject = fallback["subject"].format(**format_kwargs)
+        body_html = fallback["body"].format(**format_kwargs)
 
     # Read PDF attachment
     pdf_bytes = record.pdf_file.read()

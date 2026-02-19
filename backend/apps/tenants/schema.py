@@ -172,6 +172,7 @@ class HubSpotSettings:
     last_auto_sync_customers: str | None = None
     last_auto_sync_products: str | None = None
     last_auto_sync_deals: str | None = None
+    billing_contact_label: str | None = None
 
 
 @strawberry.type
@@ -233,6 +234,49 @@ class HubSpotPropertiesResult:
 
 
 @strawberry.type
+class HubSpotAssociationLabel:
+    """A HubSpot association label for company-to-contact relationships."""
+
+    type_id: int
+    label: str
+    category: str
+
+
+@strawberry.type
+class HubSpotAssociationLabelsResult:
+    """Result of listing HubSpot association labels."""
+
+    success: bool
+    error: str | None
+    labels: list[HubSpotAssociationLabel] | None
+
+
+@strawberry.type
+class InvoiceEmailTemplate:
+    """An email template for a specific language."""
+    language: str
+    subject: str
+    body: str
+    is_custom: bool
+
+
+@strawberry.type
+class InvoiceEmailTemplatesResult:
+    """Result of querying invoice email templates."""
+    success: bool
+    error: str | None = None
+    templates: list[InvoiceEmailTemplate] | None = None
+
+
+@strawberry.input
+class SetInvoiceEmailTemplateInput:
+    """Input for setting an invoice email template."""
+    language: str
+    subject: str
+    body: str
+
+
+@strawberry.type
 class M365Settings:
     """Microsoft 365 integration settings."""
     is_configured: bool
@@ -262,6 +306,26 @@ class M365MailboxesResult:
     success: bool
     error: str | None = None
     mailboxes: list[M365MailboxType] | None = None
+
+
+@strawberry.type
+class SmtpSettingsType:
+    """SMTP notification service settings."""
+    host: str
+    port: int
+    username: str
+    from_name: str
+    from_address: str
+    use_tls: bool
+    is_configured: bool
+    password_set: bool
+
+
+@strawberry.type
+class NotificationPreferencesType:
+    """Per-user notification subscription preferences."""
+    todo_assigned: bool
+    hubspot_new_contract: bool
 
 
 @strawberry.type
@@ -458,6 +522,7 @@ class TenantQuery:
             last_auto_sync_customers=config.get("last_auto_sync_customers"),
             last_auto_sync_products=config.get("last_auto_sync_products"),
             last_auto_sync_deals=config.get("last_auto_sync_deals"),
+            billing_contact_label=config.get("billing_contact_label"),
         )
 
     @strawberry.field
@@ -509,6 +574,39 @@ class TenantQuery:
         )
 
     @strawberry.field
+    def hubspot_contact_association_labels(
+        self, info: Info[Context, None]
+    ) -> HubSpotAssociationLabelsResult:
+        """List available association labels for company-to-contact relationships."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return HubSpotAssociationLabelsResult(
+                success=False,
+                error="No tenant assigned",
+                labels=None,
+            )
+
+        service = HubSpotService(user.tenant)
+        result = service.list_contact_association_labels()
+
+        labels = None
+        if result.get("labels"):
+            labels = [
+                HubSpotAssociationLabel(
+                    type_id=l["type_id"],
+                    label=l["label"],
+                    category=l["category"],
+                )
+                for l in result["labels"]
+            ]
+
+        return HubSpotAssociationLabelsResult(
+            success=result.get("success", False),
+            error=result.get("error"),
+            labels=labels,
+        )
+
+    @strawberry.field
     def m365_settings(self, info: Info[Context, None]) -> M365Settings | None:
         """Get M365 integration settings for current tenant."""
         user = get_current_user(info)
@@ -528,6 +626,37 @@ class TenantQuery:
         )
 
     @strawberry.field
+    def smtp_settings(self, info: Info[Context, None]) -> SmtpSettingsType | None:
+        """Get SMTP notification settings for current tenant."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return None
+        config = (user.tenant.settings or {}).get("smtp", {})
+        is_configured = bool(
+            all(config.get(k) for k in ("host", "port", "username", "password", "from_address"))
+        )
+        return SmtpSettingsType(
+            host=config.get("host", ""),
+            port=config.get("port", 587),
+            username=config.get("username", ""),
+            from_name=config.get("from_name", ""),
+            from_address=config.get("from_address", ""),
+            use_tls=config.get("use_tls", True),
+            is_configured=is_configured,
+            password_set=bool(config.get("password")),
+        )
+
+    @strawberry.field
+    def notification_preferences(self, info: Info[Context, None]) -> NotificationPreferencesType | None:
+        """Get the current user's notification subscription preferences."""
+        user = get_current_user(info)
+        prefs = user.notification_preferences or {}
+        return NotificationPreferencesType(
+            todo_assigned=prefs.get("todo_assigned", True) is not False,
+            hubspot_new_contract=prefs.get("hubspot_new_contract", True) is not False,
+        )
+
+    @strawberry.field
     def help_video_links(self, info: Info[Context, None]) -> list[HelpVideoLinksEntryType]:
         """Get help video links configured for the current tenant."""
         user = get_current_user(info)
@@ -544,6 +673,36 @@ class TenantQuery:
             )
             for route_key, links in config.items()
         ]
+
+    @strawberry.field
+    def invoice_email_templates(
+        self, info: Info[Context, None]
+    ) -> InvoiceEmailTemplatesResult:
+        """Get invoice email templates (custom or defaults) for all languages."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return InvoiceEmailTemplatesResult(
+                success=False, error="No tenant assigned"
+            )
+
+        from apps.invoices.tasks import EMAIL_TEMPLATES
+
+        custom = (user.tenant.settings or {}).get("invoice_email_templates", {})
+        templates = []
+        for lang in ("de", "en"):
+            default = EMAIL_TEMPLATES.get(lang, {})
+            custom_lang = custom.get(lang, {})
+            is_custom = bool(custom_lang.get("subject") and custom_lang.get("body"))
+            templates.append(
+                InvoiceEmailTemplate(
+                    language=lang,
+                    subject=custom_lang.get("subject", "") if is_custom else default.get("subject", ""),
+                    body=custom_lang.get("body", "") if is_custom else default.get("body", ""),
+                    is_custom=is_custom,
+                )
+            )
+
+        return InvoiceEmailTemplatesResult(success=True, templates=templates)
 
 
 @strawberry.input
@@ -747,6 +906,29 @@ class TenantMutation:
             tenant.hubspot_config = {}
 
         tenant.hubspot_config["auto_sync_enabled"] = enabled
+        tenant.save(update_fields=["hubspot_config"])
+
+        return HubSpotTestResult(success=True, error=None)
+
+    @strawberry.mutation
+    def set_hubspot_billing_contact_label(
+        self,
+        info: Info[Context, None],
+        label: str | None,
+    ) -> HubSpotTestResult:
+        """Set the association label used to identify billing contacts."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return HubSpotTestResult(success=False, error="No tenant assigned")
+
+        tenant = user.tenant
+        if not tenant.hubspot_config:
+            tenant.hubspot_config = {}
+
+        if label:
+            tenant.hubspot_config["billing_contact_label"] = label
+        else:
+            tenant.hubspot_config.pop("billing_contact_label", None)
         tenant.save(update_fields=["hubspot_config"])
 
         return HubSpotTestResult(success=True, error=None)
@@ -1365,5 +1547,129 @@ class TenantMutation:
         if not tenant.settings:
             tenant.settings = {}
         tenant.settings["m365"] = config
+        tenant.save(update_fields=["settings"])
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def save_smtp_settings(
+        self,
+        info: Info[Context, None],
+        host: str,
+        port: int,
+        username: str,
+        password: str,
+        from_name: str,
+        from_address: str,
+        use_tls: bool = True,
+    ) -> OperationResult:
+        """Save SMTP notification settings. Requires settings.write."""
+        user = require_perm(info, "settings", "write")
+        tenant = user.tenant
+        if not tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        if not tenant.settings:
+            tenant.settings = {}
+
+        existing = tenant.settings.get("smtp", {})
+        tenant.settings["smtp"] = {
+            "host": host.strip(),
+            "port": port,
+            "username": username.strip(),
+            "password": password.strip() or existing.get("password", ""),
+            "from_name": from_name.strip(),
+            "from_address": from_address.strip(),
+            "use_tls": use_tls,
+        }
+        tenant.save(update_fields=["settings"])
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def test_smtp_connection(self, info: Info[Context, None]) -> OperationResult:
+        """Test SMTP connection with stored credentials."""
+        user = require_perm(info, "settings", "write")
+        if not user.tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        from apps.core.smtp import SmtpError, test_connection
+        try:
+            test_connection(user.tenant)
+            return OperationResult(success=True)
+        except SmtpError as e:
+            return OperationResult(success=False, error=str(e))
+
+    @strawberry.mutation
+    def send_smtp_test_email(self, info: Info[Context, None]) -> OperationResult:
+        """Send a test notification email via SMTP to the current user."""
+        user = require_perm(info, "settings", "write")
+        if not user.tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        from apps.core.smtp import SmtpError, send_notification
+        try:
+            send_notification(
+                user.tenant,
+                to=[user.email],
+                subject="Test Notification from Contract Manager",
+                body_html="<p>This is a test notification sent from Contract Manager via SMTP.</p>"
+                          "<p>If you received this, your SMTP notification service is working correctly.</p>",
+            )
+            return OperationResult(success=True)
+        except SmtpError as e:
+            return OperationResult(success=False, error=str(e))
+
+    @strawberry.mutation
+    def update_notification_preferences(
+        self,
+        info: Info[Context, None],
+        todo_assigned: bool | None = None,
+        hubspot_new_contract: bool | None = None,
+    ) -> OperationResult:
+        """Update the current user's notification preferences."""
+        user = get_current_user(info)
+        prefs = user.notification_preferences or {}
+
+        if todo_assigned is not None:
+            prefs["todo_assigned"] = todo_assigned
+        if hubspot_new_contract is not None:
+            prefs["hubspot_new_contract"] = hubspot_new_contract
+
+        user.notification_preferences = prefs
+        user.save(update_fields=["notification_preferences"])
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def set_invoice_email_template(
+        self,
+        info: Info[Context, None],
+        input: SetInvoiceEmailTemplateInput,
+    ) -> OperationResult:
+        """Save or clear a custom invoice email template for a language. Requires settings.write."""
+        user = require_perm(info, "settings", "write")
+        tenant = user.tenant
+        if not tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        if input.language not in ("de", "en"):
+            return OperationResult(success=False, error="Unsupported language")
+
+        if not tenant.settings:
+            tenant.settings = {}
+
+        templates = tenant.settings.get("invoice_email_templates", {})
+
+        if input.subject.strip() and input.body.strip():
+            templates[input.language] = {
+                "subject": input.subject.strip(),
+                "body": input.body.strip(),
+            }
+        else:
+            templates.pop(input.language, None)
+
+        if templates:
+            tenant.settings["invoice_email_templates"] = templates
+        else:
+            tenant.settings.pop("invoice_email_templates", None)
+
         tenant.save(update_fields=["settings"])
         return OperationResult(success=True)
