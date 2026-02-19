@@ -231,9 +231,9 @@ export function CustomerList() {
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
                       {customer.contractCount > 0 ? (
                         <span className="text-sm">
-                          <span className="text-gray-900">{customer.contractCount}</span>
-                          <span className="text-gray-400"> / </span>
                           <span className="font-medium text-blue-700">{customer.activeContractCount}</span>
+                          <span className="text-gray-400"> / </span>
+                          <span className="text-gray-900">{customer.contractCount}</span>
                         </span>
                       ) : (
                         <span className="text-gray-400">-</span>
