@@ -89,9 +89,12 @@ class CustomerType:
     @strawberry.field
     def active_contract_count(self) -> int:
         """Get the number of active contracts for this customer."""
+        from datetime import date
+        from django.db.models import Q
         from apps.contracts.models import Contract
 
         return Contract.objects.filter(
+            Q(end_date__isnull=True) | Q(end_date__gte=date.today()),
             customer=self,
             status=Contract.Status.ACTIVE,
         ).count()

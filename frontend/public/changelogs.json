@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.2.1",
+    "date": "2026-02-19",
+    "title": "Invoice Status & Active Contract Count Fixes",
+    "description": "Consolidated storno/cancelled invoice statuses into a single 'voided' status and fixed active contract count including ended contracts.",
+    "type": "bugfix",
+    "details": [
+      "Replace storno and cancelled invoice statuses with single voided status",
+      "Fix active contract count on customer list including contracts past their end date"
+    ]
+  },
+  {
     "version": "2.2.0",
     "date": "2026-02-19",
     "title": "Notification System, SMTP Service & Comments",
