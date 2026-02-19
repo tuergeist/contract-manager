@@ -271,8 +271,7 @@ class InvoiceRecord(TenantModel):
         SENT = "sent", "Sent"
         PAID = "paid", "Paid"
         DUNNING = "dunning", "Dunning"
-        STORNO = "storno", "Storno"
-        CANCELLED = "cancelled", "Cancelled"
+        VOIDED = "voided", "Voided"
 
     contract = models.ForeignKey(
         "contracts.Contract",

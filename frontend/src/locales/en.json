@@ -497,7 +497,7 @@
     "grossTotal": "Gross Total",
     "status": "Status",
     "statusFinalized": "Finalized",
-    "statusCancelled": "Cancelled",
+    "statusVoided": "Voided",
     "statusNotGenerated": "Not Generated",
     "generateInvoices": "Generate & Finalize",
     "generateCount": "Generate {{count}} invoices",
@@ -716,8 +716,7 @@
         "sent": "Sent",
         "paid": "Paid",
         "dunning": "Dunning",
-        "storno": "Storno",
-        "cancelled": "Cancelled"
+        "voided": "Voided"
       },
       "viewPdfGenerated": "Download PDF",
       "contractLink": "View contract"

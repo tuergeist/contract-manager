@@ -194,33 +194,33 @@ class TestDuplicatePrevention:
         assert InvoiceRecord.objects.filter(tenant=tenant).count() == 2
 
 
-class TestCancelInvoice:
-    def test_cancel_finalized(self, db, tenant, legal_data, active_contract, contract_item):
+class TestVoidInvoice:
+    def test_void_finalized(self, db, tenant, legal_data, active_contract, contract_item):
         service = InvoiceService(tenant)
         records = service.generate_and_persist(2026, 1)
         record = records[0]
 
-        InvoiceService.cancel_invoice(record)
+        InvoiceService.void_invoice(record)
         record.refresh_from_db()
-        assert record.status == InvoiceRecord.Status.CANCELLED
+        assert record.status == InvoiceRecord.Status.VOIDED
 
-    def test_cancel_non_finalized_raises(self, db, tenant, legal_data, active_contract, contract_item):
+    def test_void_non_finalized_raises(self, db, tenant, legal_data, active_contract, contract_item):
         service = InvoiceService(tenant)
         records = service.generate_and_persist(2026, 1)
         record = records[0]
-        record.status = InvoiceRecord.Status.CANCELLED
+        record.status = InvoiceRecord.Status.VOIDED
         record.save()
 
         with pytest.raises(ValueError, match="Only finalized"):
-            InvoiceService.cancel_invoice(record)
+            InvoiceService.void_invoice(record)
 
-    def test_cancelled_number_not_reused(self, db, tenant, legal_data, active_contract, contract_item):
+    def test_voided_number_not_reused(self, db, tenant, legal_data, active_contract, contract_item):
         service = InvoiceService(tenant)
         records = service.generate_and_persist(2026, 1)
         old_number = records[0].invoice_number
-        InvoiceService.cancel_invoice(records[0])
+        InvoiceService.void_invoice(records[0])
 
-        # Generate again for the same month — cancelled record should allow re-generation
+        # Generate again for the same month — voided record should allow re-generation
         # but with a NEW number
         records[0].refresh_from_db()
         new_records = service.generate_and_persist(2026, 1)
@@ -247,5 +247,5 @@ class TestGetPersistedInvoices:
         results = service.get_persisted_invoices(2026, 1, status="finalized")
         assert len(results) == 1
 
-        results = service.get_persisted_invoices(2026, 1, status="cancelled")
+        results = service.get_persisted_invoices(2026, 1, status="voided")
         assert len(results) == 0

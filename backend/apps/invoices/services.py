@@ -1148,13 +1148,13 @@ class InvoiceService:
         return created_records
 
     @staticmethod
-    def cancel_invoice(invoice_record) -> None:
-        """Cancel a finalized invoice. Number is NOT reused."""
+    def void_invoice(invoice_record) -> None:
+        """Void a finalized invoice. Number is NOT reused."""
         from apps.invoices.models import InvoiceRecord
 
         if invoice_record.status != InvoiceRecord.Status.FINALIZED:
-            raise ValueError("Only finalized invoices can be cancelled.")
-        invoice_record.status = InvoiceRecord.Status.CANCELLED
+            raise ValueError("Only finalized invoices can be voided.")
+        invoice_record.status = InvoiceRecord.Status.VOIDED
         invoice_record.save(update_fields=["status", "updated_at"])
 
     def get_persisted_invoices(

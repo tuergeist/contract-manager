@@ -497,7 +497,7 @@
     "grossTotal": "Bruttobetrag",
     "status": "Status",
     "statusFinalized": "Finalisiert",
-    "statusCancelled": "Storniert",
+    "statusVoided": "Storniert",
     "statusNotGenerated": "Nicht erstellt",
     "generateInvoices": "Erstellen & Finalisieren",
     "generateCount": "{{count}} Rechnungen erstellen",
@@ -716,8 +716,7 @@
         "sent": "Versendet",
         "paid": "Bezahlt",
         "dunning": "Mahnung",
-        "storno": "Storno",
-        "cancelled": "Storniert"
+        "voided": "Storniert"
       },
       "viewPdfGenerated": "PDF herunterladen",
       "contractLink": "Vertrag anzeigen"

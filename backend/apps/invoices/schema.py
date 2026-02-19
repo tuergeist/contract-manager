@@ -318,7 +318,7 @@ class GenerateInvoicesResult:
 
 
 @strawberry.type
-class CancelInvoiceResult:
+class VoidInvoiceResult:
     success: bool
     error: str | None = None
 
@@ -1310,13 +1310,13 @@ class InvoiceMutation:
         )
 
     @strawberry.mutation
-    def cancel_invoice(
+    def void_invoice(
         self, info: Info[Context, None], invoice_id: int
-    ) -> CancelInvoiceResult:
-        """Cancel a finalized invoice."""
+    ) -> VoidInvoiceResult:
+        """Void a finalized invoice."""
         user, err = check_perm(info, "invoices", "generate")
         if err:
-            return CancelInvoiceResult(success=False, error=err)
+            return VoidInvoiceResult(success=False, error=err)
 
         from apps.invoices.models import InvoiceRecord
 
@@ -1325,25 +1325,25 @@ class InvoiceMutation:
                 id=invoice_id, tenant=user.tenant
             )
         except InvoiceRecord.DoesNotExist:
-            return CancelInvoiceResult(
+            return VoidInvoiceResult(
                 success=False, error="Invoice not found"
             )
 
         try:
-            InvoiceService.cancel_invoice(record)
+            InvoiceService.void_invoice(record)
         except ValueError as e:
-            return CancelInvoiceResult(success=False, error=str(e))
+            return VoidInvoiceResult(success=False, error=str(e))
 
-        return CancelInvoiceResult(success=True)
+        return VoidInvoiceResult(success=True)
 
     @strawberry.mutation
     def set_zugferd_default(
         self, info: Info[Context, None], enabled: bool
-    ) -> CancelInvoiceResult:
+    ) -> VoidInvoiceResult:
         """Enable or disable ZUGFeRD as the default PDF export format."""
         user, err = check_perm(info, "invoices", "settings")
         if err:
-            return CancelInvoiceResult(success=False, error=err)
+            return VoidInvoiceResult(success=False, error=err)
 
         tenant = user.tenant
         tenant_settings = tenant.settings or {}
@@ -1351,7 +1351,7 @@ class InvoiceMutation:
         tenant.settings = tenant_settings
         tenant.save(update_fields=["settings"])
 
-        return CancelInvoiceResult(success=True)
+        return VoidInvoiceResult(success=True)
 
     # ----- PDF Analysis -----
 

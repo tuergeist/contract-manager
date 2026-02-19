@@ -142,11 +142,11 @@ function StatusBadge({ status }: { status: string }) {
           {t('invoices.statusFinalized')}
         </span>
       )
-    case 'cancelled':
+    case 'voided':
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
           <XCircle className="h-3 w-3" />
-          {t('invoices.statusCancelled')}
+          {t('invoices.statusVoided')}
         </span>
       )
     default:
