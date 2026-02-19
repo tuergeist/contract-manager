@@ -68,7 +68,8 @@
       "currentYearForecast": "Prognose lfd. Jahr",
       "currentYearForecastExplanation": "Prognostizierter Gesamtumsatz für das laufende Kalenderjahr (1. Januar - 31. Dezember).",
       "nextYearForecast": "Prognose nächstes Jahr",
-      "nextYearForecastExplanation": "Prognostizierter Gesamtumsatz für das nächste Kalenderjahr. Ohne Verträge, die vor dem nächsten Jahr enden."
+      "nextYearForecastExplanation": "Prognostizierter Gesamtumsatz für das nächste Kalenderjahr. Ohne Verträge, die vor dem nächsten Jahr enden.",
+      "inclOneOff": "inkl. {{amount}} einmalig"
     }
   },
   "customers": {
@@ -887,8 +888,40 @@
       "hubspot": "HubSpot",
       "timeTracking": "Zeiterfassung",
       "email": "E-Mail (M365)",
+      "notifications": "Benachrichtigungen",
       "contracts": "Verträge",
       "helpVideos": "Hilfe-Videos"
+    },
+    "smtp": {
+      "title": "SMTP-Benachrichtigungsdienst",
+      "description": "SMTP-Einstellungen für den Versand interner Benachrichtigungen (Sync-Warnungen, Aufgabenzuweisungen usw.) konfigurieren.",
+      "status": "Status",
+      "configured": "Konfiguriert",
+      "notConfigured": "Nicht konfiguriert",
+      "host": "SMTP-Host",
+      "port": "Port",
+      "username": "Benutzername",
+      "password": "Passwort",
+      "fromName": "Absendername",
+      "fromAddress": "Absenderadresse",
+      "useTls": "TLS verwenden (STARTTLS)",
+      "save": "Einstellungen speichern",
+      "saved": "SMTP-Einstellungen gespeichert",
+      "saveFailed": "SMTP-Einstellungen konnten nicht gespeichert werden",
+      "testConnection": "Verbindung testen",
+      "connectionSuccess": "SMTP-Verbindung erfolgreich",
+      "connectionFailed": "SMTP-Verbindung fehlgeschlagen",
+      "sendTestEmail": "Test-E-Mail senden",
+      "testEmailSent": "Test-E-Mail erfolgreich gesendet",
+      "testEmailFailed": "Test-E-Mail konnte nicht gesendet werden"
+    },
+    "notificationPreferences": {
+      "title": "Benachrichtigungen",
+      "description": "Wählen Sie, welche E-Mail-Benachrichtigungen Sie erhalten möchten.",
+      "todoAssigned": "Aufgabe zugewiesen",
+      "todoAssignedDescription": "Benachrichtigung, wenn Ihnen jemand eine Aufgabe zuweist.",
+      "hubspotNewContract": "Neuer Vertrag aus HubSpot",
+      "hubspotNewContractDescription": "Benachrichtigung, wenn ein neuer Vertrag über HubSpot-Deal-Sync eintrifft."
     },
     "team": {
       "users": "Benutzer",
@@ -1013,8 +1046,11 @@
       "setupGuide": "Service-Key Anforderungen",
       "setup": {
         "intro": "Ein HubSpot Service-Key mit folgenden Berechtigungen wird benötigt:",
-        "createKeyLink": "Service-Key in den HubSpot-Einstellungen erstellen"
+        "createKeyLink": "Erstellen Sie einen Service-Key unter Einstellungen > Integrationen > Private Apps in Ihrem HubSpot-Portal."
       },
+      "billingContactLabel": "Rechnungskontakt-Label",
+      "billingContactLabelDescription": "Wählen Sie das HubSpot-Zuordnungslabel, das Rechnungskontakte identifiziert. Deren E-Mail-Adressen werden als Rechnungs-E-Mails synchronisiert.",
+      "billingContactLabelNone": "Deaktiviert (keine Rechnungskontakt-Synchronisierung)",
       "autoSync": "Automatische Synchronisierung alle 6 Stunden",
       "autoSyncDescription": "Kunden, Produkte und Deals automatisch im Hintergrund synchronisieren",
       "lastAutoSync": "Letzte Auto-Sync"
@@ -1056,6 +1092,20 @@
         "step5": "Unter API-Berechtigungen → Berechtigung hinzufügen → Microsoft Graph → Anwendungsberechtigungen → Mail.Send hinzufügen → Administratorzustimmung erteilen",
         "restrictNote": "Optional: Um einzuschränken, von welchen Postfächern die App senden darf, richten Sie eine Application Access Policy in Exchange Online PowerShell ein."
       }
+    },
+    "emailTemplate": {
+      "title": "Rechnungs-E-Mail-Vorlage",
+      "tabTitle": "E-Mail",
+      "description": "Betreff und Inhalt der E-Mail beim Rechnungsversand anpassen. Platzhalter werden automatisch ersetzt.",
+      "subject": "Betreff",
+      "body": "Inhalt (HTML)",
+      "placeholders": "Verfügbare Platzhalter (klicken zum Einfügen)",
+      "preview": "Vorschau",
+      "save": "Vorlage speichern",
+      "saved": "E-Mail-Vorlage gespeichert",
+      "saveFailed": "Fehler beim Speichern der Vorlage",
+      "resetToDefault": "Auf Standard zurücksetzen",
+      "reset": "Vorlage auf Standard zurückgesetzt"
     },
     "activationChecklist": {
       "title": "Aktivierungs-Checkliste",
@@ -1383,5 +1433,21 @@
     "allStatuses": "Alle Status",
     "dependentCount": "{{count}} abhängige Positionen",
     "dependentCount_one": "{{count}} abhängige Position"
+  },
+  "comments": {
+    "title": "Kommentare",
+    "addComment": "Kommentar hinzufügen",
+    "editComment": "Kommentar bearbeiten",
+    "deleteComment": "Kommentar löschen",
+    "showAll": "Alle anzeigen",
+    "allComments": "Alle Kommentare",
+    "noComments": "Noch keine Kommentare",
+    "commentPlaceholder": "Kommentar schreiben (Markdown unterstützt)...",
+    "confirmDelete": "Möchten Sie diesen Kommentar wirklich löschen?",
+    "edited": "bearbeitet",
+    "justNow": "gerade eben",
+    "minutesAgo": "vor {{count}} Min.",
+    "hoursAgo": "vor {{count}} Std.",
+    "daysAgo": "vor {{count}} T."
   }
 }

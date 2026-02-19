@@ -10,6 +10,7 @@ import {
 interface KPICardProps {
   title: string
   value: string | number
+  subtitle?: string
   explanation: string
   isCurrency?: boolean
 }
@@ -27,7 +28,7 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat('de-DE').format(value)
 }
 
-export function KPICard({ title, value, explanation, isCurrency = false }: KPICardProps) {
+export function KPICard({ title, value, subtitle, explanation, isCurrency = false }: KPICardProps) {
   const displayValue = typeof value === 'number'
     ? (isCurrency ? formatCurrency(value) : formatNumber(value))
     : value
@@ -51,6 +52,7 @@ export function KPICard({ title, value, explanation, isCurrency = false }: KPICa
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{displayValue}</div>
+        {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
       </CardContent>
     </Card>
   )

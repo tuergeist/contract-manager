@@ -88,6 +88,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
+import { CommentsSection } from '@/components/CommentsSection'
 import { TimeTrackingTab } from './TimeTrackingTab'
 import { PdfAnalysisPanel } from './PdfAnalysisPanel'
 import { ListTodo, Receipt } from 'lucide-react'
@@ -990,53 +991,61 @@ export function ContractDetail() {
         </div>
       </div>
 
-      {/* Internal Notes */}
-      <div className="mb-6 rounded-lg border bg-white p-4">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium text-gray-700">{t('contracts.detail.internalNotes')}</p>
-          {!isEditingNotes && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleStartEditNotes}
-              className="h-7 px-2"
-            >
-              <Edit className="h-3 w-3 mr-1" />
-              {t('common.edit')}
-            </Button>
+      {/* Internal Notes & Comments */}
+      <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Internal Notes */}
+        <div className="rounded-lg border bg-white p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium text-gray-700">{t('contracts.detail.internalNotes')}</p>
+            {!isEditingNotes && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleStartEditNotes}
+                className="h-7 px-2"
+              >
+                <Edit className="h-3 w-3 mr-1" />
+                {t('common.edit')}
+              </Button>
+            )}
+          </div>
+          {isEditingNotes ? (
+            <div className="space-y-2">
+              <textarea
+                className="w-full rounded-md border border-gray-300 p-2 text-sm min-h-[100px] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                value={editedNotes}
+                onChange={(e) => setEditedNotes(e.target.value)}
+                placeholder={t('contracts.detail.notesPlaceholder')}
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditingNotes(false)}
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveNotes}
+                  disabled={savingNotes}
+                >
+                  {savingNotes && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                  {t('common.save')}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-600 whitespace-pre-wrap">
+              {contract.notes || <span className="text-gray-400 italic">{t('contracts.detail.noNotes')}</span>}
+            </p>
           )}
         </div>
-        {isEditingNotes ? (
-          <div className="space-y-2">
-            <textarea
-              className="w-full rounded-md border border-gray-300 p-2 text-sm min-h-[100px] focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              value={editedNotes}
-              onChange={(e) => setEditedNotes(e.target.value)}
-              placeholder={t('contracts.detail.notesPlaceholder')}
-            />
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditingNotes(false)}
-              >
-                {t('common.cancel')}
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSaveNotes}
-                disabled={savingNotes}
-              >
-                {savingNotes && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-                {t('common.save')}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-gray-600 whitespace-pre-wrap">
-            {contract.notes || <span className="text-gray-400 italic">{t('contracts.detail.noNotes')}</span>}
-          </p>
-        )}
+
+        {/* Comments */}
+        <div className="rounded-lg border bg-white p-4">
+          <CommentsSection entityType="contract" entityId={id!} />
+        </div>
       </div>
 
       {/* Tabs */}

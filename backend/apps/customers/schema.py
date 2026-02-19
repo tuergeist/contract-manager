@@ -15,7 +15,7 @@ from django.db.models import Q
 from apps.core.context import Context
 from apps.core.permissions import check_perm, get_current_user, require_perm
 from apps.core.schema import DeleteResult
-from .models import Customer, CustomerAttachment, CustomerLink
+from .models import Customer, CustomerAttachment, CustomerLink, CustomerNote
 
 if TYPE_CHECKING:
     from apps.contracts.schema import ContractType
@@ -248,6 +248,63 @@ class CustomerLinkResult:
 
 
 # =============================================================================
+# Comment Types
+# =============================================================================
+
+
+@strawberry.type
+class CustomerCommentAuthorType:
+    id: strawberry.ID
+    first_name: str
+    last_name: str
+
+
+@strawberry.type
+class CustomerCommentType:
+    id: strawberry.ID
+    text: str
+    author: CustomerCommentAuthorType
+    created_at: datetime
+    updated_at: datetime
+    can_edit: bool
+    can_delete: bool
+
+
+@strawberry.type
+class CustomerCommentResult:
+    comment: CustomerCommentType | None = None
+    success: bool = False
+    error: str | None = None
+
+
+def _build_customer_comment(note: CustomerNote, user) -> CustomerCommentType:
+    """Build a CustomerCommentType from a CustomerNote model instance."""
+    from django.utils import timezone
+
+    is_author = note.user_id == user.id
+    is_latest = not CustomerNote.objects.filter(
+        customer=note.customer,
+        user=note.user,
+        created_at__gt=note.created_at,
+    ).exists()
+    within_24h = (timezone.now() - note.created_at).total_seconds() < 86400
+
+    return CustomerCommentType(
+        id=strawberry.ID(str(note.id)),
+        text=note.content,
+        author=CustomerCommentAuthorType(
+            id=strawberry.ID(str(note.user_id)),
+            first_name=note.user.first_name if note.user else "",
+            last_name=note.user.last_name if note.user else "",
+        ),
+        created_at=note.created_at,
+        updated_at=note.updated_at,
+        can_edit=is_author and is_latest and within_24h,
+        can_delete=is_author,
+    )
+
+
+# =============================================================================
 # Queries
 # =============================================================================
 
@@ -317,6 +374,22 @@ class CustomerQuery:
         if user.tenant:
             return Customer.objects.filter(tenant=user.tenant, id=id).first()
         return None
+
+    @strawberry.field
+    def customer_comments(
+        self,
+        info: Info[Context, None],
+        customer_id: strawberry.ID,
+    ) -> List[CustomerCommentType]:
+        """Get all comments for a customer, newest first."""
+        user = require_perm(info, "customers", "read")
+        if not user.tenant:
+            return []
+
+        notes = CustomerNote.objects.filter(
+            tenant=user.tenant, customer_id=customer_id
+        ).select_related("user")
+        return [_build_customer_comment(n, user) for n in notes]
 
 
 # =============================================================================
@@ -588,3 +661,110 @@ class CustomerMutation:
             success=True,
             invoice_language=customer.invoice_language,
         )
+
+    # =========================================================================
+    # Customer Comment Mutations
+    # =========================================================================
+
+    @strawberry.mutation
+    def add_customer_comment(
+        self,
+        info: Info[Context, None],
+        customer_id: strawberry.ID,
+        text: str,
+    ) -> CustomerCommentResult:
+        """Add a comment to a customer."""
+        user, err = check_perm(info, "customers", "write")
+        if err:
+            return CustomerCommentResult(error=err)
+        if not user.tenant:
+            return CustomerCommentResult(error="No tenant assigned")
+        if not text.strip():
+            return CustomerCommentResult(error="Comment text cannot be empty")
+
+        customer = Customer.objects.filter(
+            tenant=user.tenant, id=customer_id
+        ).first()
+        if not customer:
+            return CustomerCommentResult(error="Customer not found")
+
+        note = CustomerNote.objects.create(
+            tenant=user.tenant,
+            customer=customer,
+            content=text.strip(),
+            user=user,
+        )
+        return CustomerCommentResult(
+            comment=_build_customer_comment(note, user),
+            success=True,
+        )
+
+    @strawberry.mutation
+    def update_customer_comment(
+        self,
+        info: Info[Context, None],
+        comment_id: strawberry.ID,
+        text: str,
+    ) -> CustomerCommentResult:
+        """Update own most recent comment within 24h."""
+        from django.utils import timezone
+
+        user, err = check_perm(info, "customers", "write")
+        if err:
+            return CustomerCommentResult(error=err)
+        if not user.tenant:
+            return CustomerCommentResult(error="No tenant assigned")
+        if not text.strip():
+            return CustomerCommentResult(error="Comment text cannot be empty")
+
+        note = CustomerNote.objects.filter(
+            tenant=user.tenant, id=comment_id
+        ).select_related("user").first()
+        if not note:
+            return CustomerCommentResult(error="Comment not found")
+        if note.user_id != user.id:
+            return CustomerCommentResult(error="You can only edit your own comments")
+
+        # Must be the most recent comment by this author on this customer
+        newer_exists = CustomerNote.objects.filter(
+            customer=note.customer,
+            user=user,
+            created_at__gt=note.created_at,
+        ).exists()
+        if newer_exists:
+            return CustomerCommentResult(error="You can only edit your most recent comment")
+
+        if (timezone.now() - note.created_at).total_seconds() >= 86400:
+            return CustomerCommentResult(error="Comments can only be edited within 24 hours")
+
+        note.content = text.strip()
+        note.save(update_fields=["content", "updated_at"])
+
+        return CustomerCommentResult(
+            comment=_build_customer_comment(note, user),
+            success=True,
+        )
+
+    @strawberry.mutation
+    def delete_customer_comment(
+        self,
+        info: Info[Context, None],
+        comment_id: strawberry.ID,
+    ) -> DeleteResult:
+        """Delete own comment."""
+        user, err = check_perm(info, "customers", "write")
+        if err:
+            return DeleteResult(error=err)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        note = CustomerNote.objects.filter(
+            tenant=user.tenant, id=comment_id
+        ).first()
+        if not note:
+            return DeleteResult(error="Comment not found")
+        if note.user_id != user.id:
+            return DeleteResult(error="You can only delete your own comments")
+
+        note.delete()
+        return DeleteResult(success=True)

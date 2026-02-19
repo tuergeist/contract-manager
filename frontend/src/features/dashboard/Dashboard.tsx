@@ -14,7 +14,9 @@ const DASHBOARD_KPIS_QUERY = gql`
       annualRecurringRevenue
       yearToDateRevenue
       currentYearForecast
+      currentYearOneOff
       nextYearForecast
+      nextYearOneOff
     }
   }
 `
@@ -49,7 +51,9 @@ interface DashboardKPIs {
   annualRecurringRevenue: string
   yearToDateRevenue: string
   currentYearForecast: string
+  currentYearOneOff: string
   nextYearForecast: string
+  nextYearOneOff: string
 }
 
 interface DashboardKPIsData {
@@ -109,6 +113,15 @@ export function Dashboard() {
 
   const kpis = kpisData?.dashboardKpis
 
+  const formatOneOff = (value: string | undefined) => {
+    const v = parseFloat(value ?? '0')
+    if (v === 0) return undefined
+    const formatted = new Intl.NumberFormat('de-DE', {
+      style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 0,
+    }).format(v)
+    return t('dashboard.kpis.inclOneOff', { amount: formatted })
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -144,12 +157,14 @@ export function Dashboard() {
         <KPICard
           title={t('dashboard.kpis.currentYearForecast')}
           value={parseFloat(kpis?.currentYearForecast ?? '0')}
+          subtitle={formatOneOff(kpis?.currentYearOneOff)}
           explanation={t('dashboard.kpis.currentYearForecastExplanation')}
           isCurrency
         />
         <KPICard
           title={t('dashboard.kpis.nextYearForecast')}
           value={parseFloat(kpis?.nextYearForecast ?? '0')}
+          subtitle={formatOneOff(kpis?.nextYearOneOff)}
           explanation={t('dashboard.kpis.nextYearForecastExplanation')}
           isCurrency
         />

@@ -1300,3 +1300,25 @@ class ContractLink(TenantModel):
 
     def __str__(self):
         return f"{self.name} ({self.contract})"
+
+
+class ContractComment(TenantModel):
+    """A comment on a contract."""
+
+    contract = models.ForeignKey(
+        Contract,
+        on_delete=models.CASCADE,
+        related_name="comments",
+    )
+    text = models.TextField()
+    author = models.ForeignKey(
+        "tenants.User",
+        on_delete=models.CASCADE,
+        related_name="contract_comments",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Comment by {self.author} on {self.contract}"

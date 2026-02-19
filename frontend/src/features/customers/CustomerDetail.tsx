@@ -30,6 +30,7 @@ import {
 import { cn, formatDate } from '@/lib/utils'
 import { useAuditLogs, AuditLogTable } from '@/features/audit'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
+import { CommentsSection } from '@/components/CommentsSection'
 
 type SortField = 'name' | 'status' | 'startDate' | 'endDate' | 'arr' | 'totalValue' | 'remainingMonths' | null
 type SortOrder = 'asc' | 'desc'
@@ -928,8 +929,8 @@ export function CustomerDetail() {
         </div>
       </div>
 
-      {/* Invoice Language & Billing Emails */}
-      <div className="mt-4 grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-4">
+      {/* Invoice Language, Billing Emails & Comments */}
+      <div className="mt-4 grid grid-cols-1 lg:grid-cols-[auto_1fr_1fr] gap-4">
         {/* Invoice Language */}
         <div className="rounded-lg border bg-white p-4" data-testid="customer-invoice-language-section">
           <div className="flex items-center gap-2 mb-3">
@@ -1011,6 +1012,11 @@ export function CustomerDetail() {
         {emailError && (
           <p className="mt-1 text-xs text-red-500">{emailError}</p>
         )}
+      </div>
+
+      {/* Comments */}
+      <div className="rounded-lg border bg-white p-4">
+        <CommentsSection entityType="customer" entityId={id!} />
       </div>
       </div>
 

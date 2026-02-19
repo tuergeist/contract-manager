@@ -21,7 +21,7 @@ from apps.customers.models import Customer
 from apps.customers.schema import CustomerType
 from apps.products.models import Product
 from apps.products.schema import ProductType
-from .models import Contract, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, TimeTrackingProjectMapping
+from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, TimeTrackingProjectMapping
 from .services import ExcelParser, ImportService, MatchStatus
 
 if TYPE_CHECKING:
@@ -513,14 +513,18 @@ class ContractType:
 
     @strawberry.field
     def arr(self) -> Decimal:
-        """Calculate Annual Recurring Revenue (monthly × 12)."""
+        """Calculate Annual Recurring Revenue (monthly × 12), zero if expired."""
         from datetime import date
         today = date.today()
+
+        # Skip expired contracts
+        contract_end = self.end_date or self.get_effective_end_date()
+        if contract_end and contract_end < today:
+            return Decimal("0")
 
         items = ContractItem.objects.filter(contract=self, is_one_off=False)
         monthly_total = Decimal("0")
         for item in items:
-            # Use effective price considering period-specific pricing
             monthly_unit_price = item.get_price_at(today, normalize_to_monthly=True)
             monthly_total += monthly_unit_price * item.quantity
         return monthly_total * 12
@@ -950,7 +954,9 @@ def calculate_dashboard_kpis(tenant) -> dict:
     annual_recurring_revenue = Decimal("0")
     year_to_date_revenue = Decimal("0")
     current_year_forecast = Decimal("0")
+    current_year_one_off = Decimal("0")
     next_year_forecast = Decimal("0")
+    next_year_one_off = Decimal("0")
 
     for contract in active_contracts:
         # Use prefetched items (avoids re-querying)
@@ -974,14 +980,18 @@ def calculate_dashboard_kpis(tenant) -> dict:
                 effective_price, _ = item.get_effective_price_info(today)
                 total_contract_value += effective_price * item.quantity
 
-        # ARR: annualized recurring revenue (monthly × 12)
-        annual_recurring_revenue += monthly_value * 12
-
-        # Single recognition schedule spanning current year start to next year end,
-        # then split events into YTD, current year, and next year buckets
+        # ARR: annualized run rate (monthly × 12), only for non-expired contracts
         contract_end = contract.end_date or contract.get_effective_end_date()
+        if not contract_end or contract_end >= today:
+            annual_recurring_revenue += monthly_value * 12
+
+        # Recognition schedule spanning current year start to next year end,
+        # split events into YTD, current year, and next year buckets
         include_next_year = not contract_end or contract_end >= next_year_start
         schedule_end = next_year_end if include_next_year else current_year_end
+
+        # Split items by type for one-off tracking
+        one_off_items = [item for item in items if item.is_one_off]
 
         full_schedule = contract.get_recognition_schedule(
             from_date=current_year_start,
@@ -1006,13 +1016,30 @@ def calculate_dashboard_kpis(tenant) -> dict:
             if include_next_year and event_date >= next_year_start:
                 next_year_forecast += event_total
 
+        # One-off contributions to forecasts
+        if one_off_items:
+            one_off_schedule = contract.get_recognition_schedule(
+                from_date=current_year_start,
+                to_date=schedule_end,
+                include_history=True,
+                items=one_off_items,
+            )
+            for event in one_off_schedule:
+                event_date = event["date"]
+                if event_date <= current_year_end:
+                    current_year_one_off += event["total"]
+                if include_next_year and event_date >= next_year_start:
+                    next_year_one_off += event["total"]
+
     return {
         "total_active_contracts": total_active_contracts,
         "total_contract_value": total_contract_value,
         "annual_recurring_revenue": annual_recurring_revenue,
         "year_to_date_revenue": year_to_date_revenue,
         "current_year_forecast": current_year_forecast,
+        "current_year_one_off": current_year_one_off,
         "next_year_forecast": next_year_forecast,
+        "next_year_one_off": next_year_one_off,
     }
 
 
@@ -1025,7 +1052,9 @@ class DashboardKPIsType:
     annual_recurring_revenue: Decimal
     year_to_date_revenue: Decimal
     current_year_forecast: Decimal
+    current_year_one_off: Decimal
     next_year_forecast: Decimal
+    next_year_one_off: Decimal
 
 
 @strawberry.type
@@ -1196,6 +1225,63 @@ class PdfImportResultType:
     updated_items_count: int = 0
 
 
+# =============================================================================
+# Comment Types
+# =============================================================================
+
+
+@strawberry.type
+class CommentAuthorType:
+    id: strawberry.ID
+    first_name: str
+    last_name: str
+
+
+@strawberry.type
+class ContractCommentType:
+    id: strawberry.ID
+    text: str
+    author: CommentAuthorType
+    created_at: datetime
+    updated_at: datetime
+    can_edit: bool
+    can_delete: bool
+
+
+@strawberry.type
+class ContractCommentResult:
+    comment: ContractCommentType | None = None
+    success: bool = False
+    error: str | None = None
+
+
+def _build_contract_comment(comment: ContractComment, user) -> ContractCommentType:
+    """Build a ContractCommentType from a model instance."""
+    from django.utils import timezone
+
+    is_author = comment.author_id == user.id
+    is_latest = not ContractComment.objects.filter(
+        contract=comment.contract,
+        author=comment.author,
+        created_at__gt=comment.created_at,
+    ).exists()
+    within_24h = (timezone.now() - comment.created_at).total_seconds() < 86400
+
+    return ContractCommentType(
+        id=strawberry.ID(str(comment.id)),
+        text=comment.text,
+        author=CommentAuthorType(
+            id=strawberry.ID(str(comment.author_id)),
+            first_name=comment.author.first_name,
+            last_name=comment.author.last_name,
+        ),
+        created_at=comment.created_at,
+        updated_at=comment.updated_at,
+        can_edit=is_author and is_latest and within_24h,
+        can_delete=is_author,
+    )
+
+
 @strawberry.type
 class ContractQuery:
     @strawberry.field
@@ -1223,7 +1309,9 @@ class ContractQuery:
                 annual_recurring_revenue=Decimal("0"),
                 year_to_date_revenue=Decimal("0"),
                 current_year_forecast=Decimal("0"),
+                current_year_one_off=Decimal("0"),
                 next_year_forecast=Decimal("0"),
+                next_year_one_off=Decimal("0"),
             )
 
         kpis = calculate_dashboard_kpis(user.tenant)
@@ -1233,7 +1321,9 @@ class ContractQuery:
             annual_recurring_revenue=kpis["annual_recurring_revenue"],
             year_to_date_revenue=kpis["year_to_date_revenue"],
             current_year_forecast=kpis["current_year_forecast"],
+            current_year_one_off=kpis["current_year_one_off"],
             next_year_forecast=kpis["next_year_forecast"],
+            next_year_one_off=kpis["next_year_one_off"],
         )
 
     @strawberry.field
@@ -2112,6 +2202,22 @@ class ContractQuery:
             )
             for item in qs.order_by("-contract__created_at")
         ]
+
+    @strawberry.field
+    def contract_comments(
+        self,
+        info: Info[Context, None],
+        contract_id: strawberry.ID,
+    ) -> List[ContractCommentType]:
+        """Get all comments for a contract, newest first."""
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+
+        comments = ContractComment.objects.filter(
+            tenant=user.tenant, contract_id=contract_id
+        ).select_related("author")
+        return [_build_contract_comment(c, user) for c in comments]
 
 
 def _check_price_period_overlap(
@@ -4325,3 +4431,110 @@ class ContractImportMutation:
         item.save(update_fields=["delivery_status", "delivered_at"])
 
         return DeliverItemResult(success=True)
+
+    # =========================================================================
+    # Contract Comment Mutations
+    # =========================================================================
+
+    @strawberry.mutation
+    def add_contract_comment(
+        self,
+        info: Info[Context, None],
+        contract_id: strawberry.ID,
+        text: str,
+    ) -> ContractCommentResult:
+        """Add a comment to a contract."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractCommentResult(error=err)
+        if not user.tenant:
+            return ContractCommentResult(error="No tenant assigned")
+        if not text.strip():
+            return ContractCommentResult(error="Comment text cannot be empty")
+
+        contract = Contract.objects.filter(
+            tenant=user.tenant, id=contract_id
+        ).first()
+        if not contract:
+            return ContractCommentResult(error="Contract not found")
+
+        comment = ContractComment.objects.create(
+            tenant=user.tenant,
+            contract=contract,
+            text=text.strip(),
+            author=user,
+        )
+        return ContractCommentResult(
+            comment=_build_contract_comment(comment, user),
+            success=True,
+        )
+
+    @strawberry.mutation
+    def update_contract_comment(
+        self,
+        info: Info[Context, None],
+        comment_id: strawberry.ID,
+        text: str,
+    ) -> ContractCommentResult:
+        """Update own most recent comment within 24h."""
+        from django.utils import timezone
+
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ContractCommentResult(error=err)
+        if not user.tenant:
+            return ContractCommentResult(error="No tenant assigned")
+        if not text.strip():
+            return ContractCommentResult(error="Comment text cannot be empty")
+
+        comment = ContractComment.objects.filter(
+            tenant=user.tenant, id=comment_id
+        ).select_related("author").first()
+        if not comment:
+            return ContractCommentResult(error="Comment not found")
+        if comment.author_id != user.id:
+            return ContractCommentResult(error="You can only edit your own comments")
+
+        # Must be the most recent comment by this author on this contract
+        newer_exists = ContractComment.objects.filter(
+            contract=comment.contract,
+            author=user,
+            created_at__gt=comment.created_at,
+        ).exists()
+        if newer_exists:
+            return ContractCommentResult(error="You can only edit your most recent comment")
+
+        if (timezone.now() - comment.created_at).total_seconds() >= 86400:
+            return ContractCommentResult(error="Comments can only be edited within 24 hours")
+
+        comment.text = text.strip()
+        comment.save(update_fields=["text", "updated_at"])
+
+        return ContractCommentResult(
+            comment=_build_contract_comment(comment, user),
+            success=True,
+        )
+
+    @strawberry.mutation
+    def delete_contract_comment(
+        self,
+        info: Info[Context, None],
+        comment_id: strawberry.ID,
+    ) -> DeleteResult:
+        """Delete own comment."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return DeleteResult(error=err)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        comment = ContractComment.objects.filter(
+            tenant=user.tenant, id=comment_id
+        ).first()
+        if not comment:
+            return DeleteResult(error="Comment not found")
+        if comment.author_id != user.id:
+            return DeleteResult(error="You can only delete your own comments")
+
+        comment.delete()
+        return DeleteResult(success=True)

@@ -68,7 +68,8 @@
       "currentYearForecast": "Current Year Forecast",
       "currentYearForecastExplanation": "Projected total revenue for the current calendar year (January 1 - December 31).",
       "nextYearForecast": "Next Year Forecast",
-      "nextYearForecastExplanation": "Projected total revenue for the next calendar year. Excludes contracts ending before next year."
+      "nextYearForecastExplanation": "Projected total revenue for the next calendar year. Excludes contracts ending before next year.",
+      "inclOneOff": "incl. {{amount}} one-off"
     }
   },
   "customers": {
@@ -887,8 +888,40 @@
       "hubspot": "HubSpot",
       "timeTracking": "Time Tracking",
       "email": "Email (M365)",
+      "notifications": "Notifications",
       "contracts": "Contracts",
       "helpVideos": "Help Videos"
+    },
+    "smtp": {
+      "title": "SMTP Notification Service",
+      "description": "Configure SMTP settings for sending internal notifications (sync alerts, task assignments, etc.).",
+      "status": "Status",
+      "configured": "Configured",
+      "notConfigured": "Not configured",
+      "host": "SMTP Host",
+      "port": "Port",
+      "username": "Username",
+      "password": "Password",
+      "fromName": "From Name",
+      "fromAddress": "From Address",
+      "useTls": "Use TLS (STARTTLS)",
+      "save": "Save Settings",
+      "saved": "SMTP settings saved",
+      "saveFailed": "Failed to save SMTP settings",
+      "testConnection": "Test Connection",
+      "connectionSuccess": "SMTP connection successful",
+      "connectionFailed": "SMTP connection failed",
+      "sendTestEmail": "Send Test Email",
+      "testEmailSent": "Test email sent successfully",
+      "testEmailFailed": "Failed to send test email"
+    },
+    "notificationPreferences": {
+      "title": "Notifications",
+      "description": "Choose which email notifications you want to receive.",
+      "todoAssigned": "Todo assigned to me",
+      "todoAssignedDescription": "Get notified when someone assigns a todo to you.",
+      "hubspotNewContract": "New contract from HubSpot",
+      "hubspotNewContractDescription": "Get notified when a new contract arrives via HubSpot deal sync."
     },
     "team": {
       "users": "Users",
@@ -1013,8 +1046,11 @@
       "setupGuide": "Service key requirements",
       "setup": {
         "intro": "A HubSpot service key is required with the following scopes:",
-        "createKeyLink": "Create a service key in HubSpot settings"
+        "createKeyLink": "Create a service key under Settings > Integrations > Private Apps in your HubSpot portal."
       },
+      "billingContactLabel": "Billing Contact Label",
+      "billingContactLabelDescription": "Select the HubSpot association label used to identify billing contacts. Their email addresses will be synced as billing emails.",
+      "billingContactLabelNone": "Disabled (no billing contact sync)",
       "autoSync": "Automatic sync every 6 hours",
       "autoSyncDescription": "Automatically sync customers, products, and deals in the background",
       "lastAutoSync": "Last auto-sync"
@@ -1056,6 +1092,20 @@
         "step5": "Go to API permissions → Add permission → Microsoft Graph → Application permissions → add Mail.Send → Grant admin consent",
         "restrictNote": "Optional: To restrict which mailboxes the app can send from, set up an Application Access Policy in Exchange Online PowerShell."
       }
+    },
+    "emailTemplate": {
+      "title": "Invoice Email Template",
+      "tabTitle": "Email",
+      "description": "Customize the email subject and body used when sending invoices. Use placeholders for dynamic values.",
+      "subject": "Subject",
+      "body": "Body (HTML)",
+      "placeholders": "Available Placeholders (click to insert)",
+      "preview": "Preview",
+      "save": "Save Template",
+      "saved": "Email template saved",
+      "saveFailed": "Failed to save email template",
+      "resetToDefault": "Reset to Default",
+      "reset": "Template reset to default"
     },
     "activationChecklist": {
       "title": "Activation Checklist",
@@ -1383,5 +1433,21 @@
     "allStatuses": "All Statuses",
     "dependentCount": "{{count}} dependent items",
     "dependentCount_one": "{{count}} dependent item"
+  },
+  "comments": {
+    "title": "Comments",
+    "addComment": "Add Comment",
+    "editComment": "Edit Comment",
+    "deleteComment": "Delete Comment",
+    "showAll": "Show all",
+    "allComments": "All Comments",
+    "noComments": "No comments yet",
+    "commentPlaceholder": "Write a comment (Markdown supported)...",
+    "confirmDelete": "Are you sure you want to delete this comment?",
+    "edited": "edited",
+    "justNow": "just now",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago"
   }
 }
