@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.2.2",
+    "date": "2026-02-19",
+    "title": "Customer List & Invoice UI Fixes",
+    "description": "Show total and active contract counts on customer list, use Eye icon for invoice PDF view.",
+    "type": "bugfix",
+    "details": [
+      "Show active / total contract counts on customer list",
+      "Use Eye icon for imported invoice PDF view button",
+      "Rename contracts column header for clarity"
+    ]
+  },
+  {
     "version": "2.2.1",
     "date": "2026-02-19",
     "title": "Invoice Status & Active Contract Count Fixes",
