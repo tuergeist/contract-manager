@@ -5,7 +5,7 @@ import { useQuery, useMutation } from '@apollo/client'
 import { gql } from '@apollo/client'
 import { format } from 'date-fns'
 import { de, enUS } from 'date-fns/locale'
-import { FileDown, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Loader2, ShieldCheck } from 'lucide-react'
+import { FileDown, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Loader2, ShieldCheck, Eye } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,6 +25,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 const INVOICES_FOR_MONTH = gql`
@@ -170,6 +176,9 @@ export function InvoiceExportPage() {
   const [exportingFormat, setExportingFormat] = useState<string | null>(null)
   const [showConfirm, setShowConfirm] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   const { data, loading, error } = useQuery<{ invoicesForMonth: Invoice[] }>(
     INVOICES_FOR_MONTH,
@@ -306,6 +315,27 @@ export function InvoiceExportPage() {
       console.error('Export error:', err)
     } finally {
       setExportingFormat(null)
+    }
+  }
+
+  const handlePreview = async (contractId: number) => {
+    setPreviewLoading(true)
+    setPreviewOpen(true)
+    setPreviewHtml(null)
+    try {
+      const token = localStorage.getItem('auth_token')
+      const response = await fetch(
+        `/api/invoices/preview-html/?year=${year}&month=${month}&contract_id=${contractId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (!response.ok) throw new Error('Preview failed')
+      const html = await response.text()
+      setPreviewHtml(html)
+    } catch (err) {
+      console.error('Preview error:', err)
+      setPreviewOpen(false)
+    } finally {
+      setPreviewLoading(false)
     }
   }
 
@@ -501,6 +531,7 @@ export function InvoiceExportPage() {
                   <TableHead className="text-right">{t('invoices.netTotal')}</TableHead>
                   <TableHead className="text-right">{t('invoices.taxAmount')}</TableHead>
                   <TableHead className="text-right">{t('invoices.grossTotal')}</TableHead>
+                  <TableHead className="w-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -537,7 +568,15 @@ export function InvoiceExportPage() {
                           )}
                         </TableCell>
                         <TableCell className="font-mono text-sm">
-                          {record?.invoiceNumber || '—'}
+                          {record ? (
+                            <Link
+                              to={`/invoices/${record.id}`}
+                              className="text-blue-600 hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {record.invoiceNumber}
+                            </Link>
+                          ) : '—'}
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={record?.status || ''} />
@@ -570,10 +609,22 @@ export function InvoiceExportPage() {
                         <TableCell className="text-right font-medium">
                           {record ? formatCurrency(Number(record.totalGross)) : '—'}
                         </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => handlePreview(invoice.contractId)}
+                            title={t('invoices.previewInvoice')}
+                            data-testid={`invoice-preview-${invoice.contractId}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                       {expandedInvoices.has(invoice.contractId) && (
                         <TableRow>
-                          <TableCell colSpan={10} className="bg-muted/30 p-0">
+                          <TableCell colSpan={11} className="bg-muted/30 p-0">
                             <Table>
                               <TableHeader>
                                 <TableRow>
@@ -613,6 +664,26 @@ export function InvoiceExportPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Invoice Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{t('invoices.previewInvoice')}</DialogTitle>
+          </DialogHeader>
+          {previewLoading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : previewHtml ? (
+            <iframe
+              srcDoc={previewHtml}
+              className="flex-1 w-full border rounded"
+              title={t('invoices.previewInvoice')}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

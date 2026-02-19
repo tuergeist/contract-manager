@@ -1649,7 +1649,9 @@ export function ContractDetail() {
                   {generatedInvoicesData?.invoiceRecords?.items?.map((record: { id: number; invoiceNumber: string; billingDate: string; invoiceDate: string | null; totalGross: string; status: string; pdfUrl: string | null; emailSentAt: string | null; emailSentTo: string[] }) => (
                     <tr key={`gen-${record.id}`} className="hover:bg-gray-50">
                       <td className="whitespace-nowrap px-6 py-4">
-                        <span className="font-medium">{record.invoiceNumber}</span>
+                        <Link to={`/invoices/${record.id}`} className="font-medium text-blue-600 hover:underline">
+                          {record.invoiceNumber}
+                        </Link>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                         {formatDate(record.invoiceDate || record.billingDate)}

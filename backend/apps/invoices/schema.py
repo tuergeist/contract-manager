@@ -572,6 +572,23 @@ class InvoiceQuery:
         return [_convert_invoice(inv) for inv in invoices]
 
     @strawberry.field
+    def invoice_record(
+        self, info: Info, id: int
+    ) -> InvoiceRecordType | None:
+        """Get a single invoice record by ID."""
+        from apps.invoices.models import InvoiceRecord
+
+        user = require_perm(info, "invoices", "read")
+        try:
+            record = InvoiceRecord.objects.prefetch_related(
+                "payment_matches__transaction__counterparty",
+                "payment_matches__matched_by",
+            ).get(id=id, tenant=user.tenant)
+        except InvoiceRecord.DoesNotExist:
+            return None
+        return _convert_record(record)
+
+    @strawberry.field
     def invoice_records_for_month(
         self, info: Info, year: int, month: int, status: str | None = None
     ) -> List[InvoiceRecordType]:

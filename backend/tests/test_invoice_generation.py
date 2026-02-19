@@ -1,13 +1,17 @@
-"""Tests for invoice generation: persistence, tax, duplicate prevention, cancellation."""
+"""Tests for invoice generation: persistence, tax, duplicate prevention, voiding, queries."""
 import pytest
 from datetime import date
 from decimal import Decimal
+from unittest.mock import Mock
 
+from config.schema import schema
 from apps.contracts.models import Contract, ContractItem
+from apps.core.context import Context
 from apps.customers.models import Customer
 from apps.invoices.models import CompanyLegalData, InvoiceRecord
 from apps.invoices.services import InvoiceService
 from apps.products.models import Product
+from apps.tenants.models import Role, Tenant, User
 
 
 @pytest.fixture
@@ -249,3 +253,73 @@ class TestGetPersistedInvoices:
 
         results = service.get_persisted_invoices(2026, 1, status="voided")
         assert len(results) == 0
+
+
+class TestInvoiceRecordQuery:
+    """Test the invoice_record GraphQL query."""
+
+    QUERY = """
+        query InvoiceRecord($id: Int!) {
+            invoiceRecord(id: $id) {
+                id
+                invoiceNumber
+                contractName
+                customerName
+                status
+            }
+        }
+    """
+
+    @pytest.fixture
+    def admin_user(self, db, tenant):
+        u = User.objects.create_user(
+            email="admin-inv@test.local", password="pass", tenant=tenant
+        )
+        admin_role = Role.objects.get(tenant=tenant, name="Admin")
+        u.roles.add(admin_role)
+        return u
+
+    def _ctx(self, user):
+        return Context(request=Mock(), user=user)
+
+    def test_returns_record_for_valid_id(
+        self, db, tenant, legal_data, active_contract, contract_item, admin_user
+    ):
+        service = InvoiceService(tenant)
+        records = service.generate_and_persist(2026, 1)
+        record = records[0]
+
+        result = schema.execute_sync(
+            self.QUERY, variable_values={"id": record.id}, context_value=self._ctx(admin_user)
+        )
+        assert result.errors is None
+        assert result.data["invoiceRecord"]["id"] == record.id
+        assert result.data["invoiceRecord"]["invoiceNumber"] == record.invoice_number
+
+    def test_returns_null_for_missing_id(self, db, tenant, admin_user):
+        result = schema.execute_sync(
+            self.QUERY, variable_values={"id": 99999}, context_value=self._ctx(admin_user)
+        )
+        assert result.errors is None
+        assert result.data["invoiceRecord"] is None
+
+    def test_returns_null_for_other_tenant(
+        self, db, tenant, legal_data, active_contract, contract_item, admin_user
+    ):
+        service = InvoiceService(tenant)
+        records = service.generate_and_persist(2026, 1)
+        record = records[0]
+
+        # Create user in different tenant
+        other_tenant = Tenant.objects.create(name="Other Co", currency="EUR")
+        other_user = User.objects.create_user(
+            email="other@test.local", password="pass", tenant=other_tenant
+        )
+        other_role = Role.objects.get(tenant=other_tenant, name="Admin")
+        other_user.roles.add(other_role)
+
+        result = schema.execute_sync(
+            self.QUERY, variable_values={"id": record.id}, context_value=self._ctx(other_user)
+        )
+        assert result.errors is None
+        assert result.data["invoiceRecord"] is None
