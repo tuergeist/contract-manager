@@ -1745,7 +1745,7 @@ export function ContractDetail() {
                             className="text-blue-600 hover:text-blue-800"
                             title={t('invoices.import.viewPdf')}
                           >
-                            <FileText className="h-4 w-4 inline" />
+                            <Eye className="h-4 w-4 inline" />
                           </a>
                         )}
                       </td>
