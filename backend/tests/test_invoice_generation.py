@@ -204,9 +204,10 @@ class TestVoidInvoice:
         records = service.generate_and_persist(2026, 1)
         record = records[0]
 
-        InvoiceService.void_invoice(record)
+        InvoiceService.void_invoice(record, reason="Test void reason")
         record.refresh_from_db()
         assert record.status == InvoiceRecord.Status.VOIDED
+        assert record.void_reason == "Test void reason"
 
     def test_void_non_finalized_raises(self, db, tenant, legal_data, active_contract, contract_item):
         service = InvoiceService(tenant)
@@ -216,13 +217,13 @@ class TestVoidInvoice:
         record.save()
 
         with pytest.raises(ValueError, match="Only finalized"):
-            InvoiceService.void_invoice(record)
+            InvoiceService.void_invoice(record, reason="Should fail")
 
     def test_voided_number_not_reused(self, db, tenant, legal_data, active_contract, contract_item):
         service = InvoiceService(tenant)
         records = service.generate_and_persist(2026, 1)
         old_number = records[0].invoice_number
-        InvoiceService.void_invoice(records[0])
+        InvoiceService.void_invoice(records[0], reason="Reissue needed")
 
         # Generate again for the same month — voided record should allow re-generation
         # but with a NEW number

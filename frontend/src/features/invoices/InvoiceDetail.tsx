@@ -17,6 +17,8 @@ import {
   Eye,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -70,6 +72,8 @@ const INVOICE_RECORD_QUERY = gql`
         matchedAt
         matchedByName
       }
+      voidReason
+      customerBillingEmails
       emailSentAt
       emailSentTo
       emailMessageId
@@ -108,8 +112,17 @@ const SEND_INVOICE_EMAIL = gql`
 `
 
 const VOID_INVOICE = gql`
-  mutation VoidInvoice($invoiceId: Int!) {
-    voidInvoice(invoiceId: $invoiceId) {
+  mutation VoidInvoice($invoiceId: Int!, $reason: String!) {
+    voidInvoice(invoiceId: $invoiceId, reason: $reason) {
+      success
+      error
+    }
+  }
+`
+
+const GENERATE_INVOICE_PDF = gql`
+  mutation GenerateInvoicePdf($invoiceId: Int!) {
+    generateInvoicePdf(invoiceId: $invoiceId) {
       success
       error
     }
@@ -160,6 +173,8 @@ interface InvoiceRecord {
   pdfUrl: string | null
   isPaid: boolean
   paymentMatches: PaymentMatch[]
+  voidReason: string
+  customerBillingEmails: string[]
   emailSentAt: string | null
   emailSentTo: string[]
   emailMessageId: string
@@ -253,6 +268,7 @@ export function InvoiceDetail() {
   const { id } = useParams<{ id: string }>()
   const { t, i18n } = useTranslation()
   const [showVoidDialog, setShowVoidDialog] = useState(false)
+  const [voidReason, setVoidReason] = useState('')
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   const { data, loading, error, refetch } = useQuery<{ invoiceRecord: InvoiceRecord | null }>(
@@ -267,6 +283,7 @@ export function InvoiceDetail() {
 
   const [sendEmail, { loading: sendingEmail }] = useMutation(SEND_INVOICE_EMAIL)
   const [voidInvoice, { loading: voiding }] = useMutation(VOID_INVOICE)
+  const [generatePdf, { loading: generatingPdf }] = useMutation(GENERATE_INVOICE_PDF)
 
   const record = data?.invoiceRecord
   const auditEntries: AuditEntry[] =
@@ -292,10 +309,10 @@ export function InvoiceDetail() {
   }
 
   const handleVoid = async () => {
-    if (!record) return
+    if (!record || !voidReason.trim()) return
     setShowVoidDialog(false)
     try {
-      const result = await voidInvoice({ variables: { invoiceId: record.id } })
+      const result = await voidInvoice({ variables: { invoiceId: record.id, reason: voidReason.trim() } })
       if (result.data?.voidInvoice?.success) {
         setToast({ type: 'success', message: t('invoiceDetail.voided') })
         refetch()
@@ -307,6 +324,26 @@ export function InvoiceDetail() {
       }
     } catch {
       setToast({ type: 'error', message: t('invoiceDetail.voidFailed') })
+    }
+  }
+
+  const handleGeneratePdf = async () => {
+    if (!record) return
+    try {
+      const result = await generatePdf({ variables: { invoiceId: record.id } })
+      if (result.data?.generateInvoicePdf?.success) {
+        setToast({ type: 'success', message: t('invoiceDetail.pdfQueued') })
+        // Poll for PDF to appear
+        const poll = setInterval(() => { refetch().then(({ data: d }) => { if (d?.invoiceRecord?.pdfUrl) clearInterval(poll) }) }, 2000)
+        setTimeout(() => clearInterval(poll), 30000)
+      } else {
+        setToast({
+          type: 'error',
+          message: result.data?.generateInvoicePdf?.error || t('invoiceDetail.pdfGenerationFailed'),
+        })
+      }
+    } catch {
+      setToast({ type: 'error', message: t('invoiceDetail.pdfGenerationFailed') })
     }
   }
 
@@ -340,7 +377,16 @@ export function InvoiceDetail() {
   }
 
   const canSendEmail = record.status === 'finalized' && record.pdfUrl
-  const canVoid = record.status === 'finalized'
+  const sendEmailDisabledReason = !canSendEmail
+    ? record.status === 'voided'
+      ? t('invoiceDetail.sendDisabledVoided')
+      : record.status !== 'finalized'
+        ? t('invoiceDetail.sendDisabledNotFinalized')
+        : !record.pdfUrl
+          ? t('invoiceDetail.sendDisabledNoPdf')
+          : undefined
+    : undefined
+  const canVoid = record.status === 'finalized' && !record.emailSentAt
 
   // Build preview URL
   const previewHtmlUrl = record.contractId
@@ -382,10 +428,13 @@ export function InvoiceDetail() {
               {record.isPaid && record.status === 'finalized' && (
                 <span className="text-sm text-muted-foreground">({t('invoices.statusFinalized')})</span>
               )}
+              {record.status === 'voided' && record.voidReason && (
+                <span className="text-sm text-muted-foreground">{record.voidReason}</span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {pdfViewUrl && (
+            {pdfViewUrl ? (
               <Button variant="outline" size="sm" asChild>
                 <a
                   href={pdfViewUrl}
@@ -407,17 +456,49 @@ export function InvoiceDetail() {
                   {t('invoiceDetail.downloadPdf')}
                 </a>
               </Button>
-            )}
-            {canSendEmail && (
-              <Button variant="outline" size="sm" onClick={handleSendEmail} disabled={sendingEmail}>
-                {sendingEmail ? (
+            ) : record.status === 'finalized' && (
+              <Button variant="outline" size="sm" onClick={handleGeneratePdf} disabled={generatingPdf}>
+                {generatingPdf ? (
                   <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                 ) : (
-                  <Mail className="mr-1 h-4 w-4" />
+                  <FileText className="mr-1 h-4 w-4" />
                 )}
-                {t('invoices.sendEmail')}
+                {t('invoiceDetail.generatePdf')}
               </Button>
             )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSendEmail}
+                      disabled={!canSendEmail || sendingEmail}
+                    >
+                      {sendingEmail ? (
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Mail className="mr-1 h-4 w-4" />
+                      )}
+                      {t('invoices.sendEmail')}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {sendEmailDisabledReason ? (
+                  <TooltipContent>
+                    <p>{sendEmailDisabledReason}</p>
+                  </TooltipContent>
+                ) : record.customerBillingEmails.length > 0 ? (
+                  <TooltipContent>
+                    <p className="font-medium">{t('invoiceDetail.sendTo')}</p>
+                    {record.customerBillingEmails.map((email) => (
+                      <p key={email}>{email}</p>
+                    ))}
+                  </TooltipContent>
+                ) : null}
+              </Tooltip>
+            </TooltipProvider>
             {canVoid && (
               <Button
                 variant="destructive"
@@ -726,7 +807,7 @@ export function InvoiceDetail() {
       </div>
 
       {/* Void Confirmation Dialog */}
-      <Dialog open={showVoidDialog} onOpenChange={setShowVoidDialog}>
+      <Dialog open={showVoidDialog} onOpenChange={(open) => { setShowVoidDialog(open); if (!open) setVoidReason('') }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t('invoiceDetail.voidConfirmTitle')}</DialogTitle>
@@ -734,11 +815,21 @@ export function InvoiceDetail() {
               {t('invoiceDetail.voidConfirmMessage', { invoice: record.invoiceNumber })}
             </DialogDescription>
           </DialogHeader>
+          <div className="py-2">
+            <label className="text-sm font-medium">{t('invoiceDetail.voidReasonLabel')}</label>
+            <Textarea
+              value={voidReason}
+              onChange={(e) => setVoidReason(e.target.value)}
+              placeholder={t('invoiceDetail.voidReasonPlaceholder')}
+              className="mt-1"
+              rows={3}
+            />
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowVoidDialog(false)}>
+            <Button variant="outline" onClick={() => { setShowVoidDialog(false); setVoidReason('') }}>
               {t('common.cancel')}
             </Button>
-            <Button variant="destructive" onClick={handleVoid}>
+            <Button variant="destructive" onClick={handleVoid} disabled={!voidReason.trim()}>
               {t('invoiceDetail.void')}
             </Button>
           </DialogFooter>

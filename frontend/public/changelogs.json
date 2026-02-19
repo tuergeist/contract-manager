@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.3.0",
+    "date": "2026-02-19",
+    "title": "Invoice Detail View",
+    "description": "Full invoice detail page with metadata, content preview, payment matches, email history, audit timeline, and actions.",
+    "type": "feature",
+    "details": [
+      "Invoice detail page at /invoices/:id with complete invoice metadata and status",
+      "Inline PDF preview for generated invoices, HTML preview fallback",
+      "Payment matches section showing linked bank transactions",
+      "Email delivery history and audit timeline sections",
+      "Send Email action with recipient tooltip and Generate PDF button",
+      "Void invoice with required reason, restricted to finalized (unsent) invoices",
+      "Invoice number links from /invoices table and /invoices/export page",
+      "Fix PDF download returning blank page in development"
+    ]
+  },
+  {
     "version": "2.2.2",
     "date": "2026-02-19",
     "title": "Customer List & Invoice UI Fixes",

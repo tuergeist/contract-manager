@@ -24,7 +24,7 @@ class AuthenticatedGraphQLView(GraphQLView):
 
 
 from apps.core.version_views import VersionView, BackendLicensesView
-from apps.invoices.views import InvoiceExportView, InvoicePreviewView, InvoiceRecordPdfView
+from apps.invoices.views import InvoiceExportView, InvoicePreviewHtmlView, InvoicePreviewView, InvoiceRecordPdfView
 from apps.contracts.views import AttachmentDownloadView, ContractExportView
 from apps.customers.views import CustomerAttachmentDownloadView
 from apps.banking.views import UploadStatementView
@@ -37,6 +37,7 @@ urlpatterns = [
     path("api/version/licenses/", BackendLicensesView.as_view(), name="version-licenses"),
     path("api/invoices/export/", InvoiceExportView.as_view(), name="invoice-export"),
     path("api/invoices/preview/", InvoicePreviewView.as_view(), name="invoice-preview"),
+    path("api/invoices/preview-html/", InvoicePreviewHtmlView.as_view(), name="invoice-preview-html"),
     path("api/invoices/<int:record_id>/pdf/", InvoiceRecordPdfView.as_view(), name="invoice-record-pdf"),
     path("api/contracts/export/", ContractExportView.as_view(), name="contract-export"),
     path("api/attachments/<int:attachment_id>/download/", AttachmentDownloadView.as_view(), name="attachment-download"),

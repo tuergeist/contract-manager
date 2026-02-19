@@ -295,6 +295,8 @@ class InvoiceRecordType:
     pdf_url: str | None
     is_paid: bool
     payment_matches: List[PaymentMatchType]
+    void_reason: str
+    customer_billing_emails: list[str]
     email_sent_at: str | None
     email_sent_to: list[str]
     email_message_id: str
@@ -580,7 +582,9 @@ class InvoiceQuery:
 
         user = require_perm(info, "invoices", "read")
         try:
-            record = InvoiceRecord.objects.prefetch_related(
+            record = InvoiceRecord.objects.select_related(
+                "customer",
+            ).prefetch_related(
                 "payment_matches__transaction__counterparty",
                 "payment_matches__matched_by",
             ).get(id=id, tenant=user.tenant)
@@ -1328,9 +1332,39 @@ class InvoiceMutation:
 
     @strawberry.mutation
     def void_invoice(
-        self, info: Info[Context, None], invoice_id: int
+        self, info: Info[Context, None], invoice_id: int, reason: str
     ) -> VoidInvoiceResult:
         """Void a finalized invoice."""
+        user, err = check_perm(info, "invoices", "generate")
+        if err:
+            return VoidInvoiceResult(success=False, error=err)
+
+        if not reason.strip():
+            return VoidInvoiceResult(success=False, error="A void reason is required")
+
+        from apps.invoices.models import InvoiceRecord
+
+        try:
+            record = InvoiceRecord.objects.get(
+                id=invoice_id, tenant=user.tenant
+            )
+        except InvoiceRecord.DoesNotExist:
+            return VoidInvoiceResult(
+                success=False, error="Invoice not found"
+            )
+
+        try:
+            InvoiceService.void_invoice(record, reason=reason.strip())
+        except ValueError as e:
+            return VoidInvoiceResult(success=False, error=str(e))
+
+        return VoidInvoiceResult(success=True)
+
+    @strawberry.mutation
+    def generate_invoice_pdf(
+        self, info: Info[Context, None], invoice_id: int
+    ) -> VoidInvoiceResult:
+        """Queue PDF generation for a finalized invoice record."""
         user, err = check_perm(info, "invoices", "generate")
         if err:
             return VoidInvoiceResult(success=False, error=err)
@@ -1346,11 +1380,19 @@ class InvoiceMutation:
                 success=False, error="Invoice not found"
             )
 
-        try:
-            InvoiceService.void_invoice(record)
-        except ValueError as e:
-            return VoidInvoiceResult(success=False, error=str(e))
+        if record.status != InvoiceRecord.Status.FINALIZED:
+            return VoidInvoiceResult(
+                success=False, error="Only finalized invoices can have PDFs generated"
+            )
 
+        if record.pdf_file:
+            return VoidInvoiceResult(
+                success=False, error="PDF already exists"
+            )
+
+        from apps.invoices.tasks import generate_invoice_pdf_task
+
+        generate_invoice_pdf_task.delay(record.id)
         return VoidInvoiceResult(success=True)
 
     @strawberry.mutation
@@ -2272,6 +2314,8 @@ def _convert_record(record) -> InvoiceRecordType:
         pdf_url=record.pdf_file.url if record.pdf_file else None,
         is_paid=len(payment_matches) > 0,
         payment_matches=[_convert_payment_match(m) for m in payment_matches],
+        void_reason=record.void_reason or "",
+        customer_billing_emails=(record.customer.billing_emails or []) if record.customer else [],
         email_sent_at=record.email_sent_at.isoformat() if record.email_sent_at else None,
         email_sent_to=record.email_sent_to or [],
         email_message_id=record.email_message_id or "",

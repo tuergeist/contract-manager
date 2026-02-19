@@ -682,6 +682,96 @@ class TestInvoiceExportEndpoint:
         assert response.content[:2] == b"PK"
 
 
+class TestInvoicePreviewHtmlEndpoint:
+    """Test the REST preview-html endpoint."""
+
+    @pytest.fixture
+    def auth_headers(self, user):
+        from apps.core.auth import create_access_token
+
+        token = create_access_token(user)
+        return {"HTTP_AUTHORIZATION": f"Bearer {token}"}
+
+    def test_requires_authentication(self, client):
+        response = client.get(
+            "/api/invoices/preview-html/?year=2026&month=1&contract_id=1"
+        )
+        assert response.status_code == 401
+
+    def test_requires_params(self, client, auth_headers):
+        response = client.get("/api/invoices/preview-html/", **auth_headers)
+        assert response.status_code == 400
+
+    def test_returns_404_when_no_invoice(self, client, auth_headers):
+        response = client.get(
+            "/api/invoices/preview-html/?year=2020&month=1&contract_id=999",
+            **auth_headers,
+        )
+        assert response.status_code == 404
+
+    def test_returns_html_for_valid_invoice(
+        self, client, auth_headers, tenant, monthly_contract, product
+    ):
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=monthly_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("100.00"),
+        )
+
+        response = client.get(
+            f"/api/invoices/preview-html/?year=2026&month=1&contract_id={monthly_contract.id}",
+            **auth_headers,
+        )
+
+        assert response.status_code == 200
+        assert "text/html" in response["Content-Type"]
+        content = response.content.decode()
+        assert "Test Customer" in content
+        assert "Test Product" in content
+        # Invoice number should be absent (not generated)
+        assert "invoice_number" not in content or "PREVIEW" not in content
+
+    def test_includes_invoice_number_when_finalized(
+        self, client, auth_headers, tenant, monthly_contract, product, customer
+    ):
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=monthly_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("100.00"),
+        )
+        InvoiceRecord.objects.create(
+            tenant=tenant,
+            contract=monthly_contract,
+            customer=customer,
+            contract_name=monthly_contract.name,
+            customer_name=customer.name,
+            billing_date=date(2026, 1, 1),
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+            total_net=Decimal("100.00"),
+            tax_rate=Decimal("19.00"),
+            tax_amount=Decimal("19.00"),
+            total_gross=Decimal("119.00"),
+            invoice_number="INV-2026-0001",
+            status=InvoiceRecord.Status.FINALIZED,
+            line_items_snapshot=[],
+            company_data_snapshot={},
+        )
+
+        response = client.get(
+            f"/api/invoices/preview-html/?year=2026&month=1&contract_id={monthly_contract.id}",
+            **auth_headers,
+        )
+
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "INV-2026-0001" in content
+
+
 class TestContractExportEndpoint:
     """Test the REST contract export endpoint."""
 

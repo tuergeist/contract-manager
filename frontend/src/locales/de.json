@@ -736,6 +736,9 @@
     "voidFailed": "Stornierung fehlgeschlagen",
     "voidConfirmTitle": "Rechnung stornieren",
     "voidConfirmMessage": "Möchten Sie die Rechnung {{invoice}} wirklich stornieren? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "sendTo": "Empfänger:",
+    "voidReasonLabel": "Grund der Stornierung",
+    "voidReasonPlaceholder": "Geben Sie den Grund für die Stornierung ein...",
     "payments": "Zahlungen",
     "noPayments": "Keine Zahlungen zugeordnet",
     "emailHistory": "E-Mail",
@@ -749,7 +752,13 @@
     "noPreview": "Keine Vorschau verfügbar",
     "notFound": "Rechnung nicht gefunden",
     "statusPaid": "Bezahlt",
-    "statusSent": "Versendet"
+    "statusSent": "Versendet",
+    "sendDisabledVoided": "Stornierte Rechnungen können nicht versendet werden",
+    "sendDisabledNotFinalized": "Rechnung muss vor dem Versand finalisiert werden",
+    "sendDisabledNoPdf": "PDF muss vor dem Versand erstellt werden",
+    "generatePdf": "PDF erstellen",
+    "pdfQueued": "PDF-Erstellung gestartet",
+    "pdfGenerationFailed": "PDF-Erstellung fehlgeschlagen"
   },
   "audit": {
     "title": "Änderungsprotokoll",

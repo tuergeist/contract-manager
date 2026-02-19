@@ -736,6 +736,9 @@
     "voidFailed": "Failed to void invoice",
     "voidConfirmTitle": "Void Invoice",
     "voidConfirmMessage": "Are you sure you want to void invoice {{invoice}}? This action cannot be undone.",
+    "sendTo": "Recipients:",
+    "voidReasonLabel": "Reason for voiding",
+    "voidReasonPlaceholder": "Enter the reason for voiding this invoice...",
     "payments": "Payments",
     "noPayments": "No payments matched",
     "emailHistory": "Email",
@@ -749,7 +752,13 @@
     "noPreview": "No preview available",
     "notFound": "Invoice not found",
     "statusPaid": "Paid",
-    "statusSent": "Sent"
+    "statusSent": "Sent",
+    "sendDisabledVoided": "Cannot send a voided invoice",
+    "sendDisabledNotFinalized": "Invoice must be finalized before sending",
+    "sendDisabledNoPdf": "PDF must be generated before sending",
+    "generatePdf": "Generate PDF",
+    "pdfQueued": "PDF generation started",
+    "pdfGenerationFailed": "Failed to generate PDF"
   },
   "audit": {
     "title": "Audit Log",

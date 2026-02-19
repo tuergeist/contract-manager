@@ -205,7 +205,7 @@ def send_invoice_email_task(self, record_id: int) -> bool:
         return False
 
     # Determine language
-    lang = getattr(customer, "invoice_language", "") or "de"
+    lang = getattr(customer, "invoice_language", "") or "en"
     if lang not in EMAIL_TEMPLATES:
         lang = "de"
 

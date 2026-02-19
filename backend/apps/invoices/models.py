@@ -330,6 +330,9 @@ class InvoiceRecord(TenantModel):
     invoice_text = models.TextField(blank=True)
     pdf_file = models.FileField(upload_to=invoice_record_upload_path, blank=True)
 
+    # Void tracking
+    void_reason = models.TextField(blank=True, help_text="Reason for voiding the invoice")
+
     # Email sending tracking
     email_sent_at = models.DateTimeField(null=True, blank=True)
     email_sent_to = models.JSONField(default=list, blank=True)

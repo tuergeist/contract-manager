@@ -119,15 +119,12 @@ def _is_domestic_customer(company_country: str, customer_address: dict) -> bool:
 
 
 def _get_company_language(tenant) -> str:
-    """Derive the default invoice language from the company's country.
+    """Return the global default invoice language.
 
-    German company → 'de', otherwise → 'en'.
+    Always defaults to English. Per-customer overrides are handled
+    separately via Customer.invoice_language.
     """
-    try:
-        country = _normalize_country(tenant.legal_data.country)
-    except Exception:
-        return "en"
-    return "de" if country in ("deutschland", "germany", "de") else "en"
+    return "en"
 
 
 class InvoiceService:
@@ -430,6 +427,77 @@ class InvoiceService:
         # Generate PDF
         pdf_document = HTML(string=combined_html).render()
         return pdf_document.write_pdf()
+
+    def generate_invoice_html(
+        self,
+        invoice: InvoiceData,
+        language: Literal["de", "en"] = "de",
+        invoice_number: str = "",
+    ) -> str:
+        """Render a single invoice as HTML using the invoice template.
+
+        Returns the rendered HTML string (no PDF conversion). Suitable for
+        inline preview in the browser.
+        """
+        currency_symbol = self.tenant.currency_symbol
+        template_ctx = self._get_template_context()
+        default_tax_rate = template_ctx["tax_rate"]
+        company_country = template_ctx["company"].get("country", "")
+
+        labels = LABELS.get(language, LABELS["en"])
+
+        domestic = _is_domestic_customer(company_country, invoice.customer_address)
+        tax_rate = default_tax_rate if domestic else Decimal("0.00")
+
+        total_net = invoice.total_amount
+        tax_amount, total_gross = self.calculate_tax(total_net, tax_rate)
+
+        invoice_dict = {
+            "contract_id": invoice.contract_id,
+            "contract_name": invoice.contract_name,
+            "customer_id": invoice.customer_id,
+            "customer_number": invoice.customer_number,
+            "customer_name": invoice.customer_name,
+            "customer_address": invoice.customer_address,
+            "billing_date": invoice.billing_date,
+            "billing_period_start": invoice.billing_period_start,
+            "billing_period_end": invoice.billing_period_end,
+            "line_items": [
+                {
+                    "item_id": item.item_id,
+                    "product_name": item.product_name,
+                    "description": item.description,
+                    "quantity": item.quantity,
+                    "unit_price": item.unit_price,
+                    "amount": item.amount,
+                    "is_prorated": item.is_prorated,
+                    "prorate_factor": item.prorate_factor,
+                    "is_one_off": item.is_one_off,
+                }
+                for item in invoice.line_items
+            ],
+            "total_amount": invoice.total_amount,
+            "total_net": total_net,
+            "tax_amount": tax_amount,
+            "total_gross": total_gross,
+            "invoice_text": invoice.invoice_text,
+            "po_number": invoice.po_number,
+            "order_confirmation_number": invoice.order_confirmation_number,
+        }
+
+        return render_to_string(
+            "invoices/invoice.html",
+            {
+                "invoice": invoice_dict,
+                "labels": labels,
+                "language": language,
+                "currency_symbol": currency_symbol,
+                "invoice_number": invoice_number,
+                "tax_rate": tax_rate,
+                "reverse_charge": not domestic,
+                **template_ctx,
+            },
+        )
 
     def generate_preview_pdf(
         self,
@@ -1148,14 +1216,15 @@ class InvoiceService:
         return created_records
 
     @staticmethod
-    def void_invoice(invoice_record) -> None:
+    def void_invoice(invoice_record, reason: str) -> None:
         """Void a finalized invoice. Number is NOT reused."""
         from apps.invoices.models import InvoiceRecord
 
         if invoice_record.status != InvoiceRecord.Status.FINALIZED:
             raise ValueError("Only finalized invoices can be voided.")
         invoice_record.status = InvoiceRecord.Status.VOIDED
-        invoice_record.save(update_fields=["status", "updated_at"])
+        invoice_record.void_reason = reason
+        invoice_record.save(update_fields=["status", "void_reason", "updated_at"])
 
     def get_persisted_invoices(
         self,

@@ -1221,7 +1221,13 @@ export function InvoiceList() {
                       <FileText className="w-4 h-4 text-gray-400" />
                       <div>
                         <div className="font-medium flex items-center gap-2">
-                          {row.invoiceNumber || <span className="text-gray-400 italic">{t('invoices.import.noNumber')}</span>}
+                          {row.generated ? (
+                            <Link to={`/invoices/${row.generated.id}`} className="text-blue-600 hover:underline">
+                              {row.invoiceNumber || <span className="text-gray-400 italic">{t('invoices.import.noNumber')}</span>}
+                            </Link>
+                          ) : (
+                            row.invoiceNumber || <span className="text-gray-400 italic">{t('invoices.import.noNumber')}</span>
+                          )}
                           {row.imported && getUploadStatusBadge(row.imported)}
                         </div>
                         {row.imported && (
