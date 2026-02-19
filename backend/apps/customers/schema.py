@@ -87,6 +87,15 @@ class CustomerType:
         return list(Contract.objects.filter(customer=self).order_by("-created_at"))
 
     @strawberry.field
+    def contract_count(self) -> int:
+        """Get the total number of contracts for this customer."""
+        from apps.contracts.models import Contract
+
+        return Contract.objects.filter(customer=self).exclude(
+            status=Contract.Status.DELETED,
+        ).count()
+
+    @strawberry.field
     def active_contract_count(self) -> int:
         """Get the number of active contracts for this customer."""
         from datetime import date

@@ -17,6 +17,7 @@ const CUSTOMERS_QUERY = gql`
         address
         isActive
         syncedAt
+        contractCount
         activeContractCount
       }
       totalCount
@@ -42,6 +43,7 @@ interface Customer {
   address: CustomerAddress | null
   isActive: boolean
   syncedAt: string | null
+  contractCount: number
   activeContractCount: number
 }
 
@@ -227,9 +229,11 @@ export function CustomerList() {
                       {formatAddress(customer.address)}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                      {customer.activeContractCount > 0 ? (
-                        <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
-                          {customer.activeContractCount}
+                      {customer.contractCount > 0 ? (
+                        <span className="text-sm">
+                          <span className="text-gray-900">{customer.contractCount}</span>
+                          <span className="text-gray-400"> / </span>
+                          <span className="font-medium text-blue-700">{customer.activeContractCount}</span>
                         </span>
                       ) : (
                         <span className="text-gray-400">-</span>
