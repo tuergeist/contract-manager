@@ -250,6 +250,7 @@ const CONTRACT_GENERATED_INVOICES_QUERY = gql`
         id
         invoiceNumber
         billingDate
+        invoiceDate
         totalGross
         status
         pdfUrl
@@ -1645,13 +1646,13 @@ export function ContractDetail() {
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {/* Generated invoices */}
-                  {generatedInvoicesData?.invoiceRecords?.items?.map((record: { id: number; invoiceNumber: string; billingDate: string; totalGross: string; status: string; pdfUrl: string | null; emailSentAt: string | null; emailSentTo: string[] }) => (
+                  {generatedInvoicesData?.invoiceRecords?.items?.map((record: { id: number; invoiceNumber: string; billingDate: string; invoiceDate: string | null; totalGross: string; status: string; pdfUrl: string | null; emailSentAt: string | null; emailSentTo: string[] }) => (
                     <tr key={`gen-${record.id}`} className="hover:bg-gray-50">
                       <td className="whitespace-nowrap px-6 py-4">
                         <span className="font-medium">{record.invoiceNumber}</span>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                        {formatDate(record.billingDate)}
+                        {formatDate(record.invoiceDate || record.billingDate)}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
                         {new Intl.NumberFormat(i18n.language, { style: 'currency', currency: 'EUR' }).format(parseFloat(record.totalGross))}
@@ -1670,7 +1671,7 @@ export function ContractDetail() {
                             className="text-blue-600 hover:text-blue-800"
                             title={t('invoices.import.viewPdfGenerated')}
                           >
-                            <Download className="h-4 w-4 inline" />
+                            <Eye className="h-4 w-4 inline" />
                           </a>
                         ) : (
                           <button
@@ -1686,7 +1687,7 @@ export function ContractDetail() {
                             className="text-blue-600 hover:text-blue-800"
                             title={t('invoices.import.viewPdfGenerated')}
                           >
-                            <Download className="h-4 w-4 inline" />
+                            <Eye className="h-4 w-4 inline" />
                           </button>
                         )}
                       </td>

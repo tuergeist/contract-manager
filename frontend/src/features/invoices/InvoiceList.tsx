@@ -336,6 +336,7 @@ const INVOICE_RECORDS = gql`
         customerId
         customerName
         billingDate
+        invoiceDate
         totalGross
         status
         generatedAt
@@ -417,6 +418,7 @@ interface GeneratedInvoice {
   customerId: number | null
   customerName: string
   billingDate: string
+  invoiceDate: string | null
   totalGross: string
   status: string
   generatedAt: string
@@ -699,7 +701,7 @@ export function InvoiceList() {
           key: `gen-${rec.id}`,
           source: 'generated',
           invoiceNumber: rec.invoiceNumber,
-          date: rec.billingDate,
+          date: rec.invoiceDate || rec.billingDate,
           customerName: rec.customerName,
           customerId: rec.customerId,
           contractId: rec.contractId,
@@ -1171,10 +1173,10 @@ export function InvoiceList() {
               </th>
               <th
                 className="px-4 py-3 cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort(sourceFilter === 'GENERATED' ? 'billingDate' : 'invoiceDate')}
+                onClick={() => handleSort('invoiceDate')}
               >
                 {t('invoices.import.colDate')}
-                {getSortIcon(sourceFilter === 'GENERATED' ? 'billingDate' : 'invoiceDate')}
+                {getSortIcon('invoiceDate')}
               </th>
               <th
                 className="px-4 py-3 cursor-pointer hover:bg-gray-100"

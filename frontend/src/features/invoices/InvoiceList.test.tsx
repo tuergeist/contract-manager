@@ -42,6 +42,7 @@ function makeGeneratedInvoice(i: number) {
     customerId: i,
     customerName: `Customer ${i}`,
     billingDate: '2026-01-15',
+    invoiceDate: '2026-01-15',
     totalGross: '200.00',
     status: 'generated',
     generatedAt: '2026-01-15T00:00:00Z',

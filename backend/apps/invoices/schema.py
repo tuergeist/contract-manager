@@ -281,6 +281,7 @@ class InvoiceRecordType:
     customer_id: int | None
     customer_name: str
     billing_date: date
+    invoice_date: date
     period_start: date
     period_end: date
     total_net: Decimal
@@ -615,7 +616,8 @@ class InvoiceQuery:
 
         allowed_sort_fields = {
             "invoiceNumber": "invoice_number",
-            "billingDate": "billing_date",
+            "billingDate": "invoice_date",
+            "invoiceDate": "invoice_date",
             "customerName": "customer_name",
             "totalGross": "total_gross",
             "generatedAt": "generated_at",
@@ -626,7 +628,7 @@ class InvoiceQuery:
                 order_field = f"-{order_field}"
             qs = qs.order_by(order_field)
         else:
-            qs = qs.order_by("-billing_date", "-generated_at")
+            qs = qs.order_by("-invoice_date", "-generated_at")
 
         total_count = qs.count()
         items = qs[offset : offset + limit]
@@ -2239,6 +2241,7 @@ def _convert_record(record) -> InvoiceRecordType:
         customer_id=record.customer_id,
         customer_name=record.customer_name,
         billing_date=record.billing_date,
+        invoice_date=record.invoice_date or record.billing_date,
         period_start=record.period_start,
         period_end=record.period_end,
         total_net=record.total_net,

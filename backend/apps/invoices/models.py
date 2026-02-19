@@ -295,6 +295,11 @@ class InvoiceRecord(TenantModel):
 
     # Billing period
     billing_date = models.DateField()
+    invoice_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="The date shown on the invoice (defaults to creation date)",
+    )
     period_start = models.DateField()
     period_end = models.DateField()
 

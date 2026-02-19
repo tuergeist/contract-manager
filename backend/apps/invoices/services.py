@@ -574,7 +574,7 @@ class InvoiceService:
             "customer_address": (
                 record.customer.address if record.customer else {}
             ) or {},
-            "billing_date": record.billing_date,
+            "billing_date": record.invoice_date or record.billing_date,
             "billing_period_start": record.period_start,
             "billing_period_end": record.period_end,
             "line_items": record.line_items_snapshot,
@@ -1123,6 +1123,7 @@ class InvoiceService:
                     customer_id=invoice_data.customer_id,
                     invoice_number=invoice_number,
                     billing_date=invoice_data.billing_date,
+                    invoice_date=date.today(),
                     period_start=invoice_data.billing_period_start,
                     period_end=invoice_data.billing_period_end,
                     total_net=total_net,
