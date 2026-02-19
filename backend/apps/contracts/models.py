@@ -345,8 +345,11 @@ class Contract(TenantModel):
         items = self.items.select_related("product", "depends_on").prefetch_related("price_periods").all()
 
         for item in items:
-            # Skip descriptive-only items (no product and no price)
-            if not item.product and not item.unit_price:
+            # Cache the prefetched price_periods as a list for in-memory lookups
+            item_price_periods = list(item.price_periods.all())
+
+            # Skip descriptive-only items (no product, no price, and no price periods)
+            if not item.product and not item.unit_price and not item_price_periods:
                 continue
 
             # Skip items with pending delivery
@@ -356,9 +359,6 @@ class Contract(TenantModel):
             # Skip items whose dependency is not yet delivered
             if item.depends_on and item.depends_on.delivery_status == "pending":
                 continue
-
-            # Cache the prefetched price_periods as a list for in-memory lookups
-            item_price_periods = list(item.price_periods.all())
 
             # Determine item's billing period
             item_billing_start = item.billing_start_date or self.billing_start_date
@@ -593,8 +593,11 @@ class Contract(TenantModel):
             items = self.items.select_related("product", "depends_on").prefetch_related("price_periods").all()
 
         for item in items:
-            # Skip descriptive-only items (no product and no price)
-            if not item.product and not item.unit_price:
+            # Cache the prefetched price_periods as a list for in-memory lookups
+            item_price_periods = list(item.price_periods.all())
+
+            # Skip descriptive-only items (no product, no price, and no price periods)
+            if not item.product and not item.unit_price and not item_price_periods:
                 continue
 
             # Skip items with pending delivery
@@ -604,9 +607,6 @@ class Contract(TenantModel):
             # Skip items whose dependency is not yet delivered
             if item.depends_on and item.depends_on.delivery_status == "pending":
                 continue
-
-            # Cache the prefetched price_periods as a list for in-memory lookups
-            item_price_periods = list(item.price_periods.all())
 
             # Use start_date for recognition, fall back to billing_start_date
             item_recognition_start = item.start_date or item.billing_start_date or self.billing_start_date

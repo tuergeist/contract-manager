@@ -1630,8 +1630,8 @@ class ContractQuery:
                 contract_total += amount
                 period_totals[period] += amount
 
-            # Only include contracts with revenue
-            if contract_total > 0:
+            # Only include contracts with non-zero revenue
+            if contract_total != 0:
                 contract_name = contract.name or f"Vertrag {contract.id}"
                 contract_rows.append(
                     ContractRevenueRow(
@@ -1825,8 +1825,8 @@ class ContractQuery:
                 contract_total += amount
                 period_totals[period] += amount
 
-            # Only include contracts with revenue
-            if contract_total > 0:
+            # Only include contracts with non-zero revenue
+            if contract_total != 0:
                 contract_name = contract.name or f"Vertrag {contract.id}"
                 contract_rows.append(
                     ContractRevenueRow(
