@@ -4,17 +4,20 @@ Generates UN/CEFACT Cross-Industry Invoice (CII) XML conforming to
 the ZUGFeRD EN 16931 (Comfort) profile, and embeds it into PDF/A-3b
 documents using the drafthorse library.
 """
+import hashlib
 import logging
-from datetime import date
-from decimal import Decimal
+import uuid
+from datetime import date, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 from io import BytesIO
 from typing import Optional
 
-from drafthorse.models.accounting import ApplicableTradeTax
+from drafthorse.models.accounting import ApplicableTradeTax, CategoryTradeTax
 from drafthorse.models.document import Document
 from drafthorse.models.note import IncludedNote
 from drafthorse.models.party import TaxRegistration
-from drafthorse.models.payment import PaymentMeans
+from drafthorse.models.payment import PaymentMeans, PaymentTerms
+from drafthorse.models.trade import TradeAllowanceCharge
 from drafthorse.models.tradelines import LineItem
 from drafthorse.pdf import attach_xml
 from PIL import ImageCms
@@ -84,59 +87,101 @@ def _resolve_country_code(country: str) -> str:
     return COUNTRY_CODE_MAP.get(country_stripped.lower(), "DE")
 
 
+def _fix_image_interpolation(writer: PdfWriter) -> None:
+    """Set Interpolate=false on all image XObjects for PDF/A-3 compliance.
+
+    ISO 19005-3:2012 rule 6.2.8 requires image Interpolate to be false.
+    """
+    for page in writer.pages:
+        resources = page.get("/Resources")
+        if not resources:
+            continue
+        xobjects = resources.get("/XObject")
+        if not xobjects:
+            continue
+        for key in xobjects:
+            xobj = xobjects[key].get_object()
+            subtype = xobj.get("/Subtype")
+            if subtype == "/Image" and xobj.get("/Interpolate"):
+                xobj[NameObject("/Interpolate")] = NameObject("/false")
+
+
 def _add_pdfa_output_intent(pdf_bytes: bytes) -> bytes:
-    """Add sRGB OutputIntent required for PDF/A-3b compliance.
+    """Add sRGB OutputIntent and fix PDF/A-3b compliance issues.
 
     drafthorse's attach_xml() only preserves existing OutputIntents from the
     input PDF. Since WeasyPrint produces regular PDFs without OutputIntents,
     the resulting document lacks the ICC color profile that PDF/A-3b requires.
-    This function adds a GTS_PDFA1 OutputIntent with an sRGB ICC profile.
+    This function also fixes image Interpolate flags and ensures a file ID
+    exists in the trailer (ISO 19005-3:2012 rule 6.1.3).
     """
     reader = PdfReader(BytesIO(pdf_bytes))
 
-    # Skip if OutputIntents already present
+    has_output_intents = False
     try:
         root = reader.trailer["/Root"]
         if "/OutputIntents" in root:
-            return pdf_bytes
+            has_output_intents = True
     except KeyError:
         pass
 
     writer = PdfWriter(clone_from=reader)
 
-    # Generate sRGB ICC profile via Pillow
-    srgb_profile = ImageCms.createProfile("sRGB")
-    icc_data = ImageCms.ImageCmsProfile(srgb_profile).tobytes()
+    # Fix image Interpolate flags (ISO 19005-3:2012 rule 6.2.8)
+    _fix_image_interpolation(writer)
 
-    icc_stream = DecodedStreamObject()
-    icc_stream.set_data(icc_data)
-    icc_stream.update({
-        NameObject("/N"): NumberObject(3),  # RGB = 3 components
-    })
-    icc_ref = writer._add_object(icc_stream)
+    if not has_output_intents:
+        # Generate sRGB ICC profile via Pillow
+        srgb_profile = ImageCms.createProfile("sRGB")
+        icc_data = ImageCms.ImageCmsProfile(srgb_profile).tobytes()
 
-    output_intent = DictionaryObject({
-        NameObject("/Type"): NameObject("/OutputIntent"),
-        NameObject("/S"): NameObject("/GTS_PDFA1"),
-        NameObject("/OutputConditionIdentifier"): create_string_object(
-            "sRGB IEC61966-2.1"
-        ),
-        NameObject("/RegistryName"): create_string_object(
-            "http://www.color.org"
-        ),
-        NameObject("/Info"): create_string_object("sRGB IEC61966-2.1"),
-        NameObject("/DestOutputProfile"): icc_ref,
-    })
-    output_intent_ref = writer._add_object(output_intent)
+        icc_stream = DecodedStreamObject()
+        icc_stream.set_data(icc_data)
+        icc_stream.update({
+            NameObject("/N"): NumberObject(3),  # RGB = 3 components
+        })
+        icc_ref = writer._add_object(icc_stream)
 
-    writer._root_object[NameObject("/OutputIntents")] = ArrayObject(
-        [output_intent_ref]
-    )
+        output_intent = DictionaryObject({
+            NameObject("/Type"): NameObject("/OutputIntent"),
+            NameObject("/S"): NameObject("/GTS_PDFA1"),
+            NameObject("/OutputConditionIdentifier"): create_string_object(
+                "sRGB IEC61966-2.1"
+            ),
+            NameObject("/RegistryName"): create_string_object(
+                "http://www.color.org"
+            ),
+            NameObject("/Info"): create_string_object("sRGB IEC61966-2.1"),
+            NameObject("/DestOutputProfile"): icc_ref,
+        })
+        output_intent_ref = writer._add_object(output_intent)
 
+        writer._root_object[NameObject("/OutputIntents")] = ArrayObject(
+            [output_intent_ref]
+        )
+
+    # Ensure file ID in trailer (ISO 32000-1:2008 §14.4, required by PDF/A-3)
+    if not writer.pdf_header:
+        writer.pdf_header = b"%PDF-1.7"
     buf = BytesIO()
     writer.write(buf)
     buf.seek(0)
-    return buf.read()
+    pdf_out = buf.read()
+
+    # pypdf may not write an /ID entry; patch it in via a second pass
+    reader2 = PdfReader(BytesIO(pdf_out))
+    if "/ID" not in reader2.trailer:
+        writer2 = PdfWriter(clone_from=reader2)
+        file_id = hashlib.md5(uuid.uuid4().bytes).hexdigest().encode("ascii")
+        writer2._ID = ArrayObject(
+            [create_string_object(file_id), create_string_object(file_id)]
+        )
+        buf2 = BytesIO()
+        writer2.write(buf2)
+        buf2.seek(0)
+        return buf2.read()
+
+    return pdf_out
 
 
 class ZugferdService:
@@ -168,6 +213,10 @@ class ZugferdService:
                 "amount": Decimal(str(item.get("amount", "0"))),
             })
 
+        po_number = ""
+        if record.contract:
+            po_number = record.contract.po_number or ""
+
         return self._build_xml(
             invoice_number=record.invoice_number,
             invoice_date=record.billing_date,
@@ -183,6 +232,7 @@ class ZugferdService:
             customer_address=customer_address,
             line_items=line_items,
             invoice_text=record.invoice_text,
+            po_number=po_number,
         )
 
     def generate_xml_from_invoice_data(
@@ -223,6 +273,7 @@ class ZugferdService:
             customer_address=invoice_data.customer_address,
             line_items=line_items,
             invoice_text=invoice_data.invoice_text,
+            po_number=invoice_data.po_number,
         )
 
     def _build_xml(
@@ -242,11 +293,13 @@ class ZugferdService:
         customer_address: dict,
         line_items: list[dict],
         invoice_text: str = "",
+        po_number: str = "",
     ) -> bytes:
         """Build UN/CEFACT CII XML for ZUGFeRD EN 16931 profile.
 
         Returns the XML as bytes, validated against the EN 16931 XSD.
         """
+        TWO_PLACES = Decimal("0.01")
         doc = Document()
 
         # -- Context: EN 16931 profile --
@@ -262,6 +315,17 @@ class ZugferdService:
         # Invoice note
         if invoice_text:
             doc.header.notes.add(IncludedNote(content=invoice_text))
+
+        # Place of issue (Ausstellungsort) from seller city
+        seller_city = company.get("city", "")
+        if seller_city:
+            doc.header.notes.add(
+                IncludedNote(content=f"Ausstellungsort: {seller_city}")
+            )
+
+        # -- Buyer reference (BT-10, optional in Factur-X EN16931) --
+        if po_number:
+            doc.trade.agreement.buyer_reference = po_number
 
         # -- Seller --
         seller = doc.trade.agreement.seller
@@ -287,14 +351,22 @@ class ZugferdService:
                 TaxRegistration(id=("FC", tax_number))
             )
 
-        # Seller contact
+        # Seller contact (BT-41 contact point required by BR-DE-5)
         email = company.get("email", "")
         phone = company.get("phone", "")
-        if email or phone:
-            if email:
-                seller.contact.email.address = email
-            if phone:
-                seller.contact.telephone.number = phone
+        managing_directors = company.get("managing_directors", [])
+        seller.contact.person_name = (
+            managing_directors[0] if managing_directors
+            else company.get("company_name", "")
+        )
+        if email:
+            seller.contact.email.address = email
+        if phone:
+            seller.contact.telephone.number = phone
+
+        # Seller electronic address (BT-34, required by PEPPOL-EN16931-R020)
+        if email:
+            seller.electronic_address.uri_ID = ("EM", email)
 
         # -- Buyer --
         buyer = doc.trade.agreement.buyer
@@ -319,6 +391,11 @@ class ZugferdService:
                 TaxRegistration(id=("VA", buyer_vat_id))
             )
 
+        # Buyer electronic address (BT-49, required by PEPPOL-EN16931-R010)
+        buyer_email = customer_address.get("email", "")
+        if buyer_email:
+            buyer.electronic_address.uri_ID = ("EM", buyer_email)
+
         # -- Delivery (billing period) --
         doc.trade.delivery.event.occurrence = period_start
 
@@ -337,23 +414,64 @@ class ZugferdService:
                 pm.payee_institution.bic = bic
             settlement.payment_means.add(pm)
 
+        # Payment terms (BT-20, required by BR-CO-25 when amount > 0)
+        pt = PaymentTerms()
+        due_date = invoice_date + timedelta(days=30)
+        pt.description = "Net 30 days"
+        pt.due = due_date
+        settlement.terms.add(pt)
+
         # Billing period
         settlement.period.start = period_start
         settlement.period.end = period_end
 
-        # -- Line items --
-        for idx, item in enumerate(line_items, start=1):
+        # -- Line items and allowances --
+        # Separate positive items (line items) from negative items (allowances).
+        # BR-27: Item net price (BT-146) shall NOT be negative.
+        # Negative amounts are represented as document-level allowances.
+        # BR-DEC-23: All amounts quantized to 2 decimal places.
+        positive_line_total = Decimal("0.00")
+        allowance_total = Decimal("0.00")
+        line_idx = 0
+
+        for item in line_items:
+            line_amount = Decimal(str(item["amount"])).quantize(
+                TWO_PLACES, rounding=ROUND_HALF_UP
+            )
+
+            if line_amount < 0:
+                # Negative item → document-level allowance
+                tac = TradeAllowanceCharge()
+                tac.indicator = False  # False = allowance
+                tac.actual_amount = abs(line_amount)
+                tac.reason = item.get("product_name", "Discount")
+                ct = CategoryTradeTax()
+                ct.type_code = "VAT"
+                ct.category_code = "S"
+                ct.rate_applicable_percent = tax_rate
+                tac.trade_tax.add(ct)
+                settlement.allowance_charge.add(tac)
+                allowance_total += abs(line_amount)
+                continue
+
+            line_idx += 1
             li = LineItem()
-            li.document.line_id = str(idx)
+            li.document.line_id = str(line_idx)
             li.product.name = item["product_name"]
             if item.get("description"):
                 li.product.description = item["description"]
 
             quantity = Decimal(str(item["quantity"]))
-            unit_price = Decimal(str(item["unit_price"]))
-            line_amount = Decimal(str(item["amount"]))
+            if quantity == 0:
+                quantity = Decimal("1")
 
-            li.agreement.net.amount = unit_price
+            # BT-146 net price = line_amount / quantity so that
+            # net_price * qty = line_amount (arithmetic consistency)
+            net_price = (line_amount / quantity).quantize(
+                TWO_PLACES, rounding=ROUND_HALF_UP
+            )
+
+            li.agreement.net.amount = net_price
             li.agreement.net.basis_quantity = (Decimal("1.0000"), "C62")
             li.delivery.billed_quantity = (quantity, "C62")
 
@@ -362,27 +480,40 @@ class ZugferdService:
             li.settlement.trade_tax.rate_applicable_percent = tax_rate
 
             li.settlement.monetary_summation.total_amount = line_amount
+            positive_line_total += line_amount
 
             doc.trade.items.add(li)
 
         # -- Tax summary --
+        # tax_basis = line_total - allowance_total
+        tax_basis = (positive_line_total - allowance_total).quantize(
+            TWO_PLACES, rounding=ROUND_HALF_UP
+        )
+        computed_tax = (tax_basis * tax_rate / Decimal("100")).quantize(
+            TWO_PLACES, rounding=ROUND_HALF_UP
+        )
+        computed_gross = tax_basis + computed_tax
+
         trade_tax = ApplicableTradeTax()
-        trade_tax.calculated_amount = tax_amount
-        trade_tax.basis_amount = total_net
+        trade_tax.calculated_amount = computed_tax
+        trade_tax.basis_amount = tax_basis
         trade_tax.type_code = "VAT"
         trade_tax.category_code = "S"
         trade_tax.rate_applicable_percent = tax_rate
         settlement.trade_tax.add(trade_tax)
 
         # -- Monetary summation --
+        # BT-106 line_total = sum of positive line items
+        # BT-107 allowance_total = sum of allowances
+        # BT-109 tax_basis = line_total - allowance_total + charge_total
         summation = settlement.monetary_summation
-        summation.line_total = total_net
+        summation.line_total = positive_line_total
         summation.charge_total = Decimal("0.00")
-        summation.allowance_total = Decimal("0.00")
-        summation.tax_basis_total = total_net
-        summation.tax_total = (tax_amount, currency)
-        summation.grand_total = total_gross
-        summation.due_amount = total_gross
+        summation.allowance_total = allowance_total
+        summation.tax_basis_total = tax_basis
+        summation.tax_total = (computed_tax, currency)
+        summation.grand_total = computed_gross
+        summation.due_amount = computed_gross
 
         # -- Serialize and validate --
         xml_bytes = self._serialize_xml(doc)
