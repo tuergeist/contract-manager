@@ -1,4 +1,6 @@
 """Core GraphQL schema for authentication."""
+from typing import Annotated, Union
+
 import strawberry
 from django.contrib.auth import authenticate
 from django.db.models import Q
@@ -26,7 +28,7 @@ class AuthError:
     message: str
 
 
-AuthResult = strawberry.union("AuthResult", [AuthPayload, AuthError])
+AuthResult = Annotated[Union[AuthPayload, AuthError], strawberry.union("AuthResult")]
 
 
 @strawberry.type
