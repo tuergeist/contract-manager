@@ -1,5 +1,21 @@
 [
   {
+    "version": "2.3.1",
+    "date": "2026-02-20",
+    "title": "ZUGFeRD Conformity & Bug Fixes",
+    "description": "Fix ZUGFeRD EN16931 invoice XML generation to pass conformity validation, plus HubSpot and invoice UI fixes.",
+    "type": "bugfix",
+    "details": [
+      "Fix ZUGFeRD negative line items violating BR-27 by converting discounts to document-level allowances",
+      "Fix ZUGFeRD arithmetic mismatch between line item net prices and totals",
+      "Add payment terms, seller contact, electronic addresses, and Ausstellungsort to ZUGFeRD XML",
+      "Fix PDF/A-3 compliance: trailer file ID and image interpolation flags",
+      "Set BuyerReference only when customer PO number exists",
+      "Surface HubSpot API permission errors to the user instead of silently swallowing them",
+      "Fix invoice select-all bug when contract has multiple billing events per month"
+    ]
+  },
+  {
     "version": "2.3.0",
     "date": "2026-02-19",
     "title": "Invoice Detail View",
