@@ -752,32 +752,44 @@ export function CounterpartyDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Summary Cards - 4 in a row */}
+      {/* Summary Cards - 3 in a row */}
       {summary && (
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-lg border bg-white p-4">
             <p className="text-sm font-medium text-gray-500">{t('banking.transactions')}</p>
             <p className="mt-1 text-xl font-semibold text-gray-900">{summary.transactionCount}</p>
+            {summary.firstDate && summary.lastDate && (
+              <p className="mt-1 text-xs text-gray-400">
+                {formatDate(summary.firstDate)} – {formatDate(summary.lastDate)}
+              </p>
+            )}
           </div>
           <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm font-medium text-gray-500">{t('banking.totalDebit')}</p>
-            <p className="mt-1 text-xl font-semibold text-red-600">
-              {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(parseFloat(summary.totalDebit))}
-            </p>
+            <div className="flex items-baseline justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">{t('banking.totalDebit')}</p>
+                <p className="mt-1 text-xl font-semibold text-red-600">
+                  {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(parseFloat(summary.totalDebit))}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-medium text-gray-500">{t('banking.totalCredit')}</p>
+                <p className="mt-1 text-xl font-semibold text-green-600">
+                  {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(parseFloat(summary.totalCredit))}
+                </p>
+              </div>
+            </div>
           </div>
           <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm font-medium text-gray-500">{t('banking.totalCredit')}</p>
-            <p className="mt-1 text-xl font-semibold text-green-600">
-              {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(parseFloat(summary.totalCredit))}
-            </p>
-          </div>
-          <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm font-medium text-gray-500">{t('banking.period')}</p>
-            <p className="mt-1 text-xl font-semibold text-gray-900">
-              {summary.firstDate && summary.lastDate
-                ? `${formatDate(summary.firstDate)} – ${formatDate(summary.lastDate)}`
-                : '-'}
-            </p>
+            <p className="text-sm font-medium text-gray-500">Saldo</p>
+            {(() => {
+              const saldo = parseFloat(summary.totalCredit) + parseFloat(summary.totalDebit);
+              return (
+                <p className={`mt-1 text-xl font-semibold ${saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(saldo)}
+                </p>
+              );
+            })()}
           </div>
         </div>
       )}
