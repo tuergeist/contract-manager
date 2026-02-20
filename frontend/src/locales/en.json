@@ -254,6 +254,7 @@
       "description": "Description",
       "descriptionPlaceholder": "Optional description or notes...",
       "descriptionHint": "Add a description for product items or create a text-only line item",
+      "productChangeNote": "Changing the product may update the unit price.",
       "productOrDescriptionRequired": "Either a product or description is required",
       "quantity": "Quantity",
       "unitPrice": "Unit Price",
@@ -1233,7 +1234,8 @@
     "comments": "Comments",
     "noComments": "No comments yet",
     "addCommentPlaceholder": "Add a comment...",
-    "todoText": "Todo"
+    "todoText": "Todo",
+    "noDate": "No date"
   },
   "pdfAnalysis": {
     "analyzeButton": "Analyze",

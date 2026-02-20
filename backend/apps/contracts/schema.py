@@ -2769,7 +2769,7 @@ class ContractMutation:
         self, info: Info[Context, None], item_id: strawberry.ID
     ) -> DeleteResult:
         """Remove an item from a contract."""
-        user, err = check_perm(info, "contracts", "delete")
+        user, err = check_perm(info, "contracts", "write")
         if err:
             return DeleteResult(error=err)
         if not user.tenant:
@@ -2912,6 +2912,7 @@ class ContractMutation:
         - active -> paused, cancelled, draft (if no invoices)
         - paused -> active, cancelled
         - cancelled -> ended
+        - ended -> draft (if no invoices)
         """
         user, err = check_perm(info, "contracts", "write")
         if err:
@@ -2931,7 +2932,7 @@ class ContractMutation:
             Contract.Status.ACTIVE: [Contract.Status.PAUSED, Contract.Status.CANCELLED, Contract.Status.DRAFT],
             Contract.Status.PAUSED: [Contract.Status.ACTIVE, Contract.Status.CANCELLED],
             Contract.Status.CANCELLED: [Contract.Status.ENDED],
-            Contract.Status.ENDED: [],
+            Contract.Status.ENDED: [Contract.Status.DRAFT],
         }
 
         current_status = contract.status
@@ -2944,7 +2945,7 @@ class ContractMutation:
 
         # Guard: reset to draft blocked if invoices exist
         if new_status == Contract.Status.DRAFT:
-            if contract.invoice_records.exists() or contract.imported_invoices.exists():
+            if contract.invoice_records.exists():
                 return ContractResult(
                     error="Cannot reset to draft: contract has invoices"
                 )
@@ -2975,7 +2976,7 @@ class ContractMutation:
                         tenant=user.tenant, id=contract_id
                     )
                     # Re-check invoices under lock
-                    if contract.invoice_records.exists() or contract.imported_invoices.exists():
+                    if contract.invoice_records.exists():
                         return ContractResult(
                             error="Cannot reset to draft: contract has invoices"
                         )
@@ -3176,7 +3177,7 @@ class ContractMutation:
         self, info: Info[Context, None], price_id: strawberry.ID
     ) -> DeleteResult:
         """Remove a price period."""
-        user, err = check_perm(info, "contracts", "delete")
+        user, err = check_perm(info, "contracts", "write")
         if err:
             return DeleteResult(error=err)
         if not user.tenant:
@@ -3284,7 +3285,7 @@ class ContractMutation:
         attachment_id: strawberry.ID,
     ) -> DeleteResult:
         """Delete a file attachment."""
-        user, err = check_perm(info, "contracts", "delete")
+        user, err = check_perm(info, "contracts", "write")
         if err:
             return DeleteResult(error=err)
         if not user.tenant:
@@ -3355,7 +3356,7 @@ class ContractMutation:
         link_id: strawberry.ID,
     ) -> DeleteResult:
         """Delete a contract link."""
-        user, err = check_perm(info, "contracts", "delete")
+        user, err = check_perm(info, "contracts", "write")
         if err:
             return DeleteResult(error=err)
         if not user.tenant:
@@ -3452,7 +3453,7 @@ class ContractMutation:
         mapping_id: strawberry.ID,
     ) -> DeleteResult:
         """Remove a time tracking project mapping."""
-        user, err = check_perm(info, "contracts", "delete")
+        user, err = check_perm(info, "contracts", "write")
         if err:
             return DeleteResult(error=err)
         if not user.tenant:

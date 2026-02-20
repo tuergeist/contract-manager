@@ -21,23 +21,7 @@ import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
-import { Textarea } from '@/components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   Calendar,
-  User,
   MessageSquare,
   Pencil,
   Trash2,
@@ -45,12 +29,12 @@ import {
   Eye,
   EyeOff,
   GripVertical,
-  Send,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
+import { TodoDetailModal } from './TodoDetailModal'
 
 // ============================================================================
 // GraphQL Queries and Mutations
@@ -80,26 +64,7 @@ const TODOS_BY_ASSIGNEE = gql`
         contractItemId
         customerId
         commentCount
-        comments {
-          id
-          text
-          authorId
-          authorName
-          createdAt
-        }
       }
-    }
-  }
-`
-
-const USERS_QUERY = gql`
-  query UsersForTodoBoard {
-    users {
-      id
-      email
-      firstName
-      lastName
-      isActive
     }
   }
 `
@@ -145,33 +110,9 @@ const DELETE_TODO = gql`
   }
 `
 
-const ADD_COMMENT = gql`
-  mutation AddTodoComment($todoId: Int!, $text: String!) {
-    addTodoComment(todoId: $todoId, text: $text) {
-      success
-      error
-      comment {
-        id
-        text
-        authorId
-        authorName
-        createdAt
-      }
-    }
-  }
-`
-
 // ============================================================================
 // Types
 // ============================================================================
-
-interface TodoComment {
-  id: number
-  text: string
-  authorId: number
-  authorName: string
-  createdAt: string
-}
 
 interface TodoItem {
   id: number
@@ -191,7 +132,6 @@ interface TodoItem {
   contractItemId: number | null
   customerId: number | null
   commentCount: number
-  comments: TodoComment[]
 }
 
 interface AssigneeColumn {
@@ -466,219 +406,6 @@ function BoardColumn({
 }
 
 // ============================================================================
-// EditTodoModal Component
-// ============================================================================
-
-interface EditTodoModalProps {
-  todo: TodoItem | null
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onSave: (updates: {
-    text: string
-    reminderDate: string | null
-    isPublic: boolean
-    assignedToId: number | null
-  }) => void
-}
-
-function EditTodoModal({ todo, open, onOpenChange, onSave }: EditTodoModalProps) {
-  const { t } = useTranslation()
-  const [text, setText] = useState('')
-  const [reminderDate, setReminderDate] = useState('')
-  const [isPublic, setIsPublic] = useState(false)
-  const [assignedToId, setAssignedToId] = useState<string>('')
-
-  const { data: usersData } = useQuery(USERS_QUERY, { skip: !open })
-  const users = (usersData?.users || []).filter(
-    (u: { id: string; isActive: boolean }) => u.isActive
-  )
-
-  // Reset form when todo changes
-  useState(() => {
-    if (todo) {
-      setText(todo.text)
-      setReminderDate(todo.reminderDate || '')
-      setIsPublic(todo.isPublic)
-      setAssignedToId(todo.assignedToId ? String(todo.assignedToId) : '')
-    }
-  })
-
-  // Effect to update form when todo changes
-  useMemo(() => {
-    if (todo && open) {
-      setText(todo.text)
-      setReminderDate(todo.reminderDate || '')
-      setIsPublic(todo.isPublic)
-      setAssignedToId(todo.assignedToId ? String(todo.assignedToId) : '')
-    }
-  }, [todo, open])
-
-  const handleSave = () => {
-    if (!text.trim()) return
-    onSave({
-      text: text.trim(),
-      reminderDate: reminderDate || null,
-      isPublic,
-      assignedToId: assignedToId ? parseInt(assignedToId) : null,
-    })
-    onOpenChange(false)
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t('todos.editTodo')}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div>
-            <label className="text-sm font-medium">{t('todos.description')}</label>
-            <Textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={t('todos.descriptionPlaceholder')}
-              className="mt-1"
-              rows={3}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium">{t('todos.reminderDate')}</label>
-              <Input
-                type="date"
-                value={reminderDate}
-                onChange={(e) => setReminderDate(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">{t('todos.assignee')}</label>
-              <Select
-                value={assignedToId || '__none__'}
-                onValueChange={(val) => setAssignedToId(val === '__none__' ? '' : val)}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">{t('todos.unassigned')}</SelectItem>
-                  {users.map((u: { id: string; email: string; firstName: string; lastName: string }) => (
-                    <SelectItem key={u.id} value={String(u.id)}>
-                      {u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.email}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={isPublic}
-              onCheckedChange={(checked) => setIsPublic(checked === true)}
-            />
-            {t('todos.shareWithTeam')}
-          </label>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t('common.cancel')}
-          </Button>
-          <Button onClick={handleSave} disabled={!text.trim()}>
-            {t('common.save')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-// ============================================================================
-// CommentsModal Component
-// ============================================================================
-
-interface CommentsModalProps {
-  todo: TodoItem | null
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onAddComment: (text: string) => void
-}
-
-function CommentsModal({ todo, open, onOpenChange, onAddComment }: CommentsModalProps) {
-  const { t } = useTranslation()
-  const [newComment, setNewComment] = useState('')
-
-  const handleSubmit = () => {
-    if (!newComment.trim()) return
-    onAddComment(newComment.trim())
-    setNewComment('')
-  }
-
-  const formatDateTime = (dateStr: string) => {
-    return format(parseISO(dateStr), 'dd.MM.yyyy HH:mm')
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{t('todos.comments')}</DialogTitle>
-        </DialogHeader>
-
-        {todo && (
-          <div className="space-y-4">
-            {/* Todo text context */}
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm text-muted-foreground">{t('todos.todoText')}:</p>
-              <p className="text-sm">{todo.text}</p>
-            </div>
-
-            {/* Comments list */}
-            <div className="max-h-60 overflow-y-auto space-y-3">
-              {todo.comments.length === 0 ? (
-                <p className="text-center text-sm text-muted-foreground py-4">
-                  {t('todos.noComments')}
-                </p>
-              ) : (
-                todo.comments.map((comment) => (
-                  <div key={comment.id} className="p-3 border rounded-lg">
-                    <div className="flex items-center gap-2 mb-1">
-                      <User className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-sm font-medium">{comment.authorName}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatDateTime(comment.createdAt)}
-                      </span>
-                    </div>
-                    <p className="text-sm">{comment.text}</p>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Add comment */}
-            <div className="flex gap-2">
-              <Input
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder={t('todos.addCommentPlaceholder')}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    handleSubmit()
-                  }
-                }}
-              />
-              <Button onClick={handleSubmit} disabled={!newComment.trim()}>
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-// ============================================================================
 // Main TodoBoard Component
 // ============================================================================
 
@@ -690,8 +417,8 @@ export function TodoBoard() {
   // State
   const [showCompleted, setShowCompleted] = useState(false)
   const [searchFilter, setSearchFilter] = useState('')
-  const [editingTodo, setEditingTodo] = useState<TodoItem | null>(null)
-  const [commentsTodo, setCommentsTodo] = useState<TodoItem | null>(null)
+  const [detailTodoId, setDetailTodoId] = useState<number | null>(null)
+  const [detailCanEdit, setDetailCanEdit] = useState(false)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
 
   // Queries
@@ -703,8 +430,6 @@ export function TodoBoard() {
   // Mutations
   const [updateTodo] = useMutation(UPDATE_TODO)
   const [deleteTodo] = useMutation(DELETE_TODO)
-  const [addComment] = useMutation(ADD_COMMENT)
-
   // DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -746,56 +471,6 @@ export function TodoBoard() {
       refetch()
     } catch (error) {
       console.error('Failed to delete todo:', error)
-    }
-  }
-
-  const handleSaveEdit = async (updates: {
-    text: string
-    reminderDate: string | null
-    isPublic: boolean
-    assignedToId: number | null
-  }) => {
-    if (!editingTodo) return
-
-    try {
-      await updateTodo({
-        variables: {
-          todoId: editingTodo.id,
-          ...updates,
-        },
-      })
-      refetch()
-    } catch (error) {
-      console.error('Failed to update todo:', error)
-    }
-  }
-
-  const handleAddComment = async (text: string) => {
-    if (!commentsTodo) return
-
-    try {
-      const result = await addComment({
-        variables: { todoId: commentsTodo.id, text },
-      })
-      if (result.data?.addTodoComment?.success) {
-        refetch()
-        // Update the local comments list
-        if (commentsTodo) {
-          const updatedTodo = findTodoById(commentsTodo.id)
-          if (updatedTodo) {
-            setCommentsTodo({
-              ...commentsTodo,
-              comments: [
-                ...commentsTodo.comments,
-                result.data.addTodoComment.comment,
-              ],
-              commentCount: commentsTodo.commentCount + 1,
-            })
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Failed to add comment:', error)
     }
   }
 
@@ -908,9 +583,9 @@ export function TodoBoard() {
                 column={column}
                 currentUserId={currentUserId}
                 onToggleComplete={handleToggleComplete}
-                onEdit={(todo) => setEditingTodo(todo)}
+                onEdit={(todo) => { setDetailTodoId(todo.id); setDetailCanEdit(true) }}
                 onDelete={handleDelete}
-                onViewComments={(todo) => setCommentsTodo(todo)}
+                onViewComments={(todo) => { setDetailTodoId(todo.id); setDetailCanEdit(todo.createdById === currentUserId) }}
                 searchFilter={searchFilter}
               />
             ))}
@@ -935,20 +610,13 @@ export function TodoBoard() {
         </DndContext>
       </div>
 
-      {/* Edit Modal */}
-      <EditTodoModal
-        todo={editingTodo}
-        open={!!editingTodo}
-        onOpenChange={(open) => !open && setEditingTodo(null)}
-        onSave={handleSaveEdit}
-      />
-
-      {/* Comments Modal */}
-      <CommentsModal
-        todo={commentsTodo}
-        open={!!commentsTodo}
-        onOpenChange={(open) => !open && setCommentsTodo(null)}
-        onAddComment={handleAddComment}
+      {/* Detail Modal (edit + comments) */}
+      <TodoDetailModal
+        todoId={detailTodoId}
+        open={detailTodoId !== null}
+        onOpenChange={(open) => { if (!open) setDetailTodoId(null) }}
+        canEdit={detailCanEdit}
+        onRefresh={refetch}
       />
     </div>
   )

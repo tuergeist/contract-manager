@@ -217,6 +217,7 @@ const CONTRACT_DETAIL_QUERY = gql`
         contractId
         contractItemId
         customerId
+        commentCount
       }
       timeTrackingMappingsCount
     }
@@ -2801,6 +2802,8 @@ function EditItemModal({
             {error}
           </div>
         )}
+
+        <p className="text-xs text-muted-foreground">{t('contracts.item.productChangeNote')}</p>
 
         <div className="space-y-4 py-4 overflow-y-auto flex-1">
           {/* Product + Description - 2 columns */}

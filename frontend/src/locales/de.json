@@ -254,6 +254,7 @@
       "description": "Beschreibung",
       "descriptionPlaceholder": "Optionale Beschreibung oder Notizen...",
       "descriptionHint": "Beschreibung für Produktpositionen oder reine Textposition erstellen",
+      "productChangeNote": "Das Ändern des Produkts kann den Stückpreis aktualisieren.",
       "productOrDescriptionRequired": "Entweder ein Produkt oder eine Beschreibung ist erforderlich",
       "quantity": "Menge",
       "unitPrice": "Einzelpreis",
@@ -1233,7 +1234,8 @@
     "comments": "Kommentare",
     "noComments": "Noch keine Kommentare",
     "addCommentPlaceholder": "Kommentar hinzufügen...",
-    "todoText": "Aufgabe"
+    "todoText": "Aufgabe",
+    "noDate": "Kein Datum"
   },
   "pdfAnalysis": {
     "analyzeButton": "Analysieren",

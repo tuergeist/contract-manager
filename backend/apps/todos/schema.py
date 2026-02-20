@@ -115,6 +115,29 @@ def todo_to_type(todo: TodoItem, include_comments: bool = True) -> TodoItemType:
 @strawberry.type
 class TodoQuery:
     @strawberry.field
+    def todo(self, info: Info, todo_id: int) -> TodoItemType | None:
+        """Get a single todo by ID with comments.
+
+        Accessible by creator, assignee, or if the todo is public.
+        """
+        user = require_perm(info, "todos", "read")
+        if not user:
+            return None
+
+        try:
+            todo = TodoItem.objects.select_related(
+                "created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer"
+            ).get(pk=todo_id, tenant=user.tenant)
+
+            # Check access: creator, assignee, or public
+            if not todo.is_public and todo.created_by_id != user.id and todo.assigned_to_id != user.id:
+                return None
+
+            return todo_to_type(todo, include_comments=True)
+        except TodoItem.DoesNotExist:
+            return None
+
+    @strawberry.field
     def my_todos(
         self,
         info: Info,
@@ -393,8 +416,8 @@ class TodoMutation:
                     return TodoUpdateResult(success=False, error="Only the creator can edit this todo")
 
             if not is_creator:
-                # Assignees can only toggle completion
-                if text is not None or reminder_date is not strawberry.UNSET or is_public is not None or assigned_to_id is not strawberry.UNSET:
+                # Assignees can toggle completion and update reminder_date
+                if text is not None or is_public is not None or assigned_to_id is not strawberry.UNSET:
                     return TodoUpdateResult(success=False, error="Only the creator can edit this todo")
 
             old_assigned_to_id = todo.assigned_to_id
@@ -404,7 +427,7 @@ class TodoMutation:
                 todo.text = text
                 update_fields.append("text")
 
-            if reminder_date is not strawberry.UNSET and is_creator:
+            if reminder_date is not strawberry.UNSET and (is_creator or is_assignee):
                 todo.reminder_date = reminder_date
                 update_fields.append("reminder_date")
 

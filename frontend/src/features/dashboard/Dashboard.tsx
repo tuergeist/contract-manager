@@ -42,6 +42,7 @@ const MY_TODOS_QUERY = gql`
       contractId
       contractItemId
       customerId
+      commentCount
     }
   }
 `
