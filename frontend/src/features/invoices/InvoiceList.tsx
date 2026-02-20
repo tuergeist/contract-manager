@@ -410,6 +410,20 @@ const SEND_INVOICE_EMAIL = gql`
   }
 `
 
+const SEND_ALL_UNSENT = gql`
+  mutation SendAllUnsentInvoices {
+    sendAllUnsentInvoices {
+      success
+      error
+      sent
+      errors {
+        invoiceNumber
+        error
+      }
+    }
+  }
+`
+
 interface GeneratedInvoice {
   id: number
   invoiceNumber: string
@@ -618,6 +632,9 @@ export function InvoiceList() {
   const [deletePaymentMatchMutation] = useMutation(DELETE_PAYMENT_MATCH)
   const { data: m365Data } = useQuery(M365_SETTINGS_QUERY)
   const [sendInvoiceEmail, { loading: sendingEmail }] = useMutation(SEND_INVOICE_EMAIL)
+  const [sendAllUnsent, { loading: sendingAll }] = useMutation(SEND_ALL_UNSENT)
+  const [bulkSendErrors, setBulkSendErrors] = useState<{ invoiceNumber: string; error: string }[]>([])
+  const [bulkSendSent, setBulkSendSent] = useState<number | null>(null)
 
   const [findPaymentMatches, { data: paymentMatchData, loading: loadingPaymentMatches }] = useLazyQuery(
     FIND_PAYMENT_MATCHES,
@@ -670,6 +687,9 @@ export function InvoiceList() {
   const generatedInvoices: GeneratedInvoice[] = generatedData?.invoiceRecords?.items ?? []
   const batches: InvoiceImportBatch[] = batchData?.importBatches?.items ?? []
   const hasPendingUploads = batches.some((b) => b.pendingCount > 0)
+  const unsentCount = generatedInvoices.filter(
+    inv => inv.status === 'finalized' && !inv.emailSentAt && inv.pdfUrl
+  ).length
 
   // Build unified rows
   const unifiedRows: UnifiedRow[] = (() => {
@@ -993,6 +1013,29 @@ export function InvoiceList() {
     }
   }
 
+  const handleSendAllUnsent = async () => {
+    setBulkSendErrors([])
+    setBulkSendSent(null)
+    if (!window.confirm(t('invoices.sendAllUnsentConfirm', { count: unsentCount }))) {
+      return
+    }
+    try {
+      const result = await sendAllUnsent()
+      const data = result.data?.sendAllUnsentInvoices
+      if (data?.success) {
+        setBulkSendSent(data.sent)
+        if (data.errors?.length) {
+          setBulkSendErrors(data.errors)
+        }
+        generatedRefetch()
+      } else {
+        window.alert(data?.error || t('invoices.sendEmailFailed'))
+      }
+    } catch {
+      window.alert(t('invoices.sendEmailFailed'))
+    }
+  }
+
   const openPaymentMatchRecordModal = (record: GeneratedInvoice) => {
     setPaymentMatchRecord(record)
     setPaymentMatchInvoice(null)
@@ -1037,6 +1080,20 @@ export function InvoiceList() {
               </Button>
             </>
           )}
+          {m365Data?.m365Settings?.isConfigured && unsentCount > 0 && canWrite && (
+            <Button
+              variant="outline"
+              onClick={handleSendAllUnsent}
+              disabled={sendingAll}
+            >
+              {sendingAll ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Mail className="w-4 h-4 mr-2" />
+              )}
+              {t('invoices.sendAllUnsent', { count: unsentCount })}
+            </Button>
+          )}
           {hasPermission('invoices', 'export') && (
             <Button className="bg-blue-600 hover:bg-blue-700 text-white" asChild>
               <Link to="/invoices/export">
@@ -1047,6 +1104,33 @@ export function InvoiceList() {
           )}
         </div>
       </div>
+
+      {/* Bulk send result */}
+      {bulkSendSent !== null && (
+        <div className={cn(
+          "rounded-lg border p-3 flex items-start gap-3",
+          bulkSendErrors.length > 0 ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"
+        )}>
+          <div className="flex-1">
+            <p className={cn("text-sm font-medium", bulkSendErrors.length > 0 ? "text-red-800" : "text-green-800")}>
+              {t('invoices.sendAllResult', { sent: bulkSendSent })}
+            </p>
+            {bulkSendErrors.length > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {bulkSendErrors.map((err, i) => (
+                  <p key={i} className="text-sm text-red-600 flex items-center gap-1">
+                    <Mail className="w-3 h-3 text-red-500 shrink-0" />
+                    {err.invoiceNumber}: {err.error}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+          <button onClick={() => { setBulkSendSent(null); setBulkSendErrors([]) }} className="text-gray-400 hover:text-gray-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Import Batches */}
       {batches.length > 0 && (

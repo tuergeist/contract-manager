@@ -2259,6 +2259,59 @@ class InvoiceMutation:
         send_invoice_email_task.delay(record.id)
         return DeleteResult(success=True)
 
+    @strawberry.mutation
+    def send_all_unsent_invoices(
+        self, info: Info[Context, None]
+    ) -> "BulkSendResult":
+        """Send all finalized unsent invoices via M365. Requires invoices.write."""
+        user, err = check_perm(info, "invoices", "write")
+        if err:
+            return BulkSendResult(success=False, error=err, sent=0, errors=[])
+
+        # Check M365 is configured
+        m365_config = (user.tenant.settings or {}).get("m365", {})
+        if not m365_config.get("client_id") or not m365_config.get("sender_mailbox"):
+            return BulkSendResult(
+                success=False, error="M365 email sending is not configured", sent=0, errors=[]
+            )
+
+        unsent = InvoiceRecord.objects.select_related("customer", "tenant").filter(
+            tenant=user.tenant,
+            status=InvoiceRecord.Status.FINALIZED,
+            email_sent_at__isnull=True,
+        ).exclude(pdf_file="")
+
+        from apps.invoices.tasks import send_invoice_email_task
+
+        sent = 0
+        errors: list[BulkSendError] = []
+        for record in unsent:
+            customer = record.customer
+            if not customer or not customer.billing_emails:
+                errors.append(BulkSendError(
+                    invoice_number=record.invoice_number or f"#{record.id}",
+                    error="No billing email addresses",
+                ))
+                continue
+            send_invoice_email_task.delay(record.id)
+            sent += 1
+
+        return BulkSendResult(success=True, sent=sent, errors=errors)
+
+
+@strawberry.type
+class BulkSendError:
+    invoice_number: str
+    error: str
+
+
+@strawberry.type
+class BulkSendResult:
+    success: bool
+    error: str | None = None
+    sent: int = 0
+    errors: list[BulkSendError] | None = None
+
 
 # =========================================================================
 # Converters

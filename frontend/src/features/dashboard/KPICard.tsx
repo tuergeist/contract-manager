@@ -52,7 +52,9 @@ export function KPICard({ title, value, subtitle, explanation, isCurrency = fals
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{displayValue}</div>
-        {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
+        {subtitle && subtitle.split('\n').map((line, i) => (
+          <p key={i} className="text-xs text-muted-foreground mt-1">{line}</p>
+        ))}
       </CardContent>
     </Card>
   )

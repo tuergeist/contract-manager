@@ -955,8 +955,10 @@ def calculate_dashboard_kpis(tenant) -> dict:
     year_to_date_revenue = Decimal("0")
     current_year_forecast = Decimal("0")
     current_year_one_off = Decimal("0")
+    current_year_discounts = Decimal("0")
     next_year_forecast = Decimal("0")
     next_year_one_off = Decimal("0")
+    next_year_discounts = Decimal("0")
 
     for contract in active_contracts:
         # Use prefetched items (avoids re-querying)
@@ -1016,7 +1018,7 @@ def calculate_dashboard_kpis(tenant) -> dict:
             if include_next_year and event_date >= next_year_start:
                 next_year_forecast += event_total
 
-        # One-off contributions to forecasts
+        # One-off contributions to forecasts (split positive one-offs from discounts)
         if one_off_items:
             one_off_schedule = contract.get_recognition_schedule(
                 from_date=current_year_start,
@@ -1026,10 +1028,18 @@ def calculate_dashboard_kpis(tenant) -> dict:
             )
             for event in one_off_schedule:
                 event_date = event["date"]
-                if event_date <= current_year_end:
-                    current_year_one_off += event["total"]
-                if include_next_year and event_date >= next_year_start:
-                    next_year_one_off += event["total"]
+                for ei in event["items"]:
+                    amount = ei["amount"]
+                    if event_date <= current_year_end:
+                        if amount >= 0:
+                            current_year_one_off += amount
+                        else:
+                            current_year_discounts += amount
+                    if include_next_year and event_date >= next_year_start:
+                        if amount >= 0:
+                            next_year_one_off += amount
+                        else:
+                            next_year_discounts += amount
 
     return {
         "total_active_contracts": total_active_contracts,
@@ -1038,8 +1048,10 @@ def calculate_dashboard_kpis(tenant) -> dict:
         "year_to_date_revenue": year_to_date_revenue,
         "current_year_forecast": current_year_forecast,
         "current_year_one_off": current_year_one_off,
+        "current_year_discounts": current_year_discounts,
         "next_year_forecast": next_year_forecast,
         "next_year_one_off": next_year_one_off,
+        "next_year_discounts": next_year_discounts,
     }
 
 
@@ -1053,8 +1065,10 @@ class DashboardKPIsType:
     year_to_date_revenue: Decimal
     current_year_forecast: Decimal
     current_year_one_off: Decimal
+    current_year_discounts: Decimal
     next_year_forecast: Decimal
     next_year_one_off: Decimal
+    next_year_discounts: Decimal
 
 
 @strawberry.type
@@ -1310,8 +1324,10 @@ class ContractQuery:
                 year_to_date_revenue=Decimal("0"),
                 current_year_forecast=Decimal("0"),
                 current_year_one_off=Decimal("0"),
+                current_year_discounts=Decimal("0"),
                 next_year_forecast=Decimal("0"),
                 next_year_one_off=Decimal("0"),
+                next_year_discounts=Decimal("0"),
             )
 
         kpis = calculate_dashboard_kpis(user.tenant)
@@ -1322,8 +1338,10 @@ class ContractQuery:
             year_to_date_revenue=kpis["year_to_date_revenue"],
             current_year_forecast=kpis["current_year_forecast"],
             current_year_one_off=kpis["current_year_one_off"],
+            current_year_discounts=kpis["current_year_discounts"],
             next_year_forecast=kpis["next_year_forecast"],
             next_year_one_off=kpis["next_year_one_off"],
+            next_year_discounts=kpis["next_year_discounts"],
         )
 
     @strawberry.field

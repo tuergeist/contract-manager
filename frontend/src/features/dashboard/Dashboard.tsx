@@ -15,8 +15,10 @@ const DASHBOARD_KPIS_QUERY = gql`
       yearToDateRevenue
       currentYearForecast
       currentYearOneOff
+      currentYearDiscounts
       nextYearForecast
       nextYearOneOff
+      nextYearDiscounts
     }
   }
 `
@@ -52,8 +54,10 @@ interface DashboardKPIs {
   yearToDateRevenue: string
   currentYearForecast: string
   currentYearOneOff: string
+  currentYearDiscounts: string
   nextYearForecast: string
   nextYearOneOff: string
+  nextYearDiscounts: string
 }
 
 interface DashboardKPIsData {
@@ -113,13 +117,16 @@ export function Dashboard() {
 
   const kpis = kpisData?.dashboardKpis
 
-  const formatOneOff = (value: string | undefined) => {
-    const v = parseFloat(value ?? '0')
-    if (v === 0) return undefined
-    const formatted = new Intl.NumberFormat('de-DE', {
+  const formatForecastSubtitle = (oneOff: string | undefined, discounts: string | undefined) => {
+    const fmt = (v: number) => new Intl.NumberFormat('de-DE', {
       style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 0,
-    }).format(v)
-    return t('dashboard.kpis.inclOneOff', { amount: formatted })
+    }).format(Math.abs(v))
+    const oneOffVal = parseFloat(oneOff ?? '0')
+    const discountsVal = parseFloat(discounts ?? '0')
+    const parts: string[] = []
+    if (oneOffVal > 0) parts.push(t('dashboard.kpis.inclOneOff', { amount: fmt(oneOffVal) }))
+    if (discountsVal < 0) parts.push(t('dashboard.kpis.inclDiscounts', { amount: fmt(discountsVal) }))
+    return parts.length > 0 ? parts.join('\n') : undefined
   }
 
   return (
@@ -157,14 +164,14 @@ export function Dashboard() {
         <KPICard
           title={t('dashboard.kpis.currentYearForecast')}
           value={parseFloat(kpis?.currentYearForecast ?? '0')}
-          subtitle={formatOneOff(kpis?.currentYearOneOff)}
+          subtitle={formatForecastSubtitle(kpis?.currentYearOneOff, kpis?.currentYearDiscounts)}
           explanation={t('dashboard.kpis.currentYearForecastExplanation')}
           isCurrency
         />
         <KPICard
           title={t('dashboard.kpis.nextYearForecast')}
           value={parseFloat(kpis?.nextYearForecast ?? '0')}
-          subtitle={formatOneOff(kpis?.nextYearOneOff)}
+          subtitle={formatForecastSubtitle(kpis?.nextYearOneOff, kpis?.nextYearDiscounts)}
           explanation={t('dashboard.kpis.nextYearForecastExplanation')}
           isCurrency
         />
