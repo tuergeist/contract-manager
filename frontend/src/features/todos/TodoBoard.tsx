@@ -24,10 +24,7 @@ import {
   Calendar,
   MessageSquare,
   Pencil,
-  Trash2,
   Search,
-  Eye,
-  EyeOff,
   GripVertical,
   ChevronDown,
   ChevronRight,
@@ -101,15 +98,6 @@ const UPDATE_TODO = gql`
   }
 `
 
-const DELETE_TODO = gql`
-  mutation DeleteTodoBoard($todoId: Int!) {
-    deleteTodo(todoId: $todoId) {
-      success
-      error
-    }
-  }
-`
-
 // ============================================================================
 // Types
 // ============================================================================
@@ -150,7 +138,6 @@ interface TodoCardProps {
   currentUserId: number
   onToggleComplete: (todo: TodoItem) => void
   onEdit: (todo: TodoItem) => void
-  onDelete: (todo: TodoItem) => void
   onViewComments: (todo: TodoItem) => void
   isDragging?: boolean
 }
@@ -160,12 +147,9 @@ function TodoCard({
   currentUserId,
   onToggleComplete,
   onEdit,
-  onDelete,
   onViewComments,
   isDragging,
 }: TodoCardProps) {
-  const { t } = useTranslation()
-
   const getEntityLink = (todo: TodoItem): string => {
     if (todo.contractId) {
       return `/contracts/${todo.contractId}`
@@ -203,50 +187,41 @@ function TodoCard({
         <div className="flex-1 min-w-0">
           <p
             className={cn(
-              'text-sm',
+              'text-sm cursor-pointer hover:text-primary',
               todo.isCompleted && 'line-through text-muted-foreground'
             )}
+            onClick={() => onViewComments(todo)}
           >
             {todo.text}
           </p>
         </div>
         <div className="flex gap-1 shrink-0">
           {canEdit && (
-            <>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-primary"
-                onClick={() => onEdit(todo)}
-                data-testid={`todo-card-edit-${todo.id}`}
-              >
-                <Pencil className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                onClick={() => onDelete(todo)}
-                data-testid={`todo-card-delete-${todo.id}`}
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground hover:text-primary"
+              onClick={() => onEdit(todo)}
+              data-testid={`todo-card-edit-${todo.id}`}
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
           )}
         </div>
       </div>
 
-      {/* Meta info */}
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        {/* Entity link */}
+      {/* Entity link */}
+      <div className="mt-1 text-xs text-muted-foreground truncate">
         <Link
           to={getEntityLink(todo)}
-          className="hover:text-primary hover:underline truncate max-w-[150px]"
+          className="hover:text-primary hover:underline"
         >
           {todo.entityName}
         </Link>
+      </div>
 
-        {/* Reminder date */}
+      {/* Date & comment count */}
+      <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
         {todo.reminderDate && (
           <span className="flex items-center gap-1">
             <Calendar className="h-3 w-3" />
@@ -254,16 +229,6 @@ function TodoCard({
           </span>
         )}
 
-        {/* Public indicator */}
-        <span title={todo.isPublic ? t('todos.public') : t('todos.private')}>
-          {todo.isPublic ? (
-            <Eye className="h-3 w-3" />
-          ) : (
-            <EyeOff className="h-3 w-3" />
-          )}
-        </span>
-
-        {/* Comment count */}
         <button
           onClick={() => onViewComments(todo)}
           className="flex items-center gap-1 hover:text-primary"
@@ -324,7 +289,6 @@ interface BoardColumnProps {
   currentUserId: number
   onToggleComplete: (todo: TodoItem) => void
   onEdit: (todo: TodoItem) => void
-  onDelete: (todo: TodoItem) => void
   onViewComments: (todo: TodoItem) => void
   searchFilter: string
 }
@@ -334,7 +298,6 @@ function BoardColumn({
   currentUserId,
   onToggleComplete,
   onEdit,
-  onDelete,
   onViewComments,
   searchFilter,
 }: BoardColumnProps) {
@@ -393,7 +356,6 @@ function BoardColumn({
                   currentUserId={currentUserId}
                   onToggleComplete={onToggleComplete}
                   onEdit={onEdit}
-                  onDelete={onDelete}
                   onViewComments={onViewComments}
                 />
               ))
@@ -429,7 +391,6 @@ export function TodoBoard() {
 
   // Mutations
   const [updateTodo] = useMutation(UPDATE_TODO)
-  const [deleteTodo] = useMutation(DELETE_TODO)
   // DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -460,17 +421,6 @@ export function TodoBoard() {
       refetch()
     } catch (error) {
       console.error('Failed to update todo:', error)
-    }
-  }
-
-  const handleDelete = async (todo: TodoItem) => {
-    if (!confirm(t('todos.confirmDelete'))) return
-
-    try {
-      await deleteTodo({ variables: { todoId: todo.id } })
-      refetch()
-    } catch (error) {
-      console.error('Failed to delete todo:', error)
     }
   }
 
@@ -584,7 +534,6 @@ export function TodoBoard() {
                 currentUserId={currentUserId}
                 onToggleComplete={handleToggleComplete}
                 onEdit={(todo) => { setDetailTodoId(todo.id); setDetailCanEdit(true) }}
-                onDelete={handleDelete}
                 onViewComments={(todo) => { setDetailTodoId(todo.id); setDetailCanEdit(todo.createdById === currentUserId) }}
                 searchFilter={searchFilter}
               />
@@ -600,7 +549,6 @@ export function TodoBoard() {
                   currentUserId={currentUserId}
                   onToggleComplete={() => {}}
                   onEdit={() => {}}
-                  onDelete={() => {}}
                   onViewComments={() => {}}
                   isDragging
                 />

@@ -20,8 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Calendar, User, Send } from 'lucide-react'
+import { Calendar, User, Send, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/auth'
 
 const TODO_DETAIL_QUERY = gql`
   query TodoDetailModal($todoId: Int!) {
@@ -41,6 +42,8 @@ const TODO_DETAIL_QUERY = gql`
       contractId
       contractItemId
       customerId
+      customerName
+      contractCustomerId
       commentCount
       comments {
         id
@@ -71,6 +74,7 @@ const UPDATE_TODO = gql`
     $text: String
     $reminderDate: Date
     $isPublic: Boolean
+    $isCompleted: Boolean
     $assignedToId: Int
   ) {
     updateTodo(
@@ -78,8 +82,18 @@ const UPDATE_TODO = gql`
       text: $text
       reminderDate: $reminderDate
       isPublic: $isPublic
+      isCompleted: $isCompleted
       assignedToId: $assignedToId
     ) {
+      success
+      error
+    }
+  }
+`
+
+const DELETE_TODO = gql`
+  mutation DeleteTodoFromModal($todoId: Int!) {
+    deleteTodo(todoId: $todoId) {
       success
       error
     }
@@ -119,6 +133,8 @@ interface TodoData {
   contractId: number | null
   contractItemId: number | null
   customerId: number | null
+  customerName: string | null
+  contractCustomerId: number | null
   commentCount: number
   comments: TodoComment[]
 }
@@ -133,6 +149,8 @@ interface TodoDetailModalProps {
 
 export function TodoDetailModal({ todoId, open, onOpenChange, canEdit, onRefresh }: TodoDetailModalProps) {
   const { t } = useTranslation()
+  const { hasPermission } = useAuth()
+  const canDeleteTodo = hasPermission('todos', 'delete')
   const [editingText, setEditingText] = useState(false)
   const [text, setText] = useState('')
   const [reminderDate, setReminderDate] = useState('')
@@ -146,6 +164,7 @@ export function TodoDetailModal({ todoId, open, onOpenChange, canEdit, onRefresh
   )
 
   const [updateTodo] = useMutation(UPDATE_TODO)
+  const [deleteTodoMutation] = useMutation(DELETE_TODO)
   const [addCommentMutation] = useMutation(ADD_COMMENT)
 
   const [fetchTodoDetail, { data: detailData, loading }] = useLazyQuery(TODO_DETAIL_QUERY, {
@@ -208,6 +227,37 @@ export function TodoDetailModal({ todoId, open, onOpenChange, canEdit, onRefresh
     }
   }
 
+  const handleDelete = async () => {
+    if (!todo) return
+    if (!confirm(t('todos.confirmDelete'))) return
+    try {
+      const result = await deleteTodoMutation({ variables: { todoId: todo.id } })
+      if (result.data?.deleteTodo?.success) {
+        onOpenChange(false)
+        onRefresh()
+      }
+    } catch (error) {
+      console.error('Failed to delete todo:', error)
+    }
+  }
+
+  const handleToggleComplete = async () => {
+    if (!todo) return
+    try {
+      const result = await updateTodo({ variables: { todoId: todo.id, isCompleted: !todo.isCompleted } })
+      if (result.data?.updateTodo?.success) {
+        onRefresh()
+        if (!todo.isCompleted) {
+          onOpenChange(false)
+        } else {
+          fetchTodoDetail({ variables: { todoId: todo.id } })
+        }
+      }
+    } catch (error) {
+      console.error('Failed to toggle todo:', error)
+    }
+  }
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return null
     return format(parseISO(dateStr), 'dd.MM.yyyy')
@@ -227,7 +277,17 @@ export function TodoDetailModal({ todoId, open, onOpenChange, canEdit, onRefresh
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{todo?.entityName}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            {todo && (
+              <Checkbox
+                checked={todo.isCompleted}
+                onCheckedChange={() => handleToggleComplete()}
+              />
+            )}
+            <span className={cn(todo?.isCompleted && 'line-through text-muted-foreground')}>
+              {todo?.entityName}
+            </span>
+          </DialogTitle>
         </DialogHeader>
 
         {loading && !todo ? (
@@ -328,6 +388,15 @@ export function TodoDetailModal({ todoId, open, onOpenChange, canEdit, onRefresh
                 >
                   {todo.entityName}
                 </Link>
+                {todo.customerName && todo.contractCustomerId && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    (<Link
+                      to={`/customers/${todo.contractCustomerId}`}
+                      className="hover:text-primary hover:underline"
+                      onClick={() => onOpenChange(false)}
+                    >{todo.customerName}</Link>)
+                  </p>
+                )}
               </div>
 
               {/* Date */}
@@ -395,6 +464,19 @@ export function TodoDetailModal({ todoId, open, onOpenChange, canEdit, onRefresh
                   />
                   {t('todos.shareWithTeam')}
                 </label>
+              )}
+
+              {/* Delete */}
+              {canEdit && canDeleteTodo && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={handleDelete}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {t('todos.delete')}
+                </Button>
               )}
             </div>
           </div>

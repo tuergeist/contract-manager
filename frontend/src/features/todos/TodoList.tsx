@@ -5,7 +5,7 @@ import { useMutation, gql } from '@apollo/client'
 import { format, parseISO } from 'date-fns'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
-import { Trash2, Calendar, User, UserCheck, Pencil, MessageSquare } from 'lucide-react'
+import { Calendar, User, UserCheck, Pencil, MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 import { TodoDetailModal } from './TodoDetailModal'
@@ -42,15 +42,6 @@ const UPDATE_TODO = gql`
   }
 `
 
-const DELETE_TODO = gql`
-  mutation DeleteTodo($todoId: Int!) {
-    deleteTodo(todoId: $todoId) {
-      success
-      error
-    }
-  }
-`
-
 export interface TodoItem {
   id: number
   text: string
@@ -75,11 +66,10 @@ interface TodoListProps {
   todos: TodoItem[]
   showCreator?: boolean
   onUpdate?: () => void
-  canDelete?: (todo: TodoItem) => boolean
   currentUserId?: number
 }
 
-export function TodoList({ todos, showCreator = false, onUpdate, canDelete, currentUserId }: TodoListProps) {
+export function TodoList({ todos, showCreator = false, onUpdate, currentUserId }: TodoListProps) {
   const { t } = useTranslation()
   const { user } = useAuth()
   const effectiveUserId = currentUserId ?? user?.id ?? 0
@@ -98,7 +88,6 @@ export function TodoList({ todos, showCreator = false, onUpdate, canDelete, curr
   }
 
   const [updateTodo] = useMutation(UPDATE_TODO)
-  const [deleteTodo] = useMutation(DELETE_TODO)
 
   const handleToggleComplete = async (todo: TodoItem) => {
     try {
@@ -126,19 +115,6 @@ export function TodoList({ todos, showCreator = false, onUpdate, canDelete, curr
       onUpdate?.()
     } catch (error) {
       console.error('Failed to update todo:', error)
-    }
-  }
-
-  const handleDelete = async (todo: TodoItem) => {
-    if (!confirm(t('todos.confirmDelete'))) return
-
-    try {
-      await deleteTodo({
-        variables: { todoId: todo.id },
-      })
-      onUpdate?.()
-    } catch (error) {
-      console.error('Failed to delete todo:', error)
     }
   }
 
@@ -296,7 +272,7 @@ export function TodoList({ todos, showCreator = false, onUpdate, canDelete, curr
               </div>
             </div>
 
-            {/* Action buttons */}
+            {/* Action button */}
             <div className="flex items-center gap-1">
               {canEdit(todo) && (
                 <Button
@@ -307,17 +283,6 @@ export function TodoList({ todos, showCreator = false, onUpdate, canDelete, curr
                   data-testid={`todo-edit-${todo.id}`}
                 >
                   <Pencil className="h-4 w-4" />
-                </Button>
-              )}
-              {(!canDelete || canDelete(todo)) && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  onClick={() => handleDelete(todo)}
-                  data-testid={`todo-delete-${todo.id}`}
-                >
-                  <Trash2 className="h-4 w-4" />
                 </Button>
               )}
             </div>

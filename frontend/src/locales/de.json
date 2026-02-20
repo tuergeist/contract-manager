@@ -1226,6 +1226,7 @@
     "closedNone": "Nein",
     "closedDays": "{{days}} Tage",
     "confirmDelete": "Möchten Sie diese Aufgabe wirklich löschen?",
+    "delete": "Löschen",
     "errorTextRequired": "Bitte geben Sie eine Beschreibung ein",
     "errorContextRequired": "Bitte wählen Sie einen Kontext aus",
     "errorCreate": "Aufgabe konnte nicht erstellt werden",

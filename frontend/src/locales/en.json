@@ -1226,6 +1226,7 @@
     "closedNone": "No",
     "closedDays": "{{days}} days",
     "confirmDelete": "Are you sure you want to delete this todo?",
+    "delete": "Delete",
     "errorTextRequired": "Please enter a description",
     "errorContextRequired": "Please select a context",
     "errorCreate": "Failed to create todo",

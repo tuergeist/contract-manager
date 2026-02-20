@@ -65,10 +65,32 @@ class TodoItemType:
     contract_id: int | None
     contract_item_id: int | None
     customer_id: int | None
+    customer_name: str | None
+    contract_customer_id: int | None
 
     # Comments
     comment_count: int
     comments: List[TodoCommentType]
+
+
+def _get_customer_name(todo: TodoItem) -> str | None:
+    """Get the customer name for a todo's linked entity."""
+    if todo.contract and todo.contract.customer:
+        return todo.contract.customer.name
+    if todo.contract_item and todo.contract_item.contract and todo.contract_item.contract.customer:
+        return todo.contract_item.contract.customer.name
+    if todo.customer:
+        return todo.customer.name
+    return None
+
+
+def _get_contract_customer_id(todo: TodoItem) -> int | None:
+    """Get the customer ID for a todo's linked contract."""
+    if todo.contract and todo.contract.customer_id:
+        return todo.contract.customer_id
+    if todo.contract_item and todo.contract_item.contract and todo.contract_item.contract.customer_id:
+        return todo.contract_item.contract.customer_id
+    return None
 
 
 def todo_to_type(todo: TodoItem, include_comments: bool = True) -> TodoItemType:
@@ -107,6 +129,8 @@ def todo_to_type(todo: TodoItem, include_comments: bool = True) -> TodoItemType:
         contract_id=todo.contract_id,
         contract_item_id=todo.contract_item_id,
         customer_id=todo.customer_id,
+        customer_name=_get_customer_name(todo),
+        contract_customer_id=_get_contract_customer_id(todo),
         comment_count=todo.comment_count,
         comments=comments,
     )
@@ -126,7 +150,7 @@ class TodoQuery:
 
         try:
             todo = TodoItem.objects.select_related(
-                "created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer"
+                "created_by", "assigned_to", "contract__customer", "contract_item__product", "contract_item__contract__customer", "customer"
             ).get(pk=todo_id, tenant=user.tenant)
 
             # Check access: creator, assignee, or public
@@ -163,7 +187,7 @@ class TodoQuery:
             queryset = queryset.filter(is_completed=is_completed)
 
         todos = queryset.select_related(
-            "created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer"
+            "created_by", "assigned_to", "contract__customer", "contract_item__product", "contract_item__contract__customer", "customer"
         ).order_by(
             # Null reminder dates last
             F("reminder_date").asc(nulls_last=True),
@@ -187,7 +211,7 @@ class TodoQuery:
             .exclude(
                 Q(assigned_to=user) | Q(assigned_to__isnull=True, created_by=user)
             )
-            .select_related("created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer")
+            .select_related("created_by", "assigned_to", "contract__customer", "contract_item__product", "contract_item__contract__customer", "customer")
             .order_by(
                 F("reminder_date").asc(nulls_last=True),
                 "-created_at",
@@ -218,7 +242,7 @@ class TodoQuery:
             base_query = base_query.filter(is_completed=False)
 
         todos = base_query.select_related(
-            "created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer"
+            "created_by", "assigned_to", "contract__customer", "contract_item__product", "contract_item__contract__customer", "customer"
         ).order_by(
             F("reminder_date").asc(nulls_last=True),
             "-created_at",
@@ -364,7 +388,7 @@ class TodoMutation:
 
             # Reload with related objects
             todo = TodoItem.objects.select_related(
-                "created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer"
+                "created_by", "assigned_to", "contract__customer", "contract_item__product", "contract_item__contract__customer", "customer"
             ).get(pk=todo.pk)
 
             # Notify if assigned to someone else
@@ -400,7 +424,7 @@ class TodoMutation:
 
         try:
             todo = TodoItem.objects.select_related(
-                "created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer"
+                "created_by", "assigned_to", "contract__customer", "contract_item__product", "contract_item__contract__customer", "customer"
             ).get(pk=todo_id, tenant=user.tenant)
 
             # Only creator can edit text, reminder_date, is_public, assigned_to
@@ -444,7 +468,10 @@ class TodoMutation:
                 todo.assigned_to_id = assigned_to_id
                 update_fields.append("assigned_to_id")
 
+            completion_changed = False
             if is_completed is not None:
+                if is_completed != todo.is_completed:
+                    completion_changed = True
                 todo.is_completed = is_completed
                 update_fields.append("is_completed")
                 # Set or clear completed_at timestamp
@@ -459,9 +486,20 @@ class TodoMutation:
             if len(update_fields) > 1:
                 todo.save(update_fields=update_fields)
 
+            # Auto-comment on completion status change
+            if completion_changed:
+                from apps.todos.models import TodoComment
+                comment_text = "marked as done" if is_completed else "reopened"
+                TodoComment.objects.create(
+                    tenant=user.tenant,
+                    todo=todo,
+                    text=comment_text,
+                    author=user,
+                )
+
             # Reload to get updated assigned_to relation
             todo = TodoItem.objects.select_related(
-                "created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer"
+                "created_by", "assigned_to", "contract__customer", "contract_item__product", "contract_item__contract__customer", "customer"
             ).get(pk=todo.pk)
 
             # Notify if reassigned to a different user (not the creator)
@@ -488,7 +526,7 @@ class TodoMutation:
     @strawberry.mutation
     def delete_todo(self, info: Info, todo_id: int) -> DeleteResult:
         """Delete a todo item. Only the creator can delete."""
-        user, err = check_perm(info, "todos", "write")
+        user, err = check_perm(info, "todos", "delete")
         if err:
             return DeleteResult(success=False, error=err)
 
@@ -552,7 +590,7 @@ class TodoMutation:
 
         try:
             todo = TodoItem.objects.select_related(
-                "created_by", "assigned_to", "contract", "contract_item__product", "contract_item__contract", "customer"
+                "created_by", "assigned_to", "contract__customer", "contract_item__product", "contract_item__contract__customer", "customer"
             ).get(pk=todo_id, tenant=user.tenant)
 
             # Can only reassign public todos or todos you created/are assigned to

@@ -1337,7 +1337,7 @@ class TestResetContractToDraft:
         assert contract.status == Contract.Status.ACTIVE
 
     def test_reset_active_contract_with_imported_invoices(self, db, tenant, user, customer, client):
-        """Reset blocked when imported invoices exist."""
+        """Reset allowed even when imported invoices exist (only generated invoices block)."""
         from apps.invoices.models import ImportedInvoice
 
         contract = Contract.objects.create(
@@ -1364,8 +1364,7 @@ class TestResetContractToDraft:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["data"]["transitionContractStatus"]["success"] is False
-        assert "invoices" in data["data"]["transitionContractStatus"]["error"]
+        assert data["data"]["transitionContractStatus"]["success"] is True
 
     def test_reset_non_active_contract_fails(self, db, tenant, user, customer, client):
         """Reset from draft/paused/cancelled/ended returns error."""

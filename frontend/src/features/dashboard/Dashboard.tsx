@@ -206,7 +206,6 @@ export function Dashboard() {
             <TodoList
               todos={myTodos}
               onUpdate={handleTodoUpdate}
-              canDelete={() => true}
             />
           )}
         </div>
