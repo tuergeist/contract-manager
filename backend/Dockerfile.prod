@@ -71,8 +71,9 @@ RUN chmod +x entrypoint.prod.sh
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 
-# Collect static files
-RUN python manage.py collectstatic --noinput --settings=config.settings.production || true
+# Collect static files (dummy secret key – only needed to load settings, not used at runtime)
+RUN DJANGO_SECRET_KEY=build-placeholder DATABASE_URL=sqlite:///dev/null DJANGO_DEBUG=false \
+    python manage.py collectstatic --noinput --settings=config.settings.production
 
 USER appuser
 
