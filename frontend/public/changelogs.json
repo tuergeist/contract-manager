@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.3.2",
+    "date": "2026-02-20",
+    "title": "Invoice UI Improvements",
+    "description": "Improved invoice page button layout, descriptions, and navigation.",
+    "type": "bugfix",
+    "details": [
+      "Reorder /invoices buttons: Upload (gray), Import (gray), Generate (blue)",
+      "Rename export button to \"Generate ...\" to indicate navigation",
+      "Add description on /invoices/export explaining the generate and export workflow",
+      "Remove standalone ZUGFeRD PDF button (ZUGFeRD is always embedded automatically)",
+      "Make Generate & Finalize button blue, export buttons gray",
+      "Use browser history navigation for invoice detail back button"
+    ]
+  },
+  {
     "version": "2.3.1",
     "date": "2026-02-20",
     "title": "ZUGFeRD Conformity & Bug Fixes",
