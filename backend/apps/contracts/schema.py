@@ -821,7 +821,11 @@ class MatchedInvoiceType:
 
 
 def find_matching_invoice_for_billing_event(
-    contract_id: int, billing_date: date, invoices: list, expected_net: Decimal | None = None,
+    contract_id: int,
+    billing_date: date,
+    invoices: list,
+    expected_net: Decimal | None = None,
+    tax_rate: Decimal | None = None,
 ) -> "MatchedInvoiceType | None":
     """
     Find a matching imported invoice for a billing event.
@@ -831,6 +835,7 @@ def find_matching_invoice_for_billing_event(
     2. Invoice date is within 31 days *before* the billing event date
        (an invoice can't be dated after the billing event it covers)
     3. If expected_net is provided, the invoice total_amount must match
+       either the net amount or the gross amount (net + tax)
 
     If multiple invoices match, returns the one with the closest date.
 
@@ -839,11 +844,18 @@ def find_matching_invoice_for_billing_event(
         billing_date: The billing event date
         invoices: List of ImportedInvoice objects (pre-filtered by contract)
         expected_net: Expected net amount from the billing schedule
+        tax_rate: Default tax rate (%) for gross amount matching
 
     Returns:
         MatchedInvoiceType if a match is found, None otherwise
     """
     MATCH_WINDOW_DAYS = 31
+
+    # Pre-compute expected gross if we have net + tax rate
+    expected_gross = None
+    if expected_net is not None and tax_rate is not None:
+        tax_amount = (expected_net * tax_rate / Decimal("100")).quantize(Decimal("0.01"))
+        expected_gross = expected_net + tax_amount
 
     # Filter invoices: must be on or before billing date, within window
     matching_invoices = []
@@ -854,9 +866,11 @@ def find_matching_invoice_for_billing_event(
         days_diff = (billing_date - inv.invoice_date).days
         if days_diff < 0 or days_diff > MATCH_WINDOW_DAYS:
             continue
-        # Amount check: if we have an expected net, the invoice total must match
+        # Amount check: invoice total must match net or gross
         if expected_net is not None and inv.total_amount is not None:
-            if inv.total_amount != expected_net:
+            matches_net = inv.total_amount == expected_net
+            matches_gross = expected_gross is not None and inv.total_amount == expected_gross
+            if not matches_net and not matches_gross:
                 continue
         matching_invoices.append((inv, days_diff))
 
@@ -1446,7 +1460,14 @@ class ContractQuery:
         )
 
         # Fetch invoices linked to this contract for matching
-        from apps.invoices.models import ImportedInvoice, InvoiceRecord
+        from apps.invoices.models import CompanyLegalData, ImportedInvoice, InvoiceRecord
+
+        # Get default tax rate for gross amount matching
+        default_tax_rate = None
+        try:
+            default_tax_rate = user.tenant.legal_data.default_tax_rate
+        except CompanyLegalData.DoesNotExist:
+            pass
 
         contract_invoices = list(
             ImportedInvoice.objects.filter(
@@ -1485,6 +1506,7 @@ class ContractQuery:
                     billing_date=event["date"],
                     invoices=contract_invoices,
                     expected_net=event["total"],
+                    tax_rate=default_tax_rate,
                 )
             events.append(
                 BillingEvent(
