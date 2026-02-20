@@ -465,8 +465,10 @@
   },
   "invoices": {
     "exportButton": "Export",
+    "generateButton": "Generate ...",
     "export": {
-      "title": "Invoice Export",
+      "title": "Generate Invoices",
+      "description": "Generate and finalize invoices for the selected billing period. Select contracts below and click \"Generate & Finalize\" to create invoice records with sequential numbers. \"Export PDF\" and \"Individual PDFs\" do not finalize — invoices that have not been finalized yet will be included as previews without invoice numbers.",
       "selectPeriod": "Select Period",
       "totalInvoices": "Total Invoices",
       "totalAmount": "Total Amount",
@@ -475,9 +477,6 @@
       "exportPdf": "Export PDF",
       "exportIndividualPdfs": "Individual PDFs",
       "exportExcel": "Export Excel",
-      "exportZugferd": "ZUGFeRD PDF",
-      "zugferdTooltip": "Electronic invoice in ZUGFeRD format (PDF/A-3 with XML)",
-      "zugferdNoFinalized": "ZUGFeRD export requires at least one finalized invoice",
       "exporting": "Exporting..."
     },
     "customer": "Customer",

@@ -5,7 +5,7 @@ import { useQuery, useMutation } from '@apollo/client'
 import { gql } from '@apollo/client'
 import { format } from 'date-fns'
 import { de, enUS } from 'date-fns/locale'
-import { FileDown, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Loader2, ShieldCheck, Eye } from 'lucide-react'
+import { FileDown, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Loader2, Eye } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -228,10 +228,6 @@ export function InvoiceExportPage() {
 
   const ungeneratedCount = ungeneratedKeys.length
 
-  const hasFinalizedInvoices = useMemo(() => {
-    return records.some(r => r.status === 'finalized')
-  }, [records])
-
   // Calculate totals including tax
   const totals = useMemo(() => {
     let totalNet = 0
@@ -310,8 +306,7 @@ export function InvoiceExportPage() {
         if (match) filename = match[1]
       } else {
         if (exportFormat === 'pdf') filename += '.pdf'
-        else if (exportFormat === 'pdf-individual') filename += '.zip'
-        else filename += '-zugferd.zip'
+        else filename += '.zip'
       }
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
@@ -449,9 +444,14 @@ export function InvoiceExportPage() {
         </Card>
       )}
 
+      {/* Description */}
+      <p className="text-sm text-muted-foreground">
+        {t('invoices.export.description')}
+      </p>
+
       {/* Action Buttons */}
       <div className="flex gap-3 flex-wrap">
-        {/* Generate button */}
+        {/* Generate & Finalize button */}
         {ungeneratedCount > 0 && legalDataComplete && (
           <>
             {showConfirm ? (
@@ -466,7 +466,7 @@ export function InvoiceExportPage() {
                 </Button>
               </div>
             ) : (
-              <Button onClick={() => setShowConfirm(true)} disabled={selectedForGeneration.size === 0} data-testid="generate-invoices-button">
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setShowConfirm(true)} disabled={selectedForGeneration.size === 0} data-testid="generate-invoices-button">
                 <CheckCircle className="mr-2 h-4 w-4" />
                 {t('invoices.generateInvoices')} ({selectedForGeneration.size}/{ungeneratedCount})
               </Button>
@@ -475,9 +475,9 @@ export function InvoiceExportPage() {
         )}
 
         <Button
+          variant="outline"
           onClick={() => handleExport('pdf')}
           disabled={invoices.length === 0 || exportingFormat !== null}
-          variant={ungeneratedCount > 0 ? 'outline' : 'default'}
           data-testid="export-pdf-button"
         >
           <FileDown className="mr-2 h-4 w-4" />
@@ -491,16 +491,6 @@ export function InvoiceExportPage() {
         >
           <Files className="mr-2 h-4 w-4" />
           {exportingFormat === 'pdf-individual' ? t('invoices.export.exporting') : t('invoices.export.exportIndividualPdfs')}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => handleExport('zugferd')}
-          disabled={!hasFinalizedInvoices || exportingFormat !== null || !legalDataComplete}
-          title={!hasFinalizedInvoices ? t('invoices.export.zugferdNoFinalized') : t('invoices.export.zugferdTooltip')}
-          data-testid="export-zugferd-button"
-        >
-          <ShieldCheck className="mr-2 h-4 w-4" />
-          {exportingFormat === 'zugferd' ? t('invoices.export.exporting') : t('invoices.export.exportZugferd')}
         </Button>
       </div>
 

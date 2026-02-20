@@ -1025,25 +1025,25 @@ export function InvoiceList() {
         </div>
         <div className="flex gap-2">
           <HelpVideoButton />
-          {hasPermission('invoices', 'export') && (
-            <Button variant="outline" asChild>
-              <Link to="/invoices/export">
-                <FileDown className="w-4 h-4 mr-2" />
-                {t('invoices.exportButton')}
-              </Link>
-            </Button>
-          )}
           {canWrite && (
             <>
+              <Button variant="outline" onClick={() => setUploadOpen(true)}>
+                <Upload className="w-4 h-4 mr-2" />
+                {t('invoices.import.uploadButton')}
+              </Button>
               <Button variant="outline" onClick={() => setCsvUploadOpen(true)}>
                 <FileSpreadsheet className="w-4 h-4 mr-2" />
                 {t('invoices.import.importCsv')}
               </Button>
-              <Button onClick={() => setUploadOpen(true)}>
-                <Upload className="w-4 h-4 mr-2" />
-                {t('invoices.import.uploadButton')}
-              </Button>
             </>
+          )}
+          {hasPermission('invoices', 'export') && (
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white" asChild>
+              <Link to="/invoices/export">
+                <FileDown className="w-4 h-4 mr-2" />
+                {t('invoices.generateButton')}
+              </Link>
+            </Button>
           )}
         </div>
       </div>
