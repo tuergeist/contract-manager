@@ -107,6 +107,7 @@ const SYNC_HUBSPOT_CUSTOMERS = gql`
       error
       created
       updated
+      warnings
     }
   }
 `
@@ -118,6 +119,7 @@ const SYNC_HUBSPOT_PRODUCTS = gql`
       error
       created
       updated
+      warnings
     }
   }
 `
@@ -129,6 +131,7 @@ const SYNC_HUBSPOT_DEALS = gql`
       error
       created
       skipped
+      warnings
     }
   }
 `
@@ -410,10 +413,15 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
     try {
       const result = await syncCustomers()
       if (result.data?.syncHubspotCustomers?.success) {
-        const { created, updated } = result.data.syncHubspotCustomers
+        const { created, updated, warnings } = result.data.syncHubspotCustomers
+        let text = t('settings.hubspot.syncSuccess', { created, updated })
+        if (warnings?.length) {
+          text += `\n${t('settings.hubspot.syncWarnings')}: ${warnings[0]}`
+          if (warnings.length > 1) text += ` (+${warnings.length - 1} more)`
+        }
         setCustomerSyncMessage({
-          type: 'success',
-          text: t('settings.hubspot.syncSuccess', { created, updated })
+          type: warnings?.length ? 'error' : 'success',
+          text,
         })
         refetchSettings()
       } else {
@@ -432,10 +440,15 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
     try {
       const result = await syncProducts()
       if (result.data?.syncHubspotProducts?.success) {
-        const { created, updated } = result.data.syncHubspotProducts
+        const { created, updated, warnings } = result.data.syncHubspotProducts
+        let text = t('settings.hubspot.syncSuccess', { created, updated })
+        if (warnings?.length) {
+          text += `\n${t('settings.hubspot.syncWarnings')}: ${warnings[0]}`
+          if (warnings.length > 1) text += ` (+${warnings.length - 1} more)`
+        }
         setProductSyncMessage({
-          type: 'success',
-          text: t('settings.hubspot.syncSuccess', { created, updated })
+          type: warnings?.length ? 'error' : 'success',
+          text,
         })
         refetchSettings()
       } else {
@@ -454,10 +467,15 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
     try {
       const result = await syncDeals()
       if (result.data?.syncHubspotDeals?.success) {
-        const { created, skipped } = result.data.syncHubspotDeals
+        const { created, skipped, warnings } = result.data.syncHubspotDeals
+        let text = t('settings.hubspot.dealSyncSuccess', { created, skipped })
+        if (warnings?.length) {
+          text += `\n${t('settings.hubspot.syncWarnings')}: ${warnings[0]}`
+          if (warnings.length > 1) text += ` (+${warnings.length - 1} more)`
+        }
         setDealSyncMessage({
-          type: 'success',
-          text: t('settings.hubspot.dealSyncSuccess', { created, skipped })
+          type: warnings?.length ? 'error' : 'success',
+          text,
         })
         refetchSettings()
       } else {

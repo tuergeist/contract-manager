@@ -1066,6 +1066,7 @@
       "connectionFailed": "Verbindung fehlgeschlagen",
       "syncSuccess": "Synchronisierung abgeschlossen: {{created}} erstellt, {{updated}} aktualisiert",
       "syncFailed": "Synchronisierung fehlgeschlagen",
+      "syncWarnings": "Warnung",
       "customers": "Kunden (Companies)",
       "products": "Produkte",
       "deals": "Deals (Closed Won)",

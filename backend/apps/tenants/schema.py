@@ -191,6 +191,7 @@ class HubSpotSyncResult:
     error: str | None
     created: int
     updated: int
+    warnings: list[str] | None = None
 
 
 @strawberry.type
@@ -201,6 +202,7 @@ class HubSpotDealSyncResult:
     error: str | None
     created: int
     skipped: int
+    warnings: list[str] | None = None
 
 
 @strawberry.type
@@ -825,6 +827,7 @@ class TenantMutation:
             error=result.get("error"),
             created=result.get("created", 0),
             updated=result.get("updated", 0),
+            warnings=result.get("errors") or None,
         )
 
     @strawberry.mutation
@@ -844,6 +847,7 @@ class TenantMutation:
             error=result.get("error"),
             created=result.get("created", 0),
             updated=result.get("updated", 0),
+            warnings=result.get("errors") or None,
         )
 
     @strawberry.mutation
@@ -863,6 +867,7 @@ class TenantMutation:
             error=result.get("error"),
             created=result.get("created", 0),
             skipped=result.get("skipped", 0),
+            warnings=result.get("errors") or None,
         )
 
     @strawberry.mutation

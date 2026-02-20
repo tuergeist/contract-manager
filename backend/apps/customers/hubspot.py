@@ -44,6 +44,16 @@ class HubSpotService:
             "Content-Type": "application/json",
         }
 
+    @staticmethod
+    def _api_error_message(status_code: int, context: str = "") -> str:
+        """Return a user-friendly error message for HubSpot API errors."""
+        prefix = f"{context}: " if context else ""
+        if status_code == 401:
+            return f"{prefix}Invalid or expired API key (HTTP 401)"
+        if status_code == 403:
+            return f"{prefix}Insufficient API key permissions — check scopes in HubSpot (HTTP 403)"
+        return f"{prefix}API error: {status_code}"
+
     async def test_connection(self) -> dict[str, Any]:
         """Test the HubSpot API connection."""
         if not self.is_configured:
@@ -65,7 +75,7 @@ class HubSpotService:
                 else:
                     return {
                         "success": False,
-                        "error": f"API error: {response.status_code}",
+                        "error": self._api_error_message(response.status_code),
                     }
         except httpx.TimeoutException:
             return {"success": False, "error": "Connection timeout"}
@@ -96,7 +106,7 @@ class HubSpotService:
                 else:
                     return {
                         "success": False,
-                        "error": f"API error: {response.status_code}",
+                        "error": self._api_error_message(response.status_code),
                     }
         except httpx.TimeoutException:
             return {"success": False, "error": "Connection timeout"}
@@ -158,7 +168,7 @@ class HubSpotService:
                 if response.status_code != 200:
                     return {
                         "success": False,
-                        "error": f"API error: {response.status_code}",
+                        "error": self._api_error_message(response.status_code),
                         "properties": None,
                     }
 
@@ -228,7 +238,7 @@ class HubSpotService:
                 if response.status_code != 200:
                     return {
                         "success": False,
-                        "error": f"API error: {response.status_code}",
+                        "error": self._api_error_message(response.status_code),
                         "exists": False,
                     }
 
@@ -278,7 +288,7 @@ class HubSpotService:
                 if response.status_code != 200:
                     return {
                         "success": False,
-                        "error": f"API error: {response.status_code}",
+                        "error": self._api_error_message(response.status_code),
                         "labels": None,
                     }
 
@@ -369,7 +379,7 @@ class HubSpotService:
                     if response.status_code != 200:
                         return {
                             "success": False,
-                            "error": f"API error: {response.status_code}",
+                            "error": self._api_error_message(response.status_code),
                             "created": created,
                             "updated": updated,
                         }
@@ -595,11 +605,14 @@ class HubSpotService:
         )
 
         if response.status_code != 200:
+            msg = self._api_error_message(
+                response.status_code, "Billing contacts"
+            )
             logger.warning(
                 "Failed to fetch contact associations for company %s: %s",
                 customer.hubspot_id, response.status_code,
             )
-            return
+            raise HubSpotError(msg)
 
         data = response.json()
 
@@ -691,7 +704,7 @@ class HubSpotService:
                     if response.status_code != 200:
                         return {
                             "success": False,
-                            "error": f"API error: {response.status_code}",
+                            "error": self._api_error_message(response.status_code),
                             "created": created,
                             "updated": updated,
                         }
@@ -932,7 +945,7 @@ class HubSpotService:
                     if response.status_code != 200:
                         return {
                             "success": False,
-                            "error": f"API error: {response.status_code}",
+                            "error": self._api_error_message(response.status_code),
                             "created": created,
                             "skipped": skipped,
                         }

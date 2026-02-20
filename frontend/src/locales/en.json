@@ -1066,6 +1066,7 @@
       "connectionFailed": "Connection failed",
       "syncSuccess": "Sync completed: {{created}} created, {{updated}} updated",
       "syncFailed": "Sync failed",
+      "syncWarnings": "Warning",
       "customers": "Customers (Companies)",
       "products": "Products",
       "deals": "Deals (Closed Won)",
