@@ -48,20 +48,7 @@ function App() {
         <Route path="contracts/:id/edit" element={<ContractForm />} />
         <Route path="projects" element={<ProjectList />} />
         <Route path="forecasts" element={<ForecastsPage />} />
-        <Route path="settings" element={<SettingsLayout />} />
-        <Route path="settings/general" element={<SettingsLayout />} />
-        <Route path="settings/general/time-tracking" element={<SettingsLayout />} />
-        <Route path="settings/general/email" element={<SettingsLayout />} />
-        <Route path="settings/general/contracts" element={<SettingsLayout />} />
-        <Route path="settings/general/notifications" element={<SettingsLayout />} />
-        <Route path="settings/general/help-videos" element={<SettingsLayout />} />
-        <Route path="settings/team" element={<SettingsLayout />} />
-        <Route path="settings/team/roles" element={<SettingsLayout />} />
-        <Route path="settings/invoices" element={<SettingsLayout />} />
-        <Route path="settings/invoices/numbering" element={<SettingsLayout />} />
-        <Route path="settings/invoices/template" element={<SettingsLayout />} />
-        <Route path="settings/invoices/zugferd" element={<SettingsLayout />} />
-        <Route path="settings/invoices/email-template" element={<SettingsLayout />} />
+        <Route path="settings/*" element={<SettingsLayout />} />
         <Route path="contracts/import" element={<ContractImport />} />
         <Route path="invoices/export" element={<InvoiceExportPage />} />
         <Route path="invoices/:id" element={<InvoiceDetail />} />

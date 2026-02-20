@@ -113,7 +113,7 @@ export function EmailTemplateSettings({ showHeader = true }: EmailTemplateSettin
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="space-y-6">
       {showHeader && (
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">{t('settings.emailTemplate.title')}</h1>

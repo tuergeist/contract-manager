@@ -923,8 +923,15 @@
     "tabs": {
       "user": "Benutzer",
       "general": "Allgemein",
+      "integrations": "Integrationen",
       "team": "Team",
       "invoices": "Rechnungen"
+    },
+    "integrationTabs": {
+      "hubspot": "HubSpot",
+      "timeTracking": "Zeiterfassung",
+      "email": "E-Mail (M365)",
+      "notifications": "Benachrichtigungen"
     },
     "generalTabs": {
       "hubspot": "HubSpot",

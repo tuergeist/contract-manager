@@ -6,6 +6,7 @@ import { UserSettings } from './UserSettings'
 import { TeamSettingsTabs } from './TeamSettingsTabs'
 import { InvoiceSettingsTabs } from './InvoiceSettingsTabs'
 import { GeneralSettingsTabs } from './GeneralSettingsTabs'
+import { IntegrationSettingsTabs } from './IntegrationSettingsTabs'
 
 export function SettingsLayout() {
   const { t } = useTranslation()
@@ -17,6 +18,7 @@ export function SettingsLayout() {
   const getActiveTab = () => {
     if (location.pathname.startsWith('/settings/team')) return 'team'
     if (location.pathname.startsWith('/settings/invoices')) return 'invoices'
+    if (location.pathname.startsWith('/settings/integrations')) return 'integrations'
     if (location.pathname.startsWith('/settings/general')) return 'general'
     return 'user'
   }
@@ -27,6 +29,9 @@ export function SettingsLayout() {
     switch (value) {
       case 'general':
         navigate('/settings/general')
+        break
+      case 'integrations':
+        navigate('/settings/integrations')
         break
       case 'team':
         navigate('/settings/team')
@@ -50,6 +55,7 @@ export function SettingsLayout() {
         <TabsList className="mb-6">
           <TabsTrigger value="user">{t('settings.tabs.user')}</TabsTrigger>
           <TabsTrigger value="general">{t('settings.tabs.general')}</TabsTrigger>
+          <TabsTrigger value="integrations">{t('settings.tabs.integrations')}</TabsTrigger>
           {canViewUsers && (
             <TabsTrigger value="team">{t('settings.tabs.team')}</TabsTrigger>
           )}
@@ -64,6 +70,10 @@ export function SettingsLayout() {
 
         <TabsContent value="general">
           <GeneralSettingsTabs />
+        </TabsContent>
+
+        <TabsContent value="integrations">
+          <IntegrationSettingsTabs />
         </TabsContent>
 
         {canViewUsers && (

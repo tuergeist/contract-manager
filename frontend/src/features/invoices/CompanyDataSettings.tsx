@@ -217,7 +217,7 @@ export function CompanyDataSettings({ showHeader = true }: CompanyDataSettingsPr
   const labelClass = "block text-sm font-medium text-gray-700 mb-1"
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="space-y-6">
       {showHeader && (
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-2">

@@ -283,7 +283,7 @@ export function TemplateSettings({ showHeader = true }: TemplateSettingsProps) {
   const template = data?.invoiceTemplate
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="space-y-6">
       {showHeader && (
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-2">
