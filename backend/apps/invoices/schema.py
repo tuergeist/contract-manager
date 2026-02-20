@@ -2256,7 +2256,7 @@ class InvoiceMutation:
             return DeleteResult(success=False, error="M365 email sending is not configured")
 
         from apps.invoices.tasks import send_invoice_email_task
-        send_invoice_email_task.delay(record.id)
+        send_invoice_email_task.delay(record.id, user_id=user.id)
         return DeleteResult(success=True)
 
     @strawberry.mutation
@@ -2293,7 +2293,7 @@ class InvoiceMutation:
                     error="No billing email addresses",
                 ))
                 continue
-            send_invoice_email_task.delay(record.id)
+            send_invoice_email_task.delay(record.id, user_id=user.id)
             sent += 1
 
         return BulkSendResult(success=True, sent=sent, errors=errors)

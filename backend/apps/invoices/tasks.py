@@ -175,7 +175,7 @@ def _get_email_template(tenant, lang: str) -> dict:
 
 
 @shared_task(bind=True, acks_late=True)
-def send_invoice_email_task(self, record_id: int) -> bool:
+def send_invoice_email_task(self, record_id: int, user_id: int | None = None) -> bool:
     """Send an invoice email via M365 Graph API.
 
     No automatic retry to avoid duplicate sends.
@@ -259,7 +259,11 @@ def send_invoice_email_task(self, record_id: int) -> bool:
         record.save(update_fields=["email_sent_at", "email_sent_to", "email_message_id"])
 
         from apps.invoices.audit import log_invoice_email_sent
-        log_invoice_email_sent(record, recipients)
+        from apps.tenants.models import User
+        triggered_by = None
+        if user_id:
+            triggered_by = User.objects.filter(id=user_id).first()
+        log_invoice_email_sent(record, recipients, user=triggered_by)
 
         logger.info("Invoice email sent for record %s to %s", record_id, recipients)
         return True
