@@ -33,7 +33,7 @@ The system SHALL allow users to select a specific month and year for invoice gen
 
 ### Requirement: User can preview invoices before export
 
-The system SHALL display a preview table of all invoices before exporting.
+The system SHALL display a preview table of all invoices before exporting. Each invoice row SHALL include a button to open an HTML preview of the rendered invoice.
 
 #### Scenario: Preview shows invoice summary
 - **WHEN** invoices are loaded for selected month
@@ -52,6 +52,11 @@ The system SHALL display a preview table of all invoices before exporting.
 - **WHEN** selected month has no invoices
 - **THEN** system displays "No invoices for this month" message
 - **AND** export buttons are disabled
+
+#### Scenario: Preview button opens rendered invoice
+- **WHEN** user clicks the preview icon on an invoice row
+- **THEN** a dialog opens showing the full rendered HTML invoice
+- **AND** the row click (expand/collapse) is not triggered
 
 ### Requirement: User can export invoices as PDF
 
