@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.4.0",
+    "date": "2026-02-20",
+    "title": "Bulk Send Invoices, Dashboard Discounts & Notifications",
+    "description": "Send all unsent invoices in one click, separate discount tracking in forecasts, and email notifications for background sync tasks.",
+    "type": "feature",
+    "details": [
+      "Add 'Send N unsent' button on /invoices to bulk-send all finalized unsent invoices",
+      "Show per-invoice errors (e.g. missing billing email) in a result banner after bulk send",
+      "Separate discounts from one-off items in dashboard forecast KPIs",
+      "Email notifications for HubSpot sync and time tracking sync tasks",
+      "Deduplicate CI runs when a tagged commit is also pushed to main"
+    ]
+  },
+  {
     "version": "2.3.3",
     "date": "2026-02-20",
     "title": "CI Fix & Dependency Pinning",
