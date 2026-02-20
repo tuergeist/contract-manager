@@ -256,6 +256,114 @@ class TestHubspotNewContractNotification:
         assert mock_send.call_args[1]["to"] == [admin_user.email]
 
 
+class TestHubspotSyncCompletedEmail:
+    def test_subject_and_body(self):
+        from apps.core.notifications import _build_hubspot_sync_completed_email
+
+        results = {
+            "customers": {"created": 16, "updated": 1349},
+            "products": {"created": 0, "updated": 42},
+            "deals": {"created": 2, "skipped": 5},
+        }
+        subject, body = _build_hubspot_sync_completed_email(results=results)
+        assert subject == "HubSpot Sync Summary"
+        assert "16 created" in body
+        assert "1349 updated" in body
+        assert "42 updated" in body
+        assert "2 created" in body
+        assert "5 skipped" in body
+
+    def test_includes_errors(self):
+        from apps.core.notifications import _build_hubspot_sync_completed_email
+
+        results = {"customers": {"created": 1, "updated": 0}}
+        errors = {"products": "API rate limit exceeded"}
+        subject, body = _build_hubspot_sync_completed_email(results=results, errors=errors)
+        assert "Products sync failed" in body
+        assert "API rate limit exceeded" in body
+
+    def test_no_errors(self):
+        from apps.core.notifications import _build_hubspot_sync_completed_email
+
+        results = {"customers": {"created": 0, "updated": 10}}
+        subject, body = _build_hubspot_sync_completed_email(results=results)
+        assert "failed" not in body
+
+
+class TestTimeTrackingSyncCompletedEmail:
+    def test_subject_and_body(self):
+        from apps.core.notifications import _build_time_tracking_sync_completed_email
+
+        subject, body = _build_time_tracking_sync_completed_email(synced=12, total=15, failed=3)
+        assert subject == "Time Tracking Sync Summary"
+        assert "12/15" in body
+        assert "3 mapping(s) failed" in body
+
+    def test_no_failures(self):
+        from apps.core.notifications import _build_time_tracking_sync_completed_email
+
+        subject, body = _build_time_tracking_sync_completed_email(synced=5, total=5, failed=0)
+        assert "5/5" in body
+        assert "failed" not in body
+
+
+class TestHubspotSyncTaskNotification:
+    @patch("apps.core.notifications.send_notification")
+    @patch("apps.customers.hubspot.HubSpotService")
+    def test_notifies_admins_after_sync(self, mock_service_cls, mock_send, admin_user, smtp_tenant):
+        mock_service = mock_service_cls.return_value
+        mock_service.sync_companies.return_value = {"created": 5, "updated": 10}
+        mock_service.sync_products.return_value = {"created": 0, "updated": 3}
+        mock_service.sync_deals.return_value = {"created": 1, "skipped": 2}
+
+        smtp_tenant.hubspot_config = {"api_key": "test", "auto_sync_enabled": True}
+        smtp_tenant.save()
+
+        from apps.customers.tasks import _sync_tenant_hubspot
+        _sync_tenant_hubspot(smtp_tenant)
+
+        assert mock_send.call_count == 1
+        call_kwargs = mock_send.call_args[1]
+        assert "HubSpot Sync Summary" in call_kwargs["subject"]
+        assert "5 created" in call_kwargs["body_html"]
+
+
+class TestTimeTrackingSyncTaskNotification:
+    @patch("apps.core.notifications.send_notification")
+    @patch("apps.contracts.services.time_tracking.sync_mapping_data")
+    def test_notifies_admins_grouped_by_tenant(self, mock_sync, mock_send, admin_user, smtp_tenant):
+        from datetime import date
+        from apps.contracts.models import Contract, TimeTrackingProjectMapping
+        from apps.customers.models import Customer
+
+        customer = Customer.objects.create(tenant=smtp_tenant, name="Test Customer")
+        contract = Contract.objects.create(
+            tenant=smtp_tenant,
+            customer=customer,
+            name="Test Contract",
+            status="active",
+            start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+        )
+        mapping = TimeTrackingProjectMapping.objects.create(
+            tenant=smtp_tenant,
+            contract=contract,
+            external_project_id="123",
+            external_project_name="Test Project",
+        )
+        mock_sync.return_value = True
+
+        from apps.contracts.tasks import refresh_all_time_tracking_data
+
+        with patch("apps.contracts.tasks.time.sleep"):
+            refresh_all_time_tracking_data()
+
+        assert mock_send.call_count == 1
+        call_kwargs = mock_send.call_args[1]
+        assert "Time Tracking Sync Summary" in call_kwargs["subject"]
+        assert "1/1" in call_kwargs["body_html"]
+
+
 class TestNotificationPreferencesQuery:
     def test_defaults_all_true(self, admin_user):
         info = Mock()
@@ -265,9 +373,11 @@ class TestNotificationPreferencesQuery:
         result = query.notification_preferences(info)
         assert result.todo_assigned is True
         assert result.hubspot_new_contract is True
+        assert result.hubspot_sync_completed is True
+        assert result.time_tracking_sync_completed is True
 
     def test_reflects_opt_outs(self, admin_user):
-        admin_user.notification_preferences = {"todo_assigned": False}
+        admin_user.notification_preferences = {"todo_assigned": False, "hubspot_sync_completed": False}
         admin_user.save()
 
         info = Mock()
@@ -277,6 +387,8 @@ class TestNotificationPreferencesQuery:
         result = query.notification_preferences(info)
         assert result.todo_assigned is False
         assert result.hubspot_new_contract is True
+        assert result.hubspot_sync_completed is False
+        assert result.time_tracking_sync_completed is True
 
 
 class TestUpdateNotificationPreferencesMutation:

@@ -69,7 +69,8 @@
       "currentYearForecastExplanation": "Projected total revenue for the current calendar year (January 1 - December 31).",
       "nextYearForecast": "Next Year Forecast",
       "nextYearForecastExplanation": "Projected total revenue for the next calendar year. Excludes contracts ending before next year.",
-      "inclOneOff": "incl. {{amount}} one-off"
+      "inclOneOff": "incl. {{amount}} one-off",
+      "inclDiscounts": "incl. {{amount}} discounts"
     }
   },
   "customers": {
@@ -509,6 +510,9 @@
     "sendEmailConfirm": "Send invoice {{invoice}} by email to the customer's billing addresses?",
     "sendEmailRecipients": "billing email addresses",
     "sendEmailFailed": "Failed to send email",
+    "sendAllUnsent": "Send {{count}} unsent",
+    "sendAllUnsentConfirm": "Send all {{count}} unsent invoices by email?",
+    "sendAllResult": "{{sent}} invoices queued for sending",
     "legalDataIncomplete": "Company legal data is incomplete. Please configure it in Settings.",
     "goToSettings": "Go to Settings",
     "companyData": {
@@ -957,7 +961,11 @@
       "todoAssigned": "Todo assigned to me",
       "todoAssignedDescription": "Get notified when someone assigns a todo to you.",
       "hubspotNewContract": "New contract from HubSpot",
-      "hubspotNewContractDescription": "Get notified when a new contract arrives via HubSpot deal sync."
+      "hubspotNewContractDescription": "Get notified when a new contract arrives via HubSpot deal sync.",
+      "hubspotSyncCompleted": "HubSpot sync summary",
+      "hubspotSyncCompletedDescription": "Get a summary email after each automatic HubSpot sync.",
+      "timeTrackingSyncCompleted": "Time tracking sync summary",
+      "timeTrackingSyncCompletedDescription": "Get a summary email after each automatic time tracking sync."
     },
     "team": {
       "users": "Users",

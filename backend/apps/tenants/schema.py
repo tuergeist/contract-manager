@@ -328,6 +328,8 @@ class NotificationPreferencesType:
     """Per-user notification subscription preferences."""
     todo_assigned: bool
     hubspot_new_contract: bool
+    hubspot_sync_completed: bool
+    time_tracking_sync_completed: bool
 
 
 @strawberry.type
@@ -656,6 +658,8 @@ class TenantQuery:
         return NotificationPreferencesType(
             todo_assigned=prefs.get("todo_assigned", True) is not False,
             hubspot_new_contract=prefs.get("hubspot_new_contract", True) is not False,
+            hubspot_sync_completed=prefs.get("hubspot_sync_completed", True) is not False,
+            time_tracking_sync_completed=prefs.get("time_tracking_sync_completed", True) is not False,
         )
 
     @strawberry.field
@@ -1629,6 +1633,8 @@ class TenantMutation:
         info: Info[Context, None],
         todo_assigned: bool | None = None,
         hubspot_new_contract: bool | None = None,
+        hubspot_sync_completed: bool | None = None,
+        time_tracking_sync_completed: bool | None = None,
     ) -> OperationResult:
         """Update the current user's notification preferences."""
         user = get_current_user(info)
@@ -1638,6 +1644,10 @@ class TenantMutation:
             prefs["todo_assigned"] = todo_assigned
         if hubspot_new_contract is not None:
             prefs["hubspot_new_contract"] = hubspot_new_contract
+        if hubspot_sync_completed is not None:
+            prefs["hubspot_sync_completed"] = hubspot_sync_completed
+        if time_tracking_sync_completed is not None:
+            prefs["time_tracking_sync_completed"] = time_tracking_sync_completed
 
         user.notification_preferences = prefs
         user.save(update_fields=["notification_preferences"])

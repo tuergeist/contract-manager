@@ -8,13 +8,15 @@ const NOTIFICATION_PREFERENCES = gql`
     notificationPreferences {
       todoAssigned
       hubspotNewContract
+      hubspotSyncCompleted
+      timeTrackingSyncCompleted
     }
   }
 `
 
 const UPDATE_NOTIFICATION_PREFERENCES = gql`
-  mutation UpdateNotificationPreferences($todoAssigned: Boolean, $hubspotNewContract: Boolean) {
-    updateNotificationPreferences(todoAssigned: $todoAssigned, hubspotNewContract: $hubspotNewContract) {
+  mutation UpdateNotificationPreferences($todoAssigned: Boolean, $hubspotNewContract: Boolean, $hubspotSyncCompleted: Boolean, $timeTrackingSyncCompleted: Boolean) {
+    updateNotificationPreferences(todoAssigned: $todoAssigned, hubspotNewContract: $hubspotNewContract, hubspotSyncCompleted: $hubspotSyncCompleted, timeTrackingSyncCompleted: $timeTrackingSyncCompleted) {
       success
       error
     }
@@ -74,6 +76,28 @@ export function NotificationPreferences() {
           <Switch
             checked={prefs?.hubspotNewContract ?? true}
             onCheckedChange={() => togglePreference('hubspotNewContract', prefs?.hubspotNewContract ?? true)}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">{t('settings.notificationPreferences.hubspotSyncCompleted')}</p>
+            <p className="text-sm text-gray-500">{t('settings.notificationPreferences.hubspotSyncCompletedDescription')}</p>
+          </div>
+          <Switch
+            checked={prefs?.hubspotSyncCompleted ?? true}
+            onCheckedChange={() => togglePreference('hubspotSyncCompleted', prefs?.hubspotSyncCompleted ?? true)}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">{t('settings.notificationPreferences.timeTrackingSyncCompleted')}</p>
+            <p className="text-sm text-gray-500">{t('settings.notificationPreferences.timeTrackingSyncCompletedDescription')}</p>
+          </div>
+          <Switch
+            checked={prefs?.timeTrackingSyncCompleted ?? true}
+            onCheckedChange={() => togglePreference('timeTrackingSyncCompleted', prefs?.timeTrackingSyncCompleted ?? true)}
           />
         </div>
       </div>

@@ -42,6 +42,48 @@ def _build_hubspot_new_contract_email(*, contract_name, customer_name, **kwargs)
     return subject, body_html
 
 
+def _build_hubspot_sync_completed_email(*, results, errors=None, **kwargs):
+    """Build subject and body for HubSpot sync completion notification."""
+    errors = errors or {}
+    subject = "HubSpot Sync Summary"
+
+    lines = ["<p><strong>HubSpot Sync Summary</strong></p>", "<ul>"]
+    for sync_type, counts in results.items():
+        label = sync_type.replace("_", " ").title()
+        parts = [f"{v} {k}" for k, v in counts.items()]
+        lines.append(f"<li>{label}: {', '.join(parts)}</li>")
+    lines.append("</ul>")
+
+    if errors:
+        for sync_type, error_msg in errors.items():
+            label = sync_type.replace("_", " ").title()
+            lines.append(
+                f"<p style='color: #b45309;'>&#9888; {label} sync failed: {error_msg}</p>"
+            )
+
+    body_html = "\n".join(lines)
+    return subject, body_html
+
+
+def _build_time_tracking_sync_completed_email(
+    *, synced, total, failed, **kwargs
+):
+    """Build subject and body for time tracking sync completion notification."""
+    subject = "Time Tracking Sync Summary"
+
+    lines = [
+        "<p><strong>Time Tracking Sync Summary</strong></p>",
+        f"<p>Mappings refreshed: {synced}/{total}</p>",
+    ]
+    if failed:
+        lines.append(
+            f"<p style='color: #b45309;'>&#9888; {failed} mapping(s) failed to sync</p>"
+        )
+
+    body_html = "\n".join(lines)
+    return subject, body_html
+
+
 NOTIFICATION_TYPES = {
     "todo_assigned": {
         "description": "Todo assigned to me",
@@ -50,6 +92,14 @@ NOTIFICATION_TYPES = {
     "hubspot_new_contract": {
         "description": "New contract from HubSpot",
         "build_email": _build_hubspot_new_contract_email,
+    },
+    "hubspot_sync_completed": {
+        "description": "HubSpot sync summary",
+        "build_email": _build_hubspot_sync_completed_email,
+    },
+    "time_tracking_sync_completed": {
+        "description": "Time tracking sync summary",
+        "build_email": _build_time_tracking_sync_completed_email,
     },
 }
 

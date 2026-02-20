@@ -69,7 +69,8 @@
       "currentYearForecastExplanation": "Prognostizierter Gesamtumsatz für das laufende Kalenderjahr (1. Januar - 31. Dezember).",
       "nextYearForecast": "Prognose nächstes Jahr",
       "nextYearForecastExplanation": "Prognostizierter Gesamtumsatz für das nächste Kalenderjahr. Ohne Verträge, die vor dem nächsten Jahr enden.",
-      "inclOneOff": "inkl. {{amount}} einmalig"
+      "inclOneOff": "inkl. {{amount}} einmalig",
+      "inclDiscounts": "inkl. {{amount}} Rabatte"
     }
   },
   "customers": {
@@ -509,6 +510,9 @@
     "sendEmailConfirm": "Rechnung {{invoice}} per E-Mail an die Rechnungsadressen des Kunden senden?",
     "sendEmailRecipients": "Rechnungs-E-Mail-Adressen",
     "sendEmailFailed": "E-Mail-Versand fehlgeschlagen",
+    "sendAllUnsent": "{{count}} unversendete senden",
+    "sendAllUnsentConfirm": "Alle {{count}} unversendeten Rechnungen per E-Mail senden?",
+    "sendAllResult": "{{sent}} Rechnungen zum Versand eingereiht",
     "legalDataIncomplete": "Die Firmenstammdaten sind unvollständig. Bitte in den Einstellungen konfigurieren.",
     "goToSettings": "Zu den Einstellungen",
     "companyData": {
@@ -957,7 +961,11 @@
       "todoAssigned": "Aufgabe zugewiesen",
       "todoAssignedDescription": "Benachrichtigung, wenn Ihnen jemand eine Aufgabe zuweist.",
       "hubspotNewContract": "Neuer Vertrag aus HubSpot",
-      "hubspotNewContractDescription": "Benachrichtigung, wenn ein neuer Vertrag über HubSpot-Deal-Sync eintrifft."
+      "hubspotNewContractDescription": "Benachrichtigung, wenn ein neuer Vertrag über HubSpot-Deal-Sync eintrifft.",
+      "hubspotSyncCompleted": "HubSpot-Sync Zusammenfassung",
+      "hubspotSyncCompletedDescription": "Zusammenfassung per E-Mail nach jedem automatischen HubSpot-Sync.",
+      "timeTrackingSyncCompleted": "Zeiterfassung-Sync Zusammenfassung",
+      "timeTrackingSyncCompletedDescription": "Zusammenfassung per E-Mail nach jedem automatischen Zeiterfassungs-Sync."
     },
     "team": {
       "users": "Benutzer",
