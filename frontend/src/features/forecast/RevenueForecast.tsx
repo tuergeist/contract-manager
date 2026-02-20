@@ -14,8 +14,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 const REVENUE_FORECAST_QUERY = gql`
-  query RevenueForecast($months: Int, $quarters: Int, $view: String, $proRata: Boolean) {
-    revenueForecast(months: $months, quarters: $quarters, view: $view, proRata: $proRata) {
+  query RevenueForecast($months: Int, $quarters: Int, $view: String, $proRata: Boolean, $excludeOneOff: Boolean) {
+    revenueForecast(months: $months, quarters: $quarters, view: $view, proRata: $proRata, excludeOneOff: $excludeOneOff) {
       monthColumns
       monthlyTotals {
         month
@@ -39,8 +39,8 @@ const REVENUE_FORECAST_QUERY = gql`
 `
 
 const RECOGNITION_FORECAST_QUERY = gql`
-  query RecognitionForecast($months: Int, $quarters: Int, $view: String, $proRata: Boolean) {
-    recognitionForecast(months: $months, quarters: $quarters, view: $view, proRata: $proRata) {
+  query RecognitionForecast($months: Int, $quarters: Int, $view: String, $proRata: Boolean, $excludeOneOff: Boolean) {
+    recognitionForecast(months: $months, quarters: $quarters, view: $view, proRata: $proRata, excludeOneOff: $excludeOneOff) {
       monthColumns
       monthlyTotals {
         month
@@ -94,8 +94,9 @@ export function RevenueForecast() {
   const { t, i18n } = useTranslation()
   const [forecastType, setForecastType] = useState<ForecastType>('billing')
   const [view, setView] = useState<ViewType>('monthly')
-  const [periods, setPeriods] = useState('13')
+  const [periods, setPeriods] = useState('12')
   const [proRata, setProRata] = useState(false)
+  const [excludeOneOff, setExcludeOneOff] = useState(false)
   const [sortField, setSortField] = useState<SortField>(null)
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
 
@@ -105,7 +106,7 @@ export function RevenueForecast() {
     if (newView === 'quarterly') {
       setPeriods('6')
     } else {
-      setPeriods('13')
+      setPeriods('12')
     }
   }
 
@@ -117,6 +118,7 @@ export function RevenueForecast() {
         quarters: view === 'quarterly' ? parseInt(periods) : null,
         view,
         proRata,
+        excludeOneOff,
       },
     }
   )
@@ -305,6 +307,17 @@ export function RevenueForecast() {
             />
             <label htmlFor="proRata" className="text-sm font-medium cursor-pointer">
               {t('forecast.proRata')}
+            </label>
+          </div>
+          {/* ARR Only Toggle */}
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="arrOnly"
+              checked={excludeOneOff}
+              onCheckedChange={(checked) => setExcludeOneOff(checked === true)}
+            />
+            <label htmlFor="arrOnly" className="text-sm font-medium cursor-pointer">
+              {t('forecast.arrOnly')}
             </label>
           </div>
           <HelpVideoButton />

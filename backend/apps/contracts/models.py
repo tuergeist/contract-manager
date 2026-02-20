@@ -308,7 +308,7 @@ class Contract(TenantModel):
 
         return max(1, months)  # At least 1 month
 
-    def get_billing_schedule(self, from_date=None, to_date=None, include_history=False):
+    def get_billing_schedule(self, from_date=None, to_date=None, include_history=False, items=None):
         """
         Calculate the billing schedule for all contract items.
 
@@ -341,8 +341,9 @@ class Contract(TenantModel):
         interval_months = self.get_interval_months()
         events = defaultdict(lambda: {"items": [], "total": Decimal("0")})
 
-        # Get all active items with prefetched price_periods to avoid N+1 queries
-        items = self.items.select_related("product", "depends_on").prefetch_related("price_periods").all()
+        # Use pre-loaded items if provided, otherwise query from DB
+        if items is None:
+            items = self.items.select_related("product", "depends_on").prefetch_related("price_periods").all()
 
         for item in items:
             # Cache the prefetched price_periods as a list for in-memory lookups

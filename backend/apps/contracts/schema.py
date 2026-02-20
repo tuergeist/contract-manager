@@ -992,8 +992,8 @@ def calculate_dashboard_kpis(tenant) -> dict:
         include_next_year = not contract_end or contract_end >= next_year_start
         schedule_end = next_year_end if include_next_year else current_year_end
 
-        # Split items by type for one-off tracking
-        one_off_items = [item for item in items if item.is_one_off]
+        # Track one-off item IDs for splitting one-off vs recurring
+        one_off_item_ids = {item.id for item in items if item.is_one_off}
 
         full_schedule = contract.get_recognition_schedule(
             from_date=current_year_start,
@@ -1018,28 +1018,20 @@ def calculate_dashboard_kpis(tenant) -> dict:
             if include_next_year and event_date >= next_year_start:
                 next_year_forecast += event_total
 
-        # One-off contributions to forecasts (split positive one-offs from discounts)
-        if one_off_items:
-            one_off_schedule = contract.get_recognition_schedule(
-                from_date=current_year_start,
-                to_date=schedule_end,
-                include_history=True,
-                items=one_off_items,
-            )
-            for event in one_off_schedule:
-                event_date = event["date"]
-                for ei in event["items"]:
-                    amount = ei["amount"]
-                    if event_date <= current_year_end:
-                        if amount >= 0:
-                            current_year_one_off += amount
-                        else:
-                            current_year_discounts += amount
-                    if include_next_year and event_date >= next_year_start:
-                        if amount >= 0:
-                            next_year_one_off += amount
-                        else:
-                            next_year_discounts += amount
+            # Split per-item amounts into one-off and discounts
+            for ei in event["items"]:
+                amount = ei["amount"]
+                is_one_off = ei["item_id"] in one_off_item_ids
+                if event_date <= current_year_end:
+                    if amount >= 0 and is_one_off:
+                        current_year_one_off += amount
+                    elif amount < 0:
+                        current_year_discounts += amount
+                if include_next_year and event_date >= next_year_start:
+                    if amount >= 0 and is_one_off:
+                        next_year_one_off += amount
+                    elif amount < 0:
+                        next_year_discounts += amount
 
     return {
         "total_active_contracts": total_active_contracts,
@@ -1494,6 +1486,7 @@ class ContractQuery:
         quarters: int | None = None,
         view: str = "monthly",
         pro_rata: bool = False,
+        exclude_one_off: bool = False,
     ) -> RevenueForecastResult:
         """
         Calculate revenue forecast for all active contracts.
@@ -1589,10 +1582,23 @@ class ContractQuery:
         }
 
         for contract in contracts:
+            # Optionally filter out one-off items for ARR-only view
+            items_arg = None
+            if exclude_one_off:
+                items = list(
+                    contract.items.select_related("product", "depends_on")
+                    .prefetch_related("price_periods")
+                    .filter(is_one_off=False)
+                )
+                if not items:
+                    continue
+                items_arg = items
+
             schedule = contract.get_billing_schedule(
                 from_date=from_date,
                 to_date=to_date,
                 include_history=False,
+                items=items_arg,
             )
 
             # Group by period
@@ -1685,6 +1691,7 @@ class ContractQuery:
         quarters: int | None = None,
         view: str = "monthly",
         pro_rata: bool = False,
+        exclude_one_off: bool = False,
     ) -> RevenueForecastResult:
         """
         Calculate recognition forecast for all active contracts.
@@ -1783,11 +1790,24 @@ class ContractQuery:
         }
 
         for contract in contracts:
+            # Optionally filter out one-off items for ARR-only view
+            items_arg = None
+            if exclude_one_off:
+                items = list(
+                    contract.items.select_related("product", "depends_on")
+                    .prefetch_related("price_periods")
+                    .filter(is_one_off=False)
+                )
+                if not items:
+                    continue
+                items_arg = items
+
             # Use get_recognition_schedule instead of get_billing_schedule
             schedule = contract.get_recognition_schedule(
                 from_date=from_date,
                 to_date=to_date,
                 include_history=False,
+                items=items_arg,
             )
 
             # Group by period
