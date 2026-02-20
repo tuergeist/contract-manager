@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
 import {
@@ -266,6 +266,7 @@ function formatCurrency(amount: string | number, locale: string, currency = 'EUR
 
 export function InvoiceDetail() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { t, i18n } = useTranslation()
   const [showVoidDialog, setShowVoidDialog] = useState(false)
   const [voidReason, setVoidReason] = useState('')
@@ -363,10 +364,10 @@ export function InvoiceDetail() {
   if (error || !record) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8">
-        <Link to="/invoices/export" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <button onClick={() => navigate(-1)} className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
           {t('common.back')}
-        </Link>
+        </button>
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             {t('invoiceDetail.notFound')}
@@ -413,13 +414,13 @@ export function InvoiceDetail() {
 
       {/* Header */}
       <div className="mb-6">
-        <Link
-          to="/invoices/export"
+        <button
+          onClick={() => navigate(-1)}
           className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
           {t('common.back')}
-        </Link>
+        </button>
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold">{record.invoiceNumber}</h1>
