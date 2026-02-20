@@ -1,5 +1,23 @@
 [
   {
+    "version": "2.5.0",
+    "date": "2026-02-20",
+    "title": "Settings Reorganization, Audit Improvements & Bug Fixes",
+    "description": "Dedicated Integrations settings tab, invoice audit logging with user tracking, and several UX fixes across contracts, todos, forecasts, and banking.",
+    "type": "feature",
+    "details": [
+      "New Integrations settings tab for HubSpot, Time Tracking, Email (M365), and Notifications",
+      "General settings simplified to Contracts and Help Videos",
+      "Invoice lifecycle audit logging (created, emailed, voided, PDF generated)",
+      "Track user identity in invoice audit entries from background tasks",
+      "Full-width layout for all invoice settings tabs",
+      "Fix counterparty link-to-customer modal search and display",
+      "Fix discount KPIs to include recurring discounts and add ARR-only forecast option",
+      "Improve todo UX with shared modal, delete permission, and completion tracking",
+      "Fix contract permissions and add ended-to-draft status transition"
+    ]
+  },
+  {
     "version": "2.4.0",
     "date": "2026-02-20",
     "title": "Bulk Send Invoices, Dashboard Discounts & Notifications",
