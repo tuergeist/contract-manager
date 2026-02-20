@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.3.3",
+    "date": "2026-02-20",
+    "title": "CI Fix & Dependency Pinning",
+    "description": "Fix CI build failure caused by unpinned Strawberry upgrade and pin all backend dependencies.",
+    "type": "bugfix",
+    "details": [
+      "Fix strawberry.union deprecation breaking CI tests",
+      "Pin all backend dependencies to compatible release versions to prevent unexpected breakage"
+    ]
+  },
+  {
     "version": "2.3.2",
     "date": "2026-02-20",
     "title": "Invoice UI Improvements",
