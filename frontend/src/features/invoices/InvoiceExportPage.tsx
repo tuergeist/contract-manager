@@ -164,6 +164,11 @@ function StatusBadge({ status }: { status: string }) {
   }
 }
 
+// Unique key for invoice previews (a contract can have multiple billing events per month)
+function invoiceKey(inv: { contractId: number; billingDate: string }): string {
+  return `${inv.contractId}-${inv.billingDate}`
+}
+
 export function InvoiceExportPage() {
   const { t, i18n } = useTranslation()
   const locale = i18n.language === 'de' ? de : enUS
@@ -171,8 +176,8 @@ export function InvoiceExportPage() {
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
-  const [expandedInvoices, setExpandedInvoices] = useState<Set<number>>(new Set())
-  const [selectedForGeneration, setSelectedForGeneration] = useState<Set<number>>(new Set())
+  const [expandedInvoices, setExpandedInvoices] = useState<Set<string>>(new Set())
+  const [selectedForGeneration, setSelectedForGeneration] = useState<Set<string>>(new Set())
   const [exportingFormat, setExportingFormat] = useState<string | null>(null)
   const [showConfirm, setShowConfirm] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -198,26 +203,30 @@ export function InvoiceExportPage() {
   const records = recordsData?.invoiceRecordsForMonth ?? []
   const legalDataComplete = legalData?.checkLegalDataComplete?.isComplete ?? false
 
-  // Build a map of contractId -> record for quick lookup
-  const recordByContract = useMemo(() => {
-    const map = new Map<number, InvoiceRecord>()
+  // Build a map of invoiceKey -> record for quick lookup
+  const recordByKey = useMemo(() => {
+    const map = new Map<string, InvoiceRecord>()
     for (const r of records) {
-      if (r.contractId) map.set(r.contractId, r)
+      if (r.contractId && r.billingDate) {
+        map.set(`${r.contractId}-${r.billingDate}`, r)
+      }
     }
     return map
   }, [records])
 
-  // Ungenerated invoice contract IDs
-  const ungeneratedContractIds = useMemo(() => {
-    return invoices.filter(inv => !recordByContract.has(inv.contractId)).map(inv => inv.contractId)
-  }, [invoices, recordByContract])
+  // Ungenerated invoice keys
+  const ungeneratedKeys = useMemo(() => {
+    return invoices
+      .filter(inv => !recordByKey.has(invoiceKey(inv)))
+      .map(inv => invoiceKey(inv))
+  }, [invoices, recordByKey])
 
   // Default all ungenerated invoices to selected
   useEffect(() => {
-    setSelectedForGeneration(new Set(ungeneratedContractIds))
-  }, [ungeneratedContractIds])
+    setSelectedForGeneration(new Set(ungeneratedKeys))
+  }, [ungeneratedKeys])
 
-  const ungeneratedCount = ungeneratedContractIds.length
+  const ungeneratedCount = ungeneratedKeys.length
 
   const hasFinalizedInvoices = useMemo(() => {
     return records.some(r => r.status === 'finalized')
@@ -229,7 +238,7 @@ export function InvoiceExportPage() {
     let totalTax = 0
     let totalGross = 0
     for (const inv of invoices) {
-      const record = recordByContract.get(inv.contractId)
+      const record = recordByKey.get(invoiceKey(inv))
       if (record) {
         totalNet += Number(record.totalNet) || 0
         totalTax += Number(record.taxAmount) || 0
@@ -239,7 +248,7 @@ export function InvoiceExportPage() {
       }
     }
     return { count: invoices.length, totalNet, totalTax, totalGross }
-  }, [invoices, recordByContract])
+  }, [invoices, recordByKey])
 
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear()
@@ -253,11 +262,11 @@ export function InvoiceExportPage() {
     }))
   }, [locale])
 
-  const toggleExpand = (contractId: number) => {
+  const toggleExpand = (key: string) => {
     setExpandedInvoices((prev) => {
       const next = new Set(prev)
-      if (next.has(contractId)) next.delete(contractId)
-      else next.add(contractId)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }
@@ -265,8 +274,10 @@ export function InvoiceExportPage() {
   const handleGenerate = async () => {
     setShowConfirm(false)
     try {
+      // Extract unique contractIds from the selected keys (key format: "contractId-billingDate")
+      const contractIds = [...new Set([...selectedForGeneration].map(key => parseInt(key.split('-')[0])))]
       const { data: result } = await generateInvoices({
-        variables: { year, month, contractIds: [...selectedForGeneration] },
+        variables: { year, month, contractIds },
       })
       if (result?.generateInvoices?.success) {
         setToast({ type: 'success', message: t('invoices.generateSuccess', { count: result.generateInvoices.count }) })
@@ -516,7 +527,7 @@ export function InvoiceExportPage() {
                       <Checkbox
                         checked={selectedForGeneration.size === ungeneratedCount}
                         onCheckedChange={(checked) => {
-                          setSelectedForGeneration(checked ? new Set(ungeneratedContractIds) : new Set())
+                          setSelectedForGeneration(checked ? new Set(ungeneratedKeys) : new Set())
                         }}
                         aria-label="Select all"
                       />
@@ -536,23 +547,24 @@ export function InvoiceExportPage() {
               </TableHeader>
               <TableBody>
                 {invoices.map((invoice) => {
-                  const record = recordByContract.get(invoice.contractId)
+                  const key = invoiceKey(invoice)
+                  const record = recordByKey.get(key)
                   return (
-                    <Fragment key={invoice.contractId}>
+                    <Fragment key={key}>
                       <TableRow
                         className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => toggleExpand(invoice.contractId)}
+                        onClick={() => toggleExpand(key)}
                         data-testid={`invoice-row-${invoice.contractId}`}
                       >
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           {!record && (
                             <Checkbox
-                              checked={selectedForGeneration.has(invoice.contractId)}
+                              checked={selectedForGeneration.has(key)}
                               onCheckedChange={(checked) => {
                                 setSelectedForGeneration(prev => {
                                   const next = new Set(prev)
-                                  if (checked) next.add(invoice.contractId)
-                                  else next.delete(invoice.contractId)
+                                  if (checked) next.add(key)
+                                  else next.delete(key)
                                   return next
                                 })
                               }}
@@ -561,7 +573,7 @@ export function InvoiceExportPage() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {expandedInvoices.has(invoice.contractId) ? (
+                          {expandedInvoices.has(key) ? (
                             <ChevronDown className="h-4 w-4" />
                           ) : (
                             <ChevronRight className="h-4 w-4" />
@@ -622,7 +634,7 @@ export function InvoiceExportPage() {
                           </Button>
                         </TableCell>
                       </TableRow>
-                      {expandedInvoices.has(invoice.contractId) && (
+                      {expandedInvoices.has(key) && (
                         <TableRow>
                           <TableCell colSpan={11} className="bg-muted/30 p-0">
                             <Table>
