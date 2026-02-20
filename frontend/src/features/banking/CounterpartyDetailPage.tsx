@@ -169,11 +169,12 @@ const MERGE_COUNTERPARTIES = gql`
 `
 
 const SEARCH_CUSTOMERS = gql`
-  query SearchCustomers($search: String, $activeOnly: Boolean) {
-    customers(search: $search, activeOnly: $activeOnly) {
+  query SearchCustomers($search: String, $isActive: Boolean) {
+    customers(search: $search, isActive: $isActive) {
       items {
         id
         name
+        netsuiteCustomerNumber
       }
       totalCount
     }
@@ -187,10 +188,8 @@ const LINK_COUNTERPARTY_TO_CUSTOMER = gql`
       error
       counterparty {
         id
-        customer {
-          id
-          name
-        }
+        customerId
+        customerName
       }
     }
   }
@@ -203,10 +202,8 @@ const UNLINK_COUNTERPARTY_FROM_CUSTOMER = gql`
       error
       counterparty {
         id
-        customer {
-          id
-          name
-        }
+        customerId
+        customerName
       }
     }
   }
@@ -248,6 +245,7 @@ interface CounterpartySummary {
 interface CustomerSearchResult {
   id: number
   name: string
+  netsuiteCustomerNumber: string | null
 }
 
 export function CounterpartyDetailPage() {
@@ -352,7 +350,7 @@ export function CounterpartyDetailPage() {
 
   // Search customers for linking
   const { data: customerSearchData } = useQuery(SEARCH_CUSTOMERS, {
-    variables: { search: debouncedCustomerSearch, activeOnly: true },
+    variables: { search: debouncedCustomerSearch, isActive: true },
     skip: !customerLinkDialogOpen || !debouncedCustomerSearch,
   })
   const customerResults: CustomerSearchResult[] = customerSearchData?.customers?.items ?? []
@@ -421,7 +419,7 @@ export function CounterpartyDetailPage() {
     if (!id) return
     try {
       const { data } = await linkCustomer({
-        variables: { counterpartyId: id, customerId },
+        variables: { counterpartyId: id, customerId: Number(customerId) },
       })
       if (data?.linkCounterpartyToCustomer?.success) {
         setCustomerLinkDialogOpen(false)
@@ -731,8 +729,13 @@ export function CounterpartyDetailPage() {
                         disabled={linking}
                       >
                         <div className="flex w-full items-center">
-                          <User className="mr-2 h-4 w-4 text-gray-400" />
-                          <span>{customer.name}</span>
+                          <User className="mr-2 h-4 w-4 shrink-0 text-gray-400" />
+                          <div>
+                            <div>{customer.name}</div>
+                            {customer.netsuiteCustomerNumber && (
+                              <div className="text-xs text-muted-foreground">{customer.netsuiteCustomerNumber}</div>
+                            )}
+                          </div>
                         </div>
                       </CommandItem>
                     ))}
