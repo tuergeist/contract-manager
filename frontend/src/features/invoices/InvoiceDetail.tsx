@@ -56,7 +56,6 @@ const INVOICE_RECORD_QUERY = gql`
       taxAmount
       totalGross
       status
-      generatedAt
       lineItemsSnapshot
       invoiceText
       pdfUrl
@@ -167,7 +166,6 @@ interface InvoiceRecord {
   taxAmount: string
   totalGross: string
   status: string
-  generatedAt: string
   lineItemsSnapshot: LineItem[]
   invoiceText: string
   pdfUrl: string | null
@@ -521,7 +519,7 @@ export function InvoiceDetail() {
           {/* Metadata */}
           <Card>
             <CardContent className="pt-6">
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <div>
                   <div className="text-xs font-medium uppercase text-muted-foreground">
                     {t('invoiceDetail.billingDate')}
@@ -541,12 +539,6 @@ export function InvoiceDetail() {
                   <div className="mt-1 font-medium">
                     {formatDate(record.periodStart, i18n.language)} – {formatDate(record.periodEnd, i18n.language)}
                   </div>
-                </div>
-                <div>
-                  <div className="text-xs font-medium uppercase text-muted-foreground">
-                    {t('invoiceDetail.generatedAt')}
-                  </div>
-                  <div className="mt-1 font-medium">{formatDateTime(record.generatedAt, i18n.language)}</div>
                 </div>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">

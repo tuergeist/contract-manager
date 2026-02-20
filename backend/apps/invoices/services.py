@@ -1207,6 +1207,10 @@ class InvoiceService:
                 )
                 created_records.append(record)
 
+                # Audit log for invoice creation
+                from apps.invoices.audit import log_invoice_created
+                log_invoice_created(record)
+
         # Dispatch background ZUGFeRD PDF generation for each new record
         from apps.invoices.tasks import generate_invoice_pdf_task
 
@@ -1225,6 +1229,9 @@ class InvoiceService:
         invoice_record.status = InvoiceRecord.Status.VOIDED
         invoice_record.void_reason = reason
         invoice_record.save(update_fields=["status", "void_reason", "updated_at"])
+
+        from apps.invoices.audit import log_invoice_voided
+        log_invoice_voided(invoice_record)
 
     def get_persisted_invoices(
         self,

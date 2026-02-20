@@ -257,6 +257,10 @@ def send_invoice_email_task(self, record_id: int) -> bool:
         record.email_sent_to = recipients
         record.email_message_id = message_id or ""
         record.save(update_fields=["email_sent_at", "email_sent_to", "email_message_id"])
+
+        from apps.invoices.audit import log_invoice_email_sent
+        log_invoice_email_sent(record, recipients)
+
         logger.info("Invoice email sent for record %s to %s", record_id, recipients)
         return True
     except M365Error as e:
