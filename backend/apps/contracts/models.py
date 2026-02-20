@@ -308,7 +308,7 @@ class Contract(TenantModel):
 
         return max(1, months)  # At least 1 month
 
-    def get_billing_schedule(self, from_date=None, to_date=None, include_history=False, items=None):
+    def get_billing_schedule(self, from_date=None, to_date=None, include_history=False, items=None, include_eta_items=False):
         """
         Calculate the billing schedule for all contract items.
 
@@ -353,16 +353,28 @@ class Contract(TenantModel):
             if not item.product and not item.unit_price and not item_price_periods:
                 continue
 
-            # Skip items with pending delivery
+            # Skip items with pending delivery (unless forecast mode with ETA)
             if item.delivery_status == "pending":
-                continue
+                if include_eta_items and item.estimated_delivery_date:
+                    pass  # Include in forecast using ETA as projected billing date
+                else:
+                    continue
 
             # Skip items whose dependency is not yet delivered
             if item.depends_on and item.depends_on.delivery_status == "pending":
-                continue
+                if include_eta_items and item.depends_on.estimated_delivery_date:
+                    pass  # Include in forecast using dependency's ETA
+                else:
+                    continue
 
             # Determine item's billing period
             item_billing_start = item.billing_start_date or self.billing_start_date
+            # In forecast mode, use ETA as projected billing start for pending items
+            if include_eta_items:
+                if item.delivery_status == "pending" and item.estimated_delivery_date:
+                    item_billing_start = item.estimated_delivery_date
+                elif item.depends_on and item.depends_on.delivery_status == "pending" and item.depends_on.estimated_delivery_date:
+                    item_billing_start = max(item_billing_start, item.depends_on.estimated_delivery_date)
             item_billing_end = item.billing_end_date  # Can be None = ongoing
 
             # Skip items that haven't started billing yet
@@ -551,7 +563,7 @@ class Contract(TenantModel):
             })
             events[billing_date]["total"] += amount
 
-    def get_recognition_schedule(self, from_date=None, to_date=None, include_history=False, items=None):
+    def get_recognition_schedule(self, from_date=None, to_date=None, include_history=False, items=None, include_eta_items=False):
         """
         Calculate the recognition schedule for all contract items.
 
@@ -601,16 +613,28 @@ class Contract(TenantModel):
             if not item.product and not item.unit_price and not item_price_periods:
                 continue
 
-            # Skip items with pending delivery
+            # Skip items with pending delivery (unless forecast mode with ETA)
             if item.delivery_status == "pending":
-                continue
+                if include_eta_items and item.estimated_delivery_date:
+                    pass  # Include in forecast using ETA
+                else:
+                    continue
 
             # Skip items whose dependency is not yet delivered
             if item.depends_on and item.depends_on.delivery_status == "pending":
-                continue
+                if include_eta_items and item.depends_on.estimated_delivery_date:
+                    pass  # Include in forecast using dependency's ETA
+                else:
+                    continue
 
             # Use start_date for recognition, fall back to billing_start_date
             item_recognition_start = item.start_date or item.billing_start_date or self.billing_start_date
+            # In forecast mode, use ETA as projected recognition start for pending items
+            if include_eta_items:
+                if item.delivery_status == "pending" and item.estimated_delivery_date:
+                    item_recognition_start = item.estimated_delivery_date
+                elif item.depends_on and item.depends_on.delivery_status == "pending" and item.depends_on.estimated_delivery_date:
+                    item_recognition_start = max(item_recognition_start, item.depends_on.estimated_delivery_date)
             item_billing_end = item.billing_end_date  # Can be None = ongoing
 
             # Skip items that haven't started yet
@@ -910,6 +934,11 @@ class ContractItem(TenantModel):
         null=True,
         blank=True,
         help_text="Date when this item was delivered.",
+    )
+    estimated_delivery_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Estimated delivery date for pending deliverable items. Used for revenue forecasting.",
     )
     depends_on = models.ForeignKey(
         "self",

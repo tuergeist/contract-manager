@@ -147,6 +147,7 @@ const CONTRACT_DETAIL_QUERY = gql`
         sortOrder
         deliveryStatus
         deliveredAt
+        estimatedDeliveryDate
         dependsOn {
           id
           product {
@@ -530,6 +531,7 @@ interface ContractItem {
   sortOrder: number | null
   deliveryStatus: string | null
   deliveredAt: string | null
+  estimatedDeliveryDate: string | null
   dependsOn: {
     id: string
     product: { id: string; name: string } | null
@@ -1274,6 +1276,11 @@ export function ContractDetail() {
                                           {t('contracts.delivery.dependsOn')}: {item.dependsOn.product?.name || item.dependsOn.description}
                                         </div>
                                       )}
+                                      {item.deliveryStatus === 'pending' && item.estimatedDeliveryDate && (
+                                        <div className="text-xs text-blue-600">
+                                          {t('contracts.delivery.eta')}: {item.estimatedDeliveryDate}
+                                        </div>
+                                      )}
                                     </td>
                                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
                                       {item.quantity}
@@ -1446,6 +1453,11 @@ export function ContractDetail() {
                                         {item.dependsOn && (
                                           <div className="text-xs text-gray-500">
                                             {t('contracts.delivery.dependsOn')}: {item.dependsOn.product?.name || item.dependsOn.description}
+                                          </div>
+                                        )}
+                                        {item.deliveryStatus === 'pending' && item.estimatedDeliveryDate && (
+                                          <div className="text-xs text-blue-600">
+                                            {t('contracts.delivery.eta')}: {item.estimatedDeliveryDate}
                                           </div>
                                         )}
                                       </td>
@@ -2167,6 +2179,7 @@ function AddItemModal({
   const [orderConfirmationNumber, setOrderConfirmationNumber] = useState('')
   const [deliveryTracking, setDeliveryTracking] = useState(false)
   const [dependsOnItemId, setDependsOnItemId] = useState('none')
+  const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [productSearchOpen, setProductSearchOpen] = useState(false)
   const [productSearchTerm, setProductSearchTerm] = useState('')
@@ -2255,6 +2268,7 @@ function AddItemModal({
             orderConfirmationNumber: orderConfirmationNumber || null,
             deliveryTracking,
             dependsOnItemId: dependsOnItemId && dependsOnItemId !== 'none' ? dependsOnItemId : null,
+            estimatedDeliveryDate: deliveryTracking && estimatedDeliveryDate ? estimatedDeliveryDate : null,
           },
         },
       })
@@ -2490,6 +2504,18 @@ function AddItemModal({
                 </div>
               </div>
 
+              {deliveryTracking && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t('contracts.delivery.estimatedDeliveryDate')}</label>
+                  <Input
+                    type="date"
+                    value={estimatedDeliveryDate}
+                    onChange={(e) => setEstimatedDeliveryDate(e.target.value)}
+                    placeholder={t('contracts.delivery.estimatedDeliveryDatePlaceholder')}
+                  />
+                </div>
+              )}
+
               {/* Start Date + Billing Start Date - 2 columns */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -2612,6 +2638,7 @@ function EditItemModal({
   const [newPeriodSource, setNewPeriodSource] = useState('fixed')
   const [deliveryTracking, setDeliveryTracking] = useState(!!item.deliveryStatus)
   const [dependsOnItemId, setDependsOnItemId] = useState(item.dependsOn?.id || 'none')
+  const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState(item.estimatedDeliveryDate || '')
   const [error, setError] = useState<string | null>(null)
 
   const { data: productsData, loading: loadingProducts } = useQuery(PRODUCTS_FOR_SELECT_QUERY, {
@@ -2776,6 +2803,7 @@ function EditItemModal({
             priceLockedUntil: priceLockedUntil || null,
             deliveryTracking,
             dependsOnItemId: dependsOnItemId && dependsOnItemId !== 'none' ? dependsOnItemId : null,
+            estimatedDeliveryDate: deliveryTracking && estimatedDeliveryDate ? estimatedDeliveryDate : null,
           },
         },
       })
@@ -3261,6 +3289,18 @@ function EditItemModal({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Estimated Delivery Date - only for pending deliverables */}
+          {deliveryTracking && item.deliveryStatus !== 'delivered' && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('contracts.delivery.estimatedDeliveryDate')}</label>
+              <Input
+                type="date"
+                value={estimatedDeliveryDate}
+                onChange={(e) => setEstimatedDeliveryDate(e.target.value)}
+              />
+            </div>
+          )}
 
           {/* Item-specific overrides - auto-open if any field has a value */}
           <details className="group rounded-lg border" open={!!(orderConfirmationNumber || startDate || billingStartDate || billingEndDate || alignToContractAt) || undefined}>

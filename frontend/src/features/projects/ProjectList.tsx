@@ -37,6 +37,7 @@ const DELIVERABLE_ITEMS_QUERY = gql`
       isOneOff
       deliveryStatus
       deliveredAt
+      estimatedDeliveryDate
       contractId
       contractName
       customerName
@@ -60,6 +61,15 @@ const MARK_ITEM_DELIVERED_MUTATION = gql`
   }
 `
 
+const SET_DELIVERABLE_ETA_MUTATION = gql`
+  mutation SetDeliverableEta($itemId: ID!, $estimatedDeliveryDate: Date) {
+    setDeliverableEta(itemId: $itemId, estimatedDeliveryDate: $estimatedDeliveryDate) {
+      success
+      error
+    }
+  }
+`
+
 const REVERT_ITEM_DELIVERY_MUTATION = gql`
   mutation RevertItemDelivery($itemId: ID!) {
     revertItemDelivery(itemId: $itemId) {
@@ -76,6 +86,7 @@ interface DeliverableItem {
   isOneOff: boolean
   deliveryStatus: string
   deliveredAt: string | null
+  estimatedDeliveryDate: string | null
   contractId: number
   contractName: string
   customerName: string
@@ -97,6 +108,7 @@ export function ProjectList() {
 
   const [markDelivered] = useMutation(MARK_ITEM_DELIVERED_MUTATION)
   const [revertDelivery] = useMutation(REVERT_ITEM_DELIVERY_MUTATION)
+  const [setEta] = useMutation(SET_DELIVERABLE_ETA_MUTATION)
 
   const items = (data?.deliverableItems || []) as DeliverableItem[]
 
@@ -109,6 +121,16 @@ export function ProjectList() {
       setDeliveryItem(null)
       refetch()
     }
+  }
+
+  const handleSetEta = async (item: DeliverableItem, dateValue: string) => {
+    await setEta({
+      variables: {
+        itemId: String(item.id),
+        estimatedDeliveryDate: dateValue || null,
+      },
+    })
+    refetch()
   }
 
   const handleRevertDelivery = async (item: DeliverableItem) => {
@@ -176,7 +198,7 @@ export function ProjectList() {
                   {t('projects.status')}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  {t('projects.deliveredAt')}
+                  {t('projects.eta')}
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                   {t('projects.dependents')}
@@ -226,7 +248,16 @@ export function ProjectList() {
                     )}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
-                    {item.deliveredAt ? formatDate(item.deliveredAt) : '-'}
+                    {item.deliveryStatus === 'pending' ? (
+                      <Input
+                        type="date"
+                        className="h-8 w-40"
+                        value={item.estimatedDeliveryDate || ''}
+                        onChange={(e) => handleSetEta(item, e.target.value)}
+                      />
+                    ) : item.deliveredAt ? (
+                      formatDate(item.deliveredAt)
+                    ) : '-'}
                   </td>
                   <td className="px-6 py-4 text-right text-sm text-gray-500">
                     {item.dependentItemsCount > 0 && (

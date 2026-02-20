@@ -229,6 +229,7 @@ class ContractItemType:
     # Delivery tracking
     delivery_status: str | None = None
     delivered_at: date | None = None
+    estimated_delivery_date: date | None = None
     depends_on: "ContractItemType | None" = None
     dependent_items: List["ContractItemType"] = strawberry.field(default_factory=list)
     # Year-specific pricing
@@ -348,6 +349,7 @@ class ContractType:
                     sort_order=item.sort_order,
                     delivery_status=item.delivery_status,
                     delivered_at=item.delivered_at,
+                    estimated_delivery_date=item.estimated_delivery_date,
                     depends_on=ContractItemType(
                         id=item.depends_on.id,
                         quantity=item.depends_on.quantity,
@@ -362,6 +364,7 @@ class ContractType:
                         is_one_off=item.depends_on.is_one_off,
                         delivery_status=item.depends_on.delivery_status,
                         delivered_at=item.depends_on.delivered_at,
+                        estimated_delivery_date=item.depends_on.estimated_delivery_date,
                     ) if item.depends_on else None,
                     dependent_items=[
                         ContractItemType(
@@ -378,6 +381,7 @@ class ContractType:
                             is_one_off=dep.is_one_off,
                             delivery_status=dep.delivery_status,
                             delivered_at=dep.delivered_at,
+                            estimated_delivery_date=dep.estimated_delivery_date,
                         )
                         for dep in item.dependent_items.all()
                     ],
@@ -603,6 +607,7 @@ class ContractItemInput:
     order_confirmation_number: str | None = None
     delivery_tracking: bool = False
     depends_on_item_id: strawberry.ID | None = None
+    estimated_delivery_date: date | None = None
 
 
 @strawberry.input
@@ -624,6 +629,7 @@ class UpdateContractItemInput:
     price_locked_until: date | None = UNSET
     delivery_tracking: bool | None = None
     depends_on_item_id: strawberry.ID | None = UNSET
+    estimated_delivery_date: date | None = UNSET
 
 
 @strawberry.input
@@ -731,6 +737,7 @@ class DeliverableItemType:
     is_one_off: bool
     delivery_status: str | None
     delivered_at: date | None
+    estimated_delivery_date: date | None
     contract_id: int
     contract_name: str
     customer_name: str
@@ -814,14 +821,16 @@ class MatchedInvoiceType:
 
 
 def find_matching_invoice_for_billing_event(
-    contract_id: int, billing_date: date, invoices: list
+    contract_id: int, billing_date: date, invoices: list, expected_net: Decimal | None = None,
 ) -> "MatchedInvoiceType | None":
     """
     Find a matching imported invoice for a billing event.
 
     Matching criteria:
     1. Invoice is linked to the same contract
-    2. Invoice date is within ±15 days of the billing event date
+    2. Invoice date is within 31 days *before* the billing event date
+       (an invoice can't be dated after the billing event it covers)
+    3. If expected_net is provided, the invoice total_amount must match
 
     If multiple invoices match, returns the one with the closest date.
 
@@ -829,22 +838,27 @@ def find_matching_invoice_for_billing_event(
         contract_id: The contract ID to match against
         billing_date: The billing event date
         invoices: List of ImportedInvoice objects (pre-filtered by contract)
+        expected_net: Expected net amount from the billing schedule
 
     Returns:
         MatchedInvoiceType if a match is found, None otherwise
     """
-    from datetime import timedelta
+    MATCH_WINDOW_DAYS = 31
 
-    MATCH_WINDOW_DAYS = 15
-
-    # Filter invoices that match within the date window
+    # Filter invoices: must be on or before billing date, within window
     matching_invoices = []
     for inv in invoices:
         if inv.invoice_date is None:
             continue
-        days_diff = abs((inv.invoice_date - billing_date).days)
-        if days_diff <= MATCH_WINDOW_DAYS:
-            matching_invoices.append((inv, days_diff))
+        # Only look back: invoice_date <= billing_date
+        days_diff = (billing_date - inv.invoice_date).days
+        if days_diff < 0 or days_diff > MATCH_WINDOW_DAYS:
+            continue
+        # Amount check: if we have an expected net, the invoice total must match
+        if expected_net is not None and inv.total_amount is not None:
+            if inv.total_amount != expected_net:
+                continue
+        matching_invoices.append((inv, days_diff))
 
     if not matching_invoices:
         return None
@@ -947,7 +961,7 @@ def calculate_dashboard_kpis(tenant) -> dict:
     active_contracts = Contract.objects.filter(
         tenant=tenant,
         status=Contract.Status.ACTIVE,
-    ).prefetch_related("items", "items__product", "items__price_periods")
+    ).prefetch_related("items", "items__product", "items__price_periods", "items__depends_on")
 
     total_active_contracts = active_contracts.count()
     total_contract_value = Decimal("0")
@@ -1000,6 +1014,7 @@ def calculate_dashboard_kpis(tenant) -> dict:
             to_date=schedule_end,
             include_history=True,
             items=items,
+            include_eta_items=True,
         )
 
         for event in full_schedule:
@@ -1427,10 +1442,11 @@ class ContractQuery:
             from_date=from_date,
             to_date=to_date,
             include_history=include_history,
+            include_eta_items=True,
         )
 
         # Fetch invoices linked to this contract for matching
-        from apps.invoices.models import ImportedInvoice
+        from apps.invoices.models import ImportedInvoice, InvoiceRecord
 
         contract_invoices = list(
             ImportedInvoice.objects.filter(
@@ -1440,14 +1456,36 @@ class ContractQuery:
             ).select_related()
         )
 
+        # Fetch generated invoice records (exact match by billing_date)
+        invoice_records = {
+            r.billing_date: r
+            for r in InvoiceRecord.objects.filter(
+                tenant=user.tenant,
+                contract_id=contract_id,
+            ).exclude(status=InvoiceRecord.Status.VOIDED)
+        }
+
         # Convert to GraphQL types with invoice matching
         events = []
         for event in schedule:
-            matched_invoice = find_matching_invoice_for_billing_event(
-                contract_id=int(contract_id),
-                billing_date=event["date"],
-                invoices=contract_invoices,
-            )
+            # First try exact match from generated InvoiceRecord
+            record = invoice_records.get(event["date"])
+            if record:
+                pdf_url = record.pdf_file.url if record.pdf_file else None
+                matched_invoice = MatchedInvoiceType(
+                    id=strawberry.ID(str(record.id)),
+                    invoice_number=record.invoice_number,
+                    is_paid=record.is_paid,
+                    pdf_url=pdf_url,
+                )
+            else:
+                # Fall back to imported invoice heuristic
+                matched_invoice = find_matching_invoice_for_billing_event(
+                    contract_id=int(contract_id),
+                    billing_date=event["date"],
+                    invoices=contract_invoices,
+                    expected_net=event["total"],
+                )
             events.append(
                 BillingEvent(
                     date=event["date"],
@@ -1557,7 +1595,7 @@ class ContractQuery:
         contracts = Contract.objects.filter(
             tenant=user.tenant,
             status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
-        ).select_related("customer").prefetch_related("items__product", "items__price_periods")
+        ).select_related("customer").prefetch_related("items__product", "items__price_periods", "items__depends_on")
 
         # Calculate revenue per contract per period
         contract_rows = []
@@ -1599,6 +1637,7 @@ class ContractQuery:
                 to_date=to_date,
                 include_history=False,
                 items=items_arg,
+                include_eta_items=True,
             )
 
             # Group by period
@@ -1765,7 +1804,7 @@ class ContractQuery:
         contracts = Contract.objects.filter(
             tenant=user.tenant,
             status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
-        ).select_related("customer").prefetch_related("items__product", "items__price_periods")
+        ).select_related("customer").prefetch_related("items__product", "items__price_periods", "items__depends_on")
 
         # Calculate recognition per contract per period
         contract_rows = []
@@ -1808,6 +1847,7 @@ class ContractQuery:
                 to_date=to_date,
                 include_history=False,
                 items=items_arg,
+                include_eta_items=True,
             )
 
             # Group by period
@@ -2232,6 +2272,7 @@ class ContractQuery:
                 is_one_off=item.is_one_off,
                 delivery_status=item.delivery_status,
                 delivered_at=item.delivered_at,
+                estimated_delivery_date=item.estimated_delivery_date,
                 contract_id=item.contract_id,
                 contract_name=item.contract.name or "",
                 customer_name=item.contract.customer.name,
@@ -2539,6 +2580,7 @@ class ContractMutation:
                     is_one_off=input.is_one_off,
                     order_confirmation_number=input.order_confirmation_number,
                     delivery_status="pending" if input.delivery_tracking else None,
+                    estimated_delivery_date=input.estimated_delivery_date if input.delivery_tracking else None,
                     depends_on=depends_on_item,
                 )
 
@@ -2586,6 +2628,7 @@ class ContractMutation:
                     sort_order=item.sort_order,
                     delivery_status=item.delivery_status,
                     delivered_at=item.delivered_at,
+                    estimated_delivery_date=item.estimated_delivery_date,
                     depends_on=None,
                     dependent_items=[],
                     price_periods=[],  # Newly created items have no price periods
@@ -2672,6 +2715,11 @@ class ContractMutation:
                     else:
                         item.delivery_status = None
                         item.delivered_at = None
+                        item.estimated_delivery_date = None
+                if input.estimated_delivery_date is not UNSET:
+                    # Only set ETA on pending deliverable items
+                    if item.delivery_status == "pending":
+                        item.estimated_delivery_date = input.estimated_delivery_date
                 if input.depends_on_item_id is not UNSET:
                     if input.depends_on_item_id is None:
                         item.depends_on = None
@@ -2775,6 +2823,7 @@ class ContractMutation:
                     sort_order=item.sort_order,
                     delivery_status=item.delivery_status,
                     delivered_at=item.delivered_at,
+                    estimated_delivery_date=item.estimated_delivery_date,
                     depends_on=None,
                     dependent_items=[],
                     price_periods=price_periods,
@@ -4426,7 +4475,8 @@ class ContractImportMutation:
 
         item.delivery_status = "delivered"
         item.delivered_at = delivered_at
-        item.save(update_fields=["delivery_status", "delivered_at"])
+        item.estimated_delivery_date = None
+        item.save(update_fields=["delivery_status", "delivered_at", "estimated_delivery_date"])
 
         # Find dependent items that need billing_start_date
         dependents = ContractItem.objects.filter(
@@ -4470,6 +4520,37 @@ class ContractImportMutation:
         item.save(update_fields=["delivery_status", "delivered_at"])
 
         return DeliverItemResult(success=True)
+
+    @strawberry.mutation
+    def set_deliverable_eta(
+        self,
+        info: Info[Context, None],
+        item_id: strawberry.ID,
+        estimated_delivery_date: date | None = None,
+    ) -> DeleteResult:
+        """Set or clear the estimated delivery date for a deliverable item."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return DeleteResult(success=False, error=err)
+        if not user.tenant:
+            return DeleteResult(success=False, error="No tenant assigned")
+
+        item = ContractItem.objects.filter(
+            tenant=user.tenant, id=item_id
+        ).first()
+        if not item:
+            return DeleteResult(success=False, error="Item not found")
+
+        if not item.delivery_status:
+            return DeleteResult(success=False, error="Item does not have delivery tracking enabled")
+
+        if item.delivery_status != "pending":
+            return DeleteResult(success=False, error="Item is not pending delivery")
+
+        item.estimated_delivery_date = estimated_delivery_date
+        item.save(update_fields=["estimated_delivery_date"])
+
+        return DeleteResult(success=True)
 
     # =========================================================================
     # Contract Comment Mutations

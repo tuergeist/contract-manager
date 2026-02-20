@@ -1597,11 +1597,21 @@ DELIVERABLE_ITEMS_QUERY = """
             isOneOff
             deliveryStatus
             deliveredAt
+            estimatedDeliveryDate
             contractId
             contractName
             customerName
             customerId
             dependentItemsCount
+        }
+    }
+"""
+
+SET_DELIVERABLE_ETA_MUTATION = """
+    mutation SetDeliverableEta($itemId: ID!, $estimatedDeliveryDate: Date) {
+        setDeliverableEta(itemId: $itemId, estimatedDeliveryDate: $estimatedDeliveryDate) {
+            success
+            error
         }
     }
 """
@@ -1862,3 +1872,158 @@ class TestItemDependencies:
         items = result.data["deliverableItems"]
         assert len(items) == 1
         assert items[0]["id"] == delivered.id
+
+
+class TestDeliverableEta:
+    """Tests for estimated delivery date on contract items."""
+
+    @pytest.fixture
+    def active_contract(self, db, tenant, customer):
+        return Contract.objects.create(
+            tenant=tenant, customer=customer, name="ETA Test Contract",
+            status=Contract.Status.ACTIVE, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+        )
+
+    def test_eta_saved_and_cleared_on_model(self, db, tenant, active_contract, product):
+        """ETA field can be set and cleared on ContractItem."""
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("5000"), is_one_off=True,
+            delivery_status="pending",
+            estimated_delivery_date=date(2025, 6, 1),
+        )
+        assert item.estimated_delivery_date == date(2025, 6, 1)
+        item.estimated_delivery_date = None
+        item.save()
+        item.refresh_from_db()
+        assert item.estimated_delivery_date is None
+
+    def test_eta_cleared_on_delivery(self, user, tenant, active_contract, product):
+        """ETA is cleared when item is marked as delivered."""
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("5000"), is_one_off=True,
+            delivery_status="pending",
+            estimated_delivery_date=date(2025, 6, 1),
+        )
+        result = run_graphql(MARK_ITEM_DELIVERED_MUTATION, {
+            "itemId": str(item.id),
+            "deliveredAt": "2025-06-15",
+        }, make_context(user))
+        assert result.errors is None
+        assert result.data["markItemDelivered"]["success"] is True
+        item.refresh_from_db()
+        assert item.estimated_delivery_date is None
+        assert item.delivery_status == "delivered"
+
+    def test_forecast_includes_pending_with_eta(self, db, tenant, active_contract, product):
+        """Pending item with ETA included in forecast billing schedule."""
+        ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("10000"), is_one_off=True,
+            billing_start_date=date(2025, 6, 1),
+            delivery_status="pending",
+            estimated_delivery_date=date(2025, 6, 1),
+        )
+        # Without forecast mode: excluded
+        schedule = active_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2025, 12, 31),
+        )
+        assert len(schedule) == 0
+
+        # With forecast mode: included
+        schedule = active_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2025, 12, 31),
+            include_eta_items=True,
+        )
+        assert len(schedule) == 1
+        assert schedule[0]["total"] == Decimal("10000")
+
+    def test_forecast_excludes_pending_without_eta(self, db, tenant, active_contract, product):
+        """Pending item without ETA excluded from forecast."""
+        ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("10000"), is_one_off=True,
+            billing_start_date=date(2025, 6, 1),
+            delivery_status="pending",
+        )
+        schedule = active_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2025, 12, 31),
+            include_eta_items=True,
+        )
+        assert len(schedule) == 0
+
+    def test_dependent_item_included_when_dependency_has_eta(self, db, tenant, active_contract, product):
+        """Recurring item with pending dependency included when dependency has ETA."""
+        one_off = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("5000"), is_one_off=True,
+            billing_start_date=date(2025, 3, 1),
+            delivery_status="pending",
+            estimated_delivery_date=date(2025, 6, 1),
+        )
+        ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("100"),
+            billing_start_date=date(2025, 1, 1),
+            depends_on=one_off,
+        )
+        # Without forecast mode: nothing
+        schedule = active_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2025, 12, 31),
+        )
+        assert len(schedule) == 0
+
+        # With forecast mode: both items included, recurring starts from ETA
+        schedule = active_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2025, 12, 31),
+            include_eta_items=True,
+        )
+        assert len(schedule) > 0
+        # The one-off should appear at ETA date
+        one_off_events = [e for e in schedule if any(
+            i["item_id"] == one_off.id for i in e["items"]
+        )]
+        assert len(one_off_events) >= 1
+
+    def test_set_deliverable_eta_mutation(self, user, tenant, active_contract, product):
+        """set_deliverable_eta sets and clears ETA on pending item."""
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("5000"), is_one_off=True,
+            delivery_status="pending",
+        )
+        # Set ETA
+        result = run_graphql(SET_DELIVERABLE_ETA_MUTATION, {
+            "itemId": str(item.id),
+            "estimatedDeliveryDate": "2025-06-01",
+        }, make_context(user))
+        assert result.errors is None
+        assert result.data["setDeliverableEta"]["success"] is True
+        item.refresh_from_db()
+        assert item.estimated_delivery_date == date(2025, 6, 1)
+
+        # Clear ETA
+        result = run_graphql(SET_DELIVERABLE_ETA_MUTATION, {
+            "itemId": str(item.id),
+            "estimatedDeliveryDate": None,
+        }, make_context(user))
+        assert result.errors is None
+        assert result.data["setDeliverableEta"]["success"] is True
+        item.refresh_from_db()
+        assert item.estimated_delivery_date is None
+
+    def test_set_deliverable_eta_rejects_non_tracking(self, user, tenant, active_contract, product):
+        """set_deliverable_eta rejects items without delivery tracking."""
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("5000"),
+        )
+        result = run_graphql(SET_DELIVERABLE_ETA_MUTATION, {
+            "itemId": str(item.id),
+            "estimatedDeliveryDate": "2025-06-01",
+        }, make_context(user))
+        assert result.errors is None
+        assert result.data["setDeliverableEta"]["success"] is False
+        assert "delivery tracking" in result.data["setDeliverableEta"]["error"]

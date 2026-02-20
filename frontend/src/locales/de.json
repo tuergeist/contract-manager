@@ -342,7 +342,10 @@
       "needsBillingStart": "Abrechnungsstart erforderlich",
       "trackDelivery": "Lieferverfolgung",
       "trackDeliveryHint": "Lieferstatus für diese Position verfolgen",
-      "noDependency": "Keine Abhängigkeit"
+      "noDependency": "Keine Abhängigkeit",
+      "estimatedDeliveryDate": "Voraussichtliches Lieferdatum",
+      "estimatedDeliveryDatePlaceholder": "Voraussichtliches Lieferdatum auswählen",
+      "eta": "ETA"
     },
     "actions": {
       "save": "Vertrag speichern",
@@ -1484,6 +1487,7 @@
     "contract": "Vertrag",
     "status": "Status",
     "deliveredAt": "Geliefert",
+    "eta": "ETA / Geliefert",
     "dependents": "Abhängigkeiten",
     "noItems": "Keine lieferbaren Positionen gefunden",
     "allStatuses": "Alle Status",

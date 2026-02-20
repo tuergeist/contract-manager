@@ -342,7 +342,10 @@
       "needsBillingStart": "Needs billing start date",
       "trackDelivery": "Delivery Tracking",
       "trackDeliveryHint": "Track delivery status for this item",
-      "noDependency": "No dependency"
+      "noDependency": "No dependency",
+      "estimatedDeliveryDate": "Estimated Delivery Date",
+      "estimatedDeliveryDatePlaceholder": "Select estimated delivery date",
+      "eta": "ETA"
     },
     "actions": {
       "save": "Save Contract",
@@ -1484,6 +1487,7 @@
     "contract": "Contract",
     "status": "Status",
     "deliveredAt": "Delivered",
+    "eta": "ETA / Delivered",
     "dependents": "Dependents",
     "noItems": "No deliverable items found",
     "allStatuses": "All Statuses",
