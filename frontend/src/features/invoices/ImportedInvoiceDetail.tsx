@@ -15,7 +15,6 @@ import {
   CreditCard,
   Mail,
   FileText,
-  Search,
   Pencil,
   X,
   Save,
@@ -35,6 +34,7 @@ import {
 import { cn, formatCurrency, formatDate } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 import { CustomerPickerDialog } from '@/components/CustomerPickerDialog'
+import { PaymentMatchModal } from './PaymentMatchModal'
 
 // --- GraphQL ---
 
@@ -221,65 +221,6 @@ const CUSTOMER_CONTRACTS = gql`
   }
 `
 
-const FIND_PAYMENT_MATCHES = gql`
-  query FindPaymentMatchesDetail($invoiceId: ID!, $daysAfter: Int) {
-    findPaymentMatches(invoiceId: $invoiceId, daysAfter: $daysAfter) {
-      transactionId
-      transactionDate
-      amount
-      counterpartyName
-      bookingText
-      matchType
-      confidence
-    }
-  }
-`
-
-const SEARCH_TRANSACTIONS = gql`
-  query SearchTransactionsDetail($search: String, $direction: String, $page: Int, $pageSize: Int) {
-    bankTransactions(search: $search, direction: $direction, page: $page, pageSize: $pageSize) {
-      items {
-        id
-        entryDate
-        amount
-        currency
-        counterparty {
-          name
-        }
-        bookingText
-      }
-      totalCount
-    }
-  }
-`
-
-const CREATE_PAYMENT_MATCH = gql`
-  mutation CreatePaymentMatchDetail($invoiceId: ID!, $transactionId: Int!, $matchType: String) {
-    createPaymentMatch(invoiceId: $invoiceId, transactionId: $transactionId, matchType: $matchType) {
-      success
-      error
-      match {
-        id
-        transactionId
-        transactionDate
-        transactionAmount
-        counterpartyName
-        matchType
-        confidence
-      }
-    }
-  }
-`
-
-const DELETE_PAYMENT_MATCH = gql`
-  mutation DeletePaymentMatchDetail($matchId: Int!) {
-    deletePaymentMatch(matchId: $matchId) {
-      success
-      error
-    }
-  }
-`
-
 // --- Types ---
 
 interface PaymentMatch {
@@ -324,16 +265,6 @@ interface CustomerMatch {
   city: string | null
   similarity: string
   hubspotId: string | null
-}
-
-interface PaymentMatchCandidate {
-  transactionId: number
-  transactionDate: string
-  amount: string
-  counterpartyName: string
-  bookingText: string
-  matchType: string
-  confidence: string
 }
 
 // --- Helpers ---
@@ -415,8 +346,6 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
   const [showCustomerPicker, setShowCustomerPicker] = useState(false)
   const [showContractPicker, setShowContractPicker] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [transactionSearch, setTransactionSearch] = useState('')
-  const [debouncedTxSearch, setDebouncedTxSearch] = useState('')
 
   // Inline editing state
   const [editing, setEditing] = useState<'invoiceNumber' | 'invoiceDate' | 'totalAmount' | null>(null)
@@ -429,12 +358,6 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
       return () => clearTimeout(timer)
     }
   }, [toast])
-
-  // Debounce transaction search
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedTxSearch(transactionSearch), 300)
-    return () => clearTimeout(timer)
-  }, [transactionSearch])
 
   // Queries
   const { data, loading, error, refetch } = useQuery<{ invoice: ImportedInvoice | null }>(
@@ -450,15 +373,6 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
     CUSTOMER_CONTRACTS
   )
 
-  const [fetchPaymentMatches, { data: paymentMatchData, loading: loadingPaymentMatches }] = useLazyQuery(
-    FIND_PAYMENT_MATCHES
-  )
-
-  const { data: searchTxData, loading: loadingTxSearch } = useQuery(SEARCH_TRANSACTIONS, {
-    variables: { search: debouncedTxSearch, direction: 'credit', page: 1, pageSize: 10 },
-    skip: !debouncedTxSearch,
-  })
-
   // Mutations
   const [updateInvoice] = useMutation(UPDATE_INVOICE)
   const [extractInvoice, { loading: extracting }] = useMutation(EXTRACT_INVOICE)
@@ -468,8 +382,6 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
   const [confirmCustomerMatch] = useMutation(CONFIRM_CUSTOMER_MATCH)
   const [unlinkCustomer] = useMutation(UNLINK_CUSTOMER)
   const [assignContract] = useMutation(ASSIGN_INVOICE_CONTRACT)
-  const [createPaymentMatch] = useMutation(CREATE_PAYMENT_MATCH)
-  const [deletePaymentMatch] = useMutation(DELETE_PAYMENT_MATCH)
 
   const invoice = data?.invoice
   const suggestions: CustomerMatch[] = suggestionsData?.customerMatchSuggestions || []
@@ -619,37 +531,6 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
     }
   }
 
-  const handleCreatePaymentMatch = async (transactionId: number, matchType: string = 'manual') => {
-    if (!invoice) return
-    try {
-      const result = await createPaymentMatch({
-        variables: { invoiceId: invoice.id, transactionId, matchType },
-      })
-      if (result.data?.createPaymentMatch?.success) {
-        setShowPaymentModal(false)
-        setTransactionSearch('')
-        refetch()
-      } else {
-        setToast({ type: 'error', message: result.data?.createPaymentMatch?.error || t('importedInvoiceDetail.matchFailed') })
-      }
-    } catch {
-      setToast({ type: 'error', message: t('importedInvoiceDetail.matchFailed') })
-    }
-  }
-
-  const handleDeletePaymentMatch = async (matchId: number) => {
-    try {
-      const result = await deletePaymentMatch({ variables: { matchId } })
-      if (result.data?.deletePaymentMatch?.success) {
-        refetch()
-      } else {
-        setToast({ type: 'error', message: result.data?.deletePaymentMatch?.error || t('importedInvoiceDetail.unmatchFailed') })
-      }
-    } catch {
-      setToast({ type: 'error', message: t('importedInvoiceDetail.unmatchFailed') })
-    }
-  }
-
   const openCustomerPicker = () => {
     if (invoice) {
       fetchSuggestions({ variables: { invoiceId: invoice.id } })
@@ -665,9 +546,6 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
   }
 
   const openPaymentModal = () => {
-    if (invoice) {
-      fetchPaymentMatches({ variables: { invoiceId: invoice.id, daysAfter: 30 } })
-    }
     setShowPaymentModal(true)
   }
 
@@ -1086,17 +964,9 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
                         <span className="font-medium">
                           {formatCurrency(parseFloat(match.transactionAmount))}
                         </span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">
-                            {formatDate(match.transactionDate)}
-                          </span>
-                          <button
-                            onClick={() => handleDeletePaymentMatch(match.id)}
-                            className="text-muted-foreground hover:text-red-600"
-                          >
-                            <Unlink className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDate(match.transactionDate)}
+                        </span>
                       </div>
                       <div className="mt-1 text-muted-foreground">{match.counterpartyName}</div>
                       <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
@@ -1234,148 +1104,20 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
       </Dialog>
 
       {/* Payment Match Modal */}
-      <Dialog open={showPaymentModal} onOpenChange={(open) => {
-        if (!open) { setShowPaymentModal(false); setTransactionSearch('') }
-      }}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{t('invoices.import.matchPaymentTitle')}</DialogTitle>
-            <DialogDescription>
-              {t('invoices.import.matchPaymentDescription', {
-                invoiceNumber: invoice.invoiceNumber || invoice.originalFilename,
-                amount: invoice.totalAmount ? formatCurrency(parseFloat(invoice.totalAmount)) : '-',
-                customer: invoice.customerDisplayName || invoice.customerName || '-',
-              })}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {/* Existing matches */}
-            {invoice.paymentMatches.length > 0 && (
-              <div>
-                <h4 className="mb-2 text-sm font-medium text-muted-foreground">{t('invoices.import.existingMatches')}</h4>
-                <div className="space-y-2">
-                  {invoice.paymentMatches.map((match) => (
-                    <div
-                      key={match.id}
-                      className="flex items-center justify-between rounded-lg border border-green-200 bg-green-50 p-3"
-                    >
-                      <div>
-                        <div className="font-medium">{match.counterpartyName}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {formatDate(match.transactionDate)} - {formatCurrency(parseFloat(match.transactionAmount))}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary">{match.matchType}</Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeletePaymentMatch(match.id)}
-                          className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                        >
-                          <Unlink className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Suggested matches */}
-            {!invoice.isPaid && (
-              <>
-                <div>
-                  <h4 className="mb-2 text-sm font-medium text-muted-foreground">{t('invoices.import.suggestedMatches')}</h4>
-                  {loadingPaymentMatches ? (
-                    <div className="py-4 text-center">
-                      <Loader2 className="mx-auto h-6 w-6 animate-spin" />
-                    </div>
-                  ) : (paymentMatchData?.findPaymentMatches as PaymentMatchCandidate[] | undefined)?.length ? (
-                    <div className="max-h-48 space-y-2 overflow-y-auto">
-                      {(paymentMatchData.findPaymentMatches as PaymentMatchCandidate[]).map((match) => (
-                        <button
-                          key={match.transactionId}
-                          onClick={() => handleCreatePaymentMatch(match.transactionId, match.matchType)}
-                          className="w-full rounded-lg border p-3 text-left hover:bg-muted/50"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="min-w-0 flex-1">
-                              <div className="font-medium">{match.counterpartyName}</div>
-                              <div className="text-sm text-muted-foreground">
-                                {formatDate(match.transactionDate)} - {match.bookingText}
-                              </div>
-                            </div>
-                            <div className="ml-4 flex flex-col items-end">
-                              <span className="font-mono text-green-600">{formatCurrency(parseFloat(match.amount))}</span>
-                              <div className="flex items-center gap-1">
-                                <Badge variant="outline" className="text-xs">{match.matchType}</Badge>
-                                <span className="text-xs text-muted-foreground">
-                                  {Math.round(parseFloat(match.confidence) * 100)}%
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="py-2 text-center text-sm text-muted-foreground">{t('invoices.import.noSuggestedMatches')}</p>
-                  )}
-                </div>
-
-                {/* Manual search */}
-                <div>
-                  <h4 className="mb-2 text-sm font-medium text-muted-foreground">{t('invoices.import.manualSearch')}</h4>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      value={transactionSearch}
-                      onChange={(e) => setTransactionSearch(e.target.value)}
-                      placeholder={t('invoices.import.searchTransactions')}
-                      className="pl-9"
-                    />
-                  </div>
-                  {loadingTxSearch ? (
-                    <div className="py-2 text-center">
-                      <Loader2 className="mx-auto h-4 w-4 animate-spin" />
-                    </div>
-                  ) : debouncedTxSearch && (searchTxData?.bankTransactions?.items as Array<{ id: number; entryDate: string; amount: string; currency: string; counterparty: { name: string } | null; bookingText: string }> | undefined)?.length ? (
-                    <div className="mt-2 max-h-48 space-y-2 overflow-y-auto">
-                      {(searchTxData.bankTransactions.items as Array<{ id: number; entryDate: string; amount: string; currency: string; counterparty: { name: string } | null; bookingText: string }>).map((tx) => (
-                        <button
-                          key={tx.id}
-                          onClick={() => handleCreatePaymentMatch(tx.id, 'manual')}
-                          className="w-full rounded-lg border p-3 text-left hover:bg-muted/50"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="min-w-0 flex-1">
-                              <div className="font-medium">{tx.counterparty?.name || '-'}</div>
-                              <div className="text-sm text-muted-foreground">
-                                {formatDate(tx.entryDate)} - {tx.bookingText}
-                              </div>
-                            </div>
-                            <span className="ml-4 font-mono text-green-600">
-                              {formatCurrency(parseFloat(tx.amount))}
-                            </span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : debouncedTxSearch ? (
-                    <p className="mt-2 py-2 text-center text-sm text-muted-foreground">{t('invoices.import.noTransactionsFound')}</p>
-                  ) : null}
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowPaymentModal(false); setTransactionSearch('') }}>
-              {t('common.close')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <PaymentMatchModal
+        open={showPaymentModal}
+        onOpenChange={setShowPaymentModal}
+        invoiceId={invoice.id}
+        invoiceNumber={invoice.invoiceNumber || invoice.originalFilename}
+        amount={invoice.totalAmount}
+        customerName={invoice.customerDisplayName || invoice.customerName || ''}
+        isPaid={invoice.isPaid}
+        existingMatches={invoice.paymentMatches}
+        onMatchChanged={() => {
+          setShowPaymentModal(false)
+          refetch()
+        }}
+      />
     </div>
   )
 }

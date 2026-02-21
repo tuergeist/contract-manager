@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { usePersistedState } from '@/lib/usePersistedState'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useQuery, useMutation, useLazyQuery, gql } from '@apollo/client'
+import { useQuery, useMutation, gql } from '@apollo/client'
 import {
   Upload,
   Loader2,
@@ -41,6 +41,7 @@ import { cn, formatCurrency, formatDate } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { CustomerPickerDialog } from '@/components/CustomerPickerDialog'
+import { PaymentMatchModal } from './PaymentMatchModal'
 
 // --- GraphQL ---
 
@@ -189,64 +190,6 @@ const UNLINK_CUSTOMER = gql`
   }
 `
 
-const FIND_PAYMENT_MATCHES = gql`
-  query FindPaymentMatches($invoiceId: ID!, $daysAfter: Int) {
-    findPaymentMatches(invoiceId: $invoiceId, daysAfter: $daysAfter) {
-      transactionId
-      transactionDate
-      amount
-      counterpartyName
-      bookingText
-      matchType
-      confidence
-    }
-  }
-`
-
-const SEARCH_TRANSACTIONS = gql`
-  query SearchTransactions($search: String, $direction: String, $page: Int, $pageSize: Int) {
-    bankTransactions(search: $search, direction: $direction, page: $page, pageSize: $pageSize) {
-      items {
-        id
-        entryDate
-        amount
-        currency
-        counterparty {
-          name
-        }
-        bookingText
-      }
-      totalCount
-    }
-  }
-`
-
-const CREATE_PAYMENT_MATCH = gql`
-  mutation CreatePaymentMatch($invoiceId: ID!, $transactionId: Int!, $matchType: String) {
-    createPaymentMatch(invoiceId: $invoiceId, transactionId: $transactionId, matchType: $matchType) {
-      success
-      error
-      match {
-        id
-        transactionId
-        transactionDate
-        transactionAmount
-        counterpartyName
-        matchType
-        confidence
-      }
-    }
-  }
-`
-
-const DELETE_PAYMENT_MATCH = gql`
-  mutation DeletePaymentMatch($matchId: Int!) {
-    deletePaymentMatch(matchId: $matchId) {
-      success
-      error
-    }
-  }
-`
 
 const IMPORT_BATCHES = gql`
   query ImportBatches($offset: Int, $limit: Int) {
@@ -360,37 +303,6 @@ const INVOICE_RECORDS = gql`
   }
 `
 
-const FIND_PAYMENT_MATCHES_FOR_RECORD = gql`
-  query FindPaymentMatchesForRecord($invoiceRecordId: Int!, $daysAfter: Int) {
-    findPaymentMatchesForRecord(invoiceRecordId: $invoiceRecordId, daysAfter: $daysAfter) {
-      transactionId
-      transactionDate
-      amount
-      counterpartyName
-      bookingText
-      matchType
-      confidence
-    }
-  }
-`
-
-const CREATE_PAYMENT_MATCH_FOR_RECORD = gql`
-  mutation CreatePaymentMatchForRecord($invoiceRecordId: Int!, $transactionId: Int!, $matchType: String) {
-    createPaymentMatchForRecord(invoiceRecordId: $invoiceRecordId, transactionId: $transactionId, matchType: $matchType) {
-      success
-      error
-      match {
-        id
-        transactionId
-        transactionDate
-        transactionAmount
-        counterpartyName
-        matchType
-        confidence
-      }
-    }
-  }
-`
 
 const M365_SETTINGS_QUERY = gql`
   query M365SettingsForInvoices {
@@ -520,25 +432,6 @@ interface CustomerMatch {
   hubspotId: string | null
 }
 
-interface PaymentMatchCandidate {
-  transactionId: number
-  transactionDate: string
-  amount: string
-  counterpartyName: string
-  bookingText: string
-  matchType: string
-  confidence: string
-}
-
-interface SearchTransaction {
-  id: number
-  entryDate: string
-  amount: string
-  currency: string
-  counterparty: { name: string } | null
-  bookingText: string
-}
-
 export function InvoiceList() {
   const { t } = useTranslation()
   const { hasPermission } = useAuth()
@@ -561,8 +454,6 @@ export function InvoiceList() {
   const [customerMatchInvoice, setCustomerMatchInvoice] = useState<Invoice | null>(null)
   const [paymentMatchInvoice, setPaymentMatchInvoice] = useState<Invoice | null>(null)
   const [paymentMatchRecord, setPaymentMatchRecord] = useState<GeneratedInvoice | null>(null)
-  const [transactionSearch, setTransactionSearch] = useState('')
-  const [debouncedTxSearch, setDebouncedTxSearch] = useState('')
 
   // File upload
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -627,52 +518,11 @@ export function InvoiceList() {
   const [reExtractInvoiceMutation] = useMutation(RE_EXTRACT_INVOICE)
   const [confirmCustomerMatchMutation] = useMutation(CONFIRM_CUSTOMER_MATCH)
   const [unlinkCustomerMutation] = useMutation(UNLINK_CUSTOMER)
-  const [createPaymentMatchMutation] = useMutation(CREATE_PAYMENT_MATCH)
-  const [createPaymentMatchForRecordMutation] = useMutation(CREATE_PAYMENT_MATCH_FOR_RECORD)
-  const [deletePaymentMatchMutation] = useMutation(DELETE_PAYMENT_MATCH)
   const { data: m365Data } = useQuery(M365_SETTINGS_QUERY)
   const [sendInvoiceEmail, { loading: sendingEmail }] = useMutation(SEND_INVOICE_EMAIL)
   const [sendAllUnsent, { loading: sendingAll }] = useMutation(SEND_ALL_UNSENT)
   const [bulkSendErrors, setBulkSendErrors] = useState<{ invoiceNumber: string; error: string }[]>([])
   const [bulkSendSent, setBulkSendSent] = useState<number | null>(null)
-
-  const [findPaymentMatches, { data: paymentMatchData, loading: loadingPaymentMatches }] = useLazyQuery(
-    FIND_PAYMENT_MATCHES,
-    { fetchPolicy: 'network-only' }
-  )
-
-  const [findPaymentMatchesForRecord, { data: paymentMatchRecordData, loading: loadingPaymentMatchesForRecord }] = useLazyQuery(
-    FIND_PAYMENT_MATCHES_FOR_RECORD,
-    { fetchPolicy: 'network-only' }
-  )
-
-  const { data: searchTxData, loading: loadingTxSearch } = useQuery(
-    SEARCH_TRANSACTIONS,
-    {
-      variables: { search: debouncedTxSearch, direction: 'credit', page: 1, pageSize: 20 },
-      skip: (!paymentMatchInvoice && !paymentMatchRecord) || !debouncedTxSearch,
-    }
-  )
-
-  // Debounce transaction search
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedTxSearch(transactionSearch), 300)
-    return () => clearTimeout(timer)
-  }, [transactionSearch])
-
-  // Fetch payment matches when invoice selected
-  useEffect(() => {
-    if (paymentMatchInvoice) {
-      findPaymentMatches({ variables: { invoiceId: paymentMatchInvoice.id, daysAfter: 90 } })
-    }
-  }, [paymentMatchInvoice, findPaymentMatches])
-
-  // Fetch payment matches when generated invoice record selected
-  useEffect(() => {
-    if (paymentMatchRecord) {
-      findPaymentMatchesForRecord({ variables: { invoiceRecordId: paymentMatchRecord.id, daysAfter: 90 } })
-    }
-  }, [paymentMatchRecord, findPaymentMatchesForRecord])
 
   const { data: customerMatchData, loading: loadingCustomerMatches } = useQuery(
     CUSTOMER_MATCH_SUGGESTIONS,
@@ -947,52 +797,9 @@ export function InvoiceList() {
     refetch()
   }
 
-  const handleCreatePaymentMatch = async (transactionId: number, matchType: string = 'manual') => {
-    if (paymentMatchRecord) {
-      const result = await createPaymentMatchForRecordMutation({
-        variables: {
-          invoiceRecordId: paymentMatchRecord.id,
-          transactionId,
-          matchType,
-        },
-      })
-      if (result.data?.createPaymentMatchForRecord?.success) {
-        setPaymentMatchRecord(null)
-        setTransactionSearch('')
-        refetch()
-        generatedRefetch()
-      }
-      return
-    }
-    if (!paymentMatchInvoice) return
-    const result = await createPaymentMatchMutation({
-      variables: {
-        invoiceId: paymentMatchInvoice.id,
-        transactionId,
-        matchType,
-      },
-    })
-    if (result.data?.createPaymentMatch?.success) {
-      setPaymentMatchInvoice(null)
-      setTransactionSearch('')
-      refetch()
-    }
-  }
-
-  const handleDeletePaymentMatch = async (matchId: number) => {
-    const result = await deletePaymentMatchMutation({
-      variables: { matchId },
-    })
-    if (result.data?.deletePaymentMatch?.success) {
-      refetch()
-      generatedRefetch()
-    }
-  }
-
   const openPaymentMatchModal = (invoice: Invoice) => {
     setPaymentMatchInvoice(invoice)
     setPaymentMatchRecord(null)
-    setTransactionSearch('')
   }
 
   const handleSendEmail = async (record: GeneratedInvoice) => {
@@ -1039,7 +846,6 @@ export function InvoiceList() {
   const openPaymentMatchRecordModal = (record: GeneratedInvoice) => {
     setPaymentMatchRecord(record)
     setPaymentMatchInvoice(null)
-    setTransactionSearch('')
   }
 
   const getPaymentBadge = (invoice: Invoice) => {
@@ -1817,170 +1623,34 @@ export function InvoiceList() {
       </CustomerPickerDialog>
 
       {/* Payment Match Modal */}
-      <Dialog open={!!paymentMatchInvoice || !!paymentMatchRecord} onOpenChange={(open: boolean) => {
-        if (!open) {
+      <PaymentMatchModal
+        open={!!paymentMatchInvoice || !!paymentMatchRecord}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPaymentMatchInvoice(null)
+            setPaymentMatchRecord(null)
+          }
+        }}
+        invoiceId={paymentMatchInvoice?.id}
+        invoiceRecordId={paymentMatchRecord?.id}
+        invoiceNumber={
+          paymentMatchInvoice?.invoiceNumber || paymentMatchInvoice?.originalFilename ||
+          paymentMatchRecord?.invoiceNumber || ''
+        }
+        amount={paymentMatchInvoice?.totalAmount || paymentMatchRecord?.totalGross || null}
+        customerName={
+          paymentMatchInvoice?.customerDisplayName || paymentMatchInvoice?.customerName ||
+          paymentMatchRecord?.customerName || ''
+        }
+        isPaid={paymentMatchInvoice?.isPaid || paymentMatchRecord?.isPaid || false}
+        existingMatches={paymentMatchInvoice?.paymentMatches ?? paymentMatchRecord?.paymentMatches ?? []}
+        onMatchChanged={() => {
           setPaymentMatchInvoice(null)
           setPaymentMatchRecord(null)
-          setTransactionSearch('')
-        }
-      }}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{t('invoices.import.matchPaymentTitle')}</DialogTitle>
-            <DialogDescription>
-              {paymentMatchInvoice && (
-                <>
-                  {t('invoices.import.matchPaymentDescription', {
-                    invoiceNumber: paymentMatchInvoice.invoiceNumber || paymentMatchInvoice.originalFilename,
-                    amount: paymentMatchInvoice.totalAmount ? formatCurrency(parseFloat(paymentMatchInvoice.totalAmount)) : '-',
-                    customer: paymentMatchInvoice.customerDisplayName || paymentMatchInvoice.customerName || '-',
-                  })}
-                </>
-              )}
-              {paymentMatchRecord && (
-                <>
-                  {t('invoices.import.matchPaymentDescription', {
-                    invoiceNumber: paymentMatchRecord.invoiceNumber,
-                    amount: paymentMatchRecord.totalGross ? formatCurrency(parseFloat(paymentMatchRecord.totalGross)) : '-',
-                    customer: paymentMatchRecord.customerName || '-',
-                  })}
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            {/* Existing matches */}
-            {(() => {
-              const matches = paymentMatchInvoice?.paymentMatches ?? paymentMatchRecord?.paymentMatches ?? []
-              return matches.length > 0 ? (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">{t('invoices.import.existingMatches')}</h4>
-                  <div className="space-y-2">
-                    {matches.map((match) => (
-                      <div
-                        key={match.id}
-                        className="flex items-center justify-between p-3 rounded-lg border bg-green-50 border-green-200"
-                      >
-                        <div>
-                          <div className="font-medium">{match.counterpartyName}</div>
-                          <div className="text-sm text-gray-500">
-                            {formatDate(match.transactionDate)} - {formatCurrency(parseFloat(match.transactionAmount))}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary">{match.matchType}</Badge>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeletePaymentMatch(match.id)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <Unlink className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null
-            })()}
-
-            {/* Suggested matches */}
-            {!(paymentMatchInvoice?.isPaid || paymentMatchRecord?.isPaid) && (
-              <>
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">{t('invoices.import.suggestedMatches')}</h4>
-                  {(loadingPaymentMatches || loadingPaymentMatchesForRecord) ? (
-                    <div className="text-center py-4">
-                      <Loader2 className="w-6 h-6 mx-auto animate-spin" />
-                    </div>
-                  ) : ((paymentMatchInvoice ? paymentMatchData?.findPaymentMatches : paymentMatchRecordData?.findPaymentMatchesForRecord) as PaymentMatchCandidate[] | undefined)?.length ? (
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {((paymentMatchInvoice ? paymentMatchData?.findPaymentMatches : paymentMatchRecordData?.findPaymentMatchesForRecord) as PaymentMatchCandidate[]).map((match) => (
-                        <button
-                          key={match.transactionId}
-                          onClick={() => handleCreatePaymentMatch(match.transactionId, match.matchType)}
-                          className="w-full flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 text-left"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium">{match.counterpartyName}</div>
-                            <div className="text-sm text-gray-500 break-words">
-                              {formatDate(match.transactionDate)} - {match.bookingText}
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end ml-4">
-                            <span className="font-mono text-green-600">
-                              {formatCurrency(parseFloat(match.amount))}
-                            </span>
-                            <div className="flex items-center gap-1">
-                              <Badge variant="outline" className="text-xs">{match.matchType}</Badge>
-                              <span className="text-xs text-gray-400">
-                                {Math.round(parseFloat(match.confidence) * 100)}%
-                              </span>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 text-center py-2">{t('invoices.import.noSuggestedMatches')}</p>
-                  )}
-                </div>
-
-                {/* Manual search */}
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">{t('invoices.import.manualSearch')}</h4>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                    <Input
-                      value={transactionSearch}
-                      onChange={(e) => setTransactionSearch(e.target.value)}
-                      placeholder={t('invoices.import.searchTransactions')}
-                      className="pl-9"
-                    />
-                  </div>
-                  {loadingTxSearch ? (
-                    <div className="text-center py-2">
-                      <Loader2 className="w-4 h-4 mx-auto animate-spin" />
-                    </div>
-                  ) : debouncedTxSearch && (searchTxData?.bankTransactions?.items as SearchTransaction[] | undefined)?.length ? (
-                    <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
-                      {(searchTxData.bankTransactions.items as SearchTransaction[]).map((tx) => (
-                        <button
-                          key={tx.id}
-                          onClick={() => handleCreatePaymentMatch(tx.id, 'manual')}
-                          className="w-full flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 text-left"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium">{tx.counterparty?.name || '-'}</div>
-                            <div className="text-sm text-gray-500 break-words">
-                              {formatDate(tx.entryDate)} - {tx.bookingText}
-                            </div>
-                          </div>
-                          <span className="font-mono text-green-600 ml-4">
-                            {formatCurrency(parseFloat(tx.amount))}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : debouncedTxSearch ? (
-                    <p className="text-sm text-gray-500 text-center py-2 mt-2">{t('invoices.import.noTransactionsFound')}</p>
-                  ) : null}
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setPaymentMatchInvoice(null)
-              setPaymentMatchRecord(null)
-              setTransactionSearch('')
-            }}>
-              {t('common.close')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          refetch()
+          generatedRefetch()
+        }}
+      />
     </div>
   )
 }

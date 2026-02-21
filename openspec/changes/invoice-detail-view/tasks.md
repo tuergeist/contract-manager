@@ -40,9 +40,9 @@
 
 ## 7. Extract Shared Payment Match Modal
 
-- [ ] 7.1 Extract `PaymentMatchModal` from `InvoiceList.tsx` into a shared component that accepts either `invoiceId` (imported) or `invoiceRecordId` (generated) and calls the appropriate mutations
-- [ ] 7.2 Update `InvoiceList.tsx` to use the extracted shared component
-- [ ] 7.3 Use the shared component in both `ImportedInvoiceDetail` and `GeneratedInvoiceDetail`
+- [x] 7.1 Extract `PaymentMatchModal` from `InvoiceList.tsx` into a shared component that accepts either `invoiceId` (imported) or `invoiceRecordId` (generated) and calls the appropriate mutations
+- [x] 7.2 Update `InvoiceList.tsx` to use the extracted shared component
+- [x] 7.3 Use the shared component in both `ImportedInvoiceDetail` and `GeneratedInvoiceDetail`
 
 ## 8. Translations
 
