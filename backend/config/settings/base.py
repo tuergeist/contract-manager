@@ -34,6 +34,9 @@ THIRD_PARTY_APPS = [
     "strawberry_django",
     "corsheaders",
     "auditlog",
+    "oauth2_provider",
+    "rest_framework",
+    "mcp_server",
 ]
 
 LOCAL_APPS = [
@@ -46,6 +49,7 @@ LOCAL_APPS = [
     "apps.audit",
     "apps.todos",
     "apps.banking",
+    "apps.mcp",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -197,6 +201,35 @@ TODOIST_PROJECT_ID = env("TODOIST_PROJECT_ID", default="")
 STRAWBERRY_DJANGO = {
     "FIELD_DESCRIPTION_FROM_HELP_TEXT": True,
     "TYPE_DESCRIPTION_FROM_MODEL_DOCSTRING": True,
+}
+
+# OAuth2 / django-oauth-toolkit
+OAUTH2_PROVIDER = {
+    "PKCE_REQUIRED": True,
+    "ACCESS_TOKEN_EXPIRE_SECONDS": 3600,  # 1 hour
+    "REFRESH_TOKEN_EXPIRE_SECONDS": 86400 * 7,  # 7 days
+    "ROTATE_REFRESH_TOKEN": True,
+    "ALLOWED_REDIRECT_URI_SCHEMES": ["http", "https"],
+    "SCOPES": {"read": "Read access", "write": "Write access"},
+    "DEFAULT_SCOPES": ["read", "write"],
+    "OIDC_ENABLED": False,
+}
+
+# Django REST Framework (required by django-oauth-toolkit)
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "oauth2_provider.contrib.rest_framework.OAuth2Authentication",
+    ],
+}
+
+# MCP Server
+DJANGO_MCP_AUTHENTICATION_CLASSES = [
+    "oauth2_provider.contrib.rest_framework.OAuth2Authentication",
+]
+DJANGO_MCP_GLOBAL_SERVER_CONFIG = {
+    "name": "contract-manager",
+    "instructions": "Contract management system. Query customers, contracts, products, invoices, and bank transactions. Generate invoices, void them, send emails, and manage contracts.",
+    "stateless": True,
 }
 
 # Celery configuration

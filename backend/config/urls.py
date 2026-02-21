@@ -3,7 +3,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.http import JsonResponse
-from django.urls import path
+from django.urls import include, path
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.core.context import get_context
@@ -28,10 +28,18 @@ from apps.invoices.views import InvoiceExportView, InvoicePreviewHtmlView, Invoi
 from apps.contracts.views import AttachmentDownloadView, ContractExportView
 from apps.customers.views import CustomerAttachmentDownloadView
 from apps.banking.views import UploadStatementView
+from apps.mcp.views import DynamicClientRegistrationView, OAuthMetadataView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("graphql", csrf_exempt(AuthenticatedGraphQLView.as_view(schema=schema))),
+    # OAuth 2.1 endpoints (django-oauth-toolkit)
+    path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
+    path("oauth/register/", csrf_exempt(DynamicClientRegistrationView.as_view()), name="oauth-register"),
+    # OAuth metadata discovery (RFC 8414)
+    path(".well-known/oauth-authorization-server", OAuthMetadataView.as_view(), name="oauth-metadata"),
+    # MCP server endpoint
+    path("", include("mcp_server.urls")),
     path("api/health", health_check),
     path("api/version/", VersionView.as_view(), name="version"),
     path("api/version/licenses/", BackendLicensesView.as_view(), name="version-licenses"),

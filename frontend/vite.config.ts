@@ -26,6 +26,18 @@ export default defineConfig({
         target: 'http://backend:8000',  // Internal Docker network
         changeOrigin: true,
       },
+      '/oauth': {
+        target: 'http://backend:8000',
+        changeOrigin: true,
+      },
+      '/.well-known': {
+        target: 'http://backend:8000',
+        changeOrigin: true,
+      },
+      '/mcp': {
+        target: 'http://backend:8000',
+        changeOrigin: true,
+      },
     },
   },
 })
