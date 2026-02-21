@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
 import {
@@ -37,6 +37,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { getToken } from '@/lib/auth'
+import { ImportedInvoiceDetail } from './ImportedInvoiceDetail'
 
 const INVOICE_RECORD_QUERY = gql`
   query InvoiceRecord($id: Int!) {
@@ -264,6 +265,17 @@ function formatCurrency(amount: string | number, locale: string, currency = 'EUR
 
 export function InvoiceDetail() {
   const { id } = useParams<{ id: string }>()
+  const [searchParams] = useSearchParams()
+  const type = searchParams.get('type')
+
+  if (type === 'imported') {
+    return <ImportedInvoiceDetail id={Number(id!)} />
+  }
+
+  return <GeneratedInvoiceDetail id={Number(id!)} fallbackToImported={!type} />
+}
+
+function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallbackToImported: boolean }) {
   const navigate = useNavigate()
   const { t, i18n } = useTranslation()
   const [showVoidDialog, setShowVoidDialog] = useState(false)
@@ -272,12 +284,11 @@ export function InvoiceDetail() {
 
   const { data, loading, error, refetch } = useQuery<{ invoiceRecord: InvoiceRecord | null }>(
     INVOICE_RECORD_QUERY,
-    { variables: { id: Number(id) } }
+    { variables: { id } }
   )
 
   const { data: auditData } = useQuery(AUDIT_LOGS_QUERY, {
-    variables: { entityType: 'invoice_record', entityId: Number(id), first: 50 },
-    skip: !id,
+    variables: { entityType: 'invoice_record', entityId: id, first: 50 },
   })
 
   const [sendEmail, { loading: sendingEmail }] = useMutation(SEND_INVOICE_EMAIL)
@@ -357,6 +368,10 @@ export function InvoiceDetail() {
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
+  }
+
+  if (!loading && !record && fallbackToImported) {
+    return <ImportedInvoiceDetail id={id} />
   }
 
   if (error || !record) {

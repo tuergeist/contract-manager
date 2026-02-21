@@ -893,7 +893,7 @@ class InvoiceQuery:
 
         try:
             inv = ImportedInvoice.objects.select_related(
-                "customer", "created_by"
+                "customer", "created_by", "contract"
             ).prefetch_related(
                 "payment_matches__transaction__counterparty",
                 "payment_matches__matched_by",

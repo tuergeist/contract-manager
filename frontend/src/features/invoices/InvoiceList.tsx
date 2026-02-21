@@ -1309,6 +1309,10 @@ export function InvoiceList() {
                             <Link to={`/invoices/${row.generated.id}`} className="text-blue-600 hover:underline">
                               {row.invoiceNumber || <span className="text-gray-400 italic">{t('invoices.import.noNumber')}</span>}
                             </Link>
+                          ) : row.imported ? (
+                            <Link to={`/invoices/${row.imported.id}?type=imported`} className="text-blue-600 hover:underline">
+                              {row.invoiceNumber || <span className="text-gray-400 italic">{t('invoices.import.noNumber')}</span>}
+                            </Link>
                           ) : (
                             row.invoiceNumber || <span className="text-gray-400 italic">{t('invoices.import.noNumber')}</span>
                           )}
