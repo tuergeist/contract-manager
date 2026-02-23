@@ -40,7 +40,7 @@ import { PaymentMatchModal } from './PaymentMatchModal'
 // --- GraphQL ---
 
 const IMPORTED_INVOICE_QUERY = gql`
-  query ImportedInvoice($id: Int!) {
+  query ImportedInvoice($id: ID!) {
     invoice(id: $id) {
       id
       invoiceNumber
@@ -210,7 +210,7 @@ const CUSTOMER_MATCH_SUGGESTIONS = gql`
 `
 
 const CUSTOMER_CONTRACTS = gql`
-  query CustomerContractsForInvoice($id: Int!) {
+  query CustomerContractsForInvoice($id: ID!) {
     customer(id: $id) {
       id
       contracts {
