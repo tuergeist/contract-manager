@@ -52,22 +52,23 @@ describe('ForecastsPage', () => {
 
     expect(screen.getByTestId('revenue-forecast')).toBeInTheDocument()
     expect(screen.queryByTestId('liquidity-forecast')).not.toBeInTheDocument()
-    expect(screen.queryByRole('tab')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /revenue/i })).not.toBeInTheDocument()
   })
 
   it('renders tabs when user has banking.read permission', () => {
     mockAuth(['banking.read'])
     renderPage()
 
-    expect(screen.getAllByRole('tab')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: /revenue/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /liquidity/i })).toBeInTheDocument()
   })
 
   it('shows revenue tab active by default', () => {
     mockAuth(['banking.read'])
     renderPage()
 
-    const revenueTab = screen.getByRole('tab', { name: /revenue/i })
-    expect(revenueTab).toHaveAttribute('data-state', 'active')
+    const revenueTab = screen.getByRole('button', { name: /revenue/i })
+    expect(revenueTab.className).toContain('border-blue-600')
     expect(screen.getByTestId('revenue-forecast')).toBeInTheDocument()
   })
 
@@ -75,8 +76,8 @@ describe('ForecastsPage', () => {
     mockAuth(['banking.read'])
     renderPage('/forecasts?tab=liquidity')
 
-    const liquidityTab = screen.getByRole('tab', { name: /liquidity/i })
-    expect(liquidityTab).toHaveAttribute('data-state', 'active')
+    const liquidityTab = screen.getByRole('button', { name: /liquidity/i })
+    expect(liquidityTab.className).toContain('border-blue-600')
     expect(screen.getByTestId('liquidity-forecast')).toBeInTheDocument()
   })
 })
