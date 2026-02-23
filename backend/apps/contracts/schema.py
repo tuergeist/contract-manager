@@ -1339,7 +1339,8 @@ class _ImportedInvoiceAdapter:
             self.period_start = None
             self.period_end = None
         self.email_sent_at = None
-        self._is_paid_cached = imported.extraction_status == "paid" or imported.payment_matches.exists()
+        # Use bool() on prefetched queryset to avoid extra DB query
+        self._is_paid_cached = imported.extraction_status == "paid" or bool(imported.payment_matches.all())
         self.contract_id = imported.contract_id
 
 
@@ -1777,8 +1778,8 @@ class ContractQuery:
         # Build lookup: {contract_id: [InvoiceRecord, ...]}
         invoice_lookup: dict[int, list] = defaultdict(list)
         for inv in invoice_qs:
-            # Cache is_paid to avoid repeated queries
-            inv._is_paid_cached = inv.payment_matches.all().exists()
+            # Use bool() on prefetched queryset — avoids extra DB query
+            inv._is_paid_cached = bool(inv.payment_matches.all())
             invoice_lookup[inv.contract_id].append(inv)
 
         # Also include confirmed/sent/paid imported invoices linked to contracts
@@ -1813,9 +1814,8 @@ class ContractQuery:
             items_arg = None
             if exclude_one_off:
                 items = list(
-                    contract.items.select_related("product", "depends_on")
-                    .prefetch_related("price_periods")
-                    .filter(is_one_off=False)
+                    item for item in contract.items.all()
+                    if not item.is_one_off
                 )
                 if not items:
                     continue
@@ -2016,7 +2016,8 @@ class ContractQuery:
         )
         invoice_lookup: dict[int, list] = defaultdict(list)
         for inv in invoice_qs:
-            inv._is_paid_cached = inv.payment_matches.all().exists()
+            # Use bool() on prefetched queryset — avoids extra DB query
+            inv._is_paid_cached = bool(inv.payment_matches.all())
             invoice_lookup[inv.contract_id].append(inv)
 
         # Also include confirmed/sent/paid imported invoices linked to contracts
@@ -2051,9 +2052,8 @@ class ContractQuery:
             items_arg = None
             if exclude_one_off:
                 items = list(
-                    contract.items.select_related("product", "depends_on")
-                    .prefetch_related("price_periods")
-                    .filter(is_one_off=False)
+                    item for item in contract.items.all()
+                    if not item.is_one_off
                 )
                 if not items:
                     continue

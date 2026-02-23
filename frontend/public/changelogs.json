@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.5.6",
+    "date": "2026-02-23",
+    "title": "Revenue Forecast Performance Optimization",
+    "description": "Eliminated N+1 database queries in the revenue and recognition forecast resolvers, significantly reducing load time.",
+    "type": "improvement",
+    "details": [
+      "Fix N+1 queries on payment_matches by using prefetched cache instead of .exists()",
+      "Use already-prefetched contract items instead of re-querying in exclude_one_off filter"
+    ]
+  },
+  {
     "version": "2.5.5",
     "date": "2026-02-23",
     "title": "Imported Invoice Lifecycle & Forecast Integration",
