@@ -732,7 +732,29 @@
         "voided": "Voided"
       },
       "viewPdfGenerated": "Download PDF",
-      "contractLink": "View contract"
+      "contractLink": "View contract",
+      "infoButton": "Invoice guide",
+      "infoTitle": "Invoice Guide",
+      "infoTypesTitle": "Invoice Types",
+      "infoTypesGenerated": "Generated invoices are created automatically from contracts for a billing period. They receive sequential invoice numbers and can be exported as PDF.",
+      "infoTypesImported": "Imported invoices are uploaded as PDF files (e.g. from an external system). Data such as invoice number, date, and amount is extracted automatically.",
+      "infoGeneratedStatusTitle": "Generated Invoice Statuses",
+      "infoGeneratedStatusFinalized": "Invoice has been created with an invoice number but not yet sent.",
+      "infoGeneratedStatusSent": "Invoice has been sent to the customer by email.",
+      "infoGeneratedStatusPaid": "Payment has been matched to a bank transaction.",
+      "infoGeneratedStatusDunning": "Invoice is overdue and in the dunning process.",
+      "infoGeneratedStatusVoided": "Invoice has been voided and is no longer valid.",
+      "infoImportedStatusTitle": "Imported Invoice Statuses",
+      "infoImportedStatusPending": "PDF has been uploaded but data extraction has not started yet.",
+      "infoImportedStatusExtracting": "Data is currently being extracted from the PDF.",
+      "infoImportedStatusExtracted": "Data has been extracted successfully (invoice number, date, amount).",
+      "infoImportedStatusFailed": "Automatic data extraction failed. You can retry or enter data manually.",
+      "infoImportedStatusDuplicate": "An invoice with the same number already exists in the system.",
+      "infoImportedStatusConfirmed": "Extracted data has been reviewed and confirmed.",
+      "infoImportedStatusSent": "Invoice has been sent to the customer.",
+      "infoImportedStatusPaid": "Payment has been matched to a bank transaction.",
+      "infoPaymentTitle": "Payment Matching",
+      "infoPaymentDescription": "Invoices can be linked to bank transactions to track payments. When a matching credit transaction is found, the invoice is marked as paid. Matches can be created automatically from suggestions or manually by searching transactions."
     }
   },
   "invoiceDetail": {

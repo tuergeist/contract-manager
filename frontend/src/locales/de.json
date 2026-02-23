@@ -732,7 +732,29 @@
         "voided": "Storniert"
       },
       "viewPdfGenerated": "PDF herunterladen",
-      "contractLink": "Vertrag anzeigen"
+      "contractLink": "Vertrag anzeigen",
+      "infoButton": "Rechnungsübersicht",
+      "infoTitle": "Rechnungsübersicht",
+      "infoTypesTitle": "Rechnungstypen",
+      "infoTypesGenerated": "Generierte Rechnungen werden automatisch aus Verträgen für einen Abrechnungszeitraum erstellt. Sie erhalten fortlaufende Rechnungsnummern und können als PDF exportiert werden.",
+      "infoTypesImported": "Importierte Rechnungen werden als PDF-Dateien hochgeladen (z.B. aus einem externen System). Daten wie Rechnungsnummer, Datum und Betrag werden automatisch extrahiert.",
+      "infoGeneratedStatusTitle": "Status generierter Rechnungen",
+      "infoGeneratedStatusFinalized": "Rechnung wurde mit einer Rechnungsnummer erstellt, aber noch nicht versendet.",
+      "infoGeneratedStatusSent": "Rechnung wurde per E-Mail an den Kunden versendet.",
+      "infoGeneratedStatusPaid": "Zahlung wurde einer Bankbuchung zugeordnet.",
+      "infoGeneratedStatusDunning": "Rechnung ist überfällig und im Mahnverfahren.",
+      "infoGeneratedStatusVoided": "Rechnung wurde storniert und ist nicht mehr gültig.",
+      "infoImportedStatusTitle": "Status importierter Rechnungen",
+      "infoImportedStatusPending": "PDF wurde hochgeladen, aber die Datenextraktion hat noch nicht begonnen.",
+      "infoImportedStatusExtracting": "Daten werden gerade aus dem PDF extrahiert.",
+      "infoImportedStatusExtracted": "Daten wurden erfolgreich extrahiert (Rechnungsnummer, Datum, Betrag).",
+      "infoImportedStatusFailed": "Automatische Datenextraktion fehlgeschlagen. Sie können es erneut versuchen oder Daten manuell eingeben.",
+      "infoImportedStatusDuplicate": "Eine Rechnung mit derselben Nummer existiert bereits im System.",
+      "infoImportedStatusConfirmed": "Extrahierte Daten wurden geprüft und bestätigt.",
+      "infoImportedStatusSent": "Rechnung wurde an den Kunden versendet.",
+      "infoImportedStatusPaid": "Zahlung wurde einer Bankbuchung zugeordnet.",
+      "infoPaymentTitle": "Zahlungszuordnung",
+      "infoPaymentDescription": "Rechnungen können mit Bankbuchungen verknüpft werden, um Zahlungen zu verfolgen. Wird eine passende Haben-Buchung gefunden, wird die Rechnung als bezahlt markiert. Zuordnungen können automatisch aus Vorschlägen oder manuell durch Suche nach Transaktionen erstellt werden."
     }
   },
   "invoiceDetail": {

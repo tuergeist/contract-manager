@@ -25,6 +25,7 @@ import {
   ArrowUp,
   ArrowDown,
   FileDown,
+  Info,
 } from 'lucide-react'
 import {
   Dialog,
@@ -447,6 +448,7 @@ export function InvoiceList() {
   const pageSize = 20
 
   // Modals
+  const [showInfoModal, setShowInfoModal] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [csvUploadOpen, setCsvUploadOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -873,6 +875,14 @@ export function InvoiceList() {
           <p className="text-sm text-gray-500">{t('invoices.import.subtitle')}</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowInfoModal(true)}
+            title={t('invoices.import.infoButton')}
+          >
+            <Info className="w-4 h-4" />
+          </Button>
           <HelpVideoButton />
           {canWrite && (
             <>
@@ -1621,6 +1631,79 @@ export function InvoiceList() {
           </div>
         )}
       </CustomerPickerDialog>
+
+      {/* Info Modal */}
+      <Dialog open={showInfoModal} onOpenChange={setShowInfoModal}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('invoices.import.infoTitle')}</DialogTitle>
+            <DialogDescription className="sr-only">{t('invoices.import.infoTitle')}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 text-sm">
+            {/* Invoice Types */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">{t('invoices.import.infoTypesTitle')}</h3>
+              <div className="space-y-2">
+                <div className="flex gap-3">
+                  <Badge variant="outline" className="shrink-0 bg-blue-50 text-blue-700 border-blue-200">{t('invoices.import.sourceGenerated')}</Badge>
+                  <p className="text-muted-foreground">{t('invoices.import.infoTypesGenerated')}</p>
+                </div>
+                <div className="flex gap-3">
+                  <Badge variant="outline" className="shrink-0">{t('invoices.import.sourceImported')}</Badge>
+                  <p className="text-muted-foreground">{t('invoices.import.infoTypesImported')}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Generated Statuses */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">{t('invoices.import.infoGeneratedStatusTitle')}</h3>
+              <div className="space-y-2">
+                {[
+                  { key: 'finalized', label: t('invoices.import.generatedStatus.finalized'), desc: t('invoices.import.infoGeneratedStatusFinalized'), color: 'bg-blue-100 text-blue-800' },
+                  { key: 'sent', label: t('invoices.import.generatedStatus.sent'), desc: t('invoices.import.infoGeneratedStatusSent'), color: 'bg-green-100 text-green-800' },
+                  { key: 'paid', label: t('invoices.import.generatedStatus.paid'), desc: t('invoices.import.infoGeneratedStatusPaid'), color: 'bg-green-100 text-green-800' },
+                  { key: 'dunning', label: t('invoices.import.generatedStatus.dunning'), desc: t('invoices.import.infoGeneratedStatusDunning'), color: 'bg-orange-100 text-orange-800' },
+                  { key: 'voided', label: t('invoices.import.generatedStatus.voided'), desc: t('invoices.import.infoGeneratedStatusVoided'), color: 'bg-gray-100 text-gray-600' },
+                ].map((s) => (
+                  <div key={s.key} className="flex gap-3 items-start">
+                    <Badge variant="outline" className={cn('shrink-0', s.color)}>{s.label}</Badge>
+                    <p className="text-muted-foreground">{s.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Imported Statuses */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">{t('invoices.import.infoImportedStatusTitle')}</h3>
+              <div className="space-y-2">
+                {[
+                  { key: 'pending', label: t('invoices.import.statusPending'), desc: t('invoices.import.infoImportedStatusPending'), color: 'bg-gray-100 text-gray-700' },
+                  { key: 'extracting', label: t('invoices.import.statusExtracting'), desc: t('invoices.import.infoImportedStatusExtracting'), color: 'bg-yellow-100 text-yellow-800' },
+                  { key: 'extracted', label: t('invoices.import.statusExtracted'), desc: t('invoices.import.infoImportedStatusExtracted'), color: 'bg-blue-100 text-blue-800' },
+                  { key: 'failed', label: t('invoices.import.statusFailed'), desc: t('invoices.import.infoImportedStatusFailed'), color: 'bg-red-100 text-red-800' },
+                  { key: 'duplicate', label: t('invoices.import.statusDuplicate'), desc: t('invoices.import.infoImportedStatusDuplicate'), color: 'bg-orange-100 text-orange-800' },
+                  { key: 'confirmed', label: t('invoices.import.statusConfirmed'), desc: t('invoices.import.infoImportedStatusConfirmed'), color: 'bg-green-100 text-green-800' },
+                  { key: 'sent', label: t('invoices.import.generatedStatus.sent'), desc: t('invoices.import.infoImportedStatusSent'), color: 'bg-green-100 text-green-800' },
+                  { key: 'paid', label: t('invoices.import.paid'), desc: t('invoices.import.infoImportedStatusPaid'), color: 'bg-green-100 text-green-800' },
+                ].map((s) => (
+                  <div key={s.key} className="flex gap-3 items-start">
+                    <Badge variant="outline" className={cn('shrink-0', s.color)}>{s.label}</Badge>
+                    <p className="text-muted-foreground">{s.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Payment Matching */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">{t('invoices.import.infoPaymentTitle')}</h3>
+              <p className="text-muted-foreground">{t('invoices.import.infoPaymentDescription')}</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Payment Match Modal */}
       <PaymentMatchModal
