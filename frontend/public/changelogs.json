@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.5.4",
+    "date": "2026-02-23",
+    "title": "Fix Revenue Forecast Invoice Status Detection",
+    "description": "Invoice status in the revenue forecast was always showing as yellow (actionable) because email delivery did not update the invoice status to sent.",
+    "type": "bugfix",
+    "details": [
+      "Fix send_invoice_email task to set invoice status to sent after successful delivery",
+      "Forecast treats finalized invoices with email_sent_at as sent (handles existing data)"
+    ]
+  },
+  {
     "version": "2.5.3",
     "date": "2026-02-23",
     "title": "Invoice Navigation & Payment Details",
