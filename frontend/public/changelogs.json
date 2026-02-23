@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.5.7",
+    "date": "2026-02-23",
+    "title": "Pro-rate Dependent Items from Dependency ETA",
+    "description": "Recurring items that depend on a pending deliverable now start billing from the dependency's ETA date with a pro-rated first period, instead of skipping to the next full billing cycle.",
+    "type": "bugfix",
+    "details": [
+      "Compute dynamic alignment when dependency ETA pushes billing start past the contract alignment date",
+      "Generate pro-rated period from ETA to next cycle date, then full periods after",
+      "Fix applies to both billing and recognition forecast schedules"
+    ]
+  },
+  {
     "version": "2.5.6",
     "date": "2026-02-23",
     "title": "Revenue Forecast Performance Optimization",
