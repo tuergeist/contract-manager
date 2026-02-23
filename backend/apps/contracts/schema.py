@@ -1385,8 +1385,17 @@ def _determine_cell_invoice_status(invoice, period_str: str, today: date, is_qua
     if period_end > today and invoice is None:
         return None
 
-    # No invoice or draft/finalized => actionable (for past/current periods)
-    if invoice is None or invoice.status in ("draft", "finalized"):
+    # No invoice or draft => actionable (for past/current periods)
+    if invoice is None or invoice.status == "draft":
+        return "actionable"
+
+    # Finalized: check if email was actually sent (status may not have been updated)
+    if invoice.status == "finalized":
+        if invoice.email_sent_at:
+            sent_date = invoice.email_sent_at.date()
+            if (today - sent_date).days >= 60:
+                return "overdue"
+            return "sent"
         return "actionable"
 
     # Paid: has payment match or status is paid

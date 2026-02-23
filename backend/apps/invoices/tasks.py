@@ -256,7 +256,8 @@ def send_invoice_email_task(self, record_id: int, user_id: int | None = None) ->
         record.email_sent_at = timezone.now()
         record.email_sent_to = recipients
         record.email_message_id = message_id or ""
-        record.save(update_fields=["email_sent_at", "email_sent_to", "email_message_id"])
+        record.status = InvoiceRecord.Status.SENT
+        record.save(update_fields=["email_sent_at", "email_sent_to", "email_message_id", "status"])
 
         from apps.invoices.audit import log_invoice_email_sent
         from apps.tenants.models import User
