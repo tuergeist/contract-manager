@@ -37,6 +37,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { getToken } from '@/lib/auth'
+import { formatCurrency } from '@/lib/utils'
 import { ImportedInvoiceDetail } from './ImportedInvoiceDetail'
 
 const INVOICE_RECORD_QUERY = gql`
@@ -259,9 +260,6 @@ function formatDateTime(dateStr: string, locale: string) {
   })
 }
 
-function formatCurrency(amount: string | number, locale: string, currency = 'EUR') {
-  return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(Number(amount))
-}
 
 export function InvoiceDetail() {
   const { id } = useParams<{ id: string }>()
@@ -596,17 +594,17 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
                 <div className="grid grid-cols-3 gap-8">
                   <div>
                     <div className="text-xs font-medium uppercase text-muted-foreground">{t('invoices.netTotal')}</div>
-                    <div className="mt-1 text-lg font-semibold">{formatCurrency(record.totalNet, i18n.language)}</div>
+                    <div className="mt-1 text-lg font-semibold">{formatCurrency(record.totalNet)}</div>
                   </div>
                   <div>
                     <div className="text-xs font-medium uppercase text-muted-foreground">
                       {t('invoices.taxAmount')} ({Number(record.taxRate)}%)
                     </div>
-                    <div className="mt-1 text-lg font-semibold">{formatCurrency(record.taxAmount, i18n.language)}</div>
+                    <div className="mt-1 text-lg font-semibold">{formatCurrency(record.taxAmount)}</div>
                   </div>
                   <div>
                     <div className="text-xs font-medium uppercase text-muted-foreground">{t('invoices.grossTotal')}</div>
-                    <div className="mt-1 text-xl font-bold">{formatCurrency(record.totalGross, i18n.language)}</div>
+                    <div className="mt-1 text-xl font-bold">{formatCurrency(record.totalGross)}</div>
                   </div>
                 </div>
               </div>
@@ -650,10 +648,10 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
                       </TableCell>
                       <TableCell className="text-right">{item.quantity}</TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(item.unit_price, i18n.language)}
+                        {formatCurrency(item.unit_price)}
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCurrency(item.amount, i18n.language)}
+                        {formatCurrency(item.amount)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -706,7 +704,7 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
                     <div key={match.id} className="rounded border p-3 text-sm">
                       <div className="flex items-center justify-between">
                         <span className="font-medium">
-                          {formatCurrency(match.transactionAmount, i18n.language)}
+                          {formatCurrency(match.transactionAmount)}
                         </span>
                         <span className="text-xs text-muted-foreground">
                           {formatDate(match.transactionDate, i18n.language)}

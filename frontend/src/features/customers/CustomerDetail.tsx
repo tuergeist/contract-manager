@@ -27,7 +27,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import { cn, formatDate } from '@/lib/utils'
+import { cn, formatDate, formatCurrency } from '@/lib/utils'
 import { useAuditLogs, AuditLogTable } from '@/features/audit'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { CommentsSection } from '@/components/CommentsSection'
@@ -470,14 +470,6 @@ export function CustomerDetail() {
     )
   }
 
-  const formatCurrency = (value: string | null) => {
-    if (!value) return '-'
-    return new Intl.NumberFormat(i18n.language, {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(parseFloat(value))
-  }
-
   const formatAddress = (address: CustomerAddress | null) => {
     if (!address) return null
     const parts = []
@@ -862,7 +854,7 @@ export function CustomerDetail() {
             <div>
               <p className="text-sm font-medium text-gray-500">{t('customers.totalContractValue')}</p>
               <p className="mt-1 text-xl font-semibold text-gray-900">
-                {new Intl.NumberFormat(i18n.language, { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(contractTotals.totalValue)}
+                {formatCurrency(contractTotals.totalValue, { maximumFractionDigits: 0 })}
               </p>
             </div>
             <div className="rounded-full bg-blue-100 p-2">
@@ -880,7 +872,7 @@ export function CustomerDetail() {
             <div>
               <p className="text-sm font-medium text-gray-500">{t('customers.totalArr')}</p>
               <p className="mt-1 text-xl font-semibold text-gray-900">
-                {new Intl.NumberFormat(i18n.language, { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(contractTotals.totalArr)}
+                {formatCurrency(contractTotals.totalArr, { maximumFractionDigits: 0 })}
               </p>
             </div>
             <div className="rounded-full bg-green-100 p-2">

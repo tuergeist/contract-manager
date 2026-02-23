@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
 import { Link } from 'react-router-dom'
@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
+import { formatCurrency } from '@/lib/utils'
 
 const REVENUE_FORECAST_QUERY = gql`
   query RevenueForecast($months: Int, $quarters: Int, $view: String, $proRata: Boolean, $excludeOneOff: Boolean) {
@@ -29,6 +30,7 @@ const REVENUE_FORECAST_QUERY = gql`
         months {
           month
           amount
+          invoiceStatus
         }
         total
       }
@@ -54,6 +56,7 @@ const RECOGNITION_FORECAST_QUERY = gql`
         months {
           month
           amount
+          invoiceStatus
         }
         total
       }
@@ -66,6 +69,7 @@ const RECOGNITION_FORECAST_QUERY = gql`
 interface RevenueMonthData {
   month: string
   amount: string
+  invoiceStatus: string | null
 }
 
 interface ContractRevenueRow {
@@ -180,42 +184,25 @@ export function RevenueForecast() {
     return `${month}/${year.slice(2)}`
   }
 
-  // Memoize currency formatters to avoid creating new Intl.NumberFormat instances on every render
-  const currencyFormatter = useMemo(
-    () =>
-      new Intl.NumberFormat(i18n.language, {
-        style: 'currency',
-        currency: 'EUR',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      }),
-    [i18n.language]
-  )
+  const formatCurrencyCompact = (value: string) => {
+    const num = parseFloat(value)
+    if (num === 0) return '-'
+    return formatCurrency(value, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  }
 
-  const currencyFormatterFull = useMemo(
-    () =>
-      new Intl.NumberFormat(i18n.language, {
-        style: 'currency',
-        currency: 'EUR',
-      }),
-    [i18n.language]
-  )
+  const formatCurrencyFull = (value: string) => {
+    return formatCurrency(value)
+  }
 
-  const formatCurrency = useCallback(
-    (value: string) => {
-      const num = parseFloat(value)
-      if (num === 0) return '-'
-      return currencyFormatter.format(num)
-    },
-    [currencyFormatter]
-  )
-
-  const formatCurrencyFull = useCallback(
-    (value: string) => {
-      return currencyFormatterFull.format(parseFloat(value))
-    },
-    [currencyFormatterFull]
-  )
+  const getCellClassName = (status: string | null): string => {
+    switch (status) {
+      case 'paid': return 'bg-green-50'
+      case 'sent': return 'bg-blue-50'
+      case 'overdue': return 'bg-orange-50'
+      case 'actionable': return 'bg-yellow-50'
+      default: return ''
+    }
+  }
 
   if (loading) {
     return (
@@ -324,6 +311,26 @@ export function RevenueForecast() {
         </div>
       </div>
 
+      {/* Color Legend */}
+      <div className="mb-3 flex items-center gap-4 text-xs text-gray-600">
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded border border-yellow-200 bg-yellow-50" />
+          <span>{t('forecast.statusActionable')}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded border border-blue-200 bg-blue-50" />
+          <span>{t('forecast.statusSent')}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded border border-green-200 bg-green-50" />
+          <span>{t('forecast.statusPaid')}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded border border-orange-200 bg-orange-50" />
+          <span>{t('forecast.statusOverdue')}</span>
+        </div>
+      </div>
+
       {/* Forecast Table */}
       {!forecast?.contracts || forecast.contracts.length === 0 ? (
         <div className="rounded-lg border bg-white p-8 text-center">
@@ -376,7 +383,7 @@ export function RevenueForecast() {
                     key={periodData.month}
                     className="whitespace-nowrap px-3 py-3 text-right text-sm text-blue-900"
                   >
-                    {formatCurrency(periodData.amount)}
+                    {formatCurrencyCompact(periodData.amount)}
                   </td>
                 ))}
                 <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-bold text-blue-900">
@@ -406,9 +413,9 @@ export function RevenueForecast() {
                   {contract.months.map((periodData) => (
                     <td
                       key={periodData.month}
-                      className="whitespace-nowrap px-3 py-3 text-right text-sm text-gray-900"
+                      className={`whitespace-nowrap px-3 py-3 text-right text-sm text-gray-900 ${getCellClassName(periodData.invoiceStatus)}`}
                     >
-                      {formatCurrency(periodData.amount)}
+                      {formatCurrencyCompact(periodData.amount)}
                     </td>
                   ))}
                   <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900">

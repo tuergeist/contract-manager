@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { useTranslation } from 'react-i18next'
 import { useMutation, gql } from '@apollo/client'
 import { X, Loader2 } from 'lucide-react'
@@ -110,12 +111,9 @@ export function EditPatternModal({ pattern, onClose, onSave }: EditPatternModalP
               <span className="text-gray-500">
                 {pattern.averageAmount < 0 ? '-' : '+'}
               </span>
-              <input
-                type="number"
+              <CurrencyInput
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                step="0.01"
-                min="0"
+                onChange={setAmount}
                 className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               <span className="text-gray-500">EUR</span>

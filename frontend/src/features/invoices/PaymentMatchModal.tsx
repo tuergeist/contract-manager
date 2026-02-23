@@ -249,7 +249,7 @@ export function PaymentMatchModal({
           <DialogDescription>
             {t('invoices.import.matchPaymentDescription', {
               invoiceNumber,
-              amount: amount ? formatCurrency(parseFloat(amount)) : '-',
+              amount: amount ? formatCurrency(amount) : '-',
               customer: customerName || '-',
             })}
           </DialogDescription>
@@ -268,7 +268,7 @@ export function PaymentMatchModal({
                     <div>
                       <div className="font-medium">{match.counterpartyName}</div>
                       <div className="text-sm text-gray-500">
-                        {formatDate(match.transactionDate)} - {formatCurrency(parseFloat(match.transactionAmount))}
+                        {formatDate(match.transactionDate)} - {formatCurrency(match.transactionAmount)}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -314,7 +314,7 @@ export function PaymentMatchModal({
                           </div>
                           <div className="ml-4 flex flex-col items-end">
                             <span className="font-mono text-green-600">
-                              {formatCurrency(parseFloat(match.amount))}
+                              {formatCurrency(match.amount)}
                             </span>
                             <div className="flex items-center gap-1">
                               <Badge variant="outline" className="text-xs">{match.matchType}</Badge>
@@ -364,7 +364,7 @@ export function PaymentMatchModal({
                             </div>
                           </div>
                           <span className="ml-4 font-mono text-green-600">
-                            {formatCurrency(parseFloat(tx.amount))}
+                            {formatCurrency(tx.amount)}
                           </span>
                         </div>
                       </button>

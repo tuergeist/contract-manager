@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -752,11 +753,9 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
                   </div>
                   {editing === 'totalAmount' ? (
                     <div className="mt-1 flex items-center gap-1">
-                      <Input
-                        type="number"
-                        step="0.01"
+                      <CurrencyInput
                         value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
+                        onChange={setEditValue}
                         className="h-8 text-sm"
                         autoFocus
                       />
@@ -771,7 +770,7 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
                     <div className="mt-1 flex items-center gap-1">
                       <span className="font-medium">
                         {invoice.totalAmount
-                          ? `${formatCurrency(parseFloat(invoice.totalAmount))} ${invoice.currency !== 'EUR' ? invoice.currency : ''}`
+                          ? `${formatCurrency(invoice.totalAmount)} ${invoice.currency !== 'EUR' ? invoice.currency : ''}`
                           : '-'}
                       </span>
                       {isEditable && (
@@ -962,7 +961,7 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
                     <div key={match.id} className="rounded border p-3 text-sm">
                       <div className="flex items-center justify-between">
                         <span className="font-medium">
-                          {formatCurrency(parseFloat(match.transactionAmount))}
+                          {formatCurrency(match.transactionAmount)}
                         </span>
                         <span className="text-xs text-muted-foreground">
                           {formatDate(match.transactionDate)}

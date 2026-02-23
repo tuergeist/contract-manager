@@ -7,6 +7,7 @@ import { format } from 'date-fns'
 import { de, enUS } from 'date-fns/locale'
 import { FileDown, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Loader2, Eye } from 'lucide-react'
 
+import { formatCurrency } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -343,13 +344,6 @@ export function InvoiceExportPage() {
     } finally {
       setPreviewLoading(false)
     }
-  }
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat(i18n.language, {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(amount)
   }
 
   const formatDate = (dateString: string) => {

@@ -15,7 +15,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react'
 import { usePersistedState } from '@/lib/usePersistedState'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatCurrency } from '@/lib/utils'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 const CONTRACTS_QUERY = gql`
@@ -111,14 +111,6 @@ export function ContractList() {
       sortOrder,
     },
   })
-
-  const formatCurrency = (value: string | null) => {
-    if (!value) return '-'
-    return new Intl.NumberFormat(i18n.language, {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(parseFloat(value))
-  }
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {

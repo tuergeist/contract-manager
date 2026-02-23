@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
 import { Loader2, RefreshCw, TrendingUp, TrendingDown, ChevronDown, ChevronRight, Check, X, Pause, Play, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Search } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { ForecastChart } from './ForecastChart'
 import { EditPatternModal } from './EditPatternModal'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
@@ -391,11 +392,9 @@ export function LiquidityForecast() {
             <div className="flex-1">
               <label className="mb-1 block text-xs text-gray-500">{t('liquidity.referenceAmount')}</label>
               <div className="relative">
-                <input
-                  type="number"
-                  step="0.01"
+                <CurrencyInput
                   value={referenceAmount}
-                  onChange={(e) => setReferenceAmount(e.target.value)}
+                  onChange={setReferenceAmount}
                   className="w-full rounded-md border border-gray-300 px-3 py-1.5 pr-10 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">EUR</span>

@@ -43,20 +43,80 @@ export function formatMonthYear(dateStr: string | null | undefined): string {
 }
 
 /**
- * Format number as currency (EUR)
+ * Format number as currency (EUR by default, always de-DE locale)
  */
 export function formatCurrency(
-  value: number | null | undefined,
-  options?: { compact?: boolean }
+  value: string | number | null | undefined,
+  options?: {
+    compact?: boolean
+    currency?: string
+    minimumFractionDigits?: number
+    maximumFractionDigits?: number
+  }
 ): string {
-  if (value === null || value === undefined) return '-'
+  if (value === null || value === undefined || value === '') return '-'
+  const num = typeof value === 'string' ? parseFloat(value) : value
+  if (isNaN(num)) return '-'
   const formatOptions: Intl.NumberFormatOptions = {
     style: 'currency',
-    currency: 'EUR',
+    currency: options?.currency ?? 'EUR',
   }
   if (options?.compact) {
     formatOptions.notation = 'compact'
-    formatOptions.maximumFractionDigits = 1
+    formatOptions.maximumFractionDigits = options.maximumFractionDigits ?? 1
   }
-  return new Intl.NumberFormat('de-DE', formatOptions).format(value)
+  if (options?.minimumFractionDigits !== undefined) {
+    formatOptions.minimumFractionDigits = options.minimumFractionDigits
+  }
+  if (options?.maximumFractionDigits !== undefined) {
+    formatOptions.maximumFractionDigits = options.maximumFractionDigits
+  }
+  return new Intl.NumberFormat('de-DE', formatOptions).format(num)
+}
+
+/**
+ * Format number with de-DE locale (no currency symbol)
+ */
+export function formatNumber(
+  value: string | number | null | undefined,
+  options?: {
+    minimumFractionDigits?: number
+    maximumFractionDigits?: number
+  }
+): string {
+  if (value === null || value === undefined || value === '') return '-'
+  const num = typeof value === 'string' ? parseFloat(value) : value
+  if (isNaN(num)) return '-'
+  return new Intl.NumberFormat('de-DE', {
+    minimumFractionDigits: options?.minimumFractionDigits,
+    maximumFractionDigits: options?.maximumFractionDigits,
+  }).format(num)
+}
+
+/**
+ * Format number as percentage with de-DE locale
+ */
+export function formatPercent(
+  value: string | number | null | undefined,
+  options?: {
+    minimumFractionDigits?: number
+    maximumFractionDigits?: number
+  }
+): string {
+  if (value === null || value === undefined || value === '') return '-'
+  const num = typeof value === 'string' ? parseFloat(value) : value
+  if (isNaN(num)) return '-'
+  return new Intl.NumberFormat('de-DE', {
+    style: 'percent',
+    minimumFractionDigits: options?.minimumFractionDigits ?? 1,
+    maximumFractionDigits: options?.maximumFractionDigits ?? 1,
+  }).format(num)
+}
+
+/**
+ * Parse a German-formatted number string (comma as decimal separator) to a dot-decimal string.
+ * E.g. "1.234,56" → "1234.56", "42,5" → "42.5"
+ */
+export function parseGermanNumber(value: string): string {
+  return value.replace(/\./g, '').replace(',', '.')
 }

@@ -34,11 +34,12 @@ import {
   CircleDot,
   Undo2,
 } from 'lucide-react'
-import { cn, formatDate, formatDateTime, formatMonthYear } from '@/lib/utils'
+import { cn, formatDate, formatDateTime, formatMonthYear, formatCurrency, formatPercent } from '@/lib/utils'
 import { getToken } from '@/lib/auth'
 import { useAuditLogs, AuditLogTable } from '@/features/audit'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import {
   Dialog,
   DialogContent,
@@ -653,7 +654,7 @@ function SortableRow({
 type Tab = 'items' | 'amendments' | 'forecast' | 'attachments' | 'invoices' | 'todos' | 'timeTracking' | 'activity'
 
 export function ContractDetail() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
   const [activeTab, setActiveTab] = useState<Tab>('items')
@@ -805,14 +806,6 @@ export function ContractDetail() {
     }
   }
 
-  const formatCurrency = (value: string | null) => {
-    if (!value) return '-'
-    return new Intl.NumberFormat(i18n.language, {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(parseFloat(value))
-  }
-
   const getIntervalMultiplier = (interval: string): number => {
     switch (interval) {
       case 'monthly': return 1
@@ -830,10 +823,7 @@ export function ContractDetail() {
   const formatARR = (monthlyValue: string | null): string => {
     if (!monthlyValue) return '-'
     const arr = parseFloat(monthlyValue) * 12
-    return new Intl.NumberFormat(i18n.language, {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(arr)
+    return formatCurrency(arr)
   }
 
   const getStatusBadgeClass = (status: string) => {
@@ -1670,7 +1660,7 @@ export function ContractDetail() {
                         {formatDate(record.invoiceDate || record.billingDate)}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
-                        {new Intl.NumberFormat(i18n.language, { style: 'currency', currency: 'EUR' }).format(parseFloat(record.totalGross))}
+                        {formatCurrency(record.totalGross)}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4">
                         <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-blue-100 text-blue-800 w-fit">
@@ -1721,7 +1711,7 @@ export function ContractDetail() {
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
                         {invoice.totalAmount
-                          ? new Intl.NumberFormat(i18n.language, { style: 'currency', currency: invoice.currency || 'EUR' }).format(parseFloat(invoice.totalAmount))
+                          ? formatCurrency(invoice.totalAmount, { currency: invoice.currency || 'EUR' })
                           : '-'}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4">
@@ -2357,10 +2347,7 @@ function AddItemModal({
                             </div>
                             {product.currentPrice?.price && (
                               <span className="ml-auto text-sm text-muted-foreground">
-                                {new Intl.NumberFormat('de-DE', {
-                                  style: 'currency',
-                                  currency: 'EUR',
-                                }).format(parseFloat(product.currentPrice.price))}
+                                {formatCurrency(product.currentPrice.price)}
                               </span>
                             )}
                           </CommandItem>
@@ -2399,11 +2386,9 @@ function AddItemModal({
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('contracts.item.unitPrice')} *</label>
-              <Input
-                type="number"
-                step="0.01"
+              <CurrencyInput
                 value={unitPrice}
-                onChange={(e) => setUnitPrice(e.target.value)}
+                onChange={setUnitPrice}
               />
             </div>
             <div className="space-y-2">
@@ -2612,7 +2597,7 @@ function EditItemModal({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const [productId, setProductId] = useState(item.product?.id || '')
   const [productSearchOpen, setProductSearchOpen] = useState(false)
   const [productSearchTerm, setProductSearchTerm] = useState('')
@@ -2674,14 +2659,6 @@ function EditItemModal({
   const [editPeriodPrice, setEditPeriodPrice] = useState('')
   const [editPeriodPricePeriod, setEditPeriodPricePeriod] = useState('monthly')
   const [editPeriodSource, setEditPeriodSource] = useState('fixed')
-
-  const formatCurrencyLocal = (value: string | null) => {
-    if (!value) return '-'
-    return new Intl.NumberFormat(i18n.language, {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(parseFloat(value))
-  }
 
   const handleAddPricePeriod = async () => {
     if (!newPeriodFrom || !newPeriodPrice) return
@@ -2894,10 +2871,7 @@ function EditItemModal({
                             </div>
                             {product.currentPrice?.price && (
                               <span className="ml-auto text-sm text-muted-foreground">
-                                {new Intl.NumberFormat('de-DE', {
-                                  style: 'currency',
-                                  currency: 'EUR',
-                                }).format(parseFloat(product.currentPrice.price))}
+                                {formatCurrency(product.currentPrice.price)}
                               </span>
                             )}
                           </CommandItem>
@@ -2936,11 +2910,9 @@ function EditItemModal({
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('contracts.item.unitPrice')} *</label>
-              <Input
-                type="number"
-                step="0.01"
+              <CurrencyInput
                 value={unitPrice}
-                onChange={(e) => setUnitPrice(e.target.value)}
+                onChange={setUnitPrice}
               />
             </div>
             <div className="space-y-2">
@@ -3059,11 +3031,9 @@ function EditItemModal({
                               </div>
                               <div>
                                 <label className="text-xs text-gray-500">{t('contracts.item.periodPrice')}</label>
-                                <Input
-                                  type="number"
-                                  step="0.01"
+                                <CurrencyInput
                                   value={editPeriodPrice}
-                                  onChange={(e) => setEditPeriodPrice(e.target.value)}
+                                  onChange={setEditPeriodPrice}
                                   className="h-8 text-sm"
                                 />
                               </div>
@@ -3127,7 +3097,7 @@ function EditItemModal({
                               <span>{formatMonthYear(period.validFrom)}</span>
                               <span className="text-gray-400">→</span>
                               <span>{period.validTo ? formatMonthYear(period.validTo) : t('contracts.item.ongoing')}</span>
-                              <span className="font-medium">{formatCurrencyLocal(period.unitPrice)}</span>
+                              <span className="font-medium">{formatCurrency(period.unitPrice)}</span>
                               <span className="text-xs text-blue-600">/{t(`contracts.item.pricePeriodValues.${period.pricePeriod}`)}</span>
                               <span className="text-xs text-gray-500">{t(`contracts.item.source${period.source.charAt(0).toUpperCase() + period.source.slice(1)}`)}</span>
                             </div>
@@ -3181,11 +3151,9 @@ function EditItemModal({
                   </div>
                   <div>
                     <label className="text-xs text-gray-500">{t('contracts.item.periodPrice')}</label>
-                    <Input
-                      type="number"
-                      step="0.01"
+                    <CurrencyInput
                       value={newPeriodPrice}
-                      onChange={(e) => setNewPeriodPrice(e.target.value)}
+                      onChange={setNewPeriodPrice}
                       className="h-8 text-sm"
                     />
                   </div>
@@ -3496,7 +3464,7 @@ interface BillingScheduleResult {
 }
 
 function ForecastTab({ contractId }: { contractId: string }) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const [months, setMonths] = useState('13')
   const [includeAllHistory, setIncludeAllHistory] = useState(false)
 
@@ -3509,21 +3477,6 @@ function ForecastTab({ contractId }: { contractId: string }) {
   })
 
   const schedule = data?.billingSchedule as BillingScheduleResult | undefined
-
-  const formatCurrency = (value: string) => {
-    return new Intl.NumberFormat(i18n.language, {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(parseFloat(value))
-  }
-
-  const formatPercent = (value: string) => {
-    return new Intl.NumberFormat(i18n.language, {
-      style: 'percent',
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    }).format(parseFloat(value))
-  }
 
   if (loading) {
     return (

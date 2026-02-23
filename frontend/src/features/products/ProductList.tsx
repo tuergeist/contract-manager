@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
 import { Loader2, Search, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { usePersistedState } from '@/lib/usePersistedState'
-import { formatDateTime } from '@/lib/utils'
+import { formatDateTime, formatCurrency } from '@/lib/utils'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 const PRODUCTS_QUERY = gql`
@@ -76,7 +76,7 @@ type SortOrder = 'asc' | 'desc'
 const PAGE_SIZE = 20
 
 export function ProductList() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const [searchTerm, setSearchTerm] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
@@ -94,14 +94,6 @@ export function ProductList() {
       sortOrder,
     },
   })
-
-  const formatPrice = (price: string | null | undefined) => {
-    if (!price) return '-'
-    return new Intl.NumberFormat(i18n.language, {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(parseFloat(price))
-  }
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -267,7 +259,7 @@ export function ProductList() {
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                      {formatPrice(product.currentPrice?.price)}
+                      {formatCurrency(product.currentPrice?.price)}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
                       <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${

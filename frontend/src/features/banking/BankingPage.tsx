@@ -32,6 +32,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { formatCurrency } from '@/lib/utils'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import {
   Popover,
   PopoverContent,
@@ -662,14 +664,6 @@ export function BankingPage() {
       : <ArrowDown className="h-3.5 w-3.5" />
   }
 
-  const formatAmount = (amount: string, currency: string) => {
-    const num = parseFloat(amount)
-    return new Intl.NumberFormat('de-DE', {
-      style: 'currency',
-      currency: currency || 'EUR',
-    }).format(num)
-  }
-
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('de-DE')
   }
@@ -945,7 +939,7 @@ export function BankingPage() {
                               {cp.transactionCount}
                             </td>
                             <td className={`whitespace-nowrap px-4 py-2.5 text-right font-medium ${netAmount < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                              {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(netAmount)}
+                              {formatCurrency(netAmount)}
                             </td>
                             <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">
                               {formatDate(cp.lastDate)}
@@ -1074,11 +1068,9 @@ export function BankingPage() {
               <label className="mb-1 block text-xs font-medium text-gray-500">
                 {t('banking.amountMin')}
               </label>
-              <input
-                type="number"
-                step="0.01"
+              <CurrencyInput
                 value={amountMin}
-                onChange={(e) => setAmountMin(e.target.value)}
+                onChange={setAmountMin}
                 className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
@@ -1086,11 +1078,9 @@ export function BankingPage() {
               <label className="mb-1 block text-xs font-medium text-gray-500">
                 {t('banking.amountMax')}
               </label>
-              <input
-                type="number"
-                step="0.01"
+              <CurrencyInput
                 value={amountMax}
-                onChange={(e) => setAmountMax(e.target.value)}
+                onChange={setAmountMax}
                 className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
@@ -1357,7 +1347,7 @@ export function BankingPage() {
                                 <FileText className="h-4 w-4" />
                               </Link>
                             )}
-                            {formatAmount(tx.amount, tx.currency)}
+                            {formatCurrency(tx.amount, { currency: tx.currency || 'EUR' })}
                           </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-2.5 text-gray-500">

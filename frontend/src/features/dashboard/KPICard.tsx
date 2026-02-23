@@ -6,6 +6,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { formatCurrency, formatNumber } from '@/lib/utils'
 
 interface KPICardProps {
   title: string
@@ -15,22 +16,9 @@ interface KPICardProps {
   isCurrency?: boolean
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency: 'EUR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value)
-}
-
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat('de-DE').format(value)
-}
-
 export function KPICard({ title, value, subtitle, explanation, isCurrency = false }: KPICardProps) {
   const displayValue = typeof value === 'number'
-    ? (isCurrency ? formatCurrency(value) : formatNumber(value))
+    ? (isCurrency ? formatCurrency(value, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : formatNumber(value))
     : value
 
   return (

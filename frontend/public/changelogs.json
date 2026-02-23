@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.5.1",
+    "date": "2026-02-23",
+    "title": "Consistent German Number Formatting (de-DE)",
+    "description": "All currency displays and inputs now use German number formatting (1.234,56 €) regardless of UI language.",
+    "type": "bugfix",
+    "details": [
+      "Currency display uses de-DE locale consistently across all pages",
+      "New CurrencyInput component accepts comma as decimal separator",
+      "Shared formatCurrency, formatNumber, formatPercent, and parseGermanNumber utilities",
+      "Replaced 15+ local formatting function duplicates with shared imports",
+      "Currency input fields use text input with inputMode=decimal instead of type=number"
+    ]
+  },
+  {
     "version": "2.5.0",
     "date": "2026-02-20",
     "title": "Settings Reorganization, Audit Improvements & Bug Fixes",
