@@ -1439,7 +1439,25 @@
     "selectCustomerToLink": "Select Customer",
     "searchCustomers": "Search customers...",
     "noCustomersFound": "No customers found",
-    "unlinkCustomer": "Unlink Customer"
+    "unlinkCustomer": "Unlink Customer",
+    "matchView": {
+      "title": "Transaction Matching",
+      "matchedInvoices": "Matched Invoices",
+      "noMatches": "No invoices matched yet. Search below to add matches.",
+      "totalMatched": "Total Matched",
+      "difference": "Difference",
+      "remaining": "remaining",
+      "fullyMatched": "Fully matched",
+      "overbookingWarning": "Overbooking: matched invoices exceed transaction amount",
+      "searchInvoices": "Search invoices...",
+      "unmatchedOnly": "Unmatched only",
+      "noResults": "No invoices found.",
+      "addMatch": "Click to match",
+      "removeMatch": "Remove match",
+      "imported": "Imported",
+      "generated": "Generated",
+      "matchButton": "Match"
+    }
   },
   "liquidity": {
     "title": "Liquidity Forecast",

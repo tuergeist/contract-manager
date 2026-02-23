@@ -45,6 +45,8 @@ import {
 } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
+import { TransactionMatchSheet } from './TransactionMatchSheet'
+import { Link2 } from 'lucide-react'
 
 const COUNTERPARTY_DETAIL = gql`
   query CounterpartyDetail($id: ID!) {
@@ -258,6 +260,10 @@ export function CounterpartyDetailPage() {
   // Expanded transaction row
   const [expandedTxId, setExpandedTxId] = useState<number | null>(null)
 
+  // Match sheet state
+  const [matchSheetTxId, setMatchSheetTxId] = useState<number | null>(null)
+  const [matchSheetOpen, setMatchSheetOpen] = useState(false)
+
   // Rename state
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState('')
@@ -313,7 +319,7 @@ export function CounterpartyDetailPage() {
   const summary: CounterpartySummary | null = cpData?.counterparty || null
 
   // Transactions query
-  const { data: txData, loading: txLoading } = useQuery(BANK_TRANSACTIONS, {
+  const { data: txData, loading: txLoading, refetch: txRefetch } = useQuery(BANK_TRANSACTIONS, {
     variables: {
       accountId: filterAccountId !== 'all' ? parseInt(filterAccountId) : null,
       search: debouncedSearch || null,
@@ -1012,7 +1018,20 @@ export function CounterpartyDetailPage() {
                         )}
                       </td>
                       <td className={`whitespace-nowrap px-4 py-2.5 text-right font-medium ${amount < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {formatCurrency(tx.amount, { currency: tx.currency || 'EUR' })}
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setMatchSheetTxId(tx.id)
+                              setMatchSheetOpen(true)
+                            }}
+                            className="text-gray-300 hover:text-gray-500"
+                            title={t('banking.matchView.matchButton')}
+                          >
+                            <Link2 className="h-4 w-4" />
+                          </button>
+                          {formatCurrency(tx.amount, { currency: tx.currency || 'EUR' })}
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-500">
                         {tx.accountName}
@@ -1059,6 +1078,17 @@ export function CounterpartyDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Transaction Match Sheet */}
+      <TransactionMatchSheet
+        transactionId={matchSheetTxId}
+        open={matchSheetOpen}
+        onOpenChange={(open) => {
+          setMatchSheetOpen(open)
+          if (!open) setMatchSheetTxId(null)
+        }}
+        onMatchChanged={() => txRefetch()}
+      />
     </div>
   )
 }

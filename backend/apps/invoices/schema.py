@@ -558,6 +558,26 @@ class CreatePaymentMatchResult:
     match: PaymentMatchType | None = None
 
 
+@strawberry.type
+class InvoiceSearchResultType:
+    """Unified search result for both imported invoices and generated invoice records."""
+
+    id: strawberry.ID
+    invoice_number: str
+    amount: Decimal
+    customer_name: str
+    invoice_type: str  # "imported" or "generated"
+    status: str
+    invoice_date: date | None = None
+    is_paid: bool = False
+
+
+@strawberry.type
+class InvoiceSearchResultsType:
+    items: List[InvoiceSearchResultType]
+    has_more: bool
+
+
 # =========================================================================
 # Queries
 # =========================================================================
@@ -1014,6 +1034,77 @@ class InvoiceQuery:
             )
             for m in matches
         ]
+
+
+    @strawberry.field
+    def search_invoices_for_matching(
+        self,
+        info: Info,
+        search: str = "",
+        unmatched_only: bool = False,
+        limit: int = 20,
+    ) -> InvoiceSearchResultsType:
+        """Search both imported invoices and generated invoice records for payment matching."""
+        user = require_perm(info, "invoices", "read")
+
+        results: list[InvoiceSearchResultType] = []
+
+        # Search imported invoices
+        imported_qs = ImportedInvoice.objects.filter(
+            tenant=user.tenant,
+            extraction_status__in=["confirmed", "sent", "paid"],
+        ).select_related("customer")
+        if search:
+            imported_qs = imported_qs.filter(
+                Q(invoice_number__icontains=search)
+                | Q(customer_name__icontains=search)
+            )
+        if unmatched_only:
+            imported_qs = imported_qs.exclude(extraction_status="paid")
+
+        for inv in imported_qs[: limit + 1]:
+            results.append(InvoiceSearchResultType(
+                id=strawberry.ID(str(inv.id)),
+                invoice_number=inv.invoice_number or "",
+                amount=inv.total_amount or Decimal("0"),
+                customer_name=inv.customer.name if inv.customer else inv.customer_name or "",
+                invoice_type="imported",
+                status=inv.extraction_status,
+                invoice_date=inv.invoice_date,
+                is_paid=inv.extraction_status == "paid",
+            ))
+
+        # Search generated invoice records
+        record_qs = InvoiceRecord.objects.filter(
+            tenant=user.tenant,
+        ).exclude(status="voided").select_related("customer")
+        if search:
+            record_qs = record_qs.filter(
+                Q(invoice_number__icontains=search)
+                | Q(customer__name__icontains=search)
+            )
+        if unmatched_only:
+            record_qs = record_qs.exclude(status="paid")
+
+        for rec in record_qs[: limit + 1]:
+            results.append(InvoiceSearchResultType(
+                id=strawberry.ID(str(rec.id)),
+                invoice_number=rec.invoice_number or "",
+                amount=rec.total_gross or Decimal("0"),
+                customer_name=rec.customer.name if rec.customer else "",
+                invoice_type="generated",
+                status=rec.status,
+                invoice_date=rec.invoice_date,
+                is_paid=rec.status == "paid",
+            ))
+
+        # Sort by invoice number and limit
+        results.sort(key=lambda r: r.invoice_number)
+        has_more = len(results) > limit
+        return InvoiceSearchResultsType(
+            items=results[:limit],
+            has_more=has_more,
+        )
 
 
 # =========================================================================

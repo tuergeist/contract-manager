@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.5.9",
+    "date": "2026-02-23",
+    "title": "Transaction Match View for Banking",
+    "description": "New slide-over panel to match bank transactions with invoices. Supports multi-invoice matching with running balance, difference calculation, and overbooking warnings.",
+    "type": "feature",
+    "details": [
+      "Match panel opens from link icon on each transaction row in Banking and Counterparty pages",
+      "Shows all matched invoices with running total and color-coded difference (green/yellow/orange)",
+      "Search invoices by number with unmatched-only filter, click to add match",
+      "Overbooking warning when matched invoices exceed transaction by more than 3%",
+      "New backend queries: transactionMatchDetails and searchInvoicesForMatching"
+    ]
+  },
+  {
     "version": "2.5.8",
     "date": "2026-02-23",
     "title": "Fix Contract End Date Ignored in Billing and Forecast",

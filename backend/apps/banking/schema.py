@@ -317,11 +317,115 @@ def _make_pattern_type(pattern) -> RecurringPatternType:
     )
 
 
+@strawberry.type
+class MatchDetailType:
+    """A single invoice match on a transaction."""
+
+    id: int
+    invoice_id: strawberry.ID | None = None
+    invoice_record_id: int | None = None
+    invoice_number: str
+    invoice_amount: Decimal
+    customer_name: str
+    invoice_type: str  # "imported" or "generated"
+    match_type: str
+    confidence: Decimal
+    matched_at: str
+
+
+@strawberry.type
+class TransactionMatchDetailsType:
+    """Full transaction with all its invoice matches and balance info."""
+
+    id: int
+    entry_date: date
+    value_date: date | None
+    amount: Decimal
+    currency: str
+    counterparty_name: str
+    booking_text: str
+    reference: str
+    account_name: str
+    matches: List[MatchDetailType]
+    total_matched: Decimal
+    difference: Decimal
+
+
 # --- Queries ---
 
 
 @strawberry.type
 class BankingQuery:
+    @strawberry.field
+    def transaction_match_details(
+        self,
+        info: Info[Context, None],
+        transaction_id: int,
+    ) -> TransactionMatchDetailsType | None:
+        """Get a transaction with all its invoice matches and balance totals."""
+        user = require_perm(info, "banking", "read")
+        from apps.banking.models import BankTransaction
+
+        try:
+            txn = (
+                BankTransaction.objects.filter(tenant=user.tenant)
+                .select_related("account", "counterparty")
+                .prefetch_related(
+                    "invoice_matches__invoice__customer",
+                    "invoice_matches__invoice_record__customer",
+                )
+                .get(id=transaction_id)
+            )
+        except BankTransaction.DoesNotExist:
+            return None
+
+        matches = []
+        total_matched = Decimal("0")
+        for m in txn.invoice_matches.all():
+            if m.invoice_id:
+                inv = m.invoice
+                matches.append(MatchDetailType(
+                    id=m.id,
+                    invoice_id=strawberry.ID(str(inv.id)),
+                    invoice_number=inv.invoice_number or "",
+                    invoice_amount=inv.total_amount or Decimal("0"),
+                    customer_name=inv.customer.name if inv.customer else inv.customer_name or "",
+                    invoice_type="imported",
+                    match_type=m.match_type,
+                    confidence=m.confidence,
+                    matched_at=m.matched_at.isoformat() if m.matched_at else "",
+                ))
+                total_matched += inv.total_amount or Decimal("0")
+            elif m.invoice_record_id:
+                rec = m.invoice_record
+                matches.append(MatchDetailType(
+                    id=m.id,
+                    invoice_record_id=rec.id,
+                    invoice_number=rec.invoice_number or "",
+                    invoice_amount=rec.total_gross or Decimal("0"),
+                    customer_name=rec.customer.name if rec.customer else "",
+                    invoice_type="generated",
+                    match_type=m.match_type,
+                    confidence=m.confidence,
+                    matched_at=m.matched_at.isoformat() if m.matched_at else "",
+                ))
+                total_matched += rec.total_gross or Decimal("0")
+
+        return TransactionMatchDetailsType(
+            id=txn.id,
+            entry_date=txn.entry_date,
+            value_date=txn.value_date,
+            amount=txn.amount,
+            currency=txn.currency,
+            counterparty_name=txn.counterparty.name if txn.counterparty else "",
+            booking_text=txn.booking_text,
+            reference=txn.reference,
+            account_name=txn.account.name,
+            matches=matches,
+            total_matched=total_matched,
+            difference=abs(txn.amount) - total_matched,
+        )
+
     @strawberry.field
     def bank_accounts(self, info: Info[Context, None]) -> List[BankAccountType]:
         user = require_perm(info, "banking", "read")

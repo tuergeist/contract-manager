@@ -50,6 +50,8 @@ import {
 } from '@/components/ui/command'
 import { useAuth } from '@/lib/auth'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
+import { TransactionMatchSheet } from './TransactionMatchSheet'
+import { Link2 } from 'lucide-react'
 
 // --- GraphQL ---
 
@@ -320,6 +322,10 @@ export function BankingPage() {
   })
   const [accountError, setAccountError] = useState<string | null>(null)
 
+  // Match sheet state
+  const [matchSheetTxId, setMatchSheetTxId] = useState<number | null>(null)
+  const [matchSheetOpen, setMatchSheetOpen] = useState(false)
+
   // Upload state
   const [uploadingAccountId, setUploadingAccountId] = useState<number | null>(null)
   const [uploadResult, setUploadResult] = useState<{ imported: number; skipped: number } | null>(null)
@@ -389,7 +395,7 @@ export function BankingPage() {
   const { data: accountsData, loading: accountsLoading, refetch: refetchAccounts } = useQuery(BANK_ACCOUNTS)
   const accounts: BankAccount[] = accountsData?.bankAccounts ?? []
 
-  const { data: txData, loading: txLoading } = useQuery(BANK_TRANSACTIONS, {
+  const { data: txData, loading: txLoading, refetch: txRefetch } = useQuery(BANK_TRANSACTIONS, {
     variables: {
       accountId: filterAccountId !== 'all' ? parseInt(filterAccountId) : null,
       search: debouncedSearch || null,
@@ -1328,6 +1334,17 @@ export function BankingPage() {
                         </td>
                         <td className={`whitespace-nowrap px-4 py-2.5 text-right font-medium ${amount < 0 ? 'text-red-600' : 'text-green-600'}`}>
                           <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setMatchSheetTxId(tx.id)
+                                setMatchSheetOpen(true)
+                              }}
+                              className={`${tx.matchedInvoice ? 'text-blue-600 hover:text-blue-800' : 'text-gray-300 hover:text-gray-500'}`}
+                              title={t('banking.matchView.matchButton')}
+                            >
+                              <Link2 className="h-4 w-4" />
+                            </button>
                             {tx.matchedInvoice && (
                               <Link
                                 to={
@@ -1512,6 +1529,17 @@ export function BankingPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Transaction Match Sheet */}
+      <TransactionMatchSheet
+        transactionId={matchSheetTxId}
+        open={matchSheetOpen}
+        onOpenChange={(open) => {
+          setMatchSheetOpen(open)
+          if (!open) setMatchSheetTxId(null)
+        }}
+        onMatchChanged={() => txRefetch()}
+      />
     </div>
   )
 }

@@ -1439,7 +1439,25 @@
     "selectCustomerToLink": "Kunde auswählen",
     "searchCustomers": "Kunden suchen...",
     "noCustomersFound": "Keine Kunden gefunden",
-    "unlinkCustomer": "Kunde trennen"
+    "unlinkCustomer": "Kunde trennen",
+    "matchView": {
+      "title": "Transaktionszuordnung",
+      "matchedInvoices": "Zugeordnete Rechnungen",
+      "noMatches": "Noch keine Rechnungen zugeordnet. Suchen Sie unten, um Zuordnungen hinzuzufügen.",
+      "totalMatched": "Zugeordnet gesamt",
+      "difference": "Differenz",
+      "remaining": "verbleibend",
+      "fullyMatched": "Vollständig zugeordnet",
+      "overbookingWarning": "Überbuchung: Zugeordnete Rechnungen übersteigen den Transaktionsbetrag",
+      "searchInvoices": "Rechnungen suchen...",
+      "unmatchedOnly": "Nur offene",
+      "noResults": "Keine Rechnungen gefunden.",
+      "addMatch": "Klicken zum Zuordnen",
+      "removeMatch": "Zuordnung entfernen",
+      "imported": "Importiert",
+      "generated": "Generiert",
+      "matchButton": "Zuordnen"
+    }
   },
   "liquidity": {
     "title": "Liquiditätsvorschau",
