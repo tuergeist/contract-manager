@@ -438,6 +438,38 @@ class Contract(TenantModel):
 
         return result
 
+    def _calc_end_prorate(self, billing_date, interval_months, item_end_date):
+        """Calculate pro-rate factor when contract/item ends before next billing cycle.
+
+        Returns (is_prorated, prorate_factor, billing_months) where billing_months
+        is the number of months to bill for this event.
+        """
+        from decimal import Decimal
+        from dateutil.relativedelta import relativedelta
+
+        next_billing = billing_date + relativedelta(months=interval_months)
+        # Use the earlier of item end date and contract end date
+        effective_end = item_end_date
+        if self.end_date:
+            if effective_end is None or self.end_date < effective_end:
+                effective_end = self.end_date
+
+        if effective_end and next_billing > effective_end:
+            # Contract/item ends before the next billing cycle — pro-rate
+            remaining = (
+                (effective_end.year - billing_date.year) * 12 +
+                (effective_end.month - billing_date.month)
+            )
+            # If end_date is not the 1st of its month, count that month as a full month
+            if effective_end.day > 1:
+                remaining += 1
+            if remaining <= 0:
+                return True, Decimal("0"), 0
+            if remaining < interval_months:
+                factor = Decimal(remaining) / Decimal(interval_months)
+                return True, factor, remaining
+        return False, None, interval_months
+
     def _add_regular_billing_events(
         self, events, item, start_date, end_date, from_date, to_date, interval_months,
         price_periods_list=None
@@ -455,21 +487,32 @@ class Contract(TenantModel):
         while billing_date <= to_date:
             if billing_date >= from_date:
                 if end_date is None or billing_date <= end_date:
+                    # Check if this is the last period and needs pro-rating
+                    is_prorated, prorate_factor, billing_months = self._calc_end_prorate(
+                        billing_date, interval_months, end_date
+                    )
+                    if billing_months <= 0:
+                        billing_date += relativedelta(months=interval_months)
+                        continue
+
                     # Use cached price lookup if price_periods provided, else fallback
                     if price_periods_list is not None:
                         price_at_date = item.get_price_at_cached(billing_date, price_periods_list)
                     else:
                         price_at_date = item.get_price_at(billing_date)
-                    # unit_price is monthly, multiply by interval for billing amount
-                    amount = item.quantity * price_at_date * interval_months
+                    # unit_price is monthly, multiply by billing months
+                    if is_prorated:
+                        amount = (item.quantity * price_at_date * interval_months * prorate_factor).quantize(Decimal("0.01"))
+                    else:
+                        amount = item.quantity * price_at_date * interval_months
                     events[billing_date]["items"].append({
                         "item_id": item.id,
                         "product_name": item.product.name if item.product else (item.description or "Discount"),
                         "quantity": item.quantity,
                         "unit_price": price_at_date,
                         "amount": amount,
-                        "is_prorated": False,
-                        "prorate_factor": None,
+                        "is_prorated": is_prorated,
+                        "prorate_factor": prorate_factor.quantize(Decimal("0.0001")) if prorate_factor else None,
                     })
                     events[billing_date]["total"] += amount
             billing_date += relativedelta(months=interval_months)
@@ -527,21 +570,32 @@ class Contract(TenantModel):
         while billing_date <= to_date:
             if billing_date >= from_date:
                 if end_date is None or billing_date <= end_date:
+                    # Check if this is the last period and needs pro-rating
+                    is_prorated, prorate_factor, billing_months = self._calc_end_prorate(
+                        billing_date, interval_months, end_date
+                    )
+                    if billing_months <= 0:
+                        billing_date += relativedelta(months=interval_months)
+                        continue
+
                     # Use cached price lookup if price_periods provided, else fallback
                     if price_periods_list is not None:
                         price_at_date = item.get_price_at_cached(billing_date, price_periods_list)
                     else:
                         price_at_date = item.get_price_at(billing_date)
-                    # unit_price is monthly, multiply by interval for billing amount
-                    amount = item.quantity * price_at_date * interval_months
+                    # unit_price is monthly, multiply by billing months
+                    if is_prorated:
+                        amount = (item.quantity * price_at_date * interval_months * prorate_factor).quantize(Decimal("0.01"))
+                    else:
+                        amount = item.quantity * price_at_date * interval_months
                     events[billing_date]["items"].append({
                         "item_id": item.id,
                         "product_name": item.product.name if item.product else (item.description or "Discount"),
                         "quantity": item.quantity,
                         "unit_price": price_at_date,
                         "amount": amount,
-                        "is_prorated": False,
-                        "prorate_factor": None,
+                        "is_prorated": is_prorated,
+                        "prorate_factor": prorate_factor.quantize(Decimal("0.0001")) if prorate_factor else None,
                     })
                     events[billing_date]["total"] += amount
             billing_date += relativedelta(months=interval_months)

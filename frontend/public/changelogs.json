@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.5.10",
+    "date": "2026-02-23",
+    "title": "Pro-rate Last Billing Period When Contract Ends Early",
+    "description": "When a contract's end date falls before the next billing cycle, the last billing event is now pro-rated to cover only the remaining months instead of charging for the full interval.",
+    "type": "bugfix",
+    "details": [
+      "Pro-rate billing when contract duration is shorter than billing interval (e.g. 13 months on biennial)",
+      "Pro-rate billing when contract ends mid-cycle for any interval",
+      "Applies to both regular and post-alignment billing events",
+      "Billing schedule shows pro-rate percentage alongside amounts"
+    ]
+  },
+  {
     "version": "2.5.9",
     "date": "2026-02-23",
     "title": "Transaction Match View for Banking",
