@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useLazyQuery, gql } from '@apollo/client'
+import { useDocumentTitle } from '@/lib/useDocumentTitle'
 import {
   ArrowLeft,
   Loader2,
@@ -362,6 +363,8 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
     IMPORTED_INVOICE_QUERY,
     { variables: { id } }
   )
+
+  useDocumentTitle(data?.invoice ? `Invoice ${data.invoice.invoiceNumber}` : undefined)
 
   const [fetchSuggestions, { data: suggestionsData, loading: loadingSuggestions }] = useLazyQuery(
     CUSTOMER_MATCH_SUGGESTIONS

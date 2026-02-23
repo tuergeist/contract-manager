@@ -35,6 +35,7 @@ import {
   Undo2,
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear, formatCurrency, formatPercent } from '@/lib/utils'
+import { useDocumentTitle } from '@/lib/useDocumentTitle'
 import { getToken } from '@/lib/auth'
 import { useAuditLogs, AuditLogTable } from '@/features/audit'
 import { Button } from '@/components/ui/button'
@@ -671,6 +672,8 @@ export function ContractDetail() {
   const { data, loading, error, refetch } = useQuery(CONTRACT_DETAIL_QUERY, {
     variables: { id },
   })
+
+  useDocumentTitle(data?.contract?.name)
 
   // Invoices query - always fetch to show count in tab
   const { data: invoicesData, loading: invoicesLoading } = useQuery(CONTRACT_INVOICES_QUERY, {

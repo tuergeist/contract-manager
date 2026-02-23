@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/dialog'
 import { getToken } from '@/lib/auth'
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
+import { useDocumentTitle } from '@/lib/useDocumentTitle'
 import { ImportedInvoiceDetail } from './ImportedInvoiceDetail'
 
 const INVOICE_RECORD_QUERY = gql`
@@ -271,6 +272,8 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
     INVOICE_RECORD_QUERY,
     { variables: { id } }
   )
+
+  useDocumentTitle(data?.invoiceRecord ? `Invoice ${data.invoiceRecord.invoiceNumber}` : undefined)
 
   const { data: auditData } = useQuery(AUDIT_LOGS_QUERY, {
     variables: { entityType: 'invoice_record', entityId: id, first: 50 },

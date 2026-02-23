@@ -28,6 +28,7 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import { cn, formatDate, formatCurrency } from '@/lib/utils'
+import { useDocumentTitle } from '@/lib/useDocumentTitle'
 import { useAuditLogs, AuditLogTable } from '@/features/audit'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { CommentsSection } from '@/components/CommentsSection'
@@ -367,6 +368,8 @@ export function CustomerDetail() {
     variables: { id },
     skip: !id,
   })
+
+  useDocumentTitle(data?.customer?.name)
 
   // Invoices query - always fetch to show count in tab
   const { data: invoicesData, loading: invoicesLoading, refetch: refetchInvoices } = useQuery(CUSTOMER_INVOICES_QUERY, {
