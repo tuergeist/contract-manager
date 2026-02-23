@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.5.5",
+    "date": "2026-02-23",
+    "title": "Imported Invoice Lifecycle & Forecast Integration",
+    "description": "Imported invoices now follow a full lifecycle (confirmed → sent → paid) and appear in the revenue forecast. Payment matches automatically transition invoices to paid.",
+    "type": "improvement",
+    "details": [
+      "Add sent and paid statuses to imported invoices",
+      "Confirmed imported invoices treated as sent for revenue forecast",
+      "Payment match creation transitions both imported and generated invoices to paid",
+      "Backfill 377 existing matched imported invoices to paid status",
+      "Add delivery delay hint to bulk invoice send result message"
+    ]
+  },
+  {
     "version": "2.5.4",
     "date": "2026-02-23",
     "title": "Fix Revenue Forecast Invoice Status Detection",
