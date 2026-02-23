@@ -521,7 +521,7 @@
     "sendEmailFailed": "E-Mail-Versand fehlgeschlagen",
     "sendAllUnsent": "{{count}} unversendete senden",
     "sendAllUnsentConfirm": "Alle {{count}} unversendeten Rechnungen per E-Mail senden?",
-    "sendAllResult": "{{sent}} Rechnungen zum Versand eingereiht",
+    "sendAllResult": "{{sent}} Rechnungen zum Versand eingereiht. Der Versand kann einige Minuten dauern — schauen Sie gleich nochmal vorbei.",
     "legalDataIncomplete": "Die Firmenstammdaten sind unvollständig. Bitte in den Einstellungen konfigurieren.",
     "goToSettings": "Zu den Einstellungen",
     "companyData": {

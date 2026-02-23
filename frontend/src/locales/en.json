@@ -521,7 +521,7 @@
     "sendEmailFailed": "Failed to send email",
     "sendAllUnsent": "Send {{count}} unsent",
     "sendAllUnsentConfirm": "Send all {{count}} unsent invoices by email?",
-    "sendAllResult": "{{sent}} invoices queued for sending",
+    "sendAllResult": "{{sent}} invoices queued for sending. Delivery may take a few minutes — check back shortly.",
     "legalDataIncomplete": "Company legal data is incomplete. Please configure it in Settings.",
     "goToSettings": "Go to Settings",
     "companyData": {
