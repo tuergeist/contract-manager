@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.5.2",
+    "date": "2026-02-23",
+    "title": "Revenue Forecast Invoice Status & Time Tracking Revenue/Hour",
+    "description": "Color-coded invoice status in the revenue forecast grid and revenue-per-hour calculation for time-tracked projects.",
+    "type": "feature",
+    "details": [
+      "Revenue forecast cells color-coded by invoice lifecycle: pending (yellow), sent (blue), paid (green), overdue 60+ days (orange)",
+      "Invoice status applied to both billing and recognition forecast views",
+      "Color legend shown below forecast filter controls",
+      "Time tracking linked projects table shows revenue/hour when project is linked to a contract item",
+      "Revenue/hour calculated from item's current monthly price divided by tracked hours"
+    ]
+  },
+  {
     "version": "2.5.1",
     "date": "2026-02-23",
     "title": "Consistent German Number Formatting (de-DE)",

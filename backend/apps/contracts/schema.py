@@ -921,6 +921,7 @@ class RevenueMonthData:
 
     month: str  # Format: "2026-01"
     amount: Decimal
+    invoice_status: str | None = None  # null | "actionable" | "sent" | "paid" | "overdue"
 
 
 @strawberry.type
@@ -1111,6 +1112,7 @@ class TimeTrackingMappingType:
     contract_item_id: int | None
     contract_item_name: str | None = None
     cached_total_hours: float = 0
+    contract_item_monthly_revenue: float | None = None  # monthly revenue of linked item
 
 
 @strawberry.type
@@ -1315,6 +1317,95 @@ def _build_contract_comment(comment: ContractComment, user) -> ContractCommentTy
         can_edit=is_author and is_latest and within_24h,
         can_delete=is_author,
     )
+
+
+def _find_best_invoice_for_period(period_str: str, invoices: list, is_quarterly: bool):
+    """Find the most relevant non-voided InvoiceRecord for a given period.
+
+    Uses period overlap matching (inv.period_start <= period_end AND inv.period_end >= period_start).
+    When multiple match, picks highest priority status (paid > dunning > sent > finalized > draft).
+    """
+    from dateutil.relativedelta import relativedelta
+
+    # Parse period string to date range
+    if is_quarterly and "Q" in period_str:
+        year_str, q_str = period_str.split("-Q")
+        quarter = int(q_str)
+        year = int(year_str)
+        period_start = date(year, (quarter - 1) * 3 + 1, 1)
+        period_end = period_start + relativedelta(months=3, days=-1)
+    else:
+        parts = period_str.split("-")
+        year, month = int(parts[0]), int(parts[1])
+        period_start = date(year, month, 1)
+        period_end = period_start + relativedelta(months=1, days=-1)
+
+    # Status priority (higher = better)
+    status_priority = {
+        "paid": 5,
+        "dunning": 4,
+        "sent": 3,
+        "finalized": 2,
+        "draft": 1,
+    }
+
+    best = None
+    best_priority = -1
+    for inv in invoices:
+        # Check overlap: inv.period_start <= period_end AND inv.period_end >= period_start
+        if inv.period_start <= period_end and inv.period_end >= period_start:
+            priority = status_priority.get(inv.status, 0)
+            if priority > best_priority:
+                best = inv
+                best_priority = priority
+
+    return best
+
+
+def _determine_cell_invoice_status(invoice, period_str: str, today: date, is_quarterly: bool) -> str | None:
+    """Determine the display status for a forecast cell.
+
+    Returns: None (future), "actionable", "sent", "paid", or "overdue"
+    """
+    from dateutil.relativedelta import relativedelta
+    from datetime import timedelta
+
+    # Determine period end date
+    if is_quarterly and "Q" in period_str:
+        year_str, q_str = period_str.split("-Q")
+        quarter = int(q_str)
+        year = int(year_str)
+        period_end = date(year, (quarter - 1) * 3 + 1, 1) + relativedelta(months=3, days=-1)
+    else:
+        parts = period_str.split("-")
+        year, month = int(parts[0]), int(parts[1])
+        period_end = date(year, month, 1) + relativedelta(months=1, days=-1)
+
+    # Future: period end is after today and no invoice
+    if period_end > today and invoice is None:
+        return None
+
+    # No invoice or draft/finalized => actionable (for past/current periods)
+    if invoice is None or invoice.status in ("draft", "finalized"):
+        return "actionable"
+
+    # Paid: has payment match or status is paid
+    if invoice.status == "paid" or invoice._is_paid_cached:
+        return "paid"
+
+    # Sent or dunning: check overdue (60+ days)
+    if invoice.status in ("sent", "dunning"):
+        sent_date = None
+        if invoice.email_sent_at:
+            sent_date = invoice.email_sent_at.date()
+        else:
+            sent_date = invoice.billing_date
+
+        if sent_date and (today - sent_date).days >= 60:
+            return "overdue"
+        return "sent"
+
+    return "actionable"
 
 
 @strawberry.type
@@ -1619,6 +1710,26 @@ class ContractQuery:
             status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
         ).select_related("customer").prefetch_related("items__product", "items__price_periods", "items__depends_on")
 
+        # Bulk-fetch InvoiceRecords for invoice status color-coding
+        from apps.invoices.models import InvoiceRecord
+        contract_ids = [c.id for c in contracts]
+        invoice_qs = (
+            InvoiceRecord.objects.filter(
+                tenant=user.tenant,
+                contract_id__in=contract_ids,
+                period_start__lte=to_date,
+                period_end__gte=from_date,
+            )
+            .exclude(status="voided")
+            .prefetch_related("payment_matches")
+        )
+        # Build lookup: {contract_id: [InvoiceRecord, ...]}
+        invoice_lookup: dict[int, list] = defaultdict(list)
+        for inv in invoice_qs:
+            # Cache is_paid to avoid repeated queries
+            inv._is_paid_cached = inv.payment_matches.all().exists()
+            invoice_lookup[inv.contract_id].append(inv)
+
         # Calculate revenue per contract per period
         contract_rows = []
         period_totals = defaultdict(Decimal)
@@ -1707,11 +1818,17 @@ class ContractQuery:
                     period_amounts[period_key] += event["total"]
 
             # Build period data for this contract
+            contract_invoices = invoice_lookup.get(contract.id, [])
             contract_periods = []
             contract_total = Decimal("0")
             for period in period_columns:
                 amount = period_amounts.get(period, Decimal("0"))
-                contract_periods.append(RevenueMonthData(month=period, amount=amount))
+                # Determine invoice status for non-zero cells
+                inv_status = None
+                if amount != 0:
+                    best_inv = _find_best_invoice_for_period(period, contract_invoices, is_quarterly)
+                    inv_status = _determine_cell_invoice_status(best_inv, period, today, is_quarterly)
+                contract_periods.append(RevenueMonthData(month=period, amount=amount, invoice_status=inv_status))
                 contract_total += amount
                 period_totals[period] += amount
 
@@ -1828,6 +1945,24 @@ class ContractQuery:
             status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
         ).select_related("customer").prefetch_related("items__product", "items__price_periods", "items__depends_on")
 
+        # Bulk-fetch InvoiceRecords for invoice status color-coding
+        from apps.invoices.models import InvoiceRecord
+        contract_ids = [c.id for c in contracts]
+        invoice_qs = (
+            InvoiceRecord.objects.filter(
+                tenant=user.tenant,
+                contract_id__in=contract_ids,
+                period_start__lte=to_date,
+                period_end__gte=from_date,
+            )
+            .exclude(status="voided")
+            .prefetch_related("payment_matches")
+        )
+        invoice_lookup: dict[int, list] = defaultdict(list)
+        for inv in invoice_qs:
+            inv._is_paid_cached = inv.payment_matches.all().exists()
+            invoice_lookup[inv.contract_id].append(inv)
+
         # Calculate recognition per contract per period
         contract_rows = []
         period_totals = defaultdict(Decimal)
@@ -1917,11 +2052,16 @@ class ContractQuery:
                     period_amounts[period_key] += event["total"]
 
             # Build period data for this contract
+            contract_invoices = invoice_lookup.get(contract.id, [])
             contract_periods = []
             contract_total = Decimal("0")
             for period in period_columns:
                 amount = period_amounts.get(period, Decimal("0"))
-                contract_periods.append(RevenueMonthData(month=period, amount=amount))
+                inv_status = None
+                if amount != 0:
+                    best_inv = _find_best_invoice_for_period(period, contract_invoices, is_quarterly)
+                    inv_status = _determine_cell_invoice_status(best_inv, period, today, is_quarterly)
+                contract_periods.append(RevenueMonthData(month=period, amount=amount, invoice_status=inv_status))
                 contract_total += amount
                 period_totals[period] += amount
 
@@ -2162,8 +2302,16 @@ class ContractQuery:
         mappings = TimeTrackingProjectMapping.objects.filter(
             tenant=user.tenant, contract=contract
         ).select_related("contract_item", "contract_item__product")
-        mapping_types = [
-            TimeTrackingMappingType(
+
+        mapping_types = []
+        for m in mappings:
+            item_monthly_revenue = None
+            if m.contract_item:
+                item = m.contract_item
+                monthly_price = float(item.get_price_at(date.today(), normalize_to_monthly=True))
+                item_monthly_revenue = item.quantity * monthly_price
+
+            mapping_types.append(TimeTrackingMappingType(
                 id=m.id,
                 external_project_id=m.external_project_id,
                 external_project_name=m.external_project_name,
@@ -2175,9 +2323,8 @@ class ContractQuery:
                     else None
                 ),
                 cached_total_hours=m.cached_total_hours,
-            )
-            for m in mappings
-        ]
+                contract_item_monthly_revenue=item_monthly_revenue,
+            ))
 
         if not mappings.exists():
             return TimeTrackingSummaryType(

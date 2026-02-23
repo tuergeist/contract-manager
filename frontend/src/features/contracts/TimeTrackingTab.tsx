@@ -40,6 +40,7 @@ const TIME_TRACKING_SUMMARY_QUERY = gql`
         contractItemId
         contractItemName
         cachedTotalHours
+        contractItemMonthlyRevenue
       }
     }
     timeTrackingSettings {
@@ -110,6 +111,7 @@ interface Mapping {
   contractItemId: number | null
   contractItemName: string | null
   cachedTotalHours: number
+  contractItemMonthlyRevenue: number | null
 }
 
 interface ExternalProject {
@@ -186,38 +188,49 @@ export function TimeTrackingTab({ contractId, customerName, deliveryItems = [] }
                   <th className="pb-2 font-medium">{t('timeTracking.customerName')}</th>
                   <th className="pb-2 font-medium">{t('timeTracking.linkedItem')}</th>
                   <th className="pb-2 text-right font-medium">{t('timeTracking.hours')}</th>
+                  <th className="pb-2 text-right font-medium">{t('timeTracking.revenuePerHour')}</th>
                   <th className="pb-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
-                {mappings.map((m) => (
-                  <tr key={m.id} className="border-b last:border-0">
-                    <td className="py-2">
-                      <div className="flex items-center gap-2">
-                        <Link2 className="h-4 w-4 text-gray-400" />
-                        <a
-                          href={`https://my.clockodo.com/de/projects/${m.externalProjectId}/`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                {mappings.map((m) => {
+                  const revenuePerHour = m.contractItemMonthlyRevenue != null && m.cachedTotalHours > 0
+                    ? m.contractItemMonthlyRevenue / m.cachedTotalHours
+                    : null
+                  return (
+                    <tr key={m.id} className="border-b last:border-0">
+                      <td className="py-2">
+                        <div className="flex items-center gap-2">
+                          <Link2 className="h-4 w-4 text-gray-400" />
+                          <a
+                            href={`https://my.clockodo.com/de/projects/${m.externalProjectId}/`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            {m.externalProjectName}
+                          </a>
+                        </div>
+                      </td>
+                      <td className="py-2 text-gray-600">{m.externalCustomerName}</td>
+                      <td className="py-2 text-gray-500 text-xs">{m.contractItemName || '-'}</td>
+                      <td className="py-2 text-right text-gray-600">{m.cachedTotalHours.toFixed(1)}h</td>
+                      <td className="py-2 text-right text-gray-600">
+                        {revenuePerHour != null
+                          ? new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(revenuePerHour)
+                          : '-'}
+                      </td>
+                      <td className="py-2 text-right">
+                        <button
+                          onClick={() => handleUnlink(m.id)}
+                          className="text-sm text-red-600 hover:text-red-800"
                         >
-                          {m.externalProjectName}
-                        </a>
-                      </div>
-                    </td>
-                    <td className="py-2 text-gray-600">{m.externalCustomerName}</td>
-                    <td className="py-2 text-gray-500 text-xs">{m.contractItemName || '-'}</td>
-                    <td className="py-2 text-right text-gray-600">{m.cachedTotalHours.toFixed(1)}h</td>
-                    <td className="py-2 text-right">
-                      <button
-                        onClick={() => handleUnlink(m.id)}
-                        className="text-sm text-red-600 hover:text-red-800"
-                      >
-                        {t('timeTracking.unlinkProject')}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                          {t('timeTracking.unlinkProject')}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

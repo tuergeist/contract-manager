@@ -419,7 +419,11 @@
     "total": "Total",
     "monthlyTotal": "Monthly Total",
     "quarterlyTotal": "Quarterly Total",
-    "noData": "No contract data available"
+    "noData": "No contract data available",
+    "statusActionable": "Invoice pending",
+    "statusSent": "Sent",
+    "statusPaid": "Paid",
+    "statusOverdue": "Overdue (60+ days)"
   },
   "import": {
     "title": "Contract Import",
@@ -1230,6 +1234,7 @@
     "hours": "Hours",
     "revenue": "Revenue",
     "month": "Month",
+    "revenuePerHour": "Revenue/h",
     "noData": "No time data available",
     "noProvider": "Time tracking not configured. Go to Settings to connect your provider.",
     "lastUpdated": "Last updated: {{time}}",

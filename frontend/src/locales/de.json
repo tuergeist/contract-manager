@@ -419,7 +419,11 @@
     "total": "Gesamt",
     "monthlyTotal": "Monatssumme",
     "quarterlyTotal": "Quartalssumme",
-    "noData": "Keine Vertragsdaten vorhanden"
+    "noData": "Keine Vertragsdaten vorhanden",
+    "statusActionable": "Rechnung ausstehend",
+    "statusSent": "Versendet",
+    "statusPaid": "Bezahlt",
+    "statusOverdue": "Überfällig (60+ Tage)"
   },
   "import": {
     "title": "Vertragsimport",
@@ -1230,6 +1234,7 @@
     "hours": "Stunden",
     "revenue": "Umsatz",
     "month": "Monat",
+    "revenuePerHour": "Umsatz/h",
     "noData": "Keine Zeitdaten verfügbar",
     "noProvider": "Zeiterfassung nicht konfiguriert. Gehen Sie zu Einstellungen, um Ihren Anbieter zu verbinden.",
     "lastUpdated": "Zuletzt aktualisiert: {{time}}",
