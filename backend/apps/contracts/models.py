@@ -396,6 +396,14 @@ class Contract(TenantModel):
             # Use item-level alignment, or fall back to contract-level alignment
             align_date = item.align_to_contract_at or self.billing_alignment_date
 
+            # When dependency ETA pushes start past alignment, find next cycle date as alignment
+            if include_eta_items and item.depends_on and item.depends_on.delivery_status == "pending":
+                next_cycle = align_date or self.billing_start_date
+                while next_cycle < item_billing_start:
+                    next_cycle += relativedelta(months=interval_months)
+                if next_cycle > item_billing_start:
+                    align_date = next_cycle
+
             # Use alignment if it's on or after the item's billing start
             if align_date and align_date >= item_billing_start:
                 # Item has alignment - generate dates before and after alignment
@@ -655,6 +663,14 @@ class Contract(TenantModel):
             # Calculate recognition dates for this item
             # Use item-level alignment, or fall back to contract-level alignment
             align_date = item.align_to_contract_at or self.billing_alignment_date
+
+            # When dependency ETA pushes start past alignment, find next cycle date as alignment
+            if include_eta_items and item.depends_on and item.depends_on.delivery_status == "pending":
+                next_cycle = align_date or self.billing_start_date
+                while next_cycle < item_recognition_start:
+                    next_cycle += relativedelta(months=interval_months)
+                if next_cycle > item_recognition_start:
+                    align_date = next_cycle
 
             # Use alignment if it's on or after the item's recognition start
             if align_date and align_date >= item_recognition_start:
