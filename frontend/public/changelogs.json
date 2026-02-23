@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.5.8",
+    "date": "2026-02-23",
+    "title": "Fix Contract End Date Ignored in Billing and Forecast",
+    "description": "Contracts with an end date in the past but database status still 'active' were incorrectly included in invoice generation and revenue forecast queries.",
+    "type": "bugfix",
+    "details": [
+      "Exclude ended contracts from invoice generation service",
+      "Exclude ended contracts from both revenue forecast queries",
+      "Add early return guard in billing/recognition schedule when end_date clips range invalid"
+    ]
+  },
+  {
     "version": "2.5.7",
     "date": "2026-02-23",
     "title": "Pro-rate Dependent Items from Dependency ETA",
