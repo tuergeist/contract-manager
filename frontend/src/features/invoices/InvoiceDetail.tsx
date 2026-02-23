@@ -37,7 +37,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { getToken } from '@/lib/auth'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
 import { ImportedInvoiceDetail } from './ImportedInvoiceDetail'
 
 const INVOICE_RECORD_QUERY = gql`
@@ -246,27 +246,6 @@ function StatusBadge({ status, isPaid }: { status: string; isPaid?: boolean }) {
   }
 }
 
-function formatDate(dateStr: string, locale: string) {
-  if (!dateStr) return '-'
-  const d = new Date(dateStr)
-  return d.toLocaleDateString(locale === 'de' ? 'de-DE' : 'en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
-}
-
-function formatDateTime(dateStr: string, locale: string) {
-  if (!dateStr) return '-'
-  const d = new Date(dateStr)
-  return d.toLocaleString(locale === 'de' ? 'de-DE' : 'en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 
 export function InvoiceDetail() {
@@ -283,7 +262,7 @@ export function InvoiceDetail() {
 
 function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallbackToImported: boolean }) {
   const navigate = useNavigate()
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const [showVoidDialog, setShowVoidDialog] = useState(false)
   const [voidReason, setVoidReason] = useState('')
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -545,20 +524,20 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
                   <div className="text-xs font-medium uppercase text-muted-foreground">
                     {t('invoiceDetail.billingDate')}
                   </div>
-                  <div className="mt-1 font-medium">{formatDate(record.billingDate, i18n.language)}</div>
+                  <div className="mt-1 font-medium">{formatDate(record.billingDate)}</div>
                 </div>
                 <div>
                   <div className="text-xs font-medium uppercase text-muted-foreground">
                     {t('invoiceDetail.invoiceDate')}
                   </div>
-                  <div className="mt-1 font-medium">{formatDate(record.invoiceDate, i18n.language)}</div>
+                  <div className="mt-1 font-medium">{formatDate(record.invoiceDate)}</div>
                 </div>
                 <div>
                   <div className="text-xs font-medium uppercase text-muted-foreground">
                     {t('invoiceDetail.period')}
                   </div>
                   <div className="mt-1 font-medium">
-                    {formatDate(record.periodStart, i18n.language)} – {formatDate(record.periodEnd, i18n.language)}
+                    {formatDate(record.periodStart)} – {formatDate(record.periodEnd)}
                   </div>
                 </div>
               </div>
@@ -715,9 +694,9 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
                           {formatCurrency(match.transactionAmount)}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {formatDate(match.transactionDate, i18n.language)}
+                          {formatDate(match.transactionDate)}
                           {match.valueDate && match.valueDate !== match.transactionDate && (
-                            <> ({t('invoiceDetail.valueDate')}: {formatDate(match.valueDate, i18n.language)})</>
+                            <> ({t('invoiceDetail.valueDate')}: {formatDate(match.valueDate)})</>
                           )}
                         </span>
                       </div>
@@ -758,7 +737,7 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">{t('invoiceDetail.sentAt')}</span>
-                    <span className="font-medium">{formatDateTime(record.emailSentAt, i18n.language)}</span>
+                    <span className="font-medium">{formatDateTime(record.emailSentAt)}</span>
                   </div>
                   <div>
                     <span className="text-muted-foreground">{t('invoiceDetail.sentTo')}</span>
@@ -799,7 +778,7 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
                       <div className="flex items-center justify-between">
                         <span className="font-medium capitalize">{entry.action.toLowerCase()}</span>
                         <span className="text-xs text-muted-foreground">
-                          {formatDateTime(entry.timestamp, i18n.language)}
+                          {formatDateTime(entry.timestamp)}
                         </span>
                       </div>
                       {entry.userName && (

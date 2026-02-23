@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatMonthShort } from '@/lib/utils'
 
 interface MonthlyForecast {
   month: string
@@ -42,7 +42,7 @@ export function ForecastChart({ months, referenceDate, referenceAmount, showInco
     for (let m = 0; m < 12; m++) {
       const monthKey = currentYear * 12 + m
       const monthDate = new Date(currentYear, m, 1)
-      const label = monthDate.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
+      const label = formatMonthShort(monthDate)
 
       // Find matching month from backend data
       const backendMonth = months.find((bm) => {
@@ -100,10 +100,7 @@ export function ForecastChart({ months, referenceDate, referenceAmount, showInco
   const yMax = Math.ceil(maxBalance * 1.1) || 1000 // fallback if maxBalance is 0
 
   // Current month label for vertical reference line
-  const currentMonthLabel = new Date().toLocaleDateString(undefined, {
-    month: 'short',
-    year: '2-digit',
-  })
+  const currentMonthLabel = formatMonthShort(new Date())
 
   if (chartData.length === 0) {
     return <div className="h-80 flex items-center justify-center text-gray-400">No data</div>

@@ -32,7 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { cn, formatCurrency, formatDate } from '@/lib/utils'
+import { cn, formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 import { CustomerPickerDialog } from '@/components/CustomerPickerDialog'
 import { PaymentMatchModal } from './PaymentMatchModal'
@@ -329,23 +329,12 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function formatDateTime(dateStr: string, locale: string) {
-  if (!dateStr) return '-'
-  const d = new Date(dateStr)
-  return d.toLocaleString(locale === 'de' ? 'de-DE' : 'en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 // --- Main Component ---
 
 export function ImportedInvoiceDetail({ id }: { id: number }) {
   const navigate = useNavigate()
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { hasPermission } = useAuth()
   const canWrite = hasPermission('invoices', 'generate')
 
@@ -807,7 +796,7 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
                     {t('importedInvoiceDetail.createdBy')}
                   </div>
                   <div className="mt-1 font-medium">{invoice.createdByName || '-'}</div>
-                  <div className="text-xs text-muted-foreground">{formatDateTime(invoice.createdAt, i18n.language)}</div>
+                  <div className="text-xs text-muted-foreground">{formatDateTime(invoice.createdAt)}</div>
                 </div>
                 <div>
                   <div className="text-xs font-medium uppercase text-muted-foreground">

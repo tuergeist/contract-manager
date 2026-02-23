@@ -32,7 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { CurrencyInput } from '@/components/ui/currency-input'
 import {
   Popover,
@@ -663,10 +663,6 @@ export function BankingPage() {
     return sortOrder === 'asc'
       ? <ArrowUp className="h-3.5 w-3.5" />
       : <ArrowDown className="h-3.5 w-3.5" />
-  }
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('de-DE')
   }
 
   const clearFilters = () => {

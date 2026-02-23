@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { formatDateTime } from '@/lib/utils'
 
 const TIME_TRACKING_SUMMARY_QUERY = gql`
   query TimeTrackingSummary($contractId: ID!) {
@@ -260,7 +261,7 @@ export function TimeTrackingTab({ contractId, customerName, deliveryItems = [] }
           <p className="text-xs text-gray-400">
             {summary.lastSynced
               ? t('timeTracking.lastUpdated', {
-                  time: new Date(summary.lastSynced).toLocaleString(),
+                  time: formatDateTime(summary.lastSynced),
                 })
               : t('timeTracking.dataLoading')}
           </p>

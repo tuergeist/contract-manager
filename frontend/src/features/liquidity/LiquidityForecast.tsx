@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
 import { Loader2, RefreshCw, TrendingUp, TrendingDown, ChevronDown, ChevronRight, Check, X, Pause, Play, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Search } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, formatMonthLong } from '@/lib/utils'
 import { CurrencyInput } from '@/components/ui/currency-input'
 import { ForecastChart } from './ForecastChart'
 import { EditPatternModal } from './EditPatternModal'
@@ -622,10 +622,7 @@ export function LiquidityForecast() {
                       <ChevronRight className="h-4 w-4 text-gray-400" />
                     )}
                     <span className="font-medium">
-                      {new Date(month.month).toLocaleDateString(undefined, {
-                        month: 'long',
-                        year: 'numeric',
-                      })}
+                      {formatMonthLong(month.month)}
                     </span>
                   </div>
                   <div className="flex items-center gap-6 text-sm">

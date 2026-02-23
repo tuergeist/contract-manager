@@ -1337,7 +1337,7 @@ export function InvoiceList() {
                           {row.generated.emailSentAt && (
                             <span className="text-xs text-green-600 flex items-center gap-1" title={row.generated.emailSentTo.join(', ')}>
                               <Mail className="w-3 h-3" />
-                              {new Date(row.generated.emailSentAt).toLocaleDateString()}
+                              {formatDate(row.generated.emailSentAt)}
                             </span>
                           )}
                           {!row.generated.isPaid && (

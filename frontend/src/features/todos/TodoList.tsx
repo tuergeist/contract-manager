@@ -2,7 +2,7 @@ import { useState, useRef, createRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useMutation, gql } from '@apollo/client'
-import { format, parseISO } from 'date-fns'
+import { formatDate } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Calendar, User, UserCheck, Pencil, MessageSquare } from 'lucide-react'
@@ -139,10 +139,6 @@ export function TodoList({ todos, showCreator = false, onUpdate, currentUserId }
     setDetailCanEdit(todo.createdById === effectiveUserId)
   }
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return null
-    return format(parseISO(dateStr), 'dd.MM.yyyy')
-  }
 
   const getEntityLink = (todo: TodoItem): string => {
     if (todo.contractId) {

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { format, parseISO } from 'date-fns'
+import { formatDate } from '@/lib/utils'
 import {
   DndContext,
   DragEndEvent,
@@ -160,10 +160,6 @@ function TodoCard({
     return '#'
   }
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return null
-    return format(parseISO(dateStr), 'dd.MM.yyyy')
-  }
 
   const canEdit = todo.createdById === currentUserId
 

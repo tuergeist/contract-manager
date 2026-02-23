@@ -114,6 +114,24 @@ export function formatPercent(
 }
 
 /**
+ * Format date as "Feb 26" or "Mär 26" (short month + 2-digit year)
+ */
+export function formatMonthShort(dateStr: string | Date | null | undefined): string {
+  if (!dateStr) return '-'
+  const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr
+  return d.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' })
+}
+
+/**
+ * Format date as "Februar 2026" (full month + year)
+ */
+export function formatMonthLong(dateStr: string | Date | null | undefined): string {
+  if (!dateStr) return '-'
+  const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr
+  return d.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })
+}
+
+/**
  * Parse a German-formatted number string (comma as decimal separator) to a dot-decimal string.
  * E.g. "1.234,56" → "1234.56", "42,5" → "42.5"
  */

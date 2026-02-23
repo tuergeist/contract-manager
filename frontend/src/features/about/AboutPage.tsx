@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Search, Sparkles, Bug, Zap, Shield, Loader2 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
+import { formatDateTime, formatDate as formatDateUtil } from '@/lib/utils'
 
 interface VersionInfo {
   version: string
@@ -110,7 +111,7 @@ export function AboutPage() {
   const formatDate = (dateStr: string) => {
     if (!dateStr) return ''
     try {
-      return new Date(dateStr).toLocaleString()
+      return formatDateTime(dateStr)
     } catch {
       return dateStr
     }
@@ -119,11 +120,7 @@ export function AboutPage() {
   const formatChangelogDate = (dateStr: string) => {
     if (!dateStr) return ''
     try {
-      return new Date(dateStr + 'T00:00:00').toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      })
+      return formatDateUtil(dateStr + 'T00:00:00')
     } catch {
       return dateStr
     }

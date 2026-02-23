@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useQuery, useLazyQuery, useMutation, gql } from '@apollo/client'
-import { format, parseISO } from 'date-fns'
+import { formatDate, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -258,14 +258,6 @@ export function TodoDetailModal({ todoId, open, onOpenChange, canEdit, onRefresh
     }
   }
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return null
-    return format(parseISO(dateStr), 'dd.MM.yyyy')
-  }
-
-  const formatDateTime = (dateStr: string) => {
-    return format(parseISO(dateStr), 'dd.MM.yyyy HH:mm')
-  }
 
   const getEntityLink = (t: TodoData): string => {
     if (t.contractId) return `/contracts/${t.contractId}`

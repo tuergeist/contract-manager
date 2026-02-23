@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation } from '@apollo/client'
 import { gql } from '@apollo/client'
+import { FileDown, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Loader2, Eye } from 'lucide-react'
 import { format } from 'date-fns'
 import { de, enUS } from 'date-fns/locale'
-import { FileDown, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Loader2, Eye } from 'lucide-react'
 
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -346,9 +346,6 @@ export function InvoiceExportPage() {
     }
   }
 
-  const formatDate = (dateString: string) => {
-    return format(new Date(dateString), 'dd.MM.yyyy', { locale })
-  }
 
   return (
     <div className="space-y-6">
