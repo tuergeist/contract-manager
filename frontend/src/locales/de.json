@@ -753,6 +753,7 @@
     "voidReasonPlaceholder": "Geben Sie den Grund für die Stornierung ein...",
     "payments": "Zahlungen",
     "noPayments": "Keine Zahlungen zugeordnet",
+    "valueDate": "Wertstellung",
     "emailHistory": "E-Mail",
     "sentAt": "Gesendet am",
     "sentTo": "Empfänger",

@@ -72,6 +72,10 @@ const INVOICE_RECORD_QUERY = gql`
         confidence
         matchedAt
         matchedByName
+        bookingText
+        reference
+        valueDate
+        accountName
       }
       voidReason
       customerBillingEmails
@@ -140,6 +144,10 @@ interface PaymentMatch {
   confidence: string
   matchedAt: string
   matchedByName: string | null
+  bookingText: string
+  reference: string
+  valueDate: string | null
+  accountName: string
 }
 
 interface LineItem {
@@ -708,12 +716,22 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
                         </span>
                         <span className="text-xs text-muted-foreground">
                           {formatDate(match.transactionDate, i18n.language)}
+                          {match.valueDate && match.valueDate !== match.transactionDate && (
+                            <> ({t('invoiceDetail.valueDate')}: {formatDate(match.valueDate, i18n.language)})</>
+                          )}
                         </span>
                       </div>
                       <div className="mt-1 text-muted-foreground">{match.counterpartyName}</div>
+                      {match.bookingText && (
+                        <div className="mt-1 text-xs text-muted-foreground">{match.bookingText}</div>
+                      )}
+                      {match.reference && (
+                        <div className="mt-1 font-mono text-xs text-muted-foreground">{match.reference}</div>
+                      )}
                       <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                         <span className="rounded bg-muted px-1.5 py-0.5">{match.matchType}</span>
                         <span>{Math.round(Number(match.confidence) * 100)}%</span>
+                        {match.accountName && <span>{match.accountName}</span>}
                         {match.matchedByName && <span>by {match.matchedByName}</span>}
                       </div>
                     </div>

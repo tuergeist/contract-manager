@@ -10,7 +10,12 @@ from django.core.management.base import BaseCommand
 from apps.contracts.models import ContractAttachment
 from apps.core.models import StorageMigration
 from apps.customers.models import CustomerAttachment
-from apps.invoices.models import InvoiceTemplate, InvoiceTemplateReference
+from apps.invoices.models import (
+    ImportedInvoice,
+    InvoiceRecord,
+    InvoiceTemplate,
+    InvoiceTemplateReference,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +130,16 @@ class Command(BaseCommand):
         for ref_pdf in InvoiceTemplateReference.objects.exclude(file=""):
             if ref_pdf.file.name and ref_pdf.file.name not in already_migrated:
                 files.append(ref_pdf.file.name)
+
+        # Imported invoice PDFs
+        for inv in ImportedInvoice.objects.exclude(pdf_file=""):
+            if inv.pdf_file.name and inv.pdf_file.name not in already_migrated:
+                files.append(inv.pdf_file.name)
+
+        # Generated invoice record PDFs
+        for record in InvoiceRecord.objects.exclude(pdf_file=""):
+            if record.pdf_file.name and record.pdf_file.name not in already_migrated:
+                files.append(record.pdf_file.name)
 
         return files
 

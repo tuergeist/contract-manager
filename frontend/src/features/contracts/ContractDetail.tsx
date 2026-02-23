@@ -1702,9 +1702,9 @@ export function ContractDetail() {
                   {invoicesData?.invoices?.items?.map((invoice: { id: string; invoiceNumber: string; invoiceDate: string | null; totalAmount: string | null; currency: string; isPaid: boolean; paidAt: string | null; firstPaymentTransactionId: number | null; pdfUrl: string | null }) => (
                     <tr key={`imp-${invoice.id}`} className="hover:bg-gray-50">
                       <td className="whitespace-nowrap px-6 py-4">
-                        <span className="font-medium">
+                        <Link to={`/invoices/${invoice.id}?type=imported`} className="font-medium text-blue-600 hover:underline">
                           {invoice.invoiceNumber || '-'}
-                        </span>
+                        </Link>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                         {invoice.invoiceDate ? formatDate(invoice.invoiceDate) : '-'}

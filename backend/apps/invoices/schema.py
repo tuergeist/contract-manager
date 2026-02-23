@@ -263,6 +263,10 @@ class PaymentMatchType:
     confidence: Decimal
     matched_at: str
     matched_by_name: str | None
+    booking_text: str = ""
+    reference: str = ""
+    value_date: date | None = None
+    account_name: str = ""
 
 
 # =========================================================================
@@ -586,6 +590,7 @@ class InvoiceQuery:
                 "customer",
             ).prefetch_related(
                 "payment_matches__transaction__counterparty",
+                "payment_matches__transaction__account",
                 "payment_matches__matched_by",
             ).get(id=id, tenant=user.tenant)
         except InvoiceRecord.DoesNotExist:
@@ -896,6 +901,7 @@ class InvoiceQuery:
                 "customer", "created_by", "contract"
             ).prefetch_related(
                 "payment_matches__transaction__counterparty",
+                "payment_matches__transaction__account",
                 "payment_matches__matched_by",
             ).get(id=id, tenant=user.tenant)
         except ImportedInvoice.DoesNotExist:
@@ -2412,16 +2418,21 @@ def _get_template_type(tenant) -> InvoiceTemplateType:
 
 def _convert_payment_match(match: InvoicePaymentMatch) -> PaymentMatchType:
     """Convert InvoicePaymentMatch to GraphQL type."""
+    tx = match.transaction
     return PaymentMatchType(
         id=match.id,
         transaction_id=match.transaction_id,
-        transaction_date=match.transaction.entry_date,
-        transaction_amount=match.transaction.amount,
-        counterparty_name=match.transaction.counterparty.name,
+        transaction_date=tx.entry_date,
+        transaction_amount=tx.amount,
+        counterparty_name=tx.counterparty.name,
         match_type=match.match_type,
         confidence=match.confidence,
         matched_at=match.matched_at.isoformat(),
         matched_by_name=match.matched_by.email if match.matched_by else None,
+        booking_text=tx.booking_text,
+        reference=tx.reference,
+        value_date=tx.value_date,
+        account_name=tx.account.name if tx.account_id else "",
     )
 
 

@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.5.3",
+    "date": "2026-02-23",
+    "title": "Invoice Navigation & Payment Details",
+    "description": "Invoice numbers link to detail pages, payment matches show full transaction details, banking icon links to invoice detail, and S3 migration includes invoice PDFs.",
+    "type": "improvement",
+    "details": [
+      "Payment matches on invoice detail pages show booking text, reference, value date, and account name",
+      "Banking page invoice icon links to invoice detail page instead of contract/customer",
+      "Invoice numbers on customer detail and contract detail link to invoice detail page",
+      "Use Eye icon for PDF view action on customer invoice list",
+      "Fix S3 migration missing imported and generated invoice PDFs",
+      "Auto-run file storage migration on production startup"
+    ]
+  },
+  {
     "version": "2.5.2",
     "date": "2026-02-23",
     "title": "Revenue Forecast Invoice Status & Time Tracking Revenue/Hour",

@@ -753,6 +753,7 @@
     "voidReasonPlaceholder": "Enter the reason for voiding this invoice...",
     "payments": "Payments",
     "noPayments": "No payments matched",
+    "valueDate": "Value date",
     "emailHistory": "Email",
     "sentAt": "Sent at",
     "sentTo": "Recipients",

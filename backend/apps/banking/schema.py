@@ -87,6 +87,7 @@ class InvoiceMatchInfoType:
     confidence: Decimal
     contract_id: int | None
     customer_id: int | None
+    invoice_type: str = "imported"  # "imported" or "generated"
 
 
 @strawberry.type
@@ -262,14 +263,26 @@ def _make_transaction_type(t, include_invoice_match: bool = True) -> BankTransac
         if match is None and hasattr(t, "invoice_matches"):
             match = t.invoice_matches.first()
         if match:
-            matched_invoice = InvoiceMatchInfoType(
-                invoice_id=strawberry.ID(str(match.invoice_id)),
-                invoice_number=match.invoice.invoice_number or "",
-                match_type=match.match_type,
-                confidence=match.confidence,
-                contract_id=match.invoice.contract_id,
-                customer_id=match.invoice.customer_id,
-            )
+            if match.invoice_id:
+                matched_invoice = InvoiceMatchInfoType(
+                    invoice_id=strawberry.ID(str(match.invoice_id)),
+                    invoice_number=match.invoice.invoice_number or "",
+                    match_type=match.match_type,
+                    confidence=match.confidence,
+                    contract_id=match.invoice.contract_id,
+                    customer_id=match.invoice.customer_id,
+                    invoice_type="imported",
+                )
+            elif match.invoice_record_id:
+                matched_invoice = InvoiceMatchInfoType(
+                    invoice_id=strawberry.ID(str(match.invoice_record_id)),
+                    invoice_number=match.invoice_record.invoice_number or "",
+                    match_type=match.match_type,
+                    confidence=match.confidence,
+                    contract_id=match.invoice_record.contract_id,
+                    customer_id=match.invoice_record.customer_id,
+                    invoice_type="generated",
+                )
 
     return BankTransactionType(
         id=t.id,
@@ -357,7 +370,8 @@ class BankingQuery:
         qs = BankTransaction.objects.filter(
             tenant=user.tenant
         ).select_related("account", "counterparty", "counterparty__customer").prefetch_related(
-            "invoice_matches__invoice"
+            "invoice_matches__invoice",
+            "invoice_matches__invoice_record",
         )
 
         # Filters

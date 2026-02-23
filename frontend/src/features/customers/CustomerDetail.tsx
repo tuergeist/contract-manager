@@ -3,7 +3,7 @@ import { usePersistedState } from '@/lib/usePersistedState'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, History, Paperclip, Upload, Download, File, Image, Trash2, Link2, Plus, TrendingUp, DollarSign, ListTodo, Mail, X, Receipt, ChevronsUpDown, Check, FolderOpen, Globe } from 'lucide-react'
+import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, History, Paperclip, Upload, Download, File, Image, Trash2, Link2, Plus, TrendingUp, DollarSign, ListTodo, Mail, X, Receipt, ChevronsUpDown, Check, FolderOpen, Globe, Eye } from 'lucide-react'
 import { TodoModal, TodoList, type TodoContext, type TodoItem } from '@/features/todos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -1387,9 +1387,9 @@ export function CustomerDetail() {
                   {(invoicesData?.invoices?.items as CustomerInvoice[])?.map((invoice) => (
                     <tr key={invoice.id} className="hover:bg-gray-50">
                       <td className="whitespace-nowrap px-6 py-4">
-                        <span className="font-medium">
+                        <Link to={`/invoices/${invoice.id}?type=imported`} className="font-medium text-blue-600 hover:underline">
                           {invoice.invoiceNumber || '-'}
-                        </span>
+                        </Link>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                         {invoice.invoiceDate ? formatDate(invoice.invoiceDate) : '-'}
@@ -1460,7 +1460,7 @@ export function CustomerDetail() {
                             className="text-blue-600 hover:text-blue-800"
                             title={t('invoices.import.viewPdf')}
                           >
-                            <FileText className="h-4 w-4 inline" />
+                            <Eye className="h-4 w-4 inline" />
                           </a>
                         )}
                       </td>

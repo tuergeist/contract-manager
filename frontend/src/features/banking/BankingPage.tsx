@@ -121,6 +121,7 @@ const BANK_TRANSACTIONS = gql`
           invoiceNumber
           contractId
           customerId
+          invoiceType
         }
       }
       totalCount
@@ -274,7 +275,7 @@ interface BankTransaction {
   bookingText: string
   reference: string
   accountName: string
-  matchedInvoice: { invoiceId: string; invoiceNumber: string; contractId: number | null; customerId: number | null } | null
+  matchedInvoice: { invoiceId: string; invoiceNumber: string; contractId: number | null; customerId: number | null; invoiceType: string } | null
 }
 
 // --- Component ---
@@ -1334,11 +1335,9 @@ export function BankingPage() {
                             {tx.matchedInvoice && (
                               <Link
                                 to={
-                                  tx.matchedInvoice.contractId
-                                    ? `/contracts/${tx.matchedInvoice.contractId}`
-                                    : tx.matchedInvoice.customerId
-                                    ? `/customers/${tx.matchedInvoice.customerId}`
-                                    : '/invoices'
+                                  tx.matchedInvoice.invoiceType === 'imported'
+                                    ? `/invoices/${tx.matchedInvoice.invoiceId}?type=imported`
+                                    : `/invoices/${tx.matchedInvoice.invoiceId}`
                                 }
                                 onClick={(e) => e.stopPropagation()}
                                 className="text-blue-600 hover:text-blue-800"
