@@ -414,6 +414,8 @@ class ImportedInvoice(TenantModel):
         EXTRACTION_FAILED = "extraction_failed", "Extraction Failed"
         DUPLICATE = "duplicate", "Duplicate"
         CONFIRMED = "confirmed", "Confirmed"
+        SENT = "sent", "Sent"
+        PAID = "paid", "Paid"
 
     # Invoice identification (from extraction)
     invoice_number = models.CharField(

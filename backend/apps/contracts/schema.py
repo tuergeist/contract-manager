@@ -1319,6 +1319,48 @@ def _build_contract_comment(comment: ContractComment, user) -> ContractCommentTy
     )
 
 
+class _ImportedInvoiceAdapter:
+    """Adapter to make ImportedInvoice compatible with _find_best_invoice_for_period
+    and _determine_cell_invoice_status (which expect InvoiceRecord-like objects)."""
+
+    def __init__(self, imported):
+        from dateutil.relativedelta import relativedelta
+
+        self.id = imported.id
+        # Map extraction_status to InvoiceRecord-like status
+        status_map = {"confirmed": "sent", "sent": "sent", "paid": "paid"}
+        self.status = status_map.get(imported.extraction_status, "finalized")
+        # Use invoice_date as both billing_date and period boundaries
+        self.billing_date = imported.invoice_date
+        if imported.invoice_date:
+            self.period_start = imported.invoice_date.replace(day=1)
+            self.period_end = self.period_start + relativedelta(months=1, days=-1)
+        else:
+            self.period_start = None
+            self.period_end = None
+        self.email_sent_at = None
+        self._is_paid_cached = imported.extraction_status == "paid" or imported.payment_matches.exists()
+        self.contract_id = imported.contract_id
+
+
+def _merge_imported_invoices(invoice_lookup, tenant, contract_ids, from_date, to_date):
+    """Add confirmed/sent/paid imported invoices to the invoice lookup."""
+    from apps.invoices.models import ImportedInvoice
+
+    imported_qs = ImportedInvoice.objects.filter(
+        tenant=tenant,
+        contract_id__in=contract_ids,
+        extraction_status__in=["confirmed", "sent", "paid"],
+        invoice_date__gte=from_date,
+        invoice_date__lte=to_date,
+    ).prefetch_related("payment_matches")
+
+    for imp in imported_qs:
+        adapter = _ImportedInvoiceAdapter(imp)
+        if adapter.period_start and adapter.period_end:
+            invoice_lookup[imp.contract_id].append(adapter)
+
+
 def _find_best_invoice_for_period(period_str: str, invoices: list, is_quarterly: bool):
     """Find the most relevant non-voided InvoiceRecord for a given period.
 
@@ -1720,7 +1762,7 @@ class ContractQuery:
         ).select_related("customer").prefetch_related("items__product", "items__price_periods", "items__depends_on")
 
         # Bulk-fetch InvoiceRecords for invoice status color-coding
-        from apps.invoices.models import InvoiceRecord
+        from apps.invoices.models import ImportedInvoice, InvoiceRecord
         contract_ids = [c.id for c in contracts]
         invoice_qs = (
             InvoiceRecord.objects.filter(
@@ -1738,6 +1780,11 @@ class ContractQuery:
             # Cache is_paid to avoid repeated queries
             inv._is_paid_cached = inv.payment_matches.all().exists()
             invoice_lookup[inv.contract_id].append(inv)
+
+        # Also include confirmed/sent/paid imported invoices linked to contracts
+        _merge_imported_invoices(
+            invoice_lookup, user.tenant, contract_ids, from_date, to_date
+        )
 
         # Calculate revenue per contract per period
         contract_rows = []
@@ -1955,7 +2002,7 @@ class ContractQuery:
         ).select_related("customer").prefetch_related("items__product", "items__price_periods", "items__depends_on")
 
         # Bulk-fetch InvoiceRecords for invoice status color-coding
-        from apps.invoices.models import InvoiceRecord
+        from apps.invoices.models import ImportedInvoice, InvoiceRecord
         contract_ids = [c.id for c in contracts]
         invoice_qs = (
             InvoiceRecord.objects.filter(
@@ -1971,6 +2018,11 @@ class ContractQuery:
         for inv in invoice_qs:
             inv._is_paid_cached = inv.payment_matches.all().exists()
             invoice_lookup[inv.contract_id].append(inv)
+
+        # Also include confirmed/sent/paid imported invoices linked to contracts
+        _merge_imported_invoices(
+            invoice_lookup, user.tenant, contract_ids, from_date, to_date
+        )
 
         # Calculate recognition per contract per period
         contract_rows = []

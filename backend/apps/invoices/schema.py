@@ -1912,6 +1912,14 @@ class InvoiceMutation:
             matched_by=user if match_type == "manual" else None,
         )
 
+        # Transition imported invoice to paid on payment match
+        if invoice.extraction_status in (
+            ImportedInvoice.ExtractionStatus.CONFIRMED,
+            ImportedInvoice.ExtractionStatus.SENT,
+        ):
+            invoice.extraction_status = ImportedInvoice.ExtractionStatus.PAID
+            invoice.save(update_fields=["extraction_status"])
+
         return CreatePaymentMatchResult(
             success=True,
             match=_convert_payment_match(match),
@@ -1971,6 +1979,11 @@ class InvoiceMutation:
             confidence=confidence,
             matched_by=user if match_type == "manual" else None,
         )
+
+        # Transition generated invoice to paid on payment match
+        if record.status in (InvoiceRecord.Status.SENT, InvoiceRecord.Status.DUNNING, InvoiceRecord.Status.FINALIZED):
+            record.status = InvoiceRecord.Status.PAID
+            record.save(update_fields=["status"])
 
         return CreatePaymentMatchResult(
             success=True,
