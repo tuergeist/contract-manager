@@ -153,9 +153,13 @@ class InvoiceService:
         last_day = date(year, month, monthrange(year, month)[1])
 
         # Get all active contracts for this tenant
+        # Exclude contracts whose end_date is before this billing month
+        # (same pattern as effective_status: active + end_date in past = ended)
         contracts = Contract.objects.filter(
             tenant=self.tenant,
             status=Contract.Status.ACTIVE,
+        ).exclude(
+            end_date__lt=first_day,
         ).select_related("customer").prefetch_related("items__product")
 
         invoices = []

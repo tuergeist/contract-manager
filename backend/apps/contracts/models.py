@@ -338,6 +338,10 @@ class Contract(TenantModel):
         if self.end_date and to_date > self.end_date:
             to_date = self.end_date
 
+        # If end_date clipping made the range invalid, no events possible
+        if from_date > to_date:
+            return []
+
         interval_months = self.get_interval_months()
         events = defaultdict(lambda: {"items": [], "total": Decimal("0")})
 
@@ -605,6 +609,10 @@ class Contract(TenantModel):
         # Don't go beyond contract end date
         if self.end_date and to_date > self.end_date:
             to_date = self.end_date
+
+        # If end_date clipping made the range invalid, no events possible
+        if from_date > to_date:
+            return []
 
         interval_months = self.get_interval_months()
         events = defaultdict(lambda: {"items": [], "total": Decimal("0")})

@@ -1756,10 +1756,14 @@ class ContractQuery:
                 current += relativedelta(months=1)
 
         # Get all active/paused contracts (exclude drafts - they're not committed yet)
+        # Exclude contracts whose end_date is before the forecast start
+        # (active + end_date in past = effectively ended)
         # Prefetch items with products and price_periods to avoid N+1 queries
         contracts = Contract.objects.filter(
             tenant=user.tenant,
             status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
+        ).exclude(
+            end_date__lt=from_date,
         ).select_related("customer").prefetch_related("items__product", "items__price_periods", "items__depends_on")
 
         # Bulk-fetch InvoiceRecords for invoice status color-coding
@@ -1995,10 +1999,14 @@ class ContractQuery:
                 current += relativedelta(months=1)
 
         # Get all active/paused contracts (exclude drafts - they're not committed yet)
+        # Exclude contracts whose end_date is before the forecast start
+        # (active + end_date in past = effectively ended)
         # Prefetch items with products and price_periods to avoid N+1 queries
         contracts = Contract.objects.filter(
             tenant=user.tenant,
             status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
+        ).exclude(
+            end_date__lt=from_date,
         ).select_related("customer").prefetch_related("items__product", "items__price_periods", "items__depends_on")
 
         # Bulk-fetch InvoiceRecords for invoice status color-coding
