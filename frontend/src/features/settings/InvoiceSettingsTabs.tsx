@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { CompanyDataSettings } from '@/features/invoices/CompanyDataSettings'
 import { EmailTemplateSettings } from '@/features/invoices/EmailTemplateSettings'
 import { NumberSchemeSettings } from '@/features/invoices/NumberSchemeSettings'
+import { StornoNumberSchemeSettings } from '@/features/invoices/StornoNumberSchemeSettings'
 import { TemplateSettings } from '@/features/invoices/TemplateSettings'
 import { ZugferdSettings } from '@/features/invoices/ZugferdSettings'
 
@@ -14,6 +15,7 @@ export function InvoiceSettingsTabs() {
 
   // Determine active sub-tab from URL
   const getActiveSubTab = () => {
+    if (location.pathname.includes('/storno-numbering')) return 'storno-numbering'
     if (location.pathname.includes('/numbering')) return 'numbering'
     if (location.pathname.includes('/email-template')) return 'email-template'
     if (location.pathname.includes('/template')) return 'template'
@@ -27,6 +29,9 @@ export function InvoiceSettingsTabs() {
     switch (value) {
       case 'numbering':
         navigate('/settings/invoices/numbering')
+        break
+      case 'storno-numbering':
+        navigate('/settings/invoices/storno-numbering')
         break
       case 'email-template':
         navigate('/settings/invoices/email-template')
@@ -47,6 +52,7 @@ export function InvoiceSettingsTabs() {
       <TabsList className="mb-4">
         <TabsTrigger value="company">{t('invoices.companyData.title')}</TabsTrigger>
         <TabsTrigger value="numbering">{t('invoices.numberScheme.title')}</TabsTrigger>
+        <TabsTrigger value="storno-numbering">{t('invoices.stornoNumberScheme.title')}</TabsTrigger>
         <TabsTrigger value="template">{t('invoices.template.title')}</TabsTrigger>
         <TabsTrigger value="email-template">{t('settings.emailTemplate.tabTitle')}</TabsTrigger>
         <TabsTrigger value="zugferd">{t('invoices.zugferd.title')}</TabsTrigger>
@@ -58,6 +64,10 @@ export function InvoiceSettingsTabs() {
 
       <TabsContent value="numbering">
         <NumberSchemeSettings showHeader={false} />
+      </TabsContent>
+
+      <TabsContent value="storno-numbering">
+        <StornoNumberSchemeSettings showHeader={false} />
       </TabsContent>
 
       <TabsContent value="template">

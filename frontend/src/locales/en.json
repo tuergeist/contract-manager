@@ -582,6 +582,14 @@
       "saved": "Number scheme saved successfully",
       "saveFailed": "Failed to save number scheme"
     },
+    "stornoNumberScheme": {
+      "title": "Storno Numbering",
+      "description": "Configure how storno (credit note) numbers are generated",
+      "nextNumber": "Next storno number will be:",
+      "saved": "Storno number scheme saved successfully",
+      "saveFailed": "Failed to save storno number scheme"
+    },
+    "stornoBadge": "Storno",
     "template": {
       "title": "Invoice Template",
       "description": "Customize the appearance of generated invoices",
@@ -793,7 +801,11 @@
     "sendDisabledNoPdf": "PDF must be generated before sending",
     "generatePdf": "Generate PDF",
     "pdfQueued": "PDF generation started",
-    "pdfGenerationFailed": "Failed to generate PDF"
+    "pdfGenerationFailed": "Failed to generate PDF",
+    "statusStorno": "Credit Note",
+    "viewStorno": "Storno {{number}}",
+    "viewOriginalInvoice": "Original Invoice {{number}}",
+    "voidStornoNote": "A storno document (credit note) will be created automatically. You will need to send it to the customer separately."
   },
   "importedInvoiceDetail": {
     "metadata": "Invoice Details",

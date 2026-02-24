@@ -188,6 +188,40 @@ class InvoiceNumberScheme(TimestampedModel):
         return f"Number scheme for {self.tenant.name}: {self.pattern}"
 
 
+class StornoNumberScheme(TimestampedModel):
+    """Configurable storno (credit note) number pattern per tenant."""
+
+    class ResetPeriod(models.TextChoices):
+        YEARLY = "yearly", "Yearly"
+        MONTHLY = "monthly", "Monthly"
+        NEVER = "never", "Never"
+
+    tenant = models.OneToOneField(
+        "tenants.Tenant",
+        on_delete=models.CASCADE,
+        related_name="storno_number_scheme",
+    )
+    pattern = models.CharField(
+        max_length=100,
+        default="S-{YYYY}-{NNNN}",
+        help_text="Pattern with placeholders: {YYYY}, {YY}, {MM}, {NNN}, {NNNN}, {NNNNN}",
+    )
+    next_counter = models.PositiveIntegerField(default=1)
+    reset_period = models.CharField(
+        max_length=10,
+        choices=ResetPeriod.choices,
+        default=ResetPeriod.YEARLY,
+    )
+    last_reset_year = models.PositiveIntegerField(null=True, blank=True)
+    last_reset_month = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Storno Number Scheme"
+
+    def __str__(self):
+        return f"Storno number scheme for {self.tenant.name}: {self.pattern}"
+
+
 class InvoiceTemplate(TenantModel):
     """Configurable invoice template settings per tenant."""
 
@@ -272,6 +306,24 @@ class InvoiceRecord(TenantModel):
         PAID = "paid", "Paid"
         DUNNING = "dunning", "Dunning"
         VOIDED = "voided", "Voided"
+
+    class DocumentType(models.TextChoices):
+        INVOICE = "invoice", "Invoice"
+        STORNO = "storno", "Storno (Credit Note)"
+
+    document_type = models.CharField(
+        max_length=10,
+        choices=DocumentType.choices,
+        default=DocumentType.INVOICE,
+    )
+    storno_of = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="storno_records",
+        help_text="The original invoice this storno reverses",
+    )
 
     contract = models.ForeignKey(
         "contracts.Contract",

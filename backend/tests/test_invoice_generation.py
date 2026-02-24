@@ -204,10 +204,30 @@ class TestVoidInvoice:
         records = service.generate_and_persist(2026, 1)
         record = records[0]
 
-        InvoiceService.void_invoice(record, reason="Test void reason")
+        storno = service.void_invoice(record, reason="Test void reason")
         record.refresh_from_db()
         assert record.status == InvoiceRecord.Status.VOIDED
         assert record.void_reason == "Test void reason"
+
+        # Verify storno record created
+        assert storno is not None
+        assert storno.document_type == "storno"
+        assert storno.storno_of_id == record.id
+        assert storno.status == InvoiceRecord.Status.FINALIZED
+        assert storno.total_gross == record.total_gross
+        assert storno.invoice_number.startswith("S-")
+
+    def test_void_sent(self, db, tenant, legal_data, active_contract, contract_item):
+        service = InvoiceService(tenant)
+        records = service.generate_and_persist(2026, 1)
+        record = records[0]
+        record.status = InvoiceRecord.Status.SENT
+        record.save()
+
+        storno = service.void_invoice(record, reason="Error in sent invoice")
+        record.refresh_from_db()
+        assert record.status == InvoiceRecord.Status.VOIDED
+        assert storno.document_type == "storno"
 
     def test_void_non_finalized_raises(self, db, tenant, legal_data, active_contract, contract_item):
         service = InvoiceService(tenant)
@@ -216,14 +236,22 @@ class TestVoidInvoice:
         record.status = InvoiceRecord.Status.VOIDED
         record.save()
 
-        with pytest.raises(ValueError, match="Only finalized"):
-            InvoiceService.void_invoice(record, reason="Should fail")
+        with pytest.raises(ValueError, match="Only finalized or sent"):
+            service.void_invoice(record, reason="Should fail")
+
+    def test_void_storno_raises(self, db, tenant, legal_data, active_contract, contract_item):
+        service = InvoiceService(tenant)
+        records = service.generate_and_persist(2026, 1)
+        storno = service.void_invoice(records[0], reason="Void it")
+
+        with pytest.raises(ValueError, match="Storno documents cannot be voided"):
+            service.void_invoice(storno, reason="Should fail")
 
     def test_voided_number_not_reused(self, db, tenant, legal_data, active_contract, contract_item):
         service = InvoiceService(tenant)
         records = service.generate_and_persist(2026, 1)
         old_number = records[0].invoice_number
-        InvoiceService.void_invoice(records[0], reason="Reissue needed")
+        service.void_invoice(records[0], reason="Reissue needed")
 
         # Generate again for the same month — voided record should allow re-generation
         # but with a NEW number

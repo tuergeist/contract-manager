@@ -59,7 +59,7 @@ def log_invoice_email_sent(record, recipients: list[str], *, user=None) -> Audit
         return None
 
 
-def log_invoice_voided(record, *, user=None) -> AuditLog | None:
+def log_invoice_voided(record, *, old_status="finalized", user=None) -> AuditLog | None:
     """Log an audit entry when an invoice is voided."""
     try:
         return AuditLog.objects.create(
@@ -70,10 +70,33 @@ def log_invoice_voided(record, *, user=None) -> AuditLog | None:
             entity_repr=f"Invoice {record.invoice_number}",
             user=user or get_current_user(),
             changes={
-                "status": {"old": "finalized", "new": "voided"},
+                "status": {"old": old_status, "new": "voided"},
                 "void_reason": {"old": None, "new": record.void_reason},
             },
         )
     except Exception:
         logger.exception("Failed to log invoice voided for record %s", record.pk)
+        return None
+
+
+def log_storno_created(record, *, user=None) -> AuditLog | None:
+    """Log an audit entry when a storno (credit note) is created."""
+    try:
+        original_number = record.storno_of.invoice_number if record.storno_of else ""
+        return AuditLog.objects.create(
+            tenant=record.tenant,
+            action=AuditLog.Action.CREATE,
+            entity_type="invoice_record",
+            entity_id=record.pk,
+            entity_repr=f"Storno {record.invoice_number}",
+            user=user or get_current_user(),
+            changes={
+                "invoice_number": {"old": None, "new": record.invoice_number},
+                "document_type": {"old": None, "new": "storno"},
+                "storno_of": {"old": None, "new": original_number},
+                "total_gross": {"old": None, "new": str(record.total_gross)},
+            },
+        )
+    except Exception:
+        logger.exception("Failed to log storno creation for record %s", record.pk)
         return None

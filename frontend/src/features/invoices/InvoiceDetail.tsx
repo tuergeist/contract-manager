@@ -83,6 +83,11 @@ const INVOICE_RECORD_QUERY = gql`
       emailSentAt
       emailSentTo
       emailMessageId
+      documentType
+      stornoOfId
+      stornoOfNumber
+      stornoRecordId
+      stornoRecordNumber
     }
   }
 `
@@ -122,6 +127,10 @@ const VOID_INVOICE = gql`
     voidInvoice(invoiceId: $invoiceId, reason: $reason) {
       success
       error
+      stornoRecord {
+        id
+        invoiceNumber
+      }
     }
   }
 `
@@ -187,6 +196,11 @@ interface InvoiceRecord {
   emailSentAt: string | null
   emailSentTo: string[]
   emailMessageId: string
+  documentType: string
+  stornoOfId: number | null
+  stornoOfNumber: string | null
+  stornoRecordId: number | null
+  stornoRecordNumber: string | null
 }
 
 interface AuditChange {
@@ -204,8 +218,17 @@ interface AuditEntry {
   timestamp: string
 }
 
-function StatusBadge({ status, isPaid }: { status: string; isPaid?: boolean }) {
+function StatusBadge({ status, isPaid, documentType }: { status: string; isPaid?: boolean; documentType?: string }) {
   const { t } = useTranslation()
+
+  if (documentType === 'storno') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 text-sm font-medium text-orange-700">
+        <FileText className="h-4 w-4" />
+        {t('invoiceDetail.statusStorno')}
+      </span>
+    )
+  }
 
   if (isPaid) {
     return (
@@ -388,7 +411,7 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
           ? t('invoiceDetail.sendDisabledNoPdf')
           : undefined
     : undefined
-  const canVoid = record.status === 'finalized' && !record.emailSentAt
+  const canVoid = (record.status === 'finalized' || record.status === 'sent') && record.documentType !== 'storno'
 
   // Build preview URL
   const previewHtmlUrl = record.contractId
@@ -426,12 +449,22 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
           <div>
             <h1 className="text-2xl font-bold">{record.invoiceNumber}</h1>
             <div className="mt-1 flex items-center gap-3">
-              <StatusBadge status={record.status} isPaid={record.isPaid} />
+              <StatusBadge status={record.status} isPaid={record.isPaid} documentType={record.documentType} />
               {record.isPaid && record.status === 'finalized' && (
                 <span className="text-sm text-muted-foreground">({t('invoices.statusFinalized')})</span>
               )}
               {record.status === 'voided' && record.voidReason && (
                 <span className="text-sm text-muted-foreground">{record.voidReason}</span>
+              )}
+              {record.status === 'voided' && record.stornoRecordId && (
+                <Link to={`/invoices/generated/${record.stornoRecordId}`} className="text-sm text-blue-600 hover:underline">
+                  {t('invoiceDetail.viewStorno', { number: record.stornoRecordNumber })}
+                </Link>
+              )}
+              {record.documentType === 'storno' && record.stornoOfId && (
+                <Link to={`/invoices/generated/${record.stornoOfId}`} className="text-sm text-blue-600 hover:underline">
+                  {t('invoiceDetail.viewOriginalInvoice', { number: record.stornoOfNumber })}
+                </Link>
               )}
             </div>
           </div>
@@ -819,6 +852,7 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
             <DialogTitle>{t('invoiceDetail.voidConfirmTitle')}</DialogTitle>
             <DialogDescription>
               {t('invoiceDetail.voidConfirmMessage', { invoice: record.invoiceNumber })}
+              {' '}{t('invoiceDetail.voidStornoNote')}
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">

@@ -288,6 +288,7 @@ const INVOICE_RECORDS = gql`
         isPaid
         emailSentAt
         emailSentTo
+        documentType
         paymentMatches {
           id
           transactionId
@@ -353,6 +354,7 @@ interface GeneratedInvoice {
   isPaid: boolean
   emailSentAt: string | null
   emailSentTo: string[]
+  documentType: string
   paymentMatches: {
     id: number
     transactionId: number
@@ -1131,6 +1133,9 @@ export function InvoiceList() {
                             </Link>
                           ) : (
                             row.invoiceNumber || <span className="text-gray-400 italic">{t('invoices.import.noNumber')}</span>
+                          )}
+                          {row.generated?.documentType === 'storno' && (
+                            <Badge variant="outline" className="text-orange-600 border-orange-300 text-xs">{t('invoices.stornoBadge')}</Badge>
                           )}
                           {row.imported && getUploadStatusBadge(row.imported)}
                         </div>

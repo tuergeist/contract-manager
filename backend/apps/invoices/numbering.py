@@ -1,23 +1,25 @@
-"""Invoice numbering service for sequential, pattern-based number generation."""
+"""Invoice and storno numbering services for sequential, pattern-based number generation."""
 import re
 from datetime import date
 
 from django.db import transaction
 from django.db.models import F
 
-from apps.invoices.models import InvoiceNumberScheme
 from apps.tenants.models import Tenant
 
 
-class InvoiceNumberService:
-    """Generates unique sequential invoice numbers using configurable patterns."""
+class BaseNumberService:
+    """Base class for sequential number generation using configurable patterns."""
+
+    scheme_model = None  # Override in subclass
+    default_pattern = "{YYYY}-{NNNN}"  # Override in subclass
 
     def __init__(self, tenant: Tenant):
         self.tenant = tenant
 
     def get_next_number(self, billing_date: date) -> str:
         """
-        Atomically increment the counter and return the formatted invoice number.
+        Atomically increment the counter and return the formatted number.
 
         Uses select_for_update() to prevent race conditions.
         Counter reset is handled based on the scheme's reset_period.
@@ -27,7 +29,7 @@ class InvoiceNumberService:
 
             # Lock the row for update
             scheme = (
-                InvoiceNumberScheme.objects
+                self.scheme_model.objects
                 .select_for_update()
                 .get(pk=scheme.pk)
             )
@@ -46,7 +48,7 @@ class InvoiceNumberService:
             return self._format_number(scheme.pattern, billing_date, current_counter)
 
     def preview_next_number(self, billing_date: date | None = None) -> str:
-        """Preview what the next invoice number would look like without incrementing."""
+        """Preview what the next number would look like without incrementing."""
         if billing_date is None:
             billing_date = date.today()
 
@@ -59,30 +61,30 @@ class InvoiceNumberService:
 
         return self._format_number(scheme.pattern, billing_date, counter)
 
-    def _get_or_create_scheme(self) -> InvoiceNumberScheme:
+    def _get_or_create_scheme(self):
         """Get existing scheme or create default."""
-        scheme, _ = InvoiceNumberScheme.objects.get_or_create(
+        scheme, _ = self.scheme_model.objects.get_or_create(
             tenant=self.tenant,
             defaults={
-                "pattern": "{YYYY}-{NNNN}",
+                "pattern": self.default_pattern,
                 "next_counter": 1,
-                "reset_period": InvoiceNumberScheme.ResetPeriod.YEARLY,
+                "reset_period": self.scheme_model.ResetPeriod.YEARLY,
             },
         )
         return scheme
 
-    def _should_reset(self, scheme: InvoiceNumberScheme, billing_date: date) -> bool:
+    def _should_reset(self, scheme, billing_date: date) -> bool:
         """Check if the counter should be reset based on the reset period."""
-        if scheme.reset_period == InvoiceNumberScheme.ResetPeriod.NEVER:
+        if scheme.reset_period == scheme.ResetPeriod.NEVER:
             return False
 
-        if scheme.reset_period == InvoiceNumberScheme.ResetPeriod.YEARLY:
+        if scheme.reset_period == scheme.ResetPeriod.YEARLY:
             return (
                 scheme.last_reset_year is not None
                 and billing_date.year != scheme.last_reset_year
             )
 
-        if scheme.reset_period == InvoiceNumberScheme.ResetPeriod.MONTHLY:
+        if scheme.reset_period == scheme.ResetPeriod.MONTHLY:
             return (
                 scheme.last_reset_year is not None
                 and scheme.last_reset_month is not None
@@ -94,7 +96,7 @@ class InvoiceNumberService:
 
         return False
 
-    def _maybe_reset_counter(self, scheme: InvoiceNumberScheme, billing_date: date):
+    def _maybe_reset_counter(self, scheme, billing_date: date):
         """Reset counter if period boundary crossed. Updates scheme in place."""
         if self._should_reset(scheme, billing_date):
             scheme.next_counter = 1
@@ -157,3 +159,25 @@ class InvoiceNumberService:
                 errors.append(f"Unknown placeholder: {placeholder}")
 
         return errors
+
+
+class InvoiceNumberService(BaseNumberService):
+    """Generates unique sequential invoice numbers."""
+
+    default_pattern = "{YYYY}-{NNNN}"
+
+    @property
+    def scheme_model(self):
+        from apps.invoices.models import InvoiceNumberScheme
+        return InvoiceNumberScheme
+
+
+class StornoNumberService(BaseNumberService):
+    """Generates unique sequential storno (credit note) numbers."""
+
+    default_pattern = "S-{YYYY}-{NNNN}"
+
+    @property
+    def scheme_model(self):
+        from apps.invoices.models import StornoNumberScheme
+        return StornoNumberScheme

@@ -91,6 +91,20 @@ LABELS = {
 }
 
 
+STORNO_LABELS = {
+    "de": {
+        "title": "Stornorechnung",
+        "reference": "Storno zu Rechnung Nr.",
+        "void_reason": "Stornierungsgrund",
+    },
+    "en": {
+        "title": "Credit Note",
+        "reference": "Credit note for Invoice No.",
+        "void_reason": "Void Reason",
+    },
+}
+
+
 def _normalize_country(country: str) -> str:
     """Normalize a country name to a lowercase key for comparison."""
     return (country or "").strip().lower()
@@ -693,6 +707,38 @@ class InvoiceService:
         pdf_document = HTML(string=html).render()
         return pdf_document.write_pdf()
 
+    def generate_pdf_for_storno(
+        self,
+        record,
+        language: Literal["de", "en"] = "de",
+    ) -> bytes:
+        """Generate a PDF for a storno (credit note) record.
+
+        Adds storno-specific labels (title, reference line, void reason)
+        to the standard template context.
+
+        Args:
+            record: InvoiceRecord instance with document_type='storno'
+            language: Language for PDF labels
+
+        Returns:
+            PDF bytes
+        """
+        ctx = self._build_record_template_context(record, language)
+        storno_labels = STORNO_LABELS.get(language, STORNO_LABELS["en"])
+
+        # Override title and add storno-specific context
+        ctx["is_storno"] = True
+        ctx["storno_title"] = storno_labels["title"]
+        ctx["storno_reference_label"] = storno_labels["reference"]
+        ctx["storno_void_reason_label"] = storno_labels["void_reason"]
+        ctx["storno_original_number"] = record.storno_of.invoice_number if record.storno_of else ""
+        ctx["storno_void_reason"] = record.void_reason or ""
+
+        html = render_to_string("invoices/invoice.html", ctx)
+        pdf_document = HTML(string=html).render()
+        return pdf_document.write_pdf()
+
     # ----------------------------------------------------------------
     # ZUGFeRD PDF generation
     # ----------------------------------------------------------------
@@ -1147,17 +1193,16 @@ class InvoiceService:
 
         with transaction.atomic():
             for invoice_data in invoices:
-                # Check for existing finalized invoice
+                # Check for existing non-voided invoice for same period
                 exists = InvoiceRecord.objects.filter(
                     tenant=self.tenant,
                     contract_id=invoice_data.contract_id,
                     billing_date=invoice_data.billing_date,
                     period_start=invoice_data.billing_period_start,
                     period_end=invoice_data.billing_period_end,
-                    status__in=[
-                        InvoiceRecord.Status.FINALIZED,
-                        InvoiceRecord.Status.DRAFT,
-                    ],
+                    document_type=InvoiceRecord.DocumentType.INVOICE,
+                ).exclude(
+                    status=InvoiceRecord.Status.VOIDED,
                 ).exists()
                 if exists:
                     continue
@@ -1223,19 +1268,66 @@ class InvoiceService:
 
         return created_records
 
-    @staticmethod
-    def void_invoice(invoice_record, reason: str) -> None:
-        """Void a finalized invoice. Number is NOT reused."""
+    def void_invoice(self, invoice_record, reason: str):
+        """Void a finalized or sent invoice, creating a storno (credit note) record.
+
+        Returns the created storno InvoiceRecord.
+        """
         from apps.invoices.models import InvoiceRecord
+        from apps.invoices.numbering import StornoNumberService
 
-        if invoice_record.status != InvoiceRecord.Status.FINALIZED:
-            raise ValueError("Only finalized invoices can be voided.")
-        invoice_record.status = InvoiceRecord.Status.VOIDED
-        invoice_record.void_reason = reason
-        invoice_record.save(update_fields=["status", "void_reason", "updated_at"])
+        allowed = {InvoiceRecord.Status.FINALIZED, InvoiceRecord.Status.SENT}
+        if invoice_record.status not in allowed:
+            raise ValueError("Only finalized or sent invoices can be voided.")
+        if invoice_record.document_type == InvoiceRecord.DocumentType.STORNO:
+            raise ValueError("Storno documents cannot be voided.")
 
-        from apps.invoices.audit import log_invoice_voided
-        log_invoice_voided(invoice_record)
+        old_status = invoice_record.status
+
+        with transaction.atomic():
+            # 1. Void the original
+            invoice_record.status = InvoiceRecord.Status.VOIDED
+            invoice_record.void_reason = reason
+            invoice_record.save(update_fields=["status", "void_reason", "updated_at"])
+
+            # 2. Create storno record (copies all financial data)
+            storno_numbering = StornoNumberService(self.tenant)
+            storno_number = storno_numbering.get_next_number(invoice_record.billing_date)
+
+            storno = InvoiceRecord.objects.create(
+                tenant=self.tenant,
+                document_type=InvoiceRecord.DocumentType.STORNO,
+                storno_of=invoice_record,
+                contract=invoice_record.contract,
+                customer=invoice_record.customer,
+                invoice_number=storno_number,
+                billing_date=invoice_record.billing_date,
+                invoice_date=date.today(),
+                period_start=invoice_record.period_start,
+                period_end=invoice_record.period_end,
+                total_net=invoice_record.total_net,
+                tax_rate=invoice_record.tax_rate,
+                tax_amount=invoice_record.tax_amount,
+                total_gross=invoice_record.total_gross,
+                line_items_snapshot=invoice_record.line_items_snapshot,
+                company_data_snapshot=invoice_record.company_data_snapshot,
+                status=InvoiceRecord.Status.FINALIZED,
+                customer_name=invoice_record.customer_name,
+                contract_name=invoice_record.contract_name,
+                invoice_text=invoice_record.invoice_text,
+                void_reason=reason,
+            )
+
+            # 3. Audit log both events
+            from apps.invoices.audit import log_invoice_voided, log_storno_created
+            log_invoice_voided(invoice_record, old_status=old_status)
+            log_storno_created(storno)
+
+        # 4. Dispatch background storno PDF generation
+        from apps.invoices.tasks import generate_storno_pdf_task
+        generate_storno_pdf_task.delay(storno.id)
+
+        return storno
 
     def get_persisted_invoices(
         self,

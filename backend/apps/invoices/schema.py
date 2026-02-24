@@ -17,7 +17,7 @@ from strawberry.types import Info
 from apps.core.context import Context
 from apps.core.permissions import check_perm, get_current_user, require_perm
 from apps.core.schema import DeleteResult
-from apps.invoices.models import ImportedInvoice, InvoiceImportBatch, InvoicePaymentMatch, InvoiceRecord, UploadStatus
+from apps.invoices.models import ImportedInvoice, InvoiceImportBatch, InvoicePaymentMatch, InvoiceRecord, StornoNumberScheme, UploadStatus
 from apps.invoices.services import InvoiceService
 from apps.invoices.types import InvoiceData, InvoiceLineItem
 
@@ -304,6 +304,12 @@ class InvoiceRecordType:
     email_sent_at: str | None
     email_sent_to: list[str]
     email_message_id: str
+    # Storno support
+    document_type: str
+    storno_of_id: int | None
+    storno_of_number: str | None
+    storno_record_id: int | None
+    storno_record_number: str | None
 
 
 @strawberry.type
@@ -327,6 +333,7 @@ class GenerateInvoicesResult:
 class VoidInvoiceResult:
     success: bool
     error: str | None = None
+    storno_record: InvoiceRecordType | None = None
 
 
 @strawberry.type
@@ -607,11 +614,12 @@ class InvoiceQuery:
         user = require_perm(info, "invoices", "read")
         try:
             record = InvoiceRecord.objects.select_related(
-                "customer",
+                "customer", "storno_of",
             ).prefetch_related(
                 "payment_matches__transaction__counterparty",
                 "payment_matches__transaction__account",
                 "payment_matches__matched_by",
+                "storno_records",
             ).get(id=id, tenant=user.tenant)
         except InvoiceRecord.DoesNotExist:
             return None
@@ -633,6 +641,7 @@ class InvoiceQuery:
         info: Info,
         search: str | None = None,
         contract_id: int | None = None,
+        customer_id: int | None = None,
         sort_by: str | None = None,
         sort_order: str | None = "desc",
         offset: int = 0,
@@ -645,13 +654,19 @@ class InvoiceQuery:
 
         qs = InvoiceRecord.objects.filter(
             tenant=user.tenant,
+        ).select_related(
+            "storno_of",
         ).prefetch_related(
             "payment_matches__transaction__counterparty",
             "payment_matches__matched_by",
+            "storno_records",
         ).exclude(status=InvoiceRecord.Status.DRAFT)
 
         if contract_id:
             qs = qs.filter(contract_id=contract_id)
+
+        if customer_id:
+            qs = qs.filter(customer_id=customer_id)
 
         if search:
             qs = qs.filter(
@@ -703,6 +718,22 @@ class InvoiceQuery:
         from apps.invoices.numbering import InvoiceNumberService
 
         service = InvoiceNumberService(user.tenant)
+        scheme = service._get_or_create_scheme()
+        preview = service.preview_next_number()
+        return InvoiceNumberSchemeType(
+            pattern=scheme.pattern,
+            next_counter=scheme.next_counter,
+            reset_period=scheme.reset_period,
+            preview=preview,
+        )
+
+    @strawberry.field
+    def storno_number_scheme(self, info: Info) -> InvoiceNumberSchemeType:
+        """Get the tenant's storno number scheme."""
+        user = require_perm(info, "settings", "read")
+        from apps.invoices.numbering import StornoNumberService
+
+        service = StornoNumberService(user.tenant)
         scheme = service._get_or_create_scheme()
         preview = service.preview_next_number()
         return InvoiceNumberSchemeType(
@@ -1230,6 +1261,63 @@ class InvoiceMutation:
             ),
         )
 
+    # ----- Storno Number Scheme -----
+
+    @strawberry.mutation
+    def save_storno_number_scheme(
+        self, info: Info[Context, None], input: InvoiceNumberSchemeInput
+    ) -> InvoiceNumberSchemeResult:
+        """Save storno number scheme for the tenant."""
+        user, err = check_perm(info, "invoices", "settings")
+        if err:
+            return InvoiceNumberSchemeResult(success=False, error=err)
+
+        from apps.invoices.numbering import StornoNumberService
+
+        # Validate pattern
+        errors = StornoNumberService.validate_pattern(input.pattern)
+        if errors:
+            return InvoiceNumberSchemeResult(
+                success=False, error="; ".join(errors)
+            )
+
+        # Validate reset period
+        valid_periods = [c[0] for c in StornoNumberScheme.ResetPeriod.choices]
+        if input.reset_period not in valid_periods:
+            return InvoiceNumberSchemeResult(
+                success=False,
+                error=f"Invalid reset period. Must be one of: {', '.join(valid_periods)}",
+            )
+
+        defaults = {
+            "pattern": input.pattern,
+            "reset_period": input.reset_period,
+        }
+        if input.next_counter is not None:
+            if input.next_counter < 1:
+                return InvoiceNumberSchemeResult(
+                    success=False, error="Counter must be at least 1."
+                )
+            defaults["next_counter"] = input.next_counter
+
+        scheme, created = StornoNumberScheme.objects.update_or_create(
+            tenant=user.tenant,
+            defaults=defaults,
+        )
+
+        service = StornoNumberService(user.tenant)
+        preview = service.preview_next_number()
+
+        return InvoiceNumberSchemeResult(
+            success=True,
+            data=InvoiceNumberSchemeType(
+                pattern=scheme.pattern,
+                next_counter=scheme.next_counter,
+                reset_period=scheme.reset_period,
+                preview=preview,
+            ),
+        )
+
     # ----- Invoice Template -----
 
     @strawberry.mutation
@@ -1431,7 +1519,7 @@ class InvoiceMutation:
     def void_invoice(
         self, info: Info[Context, None], invoice_id: int, reason: str
     ) -> VoidInvoiceResult:
-        """Void a finalized invoice."""
+        """Void a finalized or sent invoice, creating a storno (credit note)."""
         user, err = check_perm(info, "invoices", "generate")
         if err:
             return VoidInvoiceResult(success=False, error=err)
@@ -1442,7 +1530,7 @@ class InvoiceMutation:
         from apps.invoices.models import InvoiceRecord
 
         try:
-            record = InvoiceRecord.objects.get(
+            record = InvoiceRecord.objects.select_related("customer").get(
                 id=invoice_id, tenant=user.tenant
             )
         except InvoiceRecord.DoesNotExist:
@@ -1451,11 +1539,12 @@ class InvoiceMutation:
             )
 
         try:
-            InvoiceService.void_invoice(record, reason=reason.strip())
+            service = InvoiceService(user.tenant)
+            storno = service.void_invoice(record, reason=reason.strip())
         except ValueError as e:
             return VoidInvoiceResult(success=False, error=str(e))
 
-        return VoidInvoiceResult(success=True)
+        return VoidInvoiceResult(success=True, storno_record=_convert_record(storno))
 
     @strawberry.mutation
     def generate_invoice_pdf(
@@ -2455,6 +2544,30 @@ def _convert_record(record) -> InvoiceRecordType:
     # Payment matches - use prefetched data if available, otherwise query
     payment_matches = list(record.payment_matches.all())
 
+    # Storno references
+    storno_of_id = record.storno_of_id
+    storno_of_number = None
+    if storno_of_id:
+        # Try prefetched storno_of, otherwise query
+        storno_of = getattr(record, "_storno_of_cache", None)
+        if storno_of is None:
+            try:
+                storno_of = record.storno_of
+            except Exception:
+                storno_of = None
+        storno_of_number = storno_of.invoice_number if storno_of else None
+
+    # First storno record for this invoice (if any)
+    storno_record_id = None
+    storno_record_number = None
+    try:
+        storno_records = list(record.storno_records.all())
+        if storno_records:
+            storno_record_id = storno_records[0].id
+            storno_record_number = storno_records[0].invoice_number
+    except Exception:
+        pass
+
     return InvoiceRecordType(
         id=record.id,
         invoice_number=record.invoice_number,
@@ -2482,6 +2595,11 @@ def _convert_record(record) -> InvoiceRecordType:
         email_sent_at=record.email_sent_at.isoformat() if record.email_sent_at else None,
         email_sent_to=record.email_sent_to or [],
         email_message_id=record.email_message_id or "",
+        document_type=record.document_type or "invoice",
+        storno_of_id=storno_of_id,
+        storno_of_number=storno_of_number,
+        storno_record_id=storno_record_id,
+        storno_record_number=storno_record_number,
     )
 
 

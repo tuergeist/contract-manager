@@ -329,8 +329,20 @@
 
     <!-- Invoice title with number inline -->
     <div class="invoice-title-section">
-        <span class="invoice-title">{{ labels.invoice }}{% if invoice_number %} # {{ invoice_number }}{% endif %}</span>
+        <span class="invoice-title">{% if is_storno %}{{ storno_title }}{% else %}{{ labels.invoice }}{% endif %}{% if invoice_number %} # {{ invoice_number }}{% endif %}</span>
     </div>
+
+    {% if is_storno and storno_original_number %}
+    <div style="margin-bottom: 12px; font-size: 9pt; color: #555;">
+        <strong>{{ storno_reference_label }}</strong> {{ storno_original_number }}
+    </div>
+    {% endif %}
+
+    {% if is_storno and storno_void_reason %}
+    <div style="margin-bottom: 12px; font-size: 9pt; color: #555;">
+        <strong>{{ storno_void_reason_label }}:</strong> {{ storno_void_reason }}
+    </div>
+    {% endif %}
 
     <!-- Metadata: right-aligned key-value pairs -->
     <div class="invoice-details">

@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.6.2",
+    "date": "2026-02-24",
+    "title": "Invoice Voiding with Storno (Credit Note) Documents",
+    "description": "Voiding a finalized or sent invoice now generates a Storno document (credit note) with its own number sequence, allowing proper accounting correction and re-invoicing of the same billing period.",
+    "type": "feature",
+    "details": [
+      "Void finalized and sent invoices — creates a Storno credit note with copied financial data",
+      "Separate Storno number scheme (configurable pattern, default S-{YYYY}-{NNNN}) in invoice settings",
+      "Storno PDF generated automatically with reference to original invoice and void reason",
+      "Voided invoices link to their Storno document and vice versa in the detail view",
+      "Storno documents shown with distinct badge in invoice list and detail views",
+      "Fixed duplicate prevention: voided invoices no longer block re-generation for the same period"
+    ]
+  },
+  {
     "version": "2.6.1",
     "date": "2026-02-24",
     "title": "Fix MCP OAuth Discovery for Claude Desktop",

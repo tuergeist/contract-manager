@@ -582,6 +582,14 @@
       "saved": "Nummernschema erfolgreich gespeichert",
       "saveFailed": "Nummernschema konnte nicht gespeichert werden"
     },
+    "stornoNumberScheme": {
+      "title": "Storno-Nummern",
+      "description": "Konfigurieren Sie das Nummerierungsschema für Stornorechnungen (Gutschriften)",
+      "nextNumber": "Nächste Storno-Nummer:",
+      "saved": "Storno-Nummernschema erfolgreich gespeichert",
+      "saveFailed": "Storno-Nummernschema konnte nicht gespeichert werden"
+    },
+    "stornoBadge": "Storno",
     "template": {
       "title": "Rechnungsvorlage",
       "description": "Anpassen des Erscheinungsbilds von Rechnungen",
@@ -793,7 +801,11 @@
     "sendDisabledNoPdf": "PDF muss vor dem Versand erstellt werden",
     "generatePdf": "PDF erstellen",
     "pdfQueued": "PDF-Erstellung gestartet",
-    "pdfGenerationFailed": "PDF-Erstellung fehlgeschlagen"
+    "pdfGenerationFailed": "PDF-Erstellung fehlgeschlagen",
+    "statusStorno": "Stornorechnung",
+    "viewStorno": "Storno {{number}}",
+    "viewOriginalInvoice": "Originalrechnung {{number}}",
+    "voidStornoNote": "Eine Stornorechnung (Gutschrift) wird automatisch erstellt. Sie müssen diese separat an den Kunden versenden."
   },
   "importedInvoiceDetail": {
     "metadata": "Rechnungsdetails",
