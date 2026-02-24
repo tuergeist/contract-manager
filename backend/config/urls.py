@@ -31,6 +31,7 @@ from apps.banking.views import UploadStatementView
 from apps.mcp.views import DynamicClientRegistrationView, OAuthMetadataView, ProtectedResourceMetadataView
 
 urlpatterns = [
+    path("accounts/", include("django.contrib.auth.urls")),
     path("admin/", admin.site.urls),
     path("graphql", csrf_exempt(AuthenticatedGraphQLView.as_view(schema=schema))),
     # OAuth 2.1 endpoints (django-oauth-toolkit)

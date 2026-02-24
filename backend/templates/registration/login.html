@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — Contract Manager</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 2rem; width: 100%; max-width: 400px; }
+    h1 { font-size: 1.25rem; margin-bottom: 1.5rem; text-align: center; color: #333; }
+    label { display: block; font-size: 0.875rem; font-weight: 500; color: #555; margin-bottom: 0.25rem; }
+    input[type="text"], input[type="password"] { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.875rem; margin-bottom: 1rem; }
+    input:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(79,70,229,0.15); }
+    button { width: 100%; padding: 0.625rem; background: #4f46e5; color: #fff; border: none; border-radius: 4px; font-size: 0.875rem; font-weight: 500; cursor: pointer; }
+    button:hover { background: #4338ca; }
+    .error { background: #fef2f2; color: #991b1b; padding: 0.75rem; border-radius: 4px; font-size: 0.8125rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Contract Manager</h1>
+    {% if form.errors %}
+    <div class="error">Invalid username or password.</div>
+    {% endif %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <label for="id_username">Email</label>
+      <input type="text" name="username" id="id_username" autofocus>
+      <label for="id_password">Password</label>
+      <input type="password" name="password" id="id_password">
+      <button type="submit">Log in</button>
+    </form>
+  </div>
+</body>
+</html>
