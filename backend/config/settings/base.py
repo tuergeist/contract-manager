@@ -68,6 +68,7 @@ MIDDLEWARE = [
     "auditlog.middleware.AuditlogMiddleware",
     "apps.tenants.middleware.TenantMiddleware",
     "apps.audit.middleware.AuditUserMiddleware",
+    "apps.mcp.middleware.McpResourceMetadataMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

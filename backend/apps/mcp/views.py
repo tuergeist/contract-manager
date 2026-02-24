@@ -7,6 +7,22 @@ from django.views import View
 from oauth2_provider.models import Application
 
 
+class ProtectedResourceMetadataView(View):
+    """RFC 9728 - OAuth 2.0 Protected Resource Metadata.
+
+    MCP clients use this to discover which authorization server to use.
+    """
+
+    def get(self, request):
+        base_url = request.build_absolute_uri("/").rstrip("/")
+        return JsonResponse({
+            "resource": f"{base_url}/mcp",
+            "authorization_servers": [base_url],
+            "scopes_supported": ["read", "write"],
+            "bearer_methods_supported": ["header"],
+        })
+
+
 class OAuthMetadataView(View):
     """RFC 8414 - OAuth 2.0 Authorization Server Metadata."""
 
@@ -23,6 +39,7 @@ class OAuthMetadataView(View):
             "code_challenge_methods_supported": ["S256"],
             "token_endpoint_auth_methods_supported": ["none", "client_secret_post"],
             "scopes_supported": ["read", "write"],
+            "client_id_metadata_document_supported": True,
         })
 
 

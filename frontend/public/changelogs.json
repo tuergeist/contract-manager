@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.6.1",
+    "date": "2026-02-24",
+    "title": "Fix MCP OAuth Discovery for Claude Desktop",
+    "description": "Claude Desktop could not connect to the MCP server because the required Protected Resource Metadata endpoint (RFC 9728) was missing. The server only had Authorization Server Metadata (RFC 8414), but MCP clients need the Protected Resource Metadata to discover the authorization server.",
+    "type": "bugfix",
+    "details": [
+      "Add /.well-known/oauth-protected-resource endpoint (RFC 9728) for MCP client discovery",
+      "Add /.well-known/oauth-protected-resource/mcp sub-path variant (tried first by clients)",
+      "Add middleware to include resource_metadata and scope in WWW-Authenticate header on 401",
+      "Fix MCP config URL: /mcp not /mcp/ (trailing slash returned 404)"
+    ]
+  },
+  {
     "version": "2.5.11",
     "date": "2026-02-24",
     "title": "MCP Settings UI, OAuth Scope Checks & HubSpot Country Fix",

@@ -5,7 +5,7 @@ import { Check, Copy, ChevronDown, ChevronRight } from 'lucide-react'
 const FULL_CONFIG = `{
   "mcpServers": {
     "contract-cora": {
-      "url": "https://contract-cora.com/mcp/",
+      "url": "https://contract-cora.com/mcp",
       "auth": "oauth"
     }
   }
@@ -14,7 +14,7 @@ const FULL_CONFIG = `{
 const READ_ONLY_CONFIG = `{
   "mcpServers": {
     "contract-cora": {
-      "url": "https://contract-cora.com/mcp/",
+      "url": "https://contract-cora.com/mcp",
       "auth": "oauth",
       "scope": "read"
     }

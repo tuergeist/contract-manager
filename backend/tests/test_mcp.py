@@ -6,7 +6,7 @@ import pytest
 from django.test import RequestFactory
 from oauth2_provider.models import Application
 
-from apps.mcp.views import DynamicClientRegistrationView, OAuthMetadataView
+from apps.mcp.views import DynamicClientRegistrationView, OAuthMetadataView, ProtectedResourceMetadataView
 
 
 # ── Helpers ───────────────────────────────────────────────────────
@@ -65,6 +65,24 @@ class TestOAuthMetadata:
         assert "registration_endpoint" in data
         assert data["code_challenge_methods_supported"] == ["S256"]
         assert "authorization_code" in data["grant_types_supported"]
+
+
+# ── Protected Resource Metadata (RFC 9728) ───────────────────────
+
+
+class TestProtectedResourceMetadata:
+    def test_metadata_returns_required_fields(self):
+        factory = RequestFactory()
+        request = factory.get("/.well-known/oauth-protected-resource")
+        response = ProtectedResourceMetadataView.as_view()(request)
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert "resource" in data
+        assert "authorization_servers" in data
+        assert len(data["authorization_servers"]) >= 1
+        assert "scopes_supported" in data
+        assert "read" in data["scopes_supported"]
+        assert "write" in data["scopes_supported"]
 
 
 # ── Dynamic Client Registration ──────────────────────────────────

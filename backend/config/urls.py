@@ -28,7 +28,7 @@ from apps.invoices.views import InvoiceExportView, InvoicePreviewHtmlView, Invoi
 from apps.contracts.views import AttachmentDownloadView, ContractExportView
 from apps.customers.views import CustomerAttachmentDownloadView
 from apps.banking.views import UploadStatementView
-from apps.mcp.views import DynamicClientRegistrationView, OAuthMetadataView
+from apps.mcp.views import DynamicClientRegistrationView, OAuthMetadataView, ProtectedResourceMetadataView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -36,8 +36,10 @@ urlpatterns = [
     # OAuth 2.1 endpoints (django-oauth-toolkit)
     path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
     path("oauth/register/", csrf_exempt(DynamicClientRegistrationView.as_view()), name="oauth-register"),
-    # OAuth metadata discovery (RFC 8414)
+    # OAuth metadata discovery (RFC 8414 + RFC 9728)
     path(".well-known/oauth-authorization-server", OAuthMetadataView.as_view(), name="oauth-metadata"),
+    path(".well-known/oauth-protected-resource", ProtectedResourceMetadataView.as_view(), name="oauth-protected-resource"),
+    path(".well-known/oauth-protected-resource/mcp", ProtectedResourceMetadataView.as_view(), name="oauth-protected-resource-mcp"),
     # MCP server endpoint
     path("", include("mcp_server.urls")),
     path("api/health", health_check),
