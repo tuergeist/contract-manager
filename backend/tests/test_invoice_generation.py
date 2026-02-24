@@ -283,6 +283,15 @@ class TestGetPersistedInvoices:
         results = service.get_persisted_invoices(2026, 1, status="voided")
         assert len(results) == 0
 
+    def test_excludes_voided_and_storno(self, db, tenant, legal_data, active_contract, contract_item):
+        service = InvoiceService(tenant)
+        records = service.generate_and_persist(2026, 1)
+        service.void_invoice(records[0], reason="Error")
+
+        # Voided invoice and storno record should both be excluded
+        results = service.get_persisted_invoices(2026, 1)
+        assert len(results) == 0
+
 
 class TestInvoiceRecordQuery:
     """Test the invoice_record GraphQL query."""

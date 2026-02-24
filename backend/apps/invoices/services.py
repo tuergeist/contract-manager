@@ -235,6 +235,7 @@ class InvoiceService:
                     customer_id=contract.customer.id,
                     customer_name=contract.customer.name,
                     customer_address=contract.customer.address or {},
+                    customer_vat_id=contract.customer.vat_id or "",
                     billing_date=billing_date,
                     billing_period_start=period_start,
                     billing_period_end=period_end,
@@ -1342,7 +1343,8 @@ class InvoiceService:
             tenant=self.tenant,
             billing_date__year=year,
             billing_date__month=month,
-        )
+            document_type="invoice",
+        ).exclude(status=InvoiceRecord.Status.VOIDED)
         if status:
             qs = qs.filter(status=status)
         return list(qs.order_by("customer_name", "billing_date"))
