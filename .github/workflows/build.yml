@@ -3,11 +3,12 @@ name: Build and Push Docker Images
 on:
   push:
     branches: [main]
+    tags: ['[0-9]*']
   pull_request:
     branches: [main]
 
 concurrency:
-  group: ci-${{ github.sha }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -92,20 +93,13 @@ jobs:
       tag: ${{ steps.check.outputs.tag }}
       minor_tag: ${{ steps.check.outputs.minor_tag }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Check for version tag on HEAD
+      - name: Check for version tag
         id: check
         run: |
-          TAG=$(git tag --points-at HEAD | grep -E '^[0-9]' | head -1)
-          if [ -n "$TAG" ]; then
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
             echo "is_release=true" >> "$GITHUB_OUTPUT"
-            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-            echo "minor_tag=$(echo "$TAG" | cut -d. -f1-2)" >> "$GITHUB_OUTPUT"
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "minor_tag=$(echo "$GITHUB_REF_NAME" | cut -d. -f1-2)" >> "$GITHUB_OUTPUT"
           else
             echo "is_release=false" >> "$GITHUB_OUTPUT"
           fi
