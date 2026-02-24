@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Settings } from './Settings'
 import { SmtpSettings } from './SmtpSettings'
+import { McpSettings } from './McpSettings'
 
 export function IntegrationSettingsTabs() {
   const { t } = useTranslation()
@@ -13,6 +14,7 @@ export function IntegrationSettingsTabs() {
     if (location.pathname.includes('/integrations/time-tracking')) return 'timeTracking'
     if (location.pathname.includes('/integrations/email')) return 'email'
     if (location.pathname.includes('/integrations/notifications')) return 'notifications'
+    if (location.pathname.includes('/integrations/api')) return 'api'
     return 'hubspot'
   }
 
@@ -29,6 +31,9 @@ export function IntegrationSettingsTabs() {
       case 'notifications':
         navigate('/settings/integrations/notifications')
         break
+      case 'api':
+        navigate('/settings/integrations/api')
+        break
       default:
         navigate('/settings/integrations')
     }
@@ -41,6 +46,7 @@ export function IntegrationSettingsTabs() {
         <TabsTrigger value="timeTracking">{t('settings.integrationTabs.timeTracking')}</TabsTrigger>
         <TabsTrigger value="email">{t('settings.integrationTabs.email')}</TabsTrigger>
         <TabsTrigger value="notifications">{t('settings.integrationTabs.notifications')}</TabsTrigger>
+        <TabsTrigger value="api">{t('settings.integrationTabs.api')}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="hubspot">
@@ -57,6 +63,10 @@ export function IntegrationSettingsTabs() {
 
       <TabsContent value="notifications">
         <SmtpSettings />
+      </TabsContent>
+
+      <TabsContent value="api">
+        <McpSettings />
       </TabsContent>
     </Tabs>
   )

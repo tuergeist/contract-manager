@@ -294,7 +294,7 @@ class TestSyncCompanyMergeDetection:
                 "address": "",
                 "city": "",
                 "zip": "",
-                "country": "",
+                "country_list": "",
                 "hs_merged_object_ids": "326071100639;326297284815",
             },
         }

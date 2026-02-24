@@ -137,7 +137,7 @@ class HubSpotService:
 
     def _get_company_properties(self) -> str:
         """Build the list of HubSpot properties to fetch, including filter properties."""
-        base = {"name", "address", "city", "zip", "country", "phone", "website", "domain", "lifecyclestage", "hs_merged_object_ids"}
+        base = {"name", "address", "city", "zip", "country_list", "phone", "website", "domain", "lifecyclestage", "hs_merged_object_ids"}
         for f in self._get_company_filters():
             prop = f.get("property_name", "")
             if prop:
@@ -457,7 +457,7 @@ class HubSpotService:
             "street": properties.get("address", ""),
             "city": properties.get("city", ""),
             "zip": properties.get("zip", ""),
-            "country": properties.get("country", ""),
+            "country": properties.get("country_list", ""),
         }
 
         # Try to find existing customer

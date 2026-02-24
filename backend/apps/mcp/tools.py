@@ -38,6 +38,14 @@ class _BaseTool(MCPToolset):
             return f"Permission denied: {resource}.{action}"
         return None
 
+    def _check_scope(self, required_scope: str) -> str | None:
+        """Check OAuth token scope, return error or None."""
+        token = getattr(self.request, "auth", None)
+        if token and hasattr(token, "scope"):
+            if required_scope not in token.scope.split():
+                return f"Scope '{required_scope}' required. Your token only has: {token.scope}"
+        return None
+
     def _fmt_currency(self, value, currency="EUR") -> str:
         if value is None:
             return "-"
@@ -444,6 +452,8 @@ class BankingTools(_BaseTool):
 class WriteTools(_BaseTool):
     def generate_invoices(self, contract_id: int, billing_date: str) -> str:
         """Generate invoices for a contract and billing date (YYYY-MM-DD format)."""
+        if err := self._check_scope("write"):
+            return err
         if err := self._check_perm("invoices", "generate"):
             return err
         tenant = self._get_tenant()
@@ -477,6 +487,8 @@ class WriteTools(_BaseTool):
 
     def void_invoice(self, invoice_id: int, reason: str = "") -> str:
         """Void a generated invoice record."""
+        if err := self._check_scope("write"):
+            return err
         if err := self._check_perm("invoices", "write"):
             return err
         tenant = self._get_tenant()
@@ -499,6 +511,8 @@ class WriteTools(_BaseTool):
 
     def send_invoice_email(self, invoice_id: int) -> str:
         """Send an invoice email to the customer's billing addresses."""
+        if err := self._check_scope("write"):
+            return err
         if err := self._check_perm("invoices", "write"):
             return err
         tenant = self._get_tenant()
@@ -536,6 +550,8 @@ class WriteTools(_BaseTool):
         start_date: str = "",
     ) -> str:
         """Create a new draft contract. billing_cycle: monthly, quarterly, yearly."""
+        if err := self._check_scope("write"):
+            return err
         if err := self._check_perm("contracts", "write"):
             return err
         tenant = self._get_tenant()
@@ -579,6 +595,8 @@ class WriteTools(_BaseTool):
         notes: str = "",
     ) -> str:
         """Update contract fields. Leave empty to skip. Status transitions are validated."""
+        if err := self._check_scope("write"):
+            return err
         if err := self._check_perm("contracts", "write"):
             return err
         tenant = self._get_tenant()

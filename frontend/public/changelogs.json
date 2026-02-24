@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.5.11",
+    "date": "2026-02-24",
+    "title": "MCP Settings UI, OAuth Scope Checks & HubSpot Country Fix",
+    "description": "New API (MCP) settings tab with connection setup and tool overview, OAuth scope enforcement on MCP write operations, and corrected HubSpot country property mapping.",
+    "type": "feature",
+    "details": [
+      "New API tab in Integration Settings with MCP connection config, read-only config, and available tools overview",
+      "Advanced section shows OAuth endpoint URLs for manual configuration",
+      "MCP write tools now enforce OAuth scope checks — read-only tokens are rejected for mutations",
+      "HubSpot sync uses country_list property instead of deprecated country field"
+    ]
+  },
+  {
     "version": "2.5.10",
     "date": "2026-02-23",
     "title": "Pro-rate Last Billing Period When Contract Ends Early",

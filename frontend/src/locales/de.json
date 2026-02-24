@@ -988,7 +988,30 @@
       "hubspot": "HubSpot",
       "timeTracking": "Zeiterfassung",
       "email": "E-Mail (M365)",
-      "notifications": "Benachrichtigungen"
+      "notifications": "Benachrichtigungen",
+      "api": "API (MCP)"
+    },
+    "mcp": {
+      "title": "API-Zugang (MCP)",
+      "description": "Verbinden Sie KI-Assistenten wie Claude Desktop mit Ihren Vertragsdaten über das Model Context Protocol.",
+      "connectionTitle": "Verbindung einrichten",
+      "connectionDescription": "Fügen Sie folgende Konfiguration in Ihre claude_desktop_config.json ein, um sich mit vollem Zugriff zu verbinden:",
+      "configSnippet": "claude_desktop_config.json",
+      "copyConfig": "Kopieren",
+      "copied": "Kopiert!",
+      "readOnlyTitle": "Nur-Lese-Zugriff",
+      "readOnlyDescription": "Um die Verbindung auf Lese-Tools zu beschränken (keine Rechnungserstellung, keine Vertragserstellung), fordern Sie nur den read-Scope an:",
+      "readOnlyConfigSnippet": "claude_desktop_config.json (nur lesen)",
+      "toolsTitle": "Verfügbare Tools",
+      "toolsDescription": "Die API stellt folgende Tools bereit, abhängig von Ihren Rollenberechtigungen:",
+      "readTools": "Lesen (immer verfügbar)",
+      "writeTools": "Schreiben (erfordert write-Scope)",
+      "advancedTitle": "OAuth-Endpunkte (Erweitert)",
+      "oauthEndpoints": "OAuth 2.1 Endpunkte",
+      "metadataUrl": "Metadata",
+      "authorizeUrl": "Authorize",
+      "tokenUrl": "Token",
+      "registrationUrl": "Dynamische Registrierung"
     },
     "generalTabs": {
       "hubspot": "HubSpot",

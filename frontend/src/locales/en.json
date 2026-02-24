@@ -988,7 +988,30 @@
       "hubspot": "HubSpot",
       "timeTracking": "Time Tracking",
       "email": "Email (M365)",
-      "notifications": "Notifications"
+      "notifications": "Notifications",
+      "api": "API (MCP)"
+    },
+    "mcp": {
+      "title": "API Access (MCP)",
+      "description": "Connect AI assistants like Claude Desktop to your contract data via the Model Context Protocol.",
+      "connectionTitle": "Connection Setup",
+      "connectionDescription": "Add the following configuration to your claude_desktop_config.json to connect with full access:",
+      "configSnippet": "claude_desktop_config.json",
+      "copyConfig": "Copy",
+      "copied": "Copied!",
+      "readOnlyTitle": "Read-Only Access",
+      "readOnlyDescription": "To restrict the connection to read-only tools (no invoice generation, no contract creation), request only the read scope:",
+      "readOnlyConfigSnippet": "claude_desktop_config.json (read-only)",
+      "toolsTitle": "Available Tools",
+      "toolsDescription": "The API exposes the following tools, subject to your role permissions:",
+      "readTools": "Read (always available)",
+      "writeTools": "Write (requires write scope)",
+      "advancedTitle": "OAuth Endpoints (Advanced)",
+      "oauthEndpoints": "OAuth 2.1 Endpoints",
+      "metadataUrl": "Metadata",
+      "authorizeUrl": "Authorize",
+      "tokenUrl": "Token",
+      "registrationUrl": "Dynamic Registration"
     },
     "generalTabs": {
       "hubspot": "HubSpot",
