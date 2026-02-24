@@ -137,7 +137,7 @@ class HubSpotService:
 
     def _get_company_properties(self) -> str:
         """Build the list of HubSpot properties to fetch, including filter properties."""
-        base = {"name", "address", "city", "zip", "country_list", "phone", "website", "domain", "lifecyclestage", "hs_merged_object_ids"}
+        base = {"name", "address", "city", "zip", "country_list", "phone", "website", "domain", "lifecyclestage", "hs_merged_object_ids", "vatid"}
         for f in self._get_company_filters():
             prop = f.get("property_name", "")
             if prop:
@@ -466,6 +466,9 @@ class HubSpotService:
             hubspot_id=hubspot_id,
         ).first()
 
+        # VAT ID: only update if HubSpot has a value (don't clear manual entries)
+        hubspot_vat_id = properties.get("vatid", "")
+
         if customer:
             # Update existing
             customer.name = properties.get("name", "") or f"Company {hubspot_id}"
@@ -473,6 +476,8 @@ class HubSpotService:
             customer.is_active = is_active
             customer.synced_at = datetime.now(timezone.utc)
             customer.hubspot_deleted_at = None
+            if hubspot_vat_id:
+                customer.vat_id = hubspot_vat_id
             customer.save()
             result = "updated"
         else:
@@ -484,6 +489,7 @@ class HubSpotService:
                 address=address,
                 is_active=is_active,
                 synced_at=datetime.now(timezone.utc),
+                vat_id=hubspot_vat_id,
             )
             result = "created"
 

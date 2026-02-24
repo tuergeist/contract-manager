@@ -78,6 +78,8 @@ class CustomerTools(_BaseTool):
         for c in customers:
             contract_count = Contract.objects.filter(customer=c).count()
             lines.append(f"- **{c.name}** (ID: {c.id})")
+            if c.vat_id:
+                lines.append(f"  VAT ID: {c.vat_id}")
             if c.billing_emails:
                 lines.append(f"  Billing: {', '.join(c.billing_emails)}")
             lines.append(f"  Contracts: {contract_count}")
@@ -96,6 +98,8 @@ class CustomerTools(_BaseTool):
         lines = [f"# {c.name}", f"ID: {c.id}"]
         if c.address:
             lines.append(f"Address: {c.address}")
+        if c.vat_id:
+            lines.append(f"VAT ID: {c.vat_id}")
 
         billing_emails = c.billing_emails or []
         if billing_emails:

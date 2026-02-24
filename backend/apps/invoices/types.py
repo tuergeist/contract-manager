@@ -41,6 +41,8 @@ class InvoiceData:
     line_items: list[InvoiceLineItem] = field(default_factory=list)
     invoice_text: str = ""  # Optional text to show on invoice below line items
 
+    customer_vat_id: str = ""  # e.g., "DE123456789"
+
     # Enhanced fields for NetSuite-style export
     customer_number: str = ""  # e.g., "CUS174"
     sales_order_number: str = ""  # e.g., "SO-VSX-25-039"

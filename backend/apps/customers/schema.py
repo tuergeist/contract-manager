@@ -64,6 +64,7 @@ class CustomerType:
     created_at: auto
     billing_emails: auto
     invoice_language: auto
+    vat_id: auto
 
     @strawberry.field
     def hubspot_url(self, info: Info[Context, None]) -> str | None:
@@ -239,6 +240,23 @@ class UpdateCustomerInvoiceLanguageResult:
     success: bool = False
     error: str | None = None
     invoice_language: str | None = None
+
+
+@strawberry.input
+class UpdateCustomerVatIdInput:
+    """Input for updating customer VAT ID."""
+
+    customer_id: strawberry.ID
+    vat_id: str
+
+
+@strawberry.type
+class UpdateCustomerVatIdResult:
+    """Result of updating customer VAT ID."""
+
+    success: bool = False
+    error: str | None = None
+    vat_id: str | None = None
 
 
 @strawberry.type
@@ -672,6 +690,37 @@ class CustomerMutation:
         return UpdateCustomerInvoiceLanguageResult(
             success=True,
             invoice_language=customer.invoice_language,
+        )
+
+    # =========================================================================
+    # VAT ID Mutations
+    # =========================================================================
+
+    @strawberry.mutation
+    def update_customer_vat_id(
+        self,
+        info: Info[Context, None],
+        input: UpdateCustomerVatIdInput,
+    ) -> UpdateCustomerVatIdResult:
+        """Set the VAT ID for a customer."""
+        user, err = check_perm(info, "customers", "write")
+        if err:
+            return UpdateCustomerVatIdResult(error=err)
+        if not user.tenant:
+            return UpdateCustomerVatIdResult(error="No tenant assigned")
+
+        customer = Customer.objects.filter(
+            tenant=user.tenant, id=input.customer_id
+        ).first()
+        if not customer:
+            return UpdateCustomerVatIdResult(error="Customer not found")
+
+        customer.vat_id = input.vat_id.strip()
+        customer.save(update_fields=["vat_id", "updated_at"])
+
+        return UpdateCustomerVatIdResult(
+            success=True,
+            vat_id=customer.vat_id,
         )
 
     # =========================================================================

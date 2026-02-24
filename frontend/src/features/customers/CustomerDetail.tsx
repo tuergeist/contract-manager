@@ -81,6 +81,7 @@ const CUSTOMER_QUERY = gql`
         createdAt
         createdByName
       }
+      vatId
       billingEmails
       invoiceLanguage
       todos {
@@ -168,6 +169,16 @@ const UPDATE_CUSTOMER_BILLING_EMAILS_MUTATION = gql`
   }
 `
 
+const UPDATE_CUSTOMER_VAT_ID_MUTATION = gql`
+  mutation UpdateCustomerVatId($input: UpdateCustomerVatIdInput!) {
+    updateCustomerVatId(input: $input) {
+      success
+      error
+      vatId
+    }
+  }
+`
+
 const UPDATE_CUSTOMER_INVOICE_LANGUAGE_MUTATION = gql`
   mutation UpdateCustomerInvoiceLanguage($input: UpdateCustomerInvoiceLanguageInput!) {
     updateCustomerInvoiceLanguage(input: $input) {
@@ -195,6 +206,31 @@ const CUSTOMER_INVOICES_QUERY = gql`
         pdfUrl
         contractId
         contractName
+      }
+      totalCount
+    }
+  }
+`
+
+const CUSTOMER_INVOICE_RECORDS_QUERY = gql`
+  query CustomerInvoiceRecords($customerId: Int!) {
+    invoiceRecords(customerId: $customerId, limit: 100) {
+      items {
+        id
+        invoiceNumber
+        invoiceDate
+        totalGross
+        status
+        contractId
+        contractName
+        isPaid
+        pdfUrl
+        emailSentAt
+        paymentMatches {
+          id
+          transactionId
+          transactionDate
+        }
       }
       totalCount
     }
@@ -316,6 +352,20 @@ interface CustomerInvoice {
   contractName: string | null
 }
 
+interface CustomerInvoiceRecord {
+  id: number
+  invoiceNumber: string
+  invoiceDate: string | null
+  totalGross: string
+  status: string
+  contractId: number | null
+  contractName: string | null
+  isPaid: boolean
+  pdfUrl: string | null
+  emailSentAt: string | null
+  paymentMatches: { id: number; transactionId: number; transactionDate: string }[]
+}
+
 interface Customer {
   id: string
   name: string
@@ -330,6 +380,7 @@ interface Customer {
   attachments: Attachment[]
   links: CustomerLink[]
   todos: TodoItem[]
+  vatId: string
   billingEmails: string[]
   invoiceLanguage: string
 }
@@ -359,6 +410,10 @@ export function CustomerDetail() {
   const [todoModalOpen, setTodoModalOpen] = useState(false)
   const [todoContext, setTodoContext] = useState<TodoContext | undefined>()
 
+  // VAT ID state
+  const [editingVatId, setEditingVatId] = useState(false)
+  const [vatIdValue, setVatIdValue] = useState('')
+
   // Billing email state
   const [newBillingEmail, setNewBillingEmail] = useState('')
   const [addingEmail, setAddingEmail] = useState(false)
@@ -373,6 +428,11 @@ export function CustomerDetail() {
 
   // Invoices query - always fetch to show count in tab
   const { data: invoicesData, loading: invoicesLoading, refetch: refetchInvoices } = useQuery(CUSTOMER_INVOICES_QUERY, {
+    variables: { customerId: parseInt(id!, 10) },
+    skip: !id,
+  })
+
+  const { data: invoiceRecordsData, loading: invoiceRecordsLoading } = useQuery(CUSTOMER_INVOICE_RECORDS_QUERY, {
     variables: { customerId: parseInt(id!, 10) },
     skip: !id,
   })
@@ -394,6 +454,7 @@ export function CustomerDetail() {
   const [addLink] = useMutation(ADD_CUSTOMER_LINK_MUTATION)
   const [deleteLink] = useMutation(DELETE_CUSTOMER_LINK_MUTATION)
   const [updateBillingEmails] = useMutation(UPDATE_CUSTOMER_BILLING_EMAILS_MUTATION)
+  const [updateVatId] = useMutation(UPDATE_CUSTOMER_VAT_ID_MUTATION)
   const [updateInvoiceLanguage] = useMutation(UPDATE_CUSTOMER_INVOICE_LANGUAGE_MUTATION)
   const [assignInvoiceContract] = useMutation(ASSIGN_INVOICE_CONTRACT_MUTATION)
   const [createContractGroup] = useMutation(CREATE_CONTRACT_GROUP_MUTATION)
@@ -757,6 +818,26 @@ export function CustomerDetail() {
     }
   }
 
+  const handleVatIdSave = async () => {
+    if (!id) return
+    try {
+      const result = await updateVatId({
+        variables: {
+          input: {
+            customerId: id,
+            vatId: vatIdValue.trim(),
+          },
+        },
+      })
+      if (result.data?.updateCustomerVatId?.success) {
+        setEditingVatId(false)
+        refetch()
+      }
+    } catch (err) {
+      console.error('Update VAT ID error:', err)
+    }
+  }
+
   const handleInvoiceLanguageChange = async (value: string) => {
     if (!id) return
     try {
@@ -921,6 +1002,37 @@ export function CustomerDetail() {
                 <span className="text-gray-900">{formatDate(customer.syncedAt)}</span>
               </div>
             )}
+            <div className="flex justify-between items-center">
+              <span className="text-gray-500">{t('customers.vatId')}</span>
+              {editingVatId ? (
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={vatIdValue}
+                    onChange={(e) => setVatIdValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleVatIdSave()
+                      if (e.key === 'Escape') setEditingVatId(false)
+                    }}
+                    className="h-6 w-36 text-xs"
+                    placeholder="DE123456789"
+                    autoFocus
+                  />
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={handleVatIdSave}>
+                    <Check className="h-3 w-3" />
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setEditingVatId(false)}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <span
+                  className="text-gray-900 cursor-pointer hover:text-blue-600"
+                  onClick={() => { setVatIdValue(customer.vatId || ''); setEditingVatId(true) }}
+                >
+                  {customer.vatId || <span className="text-gray-400 italic">-</span>}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1052,7 +1164,7 @@ export function CustomerDetail() {
             }`}
           >
             <Receipt className="h-4 w-4" />
-            {t('nav.invoices')} ({invoicesData?.invoices?.totalCount || 0})
+            {t('nav.invoices')} ({(invoicesData?.invoices?.totalCount || 0) + (invoiceRecordsData?.invoiceRecords?.totalCount || 0)})
           </button>
           <button
             onClick={() => setActiveTab('attachments')}
@@ -1353,126 +1465,199 @@ export function CustomerDetail() {
       {/* Invoices Tab */}
       {activeTab === 'invoices' && (
         <div data-testid="customer-invoices-section">
-          {invoicesLoading ? (
+          {(invoicesLoading || invoiceRecordsLoading) ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
             </div>
-          ) : (invoicesData?.invoices?.items?.length || 0) === 0 ? (
-            <div className="rounded-lg border bg-white p-8 text-center">
-              <p className="text-gray-500">{t('customers.noInvoices')}</p>
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-lg border">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      {t('invoices.import.colInvoiceNumber')}
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      {t('invoices.import.colDate')}
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                      {t('invoices.import.colAmount')}
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      {t('contracts.title')}
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      {t('invoices.import.colPayment')}
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                      {t('common.actions')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {(invoicesData?.invoices?.items as CustomerInvoice[])?.map((invoice) => (
-                    <tr key={invoice.id} className="hover:bg-gray-50">
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <Link to={`/invoices/${invoice.id}?type=imported`} className="font-medium text-blue-600 hover:underline">
-                          {invoice.invoiceNumber || '-'}
-                        </Link>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                        {invoice.invoiceDate ? formatDate(invoice.invoiceDate) : '-'}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
-                        {invoice.totalAmount
-                          ? formatCurrency(invoice.totalAmount)
-                          : '-'}
-                      </td>
-                      <td className="px-6 py-4">
-                        <Select
-                          value={invoice.contractId?.toString() || 'none'}
-                          onValueChange={(value) => {
-                            handleAssignContract(
-                              invoice.id,
-                              value === 'none' ? null : parseInt(value, 10)
-                            )
-                          }}
-                        >
-                          <SelectTrigger className="w-[180px] h-8 text-sm">
-                            <SelectValue placeholder={t('invoices.import.selectContract')} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">
-                              <span className="text-gray-400">{t('invoices.import.noContract')}</span>
-                            </SelectItem>
-                            {customer?.contracts.map((contract) => (
-                              <SelectItem key={contract.id} value={contract.id}>
-                                {contract.name || `Contract #${contract.id}`}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4">
-                        {invoice.isPaid ? (
-                          <div className="flex flex-col">
-                            <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-green-100 text-green-800 w-fit">
-                              {t('invoices.import.paid')}
+          ) : (() => {
+            const importedInvoices = (invoicesData?.invoices?.items as CustomerInvoice[]) ?? []
+            const generatedInvoices = (invoiceRecordsData?.invoiceRecords?.items as CustomerInvoiceRecord[]) ?? []
+
+            // Build unified list sorted by date descending
+            type UnifiedInvoice = {
+              key: string
+              source: 'imported' | 'generated'
+              invoiceNumber: string
+              invoiceDate: string | null
+              amount: string | null
+              contractId: number | null
+              contractName: string | null
+              isPaid: boolean
+              pdfUrl: string | null
+              imported?: CustomerInvoice
+              generated?: CustomerInvoiceRecord
+            }
+
+            const unified: UnifiedInvoice[] = [
+              ...importedInvoices.map((inv) => ({
+                key: `imp-${inv.id}`,
+                source: 'imported' as const,
+                invoiceNumber: inv.invoiceNumber,
+                invoiceDate: inv.invoiceDate,
+                amount: inv.totalAmount,
+                contractId: inv.contractId,
+                contractName: inv.contractName,
+                isPaid: inv.isPaid,
+                pdfUrl: inv.pdfUrl,
+                imported: inv,
+              })),
+              ...generatedInvoices.map((rec) => ({
+                key: `gen-${rec.id}`,
+                source: 'generated' as const,
+                invoiceNumber: rec.invoiceNumber,
+                invoiceDate: rec.invoiceDate,
+                amount: rec.totalGross,
+                contractId: rec.contractId,
+                contractName: rec.contractName,
+                isPaid: rec.isPaid,
+                pdfUrl: rec.pdfUrl,
+                generated: rec,
+              })),
+            ].sort((a, b) => {
+              const da = a.invoiceDate || ''
+              const db = b.invoiceDate || ''
+              return db.localeCompare(da)
+            })
+
+            if (unified.length === 0) {
+              return (
+                <div className="rounded-lg border bg-white p-8 text-center">
+                  <p className="text-gray-500">{t('customers.noInvoices')}</p>
+                </div>
+              )
+            }
+
+            return (
+              <div className="overflow-hidden rounded-lg border">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('invoices.import.colInvoiceNumber')}
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('invoices.import.colDate')}
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('invoices.import.colAmount')}
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('contracts.title')}
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('invoices.import.colPayment')}
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('common.actions')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {unified.map((row) => (
+                      <tr key={row.key} className="hover:bg-gray-50">
+                        <td className="whitespace-nowrap px-6 py-4">
+                          {row.source === 'imported' ? (
+                            <Link to={`/invoices/${row.imported!.id}?type=imported`} className="font-medium text-blue-600 hover:underline">
+                              {row.invoiceNumber || '-'}
+                            </Link>
+                          ) : (
+                            <Link to={`/invoices/${row.generated!.id}?type=generated`} className="font-medium text-blue-600 hover:underline">
+                              {row.invoiceNumber || '-'}
+                            </Link>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                          {row.invoiceDate ? formatDate(row.invoiceDate) : '-'}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
+                          {row.amount ? formatCurrency(row.amount) : '-'}
+                        </td>
+                        <td className="px-6 py-4">
+                          {row.source === 'imported' ? (
+                            <Select
+                              value={row.imported!.contractId?.toString() || 'none'}
+                              onValueChange={(value) => {
+                                handleAssignContract(
+                                  row.imported!.id,
+                                  value === 'none' ? null : parseInt(value, 10)
+                                )
+                              }}
+                            >
+                              <SelectTrigger className="w-[180px] h-8 text-sm">
+                                <SelectValue placeholder={t('invoices.import.selectContract')} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">
+                                  <span className="text-gray-400">{t('invoices.import.noContract')}</span>
+                                </SelectItem>
+                                {customer?.contracts.map((contract) => (
+                                  <SelectItem key={contract.id} value={contract.id}>
+                                    {contract.name || `Contract #${contract.id}`}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="text-sm text-gray-700">
+                              {row.contractName || '-'}
                             </span>
-                            {invoice.paidAt && (
-                              invoice.firstPaymentTransactionId ? (
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4">
+                          {row.isPaid ? (
+                            <div className="flex flex-col">
+                              <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-green-100 text-green-800 w-fit">
+                                {t('invoices.import.paid')}
+                              </span>
+                              {row.source === 'imported' && row.imported!.paidAt && (
+                                row.imported!.firstPaymentTransactionId ? (
+                                  <Link
+                                    to={`/banking?tx=${row.imported!.firstPaymentTransactionId}`}
+                                    className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                                  >
+                                    {formatDate(row.imported!.paidAt)}
+                                  </Link>
+                                ) : (
+                                  <span className="text-xs text-gray-500 mt-1">
+                                    {formatDate(row.imported!.paidAt)}
+                                  </span>
+                                )
+                              )}
+                              {row.source === 'generated' && row.generated!.paymentMatches.length > 0 && (
                                 <Link
-                                  to={`/banking?tx=${invoice.firstPaymentTransactionId}`}
+                                  to={`/banking?tx=${row.generated!.paymentMatches[0].transactionId}`}
                                   className="text-xs text-blue-600 hover:text-blue-800 mt-1"
                                 >
-                                  {formatDate(invoice.paidAt)}
+                                  {formatDate(row.generated!.paymentMatches[0].transactionDate)}
                                 </Link>
-                              ) : (
-                                <span className="text-xs text-gray-500 mt-1">
-                                  {formatDate(invoice.paidAt)}
-                                </span>
-                              )
-                            )}
-                          </div>
-                        ) : (
-                          <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-gray-100 text-gray-600">
-                            {t('invoices.import.unpaid')}
-                          </span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-right">
-                        {invoice.pdfUrl && (
-                          <a
-                            href={invoice.pdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800"
-                            title={t('invoices.import.viewPdf')}
-                          >
-                            <Eye className="h-4 w-4 inline" />
-                          </a>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                              )}
+                            </div>
+                          ) : (
+                            <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-gray-100 text-gray-600">
+                              {t('invoices.import.unpaid')}
+                            </span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-right">
+                          {row.pdfUrl && (
+                            <a
+                              href={row.pdfUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800"
+                              title={t('invoices.import.viewPdf')}
+                            >
+                              <Eye className="h-4 w-4 inline" />
+                            </a>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })()}
         </div>
       )}
 

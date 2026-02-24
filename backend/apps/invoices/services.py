@@ -41,6 +41,7 @@ LABELS = {
         "prorated": "Anteilig",
         "one_off": "Einmalig",
         "customer_id": "Kunden-Nr.",
+        "customer_vat_id": "USt-IdNr.",
         "vat_id": "USt-IdNr.",
         "tax_number": "Steuernummer",
         "register": "Handelsregister",
@@ -74,6 +75,7 @@ LABELS = {
         "prorated": "Prorated",
         "one_off": "One-time",
         "customer_id": "Customer ID",
+        "customer_vat_id": "VAT ID",
         "vat_id": "VAT ID",
         "tax_number": "Tax Number",
         "register": "Commercial Register",
@@ -235,7 +237,7 @@ class InvoiceService:
                     customer_id=contract.customer.id,
                     customer_name=contract.customer.name,
                     customer_address=contract.customer.address or {},
-                    customer_vat_id=contract.customer.vat_id or "",
+                    customer_vat_id=getattr(contract.customer, "vat_id", "") or "",
                     billing_date=billing_date,
                     billing_period_start=period_start,
                     billing_period_end=period_end,
@@ -399,6 +401,7 @@ class InvoiceService:
                 "customer_number": invoice.customer_number,
                 "customer_name": invoice.customer_name,
                 "customer_address": invoice.customer_address,
+                "customer_vat_id": invoice.customer_vat_id,
                 "billing_date": invoice.billing_date,
                 "billing_period_start": invoice.billing_period_start,
                 "billing_period_end": invoice.billing_period_end,
@@ -478,6 +481,7 @@ class InvoiceService:
             "customer_number": invoice.customer_number,
             "customer_name": invoice.customer_name,
             "customer_address": invoice.customer_address,
+            "customer_vat_id": invoice.customer_vat_id,
             "billing_date": invoice.billing_date,
             "billing_period_start": invoice.billing_period_start,
             "billing_period_end": invoice.billing_period_end,
@@ -661,6 +665,9 @@ class InvoiceService:
             "customer_address": (
                 record.customer.address if record.customer else {}
             ) or {},
+            "customer_vat_id": (
+                record.customer.vat_id if record.customer else ""
+            ) or "",
             "billing_date": record.invoice_date or record.billing_date,
             "billing_period_start": record.period_start,
             "billing_period_end": record.period_end,

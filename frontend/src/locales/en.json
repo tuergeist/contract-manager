@@ -95,6 +95,7 @@
     "totalArr": "Total ARR",
     "activeContractsCount": "From {{count}} active contracts",
     "annualRecurringRevenue": "Annual Recurring Revenue",
+    "vatId": "VAT ID",
     "billingEmails": "Billing Emails",
     "noBillingEmails": "No billing emails",
     "addBillingEmailPlaceholder": "Add email address...",

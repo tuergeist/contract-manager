@@ -48,6 +48,12 @@ class Customer(TenantModel):
         default="",
         help_text="Language for invoices (de/en). Empty means use system default.",
     )
+    vat_id = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+        help_text="Customer VAT registration number (e.g., DE123456789)",
+    )
 
     class Meta:
         ordering = ["name"]

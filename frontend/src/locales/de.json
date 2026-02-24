@@ -95,6 +95,7 @@
     "totalArr": "Gesamt-ARR",
     "activeContractsCount": "Aus {{count}} aktiven Verträgen",
     "annualRecurringRevenue": "Jährlich wiederkehrender Umsatz",
+    "vatId": "USt-IdNr.",
     "billingEmails": "Rechnungs-E-Mails",
     "noBillingEmails": "Keine Rechnungs-E-Mails",
     "addBillingEmailPlaceholder": "E-Mail-Adresse hinzufügen...",

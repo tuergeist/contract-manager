@@ -706,3 +706,66 @@ class TestBillingContactSync:
 
         customer.refresh_from_db()
         assert customer.billing_emails == ["purchasing@corp.com"]
+
+
+class TestVatIdSync:
+    """Test VAT ID syncing from HubSpot."""
+
+    def test_vat_id_synced_on_create(self, hubspot_service, tenant_with_hubspot):
+        """VAT ID is set when creating a new customer from HubSpot."""
+        company_data = {
+            "id": "900",
+            "properties": {
+                "name": "EU Corp",
+                "vatid": "DE123456789",
+            },
+        }
+
+        hubspot_service._sync_company(company_data, is_active=True)
+
+        customer = Customer.objects.get(tenant=tenant_with_hubspot, hubspot_id="900")
+        assert customer.vat_id == "DE123456789"
+
+    def test_vat_id_synced_on_update(self, hubspot_service, tenant_with_hubspot):
+        """VAT ID is updated when HubSpot provides a value."""
+        customer = Customer.objects.create(
+            tenant=tenant_with_hubspot,
+            hubspot_id="901",
+            name="Old Corp",
+            vat_id="",
+        )
+
+        company_data = {
+            "id": "901",
+            "properties": {
+                "name": "Old Corp",
+                "vatid": "ATU12345678",
+            },
+        }
+
+        hubspot_service._sync_company(company_data, is_active=True)
+
+        customer.refresh_from_db()
+        assert customer.vat_id == "ATU12345678"
+
+    def test_empty_vatid_does_not_clear_manual_entry(self, hubspot_service, tenant_with_hubspot):
+        """Empty vatid from HubSpot does not overwrite a manually set VAT ID."""
+        customer = Customer.objects.create(
+            tenant=tenant_with_hubspot,
+            hubspot_id="902",
+            name="Manual Corp",
+            vat_id="DE999888777",
+        )
+
+        company_data = {
+            "id": "902",
+            "properties": {
+                "name": "Manual Corp",
+                "vatid": "",
+            },
+        }
+
+        hubspot_service._sync_company(company_data, is_active=True)
+
+        customer.refresh_from_db()
+        assert customer.vat_id == "DE999888777"

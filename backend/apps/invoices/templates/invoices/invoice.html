@@ -324,6 +324,7 @@
             {% if invoice.customer_address.street %}{{ invoice.customer_address.street }}<br>{% endif %}
             {% if invoice.customer_address.zip %}{{ invoice.customer_address.zip }} {% endif %}{% if invoice.customer_address.city %}{{ invoice.customer_address.city }}{% endif %}
             {% if invoice.customer_address.country %}<br>{{ invoice.customer_address.country }}{% endif %}
+            {% if invoice.customer_vat_id %}<br>{{ labels.customer_vat_id }}: {{ invoice.customer_vat_id }}{% endif %}
         </div>
     </div>
 

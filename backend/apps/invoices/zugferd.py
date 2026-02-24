@@ -217,6 +217,10 @@ class ZugferdService:
         if record.contract:
             po_number = record.contract.po_number or ""
 
+        customer_vat_id = ""
+        if record.customer:
+            customer_vat_id = record.customer.vat_id or ""
+
         return self._build_xml(
             invoice_number=record.invoice_number,
             invoice_date=record.billing_date,
@@ -233,6 +237,7 @@ class ZugferdService:
             line_items=line_items,
             invoice_text=record.invoice_text,
             po_number=po_number,
+            customer_vat_id=customer_vat_id,
         )
 
     def generate_xml_from_invoice_data(
@@ -274,6 +279,7 @@ class ZugferdService:
             line_items=line_items,
             invoice_text=invoice_data.invoice_text,
             po_number=invoice_data.po_number,
+            customer_vat_id=invoice_data.customer_vat_id,
         )
 
     def _build_xml(
@@ -294,6 +300,7 @@ class ZugferdService:
         line_items: list[dict],
         invoice_text: str = "",
         po_number: str = "",
+        customer_vat_id: str = "",
     ) -> bytes:
         """Build UN/CEFACT CII XML for ZUGFeRD EN 16931 profile.
 
@@ -384,8 +391,8 @@ class ZugferdService:
         if buyer_country:
             buyer_address.country_id = _resolve_country_code(buyer_country)
 
-        # Buyer VAT ID (optional, from address JSON)
-        buyer_vat_id = customer_address.get("vat_id", "")
+        # Buyer VAT ID (optional)
+        buyer_vat_id = customer_vat_id
         if buyer_vat_id:
             buyer.tax_registrations.add(
                 TaxRegistration(id=("VA", buyer_vat_id))
