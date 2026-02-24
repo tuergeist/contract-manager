@@ -1,5 +1,51 @@
 [
   {
+    "version": "2.6.9",
+    "date": "2026-02-24",
+    "title": "Fix Invite Links Using Localhost Domain",
+    "description": "Invite and password reset links contained localhost:5173 instead of the actual production domain, making them unusable.",
+    "type": "bugfix",
+    "details": [
+      "Derive base URL from request Origin header instead of hardcoded localhost fallback",
+      "Fixes invite links, password reset links, and pending invitation URLs"
+    ]
+  },
+  {
+    "version": "2.6.8",
+    "date": "2026-02-24",
+    "title": "Customer VAT ID with HubSpot Sync",
+    "description": "Optional VAT ID field on customers, synced from HubSpot and displayed on invoices and ZUGFeRD XML.",
+    "type": "feature",
+    "details": [
+      "New VAT ID field on customer detail page, editable inline",
+      "HubSpot sync pulls vatid property (does not overwrite manual entries when empty)",
+      "VAT ID shown on invoice PDF in customer address block",
+      "ZUGFeRD XML includes buyer tax registration from customer VAT ID"
+    ]
+  },
+  {
+    "version": "2.6.7",
+    "date": "2026-02-24",
+    "title": "Fix Voided Invoices Blocking Re-generation",
+    "description": "Voided invoices and storno credit notes appeared on the invoice generation page and in revenue forecasts, preventing re-invoicing and inflating totals.",
+    "type": "bugfix",
+    "details": [
+      "Exclude voided invoices and storno documents from invoice generation preview",
+      "Exclude storno documents from revenue and recognition forecast queries",
+      "Voided contracts now appear as 'ungenerated' and can be re-invoiced"
+    ]
+  },
+  {
+    "version": "2.6.6",
+    "date": "2026-02-24",
+    "title": "Fix Storno and Invoice Detail Navigation Links",
+    "description": "Links between voided invoices and their storno credit notes pointed to incorrect URLs.",
+    "type": "bugfix",
+    "details": [
+      "Fix storno/original invoice links to use correct route path"
+    ]
+  },
+  {
     "version": "2.6.5",
     "date": "2026-02-24",
     "title": "Fix MCP OAuth for Claude Desktop Connection",
