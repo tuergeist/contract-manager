@@ -1,6 +1,6 @@
 [
   {
-    "version": "2.6.2",
+    "version": "2.6.3",
     "date": "2026-02-24",
     "title": "Invoice Voiding with Storno (Credit Note) Documents",
     "description": "Voiding a finalized or sent invoice now generates a Storno document (credit note) with its own number sequence, allowing proper accounting correction and re-invoicing of the same billing period.",
