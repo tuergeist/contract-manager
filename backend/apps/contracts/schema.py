@@ -1626,7 +1626,7 @@ class ContractQuery:
             for r in InvoiceRecord.objects.filter(
                 tenant=user.tenant,
                 contract_id=contract_id,
-            ).exclude(status=InvoiceRecord.Status.VOIDED)
+            ).exclude(status=InvoiceRecord.Status.VOIDED).exclude(document_type="storno")
         }
 
         # Convert to GraphQL types with invoice matching
@@ -1777,6 +1777,7 @@ class ContractQuery:
                 period_end__gte=from_date,
             )
             .exclude(status="voided")
+            .exclude(document_type="storno")
             .prefetch_related("payment_matches")
         )
         # Build lookup: {contract_id: [InvoiceRecord, ...]}
@@ -2020,6 +2021,7 @@ class ContractQuery:
                 period_end__gte=from_date,
             )
             .exclude(status="voided")
+            .exclude(document_type="storno")
             .prefetch_related("payment_matches")
         )
         invoice_lookup: dict[int, list] = defaultdict(list)
