@@ -457,12 +457,12 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
                 <span className="text-sm text-muted-foreground">{record.voidReason}</span>
               )}
               {record.status === 'voided' && record.stornoRecordId && (
-                <Link to={`/invoices/generated/${record.stornoRecordId}`} className="text-sm text-blue-600 hover:underline">
+                <Link to={`/invoices/${record.stornoRecordId}`} className="text-sm text-blue-600 hover:underline">
                   {t('invoiceDetail.viewStorno', { number: record.stornoRecordNumber })}
                 </Link>
               )}
               {record.documentType === 'storno' && record.stornoOfId && (
-                <Link to={`/invoices/generated/${record.stornoOfId}`} className="text-sm text-blue-600 hover:underline">
+                <Link to={`/invoices/${record.stornoOfId}`} className="text-sm text-blue-600 hover:underline">
                   {t('invoiceDetail.viewOriginalInvoice', { number: record.stornoOfNumber })}
                 </Link>
               )}
