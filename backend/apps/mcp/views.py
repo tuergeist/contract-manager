@@ -1,10 +1,16 @@
 """OAuth 2.1 metadata and dynamic registration views for MCP."""
 
 import json
+import logging
+from urllib.parse import urlparse
 
+import requests
 from django.http import JsonResponse
 from django.views import View
 from oauth2_provider.models import Application
+from oauth2_provider.views import AuthorizationView
+
+logger = logging.getLogger(__name__)
 
 
 class ProtectedResourceMetadataView(View):
@@ -77,3 +83,75 @@ class DynamicClientRegistrationView(View):
             "response_types": ["code"],
             "token_endpoint_auth_method": "none",
         }, status=201)
+
+
+def _is_url(value: str) -> bool:
+    """Check if a string looks like an HTTP(S) URL."""
+    try:
+        parsed = urlparse(value)
+        return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+    except Exception:
+        return False
+
+
+def _resolve_metadata_client(client_id_url: str) -> Application | None:
+    """Resolve a client_id metadata document URL to an Application.
+
+    MCP OAuth spec: when client_id is a URL, the server fetches the
+    client metadata from that URL, registers the client, and uses
+    the URL as the stored client_id for future lookups.
+    """
+    # Look up existing application by metadata URL
+    try:
+        return Application.objects.get(client_id=client_id_url)
+    except Application.DoesNotExist:
+        pass
+
+    # Fetch metadata from the URL
+    try:
+        resp = requests.get(client_id_url, timeout=10)
+        resp.raise_for_status()
+        metadata = resp.json()
+    except Exception:
+        logger.warning("Failed to fetch client metadata from %s", client_id_url)
+        return None
+
+    redirect_uris = metadata.get("redirect_uris", [])
+    client_name = metadata.get("client_name", "MCP Client")
+
+    if not redirect_uris:
+        logger.warning("Client metadata at %s has no redirect_uris", client_id_url)
+        return None
+
+    # Create application with the metadata URL as client_id
+    app = Application(
+        name=client_name,
+        client_id=client_id_url,
+        client_type=Application.CLIENT_PUBLIC,
+        authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
+        redirect_uris=" ".join(redirect_uris),
+        skip_authorization=False,
+    )
+    app.save()
+    logger.info("Auto-registered MCP client '%s' from %s", client_name, client_id_url)
+    return app
+
+
+class McpAuthorizationView(AuthorizationView):
+    """Custom authorize view that supports URL-based client_id.
+
+    MCP clients (e.g. Claude) send their metadata document URL as client_id.
+    This view resolves it to a registered Application before passing to
+    django-oauth-toolkit's standard authorization flow.
+    """
+
+    def dispatch(self, request, *args, **kwargs):
+        client_id = request.GET.get("client_id", "")
+        if client_id and _is_url(client_id):
+            app = _resolve_metadata_client(client_id)
+            if app is None:
+                return JsonResponse(
+                    {"error": "invalid_request", "error_description": "Could not resolve client metadata"},
+                    status=400,
+                )
+        return super().dispatch(request, *args, **kwargs)

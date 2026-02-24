@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.6.5",
+    "date": "2026-02-24",
+    "title": "Fix MCP OAuth for Claude Desktop Connection",
+    "description": "Claude Desktop could not authenticate because it sends a metadata document URL as client_id (per MCP OAuth spec), which django-oauth-toolkit rejected as unknown.",
+    "type": "bugfix",
+    "details": [
+      "Custom authorize view resolves URL-based client_id by fetching client metadata and auto-registering",
+      "Supports MCP client_id_metadata_document flow (Claude sends https://claude.ai/oauth/mcp-oauth-client-metadata)",
+      "Auto-registered clients are cached — subsequent connections skip the metadata fetch"
+    ]
+  },
+  {
     "version": "2.6.4",
     "date": "2026-02-24",
     "title": "Invoice Voiding with Storno (Credit Note) Documents",

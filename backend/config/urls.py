@@ -28,13 +28,15 @@ from apps.invoices.views import InvoiceExportView, InvoicePreviewHtmlView, Invoi
 from apps.contracts.views import AttachmentDownloadView, ContractExportView
 from apps.customers.views import CustomerAttachmentDownloadView
 from apps.banking.views import UploadStatementView
-from apps.mcp.views import DynamicClientRegistrationView, OAuthMetadataView, ProtectedResourceMetadataView
+from apps.mcp.views import DynamicClientRegistrationView, McpAuthorizationView, OAuthMetadataView, ProtectedResourceMetadataView
 
 urlpatterns = [
     path("accounts/", include("django.contrib.auth.urls")),
     path("admin/", admin.site.urls),
     path("graphql", csrf_exempt(AuthenticatedGraphQLView.as_view(schema=schema))),
     # OAuth 2.1 endpoints (django-oauth-toolkit)
+    # Custom authorize view handles URL-based client_id (MCP metadata document flow)
+    path("oauth/authorize/", McpAuthorizationView.as_view(), name="oauth-authorize"),
     path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
     path("oauth/register/", csrf_exempt(DynamicClientRegistrationView.as_view()), name="oauth-register"),
     # OAuth metadata discovery (RFC 8414 + RFC 9728)
