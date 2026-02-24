@@ -72,9 +72,11 @@ class InvitationType:
         return None
 
     @strawberry.field
-    def invite_url(self) -> str:
+    def invite_url(self, info: Info) -> str:
         """Return the full invite URL."""
-        base_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+        request = info.context.request
+        origin = request.headers.get("Origin") or request.headers.get("Referer", "").rstrip("/")
+        base_url = origin or getattr(settings, "FRONTEND_URL", "http://localhost:5173")
         return f"{base_url}/invite/{self.token}"
 
 
@@ -1130,7 +1132,9 @@ class TenantMutation:
         invitation.role_ids = stored_role_ids
         invitation.save(update_fields=["role_ids"])
 
-        url_base = base_url or getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+        request = info.context.request
+        origin = request.headers.get("Origin") or request.headers.get("Referer", "").rstrip("/")
+        url_base = base_url or origin or getattr(settings, "FRONTEND_URL", "http://localhost:5173")
         invite_url = f"{url_base}/invite/{invitation.token}"
 
         return InvitationResult(
@@ -1277,7 +1281,9 @@ class TenantMutation:
             return ResetLinkResult(success=False, error="User not found")
 
         reset_token = PasswordResetToken.create_token(target_user)
-        url_base = base_url or getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+        request = info.context.request
+        origin = request.headers.get("Origin") or request.headers.get("Referer", "").rstrip("/")
+        url_base = base_url or origin or getattr(settings, "FRONTEND_URL", "http://localhost:5173")
         reset_url = f"{url_base}/reset-password/{reset_token.token}"
 
         return ResetLinkResult(success=True, reset_url=reset_url)
