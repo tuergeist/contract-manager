@@ -37,7 +37,7 @@ class AuditLogService:
     AUDITED_MODELS = {}
 
     # Fields to exclude from change tracking
-    EXCLUDED_FIELDS = {"created_at", "updated_at", "id", "tenant", "tenant_id"}
+    EXCLUDED_FIELDS = {"created_at", "updated_at", "id", "tenant", "tenant_id", "synced_at"}
 
     # Parent relationship mappings (child_type -> (parent_type, parent_field))
     PARENT_RELATIONSHIPS = {}
