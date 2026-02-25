@@ -283,6 +283,10 @@ class AuthMutation:
         if user.tenant and not user.tenant.is_active:
             return AuthError(message="Tenant is inactive")
 
+        from django.utils import timezone
+        user.last_login = timezone.now()
+        user.save(update_fields=["last_login"])
+
         access_token = create_access_token(user)
         refresh_token = create_refresh_token(user)
 
