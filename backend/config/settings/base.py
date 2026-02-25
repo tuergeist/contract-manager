@@ -198,9 +198,16 @@ CACHES = {
 # Anthropic (Claude API for PDF analysis)
 ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
 
-# Todoist (Feedback integration)
+# Feedback integration
+FEEDBACK_BACKEND = env("FEEDBACK_BACKEND", default="todoist")  # "todoist" or "github"
+
+# Todoist backend
 TODOIST_API_TOKEN = env("TODOIST_API_TOKEN", default="")
 TODOIST_PROJECT_ID = env("TODOIST_PROJECT_ID", default="")
+
+# GitHub Issues backend
+GITHUB_FEEDBACK_REPO = env("GITHUB_FEEDBACK_REPO", default="")  # "owner/repo"
+GITHUB_FEEDBACK_TOKEN = env("GITHUB_FEEDBACK_TOKEN", default="")
 
 # Strawberry GraphQL
 STRAWBERRY_DJANGO = {

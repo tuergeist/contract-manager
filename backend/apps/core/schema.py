@@ -124,12 +124,9 @@ class CoreQuery:
 
     @strawberry.field
     def feedback_enabled(self) -> bool:
-        """Check if feedback submission is enabled (Todoist configured)."""
-        from django.conf import settings
-        return bool(
-            getattr(settings, "TODOIST_API_TOKEN", "")
-            and getattr(settings, "TODOIST_PROJECT_ID", "")
-        )
+        """Check if the selected feedback backend is configured."""
+        from apps.core.feedback import get_feedback_service
+        return get_feedback_service().is_configured()
 
     @strawberry.field
     def me(self, info: Info[Context, None]) -> CurrentUser | None:
@@ -358,9 +355,9 @@ class FeedbackMutation:
 
     @strawberry.mutation
     def submit_feedback(self, info: Info[Context, None], input: FeedbackInput) -> FeedbackResult:
-        """Submit user feedback to Todoist."""
+        """Submit user feedback via the configured backend."""
         from datetime import datetime
-        from apps.core.todoist import TodoistService, TodoistError, TodoistNotConfiguredError
+        from apps.core.feedback import get_feedback_service
 
         user = info.context.user
         if user is None:
@@ -387,35 +384,23 @@ class FeedbackMutation:
         description = "\n".join(lines)
 
         try:
-            service = TodoistService()
+            service = get_feedback_service()
 
-            # Create the task
-            task = service.create_task(
+            result = service.create_feedback(
                 title=input.title,
                 description=description,
                 feedback_type=input.type.value,
+                screenshot=input.screenshot,
             )
-
-            # Upload screenshot if provided
-            if input.screenshot:
-                try:
-                    service.upload_screenshot_to_task(
-                        task_id=task.id,
-                        screenshot_base64=input.screenshot,
-                        filename=f"screenshot-{task.id}.png",
-                    )
-                except TodoistError as e:
-                    # Log but don't fail - task was created successfully
-                    import logging
-                    logging.getLogger(__name__).warning(f"Failed to upload screenshot: {e}")
 
             return FeedbackResult(
                 success=True,
-                task_url=task.url,
+                task_url=result.url,
             )
 
-        except TodoistNotConfiguredError as e:
-            return FeedbackResult(success=False, error="Feedback system is not configured. Please contact an administrator.")
-
-        except TodoistError as e:
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("Feedback submission failed: %s", e)
+            if "not configured" in str(e).lower():
+                return FeedbackResult(success=False, error="Feedback system is not configured. Please contact an administrator.")
             return FeedbackResult(success=False, error=str(e))
