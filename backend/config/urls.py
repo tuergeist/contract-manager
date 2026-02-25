@@ -28,6 +28,7 @@ from apps.invoices.views import InvoiceExportView, InvoicePreviewHtmlView, Invoi
 from apps.contracts.views import AttachmentDownloadView, ContractExportView
 from apps.customers.views import CustomerAttachmentDownloadView
 from apps.banking.views import UploadStatementView
+from apps.customers.webhooks import HubSpotWebhookView
 from apps.mcp.views import DynamicClientRegistrationView, McpAuthorizationView, OAuthMetadataView, ProtectedResourceMetadataView
 
 urlpatterns = [
@@ -56,6 +57,7 @@ urlpatterns = [
     path("api/attachments/<int:attachment_id>/download/", AttachmentDownloadView.as_view(), name="attachment-download"),
     path("api/customer-attachments/<int:attachment_id>/download/", CustomerAttachmentDownloadView.as_view(), name="customer-attachment-download"),
     path("api/banking/upload/<int:account_id>/", UploadStatementView.as_view(), name="banking-upload"),
+    path("api/hubspot/webhook/", HubSpotWebhookView.as_view(), name="hubspot-webhook"),
 ]
 
 if settings.DEBUG:

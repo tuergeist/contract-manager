@@ -1208,7 +1208,22 @@
       "billingContactLabelNone": "Disabled (no billing contact sync)",
       "autoSync": "Automatic sync every 6 hours",
       "autoSyncDescription": "Automatically sync customers, products, and deals in the background",
-      "lastAutoSync": "Last auto-sync"
+      "lastAutoSync": "Last auto-sync",
+      "webhookTitle": "Webhook Settings",
+      "webhookDescription": "Configure real-time sync via HubSpot webhooks instead of periodic polling.",
+      "syncMode": "Sync Mode",
+      "syncModePolling": "Polling (every 6h)",
+      "syncModeWebhooks": "Webhooks (real-time)",
+      "portalId": "Portal ID",
+      "portalIdPlaceholder": "e.g. 12345678",
+      "clientSecret": "Client Secret",
+      "clientSecretPlaceholder": "Your HubSpot app client secret",
+      "webhookSave": "Save Webhook Settings",
+      "webhookSaved": "Webhook settings saved",
+      "webhookSaveFailed": "Failed to save webhook settings",
+      "webhookUrl": "Webhook URL (configure in HubSpot)",
+      "copyUrl": "Copy URL",
+      "webhookLastReceived": "Last webhook received"
     },
     "m365": {
       "title": "Microsoft 365 Email",

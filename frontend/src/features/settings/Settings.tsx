@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, gql } from '@apollo/client'
-import { RefreshCw, CheckCircle, XCircle, Loader2, Upload, Plus, X, Info } from 'lucide-react'
+import { RefreshCw, CheckCircle, XCircle, Loader2, Upload, Plus, X, Info, Copy, Check } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
 import { HelpVideoSettings } from './HelpVideoSettings'
 
@@ -78,6 +78,10 @@ const HUBSPOT_SETTINGS_QUERY = gql`
         values
       }
       billingContactLabel
+      portalId
+      clientSecretSet
+      syncMode
+      webhookLastReceived
     }
     hubspotCompanyProperties {
       success
@@ -176,6 +180,15 @@ const SET_BILLING_CONTACT_LABEL = gql`
   }
 `
 
+const SAVE_WEBHOOK_SETTINGS = gql`
+  mutation SaveWebhookSettings($portalId: String, $clientSecret: String, $syncMode: String) {
+    saveWebhookSettings(portalId: $portalId, clientSecret: $clientSecret, syncMode: $syncMode) {
+      success
+      error
+    }
+  }
+`
+
 const M365_SETTINGS_QUERY = gql`
   query M365Settings {
     m365Settings {
@@ -265,6 +278,12 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
   const [setAutoSync] = useMutation(SET_HUBSPOT_AUTO_SYNC)
   const { data: contactLabelsData } = useQuery(HUBSPOT_CONTACT_LABELS_QUERY)
   const [setBillingContactLabel] = useMutation(SET_BILLING_CONTACT_LABEL)
+  const [saveWebhookSettings, { loading: savingWebhook }] = useMutation(SAVE_WEBHOOK_SETTINGS)
+
+  const [webhookPortalId, setWebhookPortalId] = useState('')
+  const [webhookClientSecret, setWebhookClientSecret] = useState('')
+  const [webhookMessage, setWebhookMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [webhookCopied, setWebhookCopied] = useState(false)
 
   // M365 state
   const [m365AzureTenantId, setM365AzureTenantId] = useState('')
@@ -285,6 +304,13 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
       setTtShowRevenue(ttSettingsData.timeTrackingSettings.showRevenue)
     }
   }, [ttSettingsData?.timeTrackingSettings?.showRevenue])
+
+  // Initialize webhook portal ID from settings
+  useEffect(() => {
+    if (settingsData?.hubspotSettings?.portalId) {
+      setWebhookPortalId(settingsData.hubspotSettings.portalId)
+    }
+  }, [settingsData?.hubspotSettings?.portalId])
 
   // Initialize filters from settings
   useEffect(() => {
@@ -551,6 +577,53 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
   const handleSetBillingContactLabel = async (label: string | null) => {
     await setBillingContactLabel({ variables: { label } })
     refetchSettings()
+  }
+
+  const handleSaveWebhookSettings = async () => {
+    setWebhookMessage(null)
+    try {
+      const variables: Record<string, string> = {}
+      if (webhookPortalId) variables.portalId = webhookPortalId
+      if (webhookClientSecret) variables.clientSecret = webhookClientSecret
+
+      const result = await saveWebhookSettings({ variables })
+      if (result.data?.saveWebhookSettings?.success) {
+        setWebhookMessage({ type: 'success', text: t('settings.hubspot.webhookSaved') })
+        setWebhookClientSecret('')
+        refetchSettings()
+      } else {
+        setWebhookMessage({
+          type: 'error',
+          text: result.data?.saveWebhookSettings?.error || t('settings.hubspot.webhookSaveFailed'),
+        })
+      }
+    } catch {
+      setWebhookMessage({ type: 'error', text: t('settings.hubspot.webhookSaveFailed') })
+    }
+  }
+
+  const handleToggleSyncMode = async (mode: string) => {
+    setWebhookMessage(null)
+    try {
+      const result = await saveWebhookSettings({ variables: { syncMode: mode } })
+      if (result.data?.saveWebhookSettings?.success) {
+        refetchSettings()
+      } else {
+        setWebhookMessage({
+          type: 'error',
+          text: result.data?.saveWebhookSettings?.error || t('settings.hubspot.webhookSaveFailed'),
+        })
+      }
+    } catch {
+      setWebhookMessage({ type: 'error', text: t('settings.hubspot.webhookSaveFailed') })
+    }
+  }
+
+  const handleCopyWebhookUrl = () => {
+    const url = `${window.location.origin}/api/hubspot/webhook/`
+    navigator.clipboard.writeText(url)
+    setWebhookCopied(true)
+    setTimeout(() => setWebhookCopied(false), 2000)
   }
 
   const contactLabels: { typeId: number; label: string; category: string }[] =
@@ -978,6 +1051,108 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* Webhook Settings */}
+                <div className="border-t pt-4">
+                  <h3 className="text-sm font-medium text-gray-900">{t('settings.hubspot.webhookTitle')}</h3>
+                  <p className="text-xs text-gray-500 mt-1">{t('settings.hubspot.webhookDescription')}</p>
+
+                  <div className="mt-3 space-y-3">
+                    {/* Sync Mode */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">{t('settings.hubspot.syncMode')}</label>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="radio"
+                            name="syncMode"
+                            value="polling"
+                            checked={hubspotSettings?.syncMode !== 'webhooks'}
+                            onChange={() => handleToggleSyncMode('polling')}
+                            className="text-blue-600"
+                          />
+                          {t('settings.hubspot.syncModePolling')}
+                        </label>
+                        <label className={`flex items-center gap-2 text-sm ${!hubspotSettings?.portalId || !hubspotSettings?.clientSecretSet ? 'text-gray-400' : ''}`}>
+                          <input
+                            type="radio"
+                            name="syncMode"
+                            value="webhooks"
+                            checked={hubspotSettings?.syncMode === 'webhooks'}
+                            onChange={() => handleToggleSyncMode('webhooks')}
+                            disabled={!hubspotSettings?.portalId || !hubspotSettings?.clientSecretSet}
+                            className="text-blue-600"
+                          />
+                          {t('settings.hubspot.syncModeWebhooks')}
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Portal ID */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700">{t('settings.hubspot.portalId')}</label>
+                      <input
+                        type="text"
+                        value={webhookPortalId}
+                        onChange={(e) => setWebhookPortalId(e.target.value)}
+                        placeholder={t('settings.hubspot.portalIdPlaceholder')}
+                        className="mt-1 block w-full max-w-xs rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    {/* Client Secret */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700">{t('settings.hubspot.clientSecret')}</label>
+                      <input
+                        type="password"
+                        value={webhookClientSecret}
+                        onChange={(e) => setWebhookClientSecret(e.target.value)}
+                        placeholder={hubspotSettings?.clientSecretSet ? '••••••••••••••••' : t('settings.hubspot.clientSecretPlaceholder')}
+                        className="mt-1 block w-full max-w-xs rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    {/* Save button */}
+                    <button
+                      onClick={handleSaveWebhookSettings}
+                      disabled={savingWebhook || (!webhookPortalId && !webhookClientSecret)}
+                      className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {savingWebhook ? <Loader2 className="h-4 w-4 animate-spin inline mr-1" /> : null}
+                      {t('settings.hubspot.webhookSave')}
+                    </button>
+
+                    {webhookMessage && (
+                      <p className={`text-sm ${webhookMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                        {webhookMessage.text}
+                      </p>
+                    )}
+
+                    {/* Webhook URL */}
+                    <div className="mt-2 rounded-md bg-gray-50 p-3">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">{t('settings.hubspot.webhookUrl')}</label>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded flex-1 overflow-x-auto">
+                          {window.location.origin}/api/hubspot/webhook/
+                        </code>
+                        <button
+                          onClick={handleCopyWebhookUrl}
+                          className="text-gray-500 hover:text-gray-700 p-1"
+                          title={t('settings.hubspot.copyUrl')}
+                        >
+                          {webhookCopied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Last webhook received */}
+                    {hubspotSettings?.webhookLastReceived && (
+                      <p className="text-xs text-gray-400">
+                        {t('settings.hubspot.webhookLastReceived')}: {formatDateTime(hubspotSettings.webhookLastReceived)}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

@@ -338,6 +338,54 @@ class HubSpotService:
 
         return True
 
+    def fetch_company(self, hubspot_id: str) -> dict | None:
+        """Fetch a single company from HubSpot CRM API.
+
+        Returns the company dict or None if not found (404).
+        """
+        with httpx.Client() as client:
+            response = client.get(
+                f"{HUBSPOT_API_BASE}/crm/v3/objects/companies/{hubspot_id}",
+                headers=self._get_headers(),
+                params={"properties": self._get_company_properties()},
+                timeout=30.0,
+            )
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise HubSpotError(self._api_error_message(response.status_code, "Fetch company"))
+        return response.json()
+
+    def fetch_product(self, hubspot_id: str) -> dict | None:
+        """Fetch a single product from HubSpot CRM API."""
+        with httpx.Client() as client:
+            response = client.get(
+                f"{HUBSPOT_API_BASE}/crm/v3/objects/products/{hubspot_id}",
+                headers=self._get_headers(),
+                params={"properties": "name,description,price,hs_sku,hs_recurring_billing_period"},
+                timeout=30.0,
+            )
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise HubSpotError(self._api_error_message(response.status_code, "Fetch product"))
+        return response.json()
+
+    def fetch_deal(self, hubspot_id: str) -> dict | None:
+        """Fetch a single deal from HubSpot CRM API."""
+        with httpx.Client() as client:
+            response = client.get(
+                f"{HUBSPOT_API_BASE}/crm/v3/objects/deals/{hubspot_id}",
+                headers=self._get_headers(),
+                params={"properties": "dealname,dealstage,amount,closedate,pipeline"},
+                timeout=30.0,
+            )
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise HubSpotError(self._api_error_message(response.status_code, "Fetch deal"))
+        return response.json()
+
     def sync_companies(self) -> dict[str, Any]:
         """Sync companies from HubSpot to local customers.
 

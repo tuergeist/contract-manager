@@ -28,6 +28,9 @@ def sync_all_hubspot_tenants() -> int:
         config = tenant.hubspot_config or {}
         if not config.get("api_key") or not config.get("auto_sync_enabled"):
             continue
+        if config.get("sync_mode") == "webhooks":
+            logger.info("Skipping tenant %s (webhook sync mode)", tenant.id)
+            continue
 
         logger.info("Auto-syncing HubSpot for tenant %s", tenant.id)
         _sync_tenant_hubspot(tenant)
@@ -117,3 +120,126 @@ def _sync_tenant_hubspot(tenant) -> None:
             results=results,
             errors=errors,
         )
+
+
+# Supported webhook event types and their object kind
+_EVENT_TYPE_MAP = {
+    "company.creation": "company",
+    "company.propertyChange": "company",
+    "company.deletion": "company",
+    "company.merge": "company",
+    "product.creation": "product",
+    "product.propertyChange": "product",
+    "product.deletion": "product",
+    "deal.creation": "deal",
+    "deal.propertyChange": "deal",
+    "deal.deletion": "deal",
+}
+
+
+@shared_task(
+    acks_late=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    max_retries=3,
+)
+def process_hubspot_webhook_event(event: dict, tenant_id: int) -> str:
+    """Process a single HubSpot webhook event.
+
+    Fetches the full record from HubSpot and upserts it locally.
+    """
+    from apps.customers.hubspot import HubSpotError, HubSpotService
+    from apps.customers.models import Customer
+    from apps.products.models import Product
+    from apps.tenants.models import Tenant
+
+    subscription_type = event.get("subscriptionType", "")
+    object_id = str(event.get("objectId", ""))
+
+    object_kind = _EVENT_TYPE_MAP.get(subscription_type)
+    if not object_kind:
+        logger.debug("Ignoring unsupported webhook event type: %s", subscription_type)
+        return "ignored"
+
+    try:
+        tenant = Tenant.objects.get(id=tenant_id, is_active=True)
+    except Tenant.DoesNotExist:
+        logger.warning("Tenant %s not found for webhook event", tenant_id)
+        return "tenant_not_found"
+
+    service = HubSpotService(tenant)
+
+    is_deletion = subscription_type.endswith(".deletion")
+
+    if object_kind == "company":
+        if is_deletion:
+            customer = Customer.objects.filter(
+                tenant=tenant, hubspot_id=object_id
+            ).first()
+            if customer:
+                customer.is_active = False
+                customer.hubspot_deleted_at = datetime.now(timezone.utc)
+                customer.save(update_fields=["is_active", "hubspot_deleted_at"])
+                logger.info("Marked customer %s as deleted (hubspot %s)", customer.id, object_id)
+            return "company_deleted"
+
+        company_data = service.fetch_company(object_id)
+        if company_data is None:
+            # Record deleted before we could fetch it
+            customer = Customer.objects.filter(
+                tenant=tenant, hubspot_id=object_id
+            ).first()
+            if customer:
+                customer.is_active = False
+                customer.hubspot_deleted_at = datetime.now(timezone.utc)
+                customer.save(update_fields=["is_active", "hubspot_deleted_at"])
+            logger.warning("Company %s not found in HubSpot (404)", object_id)
+            return "company_not_found"
+
+        properties = company_data.get("properties", {})
+        is_active = service._company_matches_filters(properties)
+        service._sync_company(company_data, is_active=is_active)
+        return "company_synced"
+
+    elif object_kind == "product":
+        if is_deletion:
+            product = Product.objects.filter(
+                tenant=tenant, hubspot_id=object_id
+            ).first()
+            if product:
+                product.is_active = False
+                product.save(update_fields=["is_active"])
+                logger.info("Marked product %s as deleted (hubspot %s)", product.id, object_id)
+            return "product_deleted"
+
+        product_data = service.fetch_product(object_id)
+        if product_data is None:
+            product = Product.objects.filter(
+                tenant=tenant, hubspot_id=object_id
+            ).first()
+            if product:
+                product.is_active = False
+                product.save(update_fields=["is_active"])
+            logger.warning("Product %s not found in HubSpot (404)", object_id)
+            return "product_not_found"
+
+        service._sync_product(product_data)
+        return "product_synced"
+
+    elif object_kind == "deal":
+        if is_deletion:
+            logger.info("Deal deletion event for %s — no local action", object_id)
+            return "deal_deleted"
+
+        deal_data = service.fetch_deal(object_id)
+        if deal_data is None:
+            logger.warning("Deal %s not found in HubSpot (404)", object_id)
+            return "deal_not_found"
+
+        import httpx
+        with httpx.Client() as client:
+            service._sync_deal(deal_data, client)
+        return "deal_synced"
+
+    return "unhandled"
