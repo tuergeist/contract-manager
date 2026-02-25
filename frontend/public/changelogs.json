@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.6.15",
+    "date": "2026-02-25",
+    "title": "Deploy Notification via Todoist",
+    "description": "The backend now posts a notification to Todoist on each deployment so you can track releases.",
+    "type": "feature",
+    "details": [
+      "Added deploy ping to Todoist on backend startup with version info",
+      "Fixed Todoist API base URL to use new unified v1 endpoint"
+    ]
+  },
+  {
     "version": "2.6.14",
     "date": "2026-02-25",
     "title": "Fix Feedback Submission (Todoist API)",
