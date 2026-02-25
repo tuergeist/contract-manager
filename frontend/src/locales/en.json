@@ -42,6 +42,7 @@
   "search": {
     "customer": "Customers",
     "contract": "Contracts",
+    "invoice": "Invoices",
     "noResults": "No results found",
     "moreResults": "+ more results..."
   },

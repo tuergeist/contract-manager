@@ -166,9 +166,10 @@ class CoreQuery:
     def global_search(
         self, info: Info[Context, None], query: str, limit: int = 10
     ) -> GlobalSearchResult:
-        """Search across customers and contracts."""
+        """Search across customers, contracts, and invoices."""
         from apps.contracts.models import Contract
         from apps.customers.models import Customer
+        from apps.invoices.models import InvoiceRecord
 
         user = info.context.user
         if user is None or not user.tenant:
@@ -252,6 +253,36 @@ class CoreQuery:
                 has_more=contracts_has_more,
             ))
             total_count += len(contract_items)
+
+        # Search invoice records by invoice number
+        invoice_records = list(InvoiceRecord.objects.filter(
+            tenant=user.tenant,
+            invoice_number__icontains=query,
+        ).exclude(
+            status=InvoiceRecord.Status.VOIDED,
+        ).select_related("customer")[:limit + 1])
+
+        invoices_has_more = len(invoice_records) > limit
+        if invoices_has_more:
+            invoice_records = invoice_records[:limit]
+
+        if invoice_records:
+            invoice_items = [
+                SearchResultItem(
+                    id=r.id,
+                    title=r.invoice_number,
+                    subtitle=r.customer_name,
+                    url=f"/invoices/{r.id}",
+                )
+                for r in invoice_records
+            ]
+            groups.append(SearchResultGroup(
+                type="invoice",
+                label="Invoices",
+                items=invoice_items,
+                has_more=invoices_has_more,
+            ))
+            total_count += len(invoice_items)
 
         return GlobalSearchResult(groups=groups, total_count=total_count)
 

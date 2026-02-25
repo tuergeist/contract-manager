@@ -16,6 +16,7 @@ import {
   Loader2,
   User,
   FileSignature,
+  Receipt,
   X,
   MessageSquarePlus,
   Landmark,
@@ -142,6 +143,8 @@ export function Sidebar() {
         return User
       case 'contract':
         return FileSignature
+      case 'invoice':
+        return Receipt
       default:
         return FileText
     }
