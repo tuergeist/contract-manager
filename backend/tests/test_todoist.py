@@ -79,7 +79,7 @@ class TestTodoistCreateTask:
         # Verify API call
         mock_post.assert_called_once()
         call_args = mock_post.call_args
-        assert call_args[0][0] == "https://api.todoist.com/rest/v2/tasks"
+        assert call_args[0][0] == "https://api.todoist.com/rest/v1/tasks"
         assert call_args[1]["json"]["content"] == "Bug: Login fails"
         assert call_args[1]["json"]["description"] == "Users cannot login"
         assert call_args[1]["json"]["project_id"] == "test-project-123"

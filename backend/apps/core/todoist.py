@@ -37,7 +37,7 @@ class TodoistTask:
 class TodoistService:
     """Service for interacting with Todoist API."""
 
-    BASE_URL = "https://api.todoist.com/rest/v2"
+    BASE_URL = "https://api.todoist.com/rest/v1"
     SYNC_URL = "https://api.todoist.com/sync/v9"
     TIMEOUT = 30  # seconds
 
