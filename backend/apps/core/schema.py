@@ -83,6 +83,7 @@ class CurrentUser:
     last_name: str
     tenant_id: int | None
     tenant_name: str | None
+    company_name: str | None
     role_name: str | None
     is_admin: bool
     roles: list[str] | None = None
@@ -139,6 +140,14 @@ class CoreQuery:
 
         role_names = [r.name for r in user.roles.all()]
         permissions = sorted(user.effective_permissions)
+
+        company_name = None
+        if user.tenant:
+            from apps.invoices.models import CompanyLegalData
+            legal = CompanyLegalData.objects.filter(tenant=user.tenant).values_list("company_name", flat=True).first()
+            if legal:
+                company_name = legal
+
         return CurrentUser(
             id=user.id,
             email=user.email,
@@ -146,6 +155,7 @@ class CoreQuery:
             last_name=user.last_name,
             tenant_id=user.tenant_id,
             tenant_name=user.tenant.name if user.tenant else None,
+            company_name=company_name,
             role_name=user.role.name if user.role else None,
             is_admin=user.is_admin or user.is_super_admin,
             roles=role_names,

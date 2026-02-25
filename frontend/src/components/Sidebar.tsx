@@ -261,7 +261,7 @@ export function Sidebar() {
         <div className="mb-2 px-3">
           <p className="text-sm font-medium text-gray-900">{user?.firstName} {user?.lastName}</p>
           <p className="text-xs text-gray-500">{user?.email}</p>
-          <p className="text-xs text-gray-400">{user?.tenantName}</p>
+          <p className="text-xs text-gray-400">{user?.companyName || user?.tenantName}</p>
         </div>
         {feedbackEnabled && (
           <button

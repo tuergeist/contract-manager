@@ -8,6 +8,7 @@ interface User {
   lastName: string
   tenantId: number | null
   tenantName: string | null
+  companyName: string | null
   roleName: string | null
   isAdmin: boolean
   roles: string[]
@@ -53,6 +54,7 @@ const ME_QUERY = gql`
       lastName
       tenantId
       tenantName
+      companyName
       roleName
       isAdmin
       roles
