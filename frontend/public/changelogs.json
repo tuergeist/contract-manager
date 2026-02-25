@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.7.0",
+    "date": "2026-02-25",
+    "title": "GitHub Issues Feedback Backend",
+    "description": "Feedback can now be routed to GitHub Issues as an alternative to Todoist, configurable via FEEDBACK_BACKEND setting.",
+    "type": "feature",
+    "details": [
+      "Added configurable feedback backend: set FEEDBACK_BACKEND=github to create GitHub Issues instead of Todoist tasks",
+      "Feedback types mapped to GitHub labels (bug, enhancement, feedback)",
+      "Restyled tabs to use underline style",
+      "Excluded synced_at from audit log change tracking",
+      "Removed completed storage migration command from startup"
+    ]
+  },
+  {
     "version": "2.6.15",
     "date": "2026-02-25",
     "title": "Deploy Notification via Todoist",
