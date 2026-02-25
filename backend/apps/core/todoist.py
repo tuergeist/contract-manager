@@ -37,8 +37,8 @@ class TodoistTask:
 class TodoistService:
     """Service for interacting with Todoist API."""
 
-    BASE_URL = "https://api.todoist.com/rest/v1"
-    SYNC_URL = "https://api.todoist.com/sync/v9"
+    BASE_URL = "https://api.todoist.com/api/v1"
+    SYNC_URL = "https://api.todoist.com/api/v1"
     TIMEOUT = 30  # seconds
 
     # Label mapping for feedback types
@@ -157,7 +157,7 @@ class TodoistService:
 
         try:
             response = httpx.post(
-                f"{self.SYNC_URL}/uploads/add",
+                f"{self.SYNC_URL}/uploads",
                 headers={"Authorization": f"Bearer {self.api_token}"},
                 files={"file": (filename, file_data)},
                 timeout=self.TIMEOUT,

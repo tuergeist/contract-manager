@@ -79,7 +79,7 @@ class TestTodoistCreateTask:
         # Verify API call
         mock_post.assert_called_once()
         call_args = mock_post.call_args
-        assert call_args[0][0] == "https://api.todoist.com/rest/v1/tasks"
+        assert call_args[0][0] == "https://api.todoist.com/api/v1/tasks"
         assert call_args[1]["json"]["content"] == "Bug: Login fails"
         assert call_args[1]["json"]["description"] == "Users cannot login"
         assert call_args[1]["json"]["project_id"] == "test-project-123"
@@ -193,7 +193,7 @@ class TestTodoistUploadFile:
 
         # Verify API call used sync URL
         call_args = mock_post.call_args
-        assert "sync/v9/uploads/add" in call_args[0][0]
+        assert "api/v1/uploads" in call_args[0][0]
 
     @patch("apps.core.todoist.httpx.post")
     def test_raises_error_when_no_file_url_returned(self, mock_post, configured_settings):
