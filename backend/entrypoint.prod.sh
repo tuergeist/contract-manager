@@ -9,6 +9,10 @@ python manage.py migrate --noinput
 echo "Checking file storage migration..."
 python manage.py migrate_to_object_storage --auto
 
+# Send deploy ping to Todoist
+echo "Sending deploy ping..."
+python manage.py deploy_ping || true
+
 # Start the application
 echo "Starting application..."
 exec "$@"
