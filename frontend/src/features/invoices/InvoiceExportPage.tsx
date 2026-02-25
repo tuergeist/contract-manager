@@ -229,26 +229,27 @@ export function InvoiceExportPage() {
 
   const ungeneratedCount = ungeneratedKeys.length
 
-  // Calculate totals including tax
+  // Calculate totals split by generated vs open
   const totals = useMemo(() => {
-    let totalNet = 0
-    let totalTax = 0
-    let totalGross = 0
-    let ungeneratedNet = 0
+    let generatedNet = 0
+    let generatedTax = 0
+    let generatedGross = 0
+    let openNet = 0
+    let generatedCount = 0
+    let openCount = 0
     for (const inv of invoices) {
       const record = recordByKey.get(invoiceKey(inv))
       if (record) {
-        totalNet += Number(record.totalNet) || 0
-        totalTax += Number(record.taxAmount) || 0
-        totalGross += Number(record.totalGross) || 0
+        generatedCount++
+        generatedNet += Number(record.totalNet) || 0
+        generatedTax += Number(record.taxAmount) || 0
+        generatedGross += Number(record.totalGross) || 0
       } else {
-        const net = Number(inv.totalAmount) || 0
-        totalNet += net
-        totalGross += net
-        ungeneratedNet += net
+        openCount++
+        openNet += Number(inv.totalAmount) || 0
       }
     }
-    return { count: invoices.length, totalNet, totalTax, totalGross, ungeneratedNet }
+    return { total: invoices.length, generatedCount, openCount, generatedNet, generatedTax, generatedGross, openNet }
   }, [invoices, recordByKey])
 
   const yearOptions = useMemo(() => {
@@ -411,38 +412,50 @@ export function InvoiceExportPage() {
 
       {/* Totals Summary */}
       {!loading && invoices.length > 0 && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex gap-8">
-              <div>
-                <p className="text-sm text-muted-foreground">{t('invoices.export.totalInvoices')}</p>
-                <p className="text-2xl font-bold" data-testid="total-count">{totals.count}</p>
+        <div className="grid grid-cols-3 gap-4">
+          {/* Overview */}
+          <Card>
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground">{t('invoices.export.totalInvoices')}</p>
+              <p className="text-2xl font-bold" data-testid="total-count">{totals.total}</p>
+              <div className="mt-2 flex gap-4 text-sm">
+                <span className="text-green-600">{t('invoices.export.generated')}: {totals.generatedCount}</span>
+                {totals.openCount > 0 && (
+                  <span className="text-orange-600">{t('invoices.export.open')}: {totals.openCount}</span>
+                )}
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">{t('invoices.netTotal')}</p>
-                <p className="text-2xl font-bold" data-testid="total-net">{formatCurrency(totals.totalNet)}</p>
-              </div>
-              {totals.totalTax > 0 && (
-                <>
-                  <div>
-                    <p className="text-sm text-muted-foreground">{t('invoices.taxAmount')}</p>
-                    <p className="text-lg font-semibold text-gray-600">{formatCurrency(totals.totalTax)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">{t('invoices.grossTotal')}</p>
-                    <p className="text-2xl font-bold" data-testid="total-gross">{formatCurrency(totals.totalGross)}</p>
-                  </div>
-                </>
-              )}
-              {totals.ungeneratedNet > 0 && (
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('invoices.export.ungeneratedNet')}</p>
-                  <p className="text-lg font-semibold text-orange-600">{formatCurrency(totals.ungeneratedNet)}</p>
+            </CardContent>
+          </Card>
+
+          {/* Generated totals */}
+          <Card>
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground">{t('invoices.export.generatedTotal')}</p>
+              <p className="text-2xl font-bold" data-testid="total-net">{formatCurrency(totals.generatedNet)}</p>
+              {totals.generatedTax > 0 && (
+                <div className="mt-2 flex gap-4 text-sm text-muted-foreground">
+                  <span>{t('invoices.taxAmount')}: {formatCurrency(totals.generatedTax)}</span>
+                  <span>{t('invoices.grossTotal')}: {formatCurrency(totals.generatedGross)}</span>
                 </div>
               )}
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          {/* Open / ungenerated */}
+          <Card>
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground">{t('invoices.export.openTotal')}</p>
+              <p className={`text-2xl font-bold ${totals.openCount > 0 ? 'text-orange-600' : ''}`}>
+                {formatCurrency(totals.openNet)}
+              </p>
+              {totals.openCount > 0 && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {t('invoices.export.openHint')}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Description */}
