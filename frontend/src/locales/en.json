@@ -487,6 +487,7 @@
       "open": "Open",
       "generatedTotal": "Generated (net)",
       "openTotal": "Open (net)",
+      "hideGenerated": "Hide generated",
       "openHint": "Tax will be calculated upon generation",
       "ungeneratedNet": "Ungenerated (net)",
       "totalAmount": "Total Amount",

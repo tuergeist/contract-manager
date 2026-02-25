@@ -487,6 +487,7 @@
       "open": "Offen",
       "generatedTotal": "Erstellt (netto)",
       "openTotal": "Offen (netto)",
+      "hideGenerated": "Erstellte ausblenden",
       "openHint": "Steuer wird bei Erstellung berechnet",
       "ungeneratedNet": "Davon nicht erstellt (netto)",
       "totalAmount": "Gesamtbetrag",

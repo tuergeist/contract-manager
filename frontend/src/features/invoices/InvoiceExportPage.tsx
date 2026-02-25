@@ -185,6 +185,7 @@ export function InvoiceExportPage() {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [hideGenerated, setHideGenerated] = useState(false)
 
   const { data, loading, error } = useQuery<{ invoicesForMonth: Invoice[] }>(
     INVOICES_FOR_MONTH,
@@ -204,12 +205,13 @@ export function InvoiceExportPage() {
   const records = recordsData?.invoiceRecordsForMonth ?? []
   const legalDataComplete = legalData?.checkLegalDataComplete?.isComplete ?? false
 
-  // Build a map of invoiceKey -> record for quick lookup
-  const recordByKey = useMemo(() => {
-    const map = new Map<string, InvoiceRecord>()
+  // Build a map of contractId -> record for quick lookup
+  // A preview is "generated" when a record with an invoice number exists for that contract
+  const recordByContract = useMemo(() => {
+    const map = new Map<number, InvoiceRecord>()
     for (const r of records) {
-      if (r.contractId && r.billingDate) {
-        map.set(`${r.contractId}-${r.billingDate}`, r)
+      if (r.contractId && r.invoiceNumber) {
+        map.set(r.contractId, r)
       }
     }
     return map
@@ -218,9 +220,9 @@ export function InvoiceExportPage() {
   // Ungenerated invoice keys
   const ungeneratedKeys = useMemo(() => {
     return invoices
-      .filter(inv => !recordByKey.has(invoiceKey(inv)))
+      .filter(inv => !recordByContract.has(inv.contractId))
       .map(inv => invoiceKey(inv))
-  }, [invoices, recordByKey])
+  }, [invoices, recordByContract])
 
   // Default all ungenerated invoices to selected
   useEffect(() => {
@@ -228,6 +230,11 @@ export function InvoiceExportPage() {
   }, [ungeneratedKeys])
 
   const ungeneratedCount = ungeneratedKeys.length
+
+  const filteredInvoices = useMemo(() => {
+    if (!hideGenerated) return invoices
+    return invoices.filter(inv => !recordByContract.has(inv.contractId))
+  }, [invoices, recordByContract, hideGenerated])
 
   // Calculate totals split by generated vs open
   const totals = useMemo(() => {
@@ -238,7 +245,7 @@ export function InvoiceExportPage() {
     let generatedCount = 0
     let openCount = 0
     for (const inv of invoices) {
-      const record = recordByKey.get(invoiceKey(inv))
+      const record = recordByContract.get(inv.contractId)
       if (record) {
         generatedCount++
         generatedNet += Number(record.totalNet) || 0
@@ -250,7 +257,7 @@ export function InvoiceExportPage() {
       }
     }
     return { total: invoices.length, generatedCount, openCount, generatedNet, generatedTax, generatedGross, openNet }
-  }, [invoices, recordByKey])
+  }, [invoices, recordByContract])
 
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear()
@@ -385,7 +392,7 @@ export function InvoiceExportPage() {
           <CardTitle>{t('invoices.export.selectPeriod')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4">
+          <div className="flex items-center gap-4">
             <Select value={String(month)} onValueChange={(value) => setMonth(parseInt(value))}>
               <SelectTrigger className="w-40" data-testid="month-select">
                 <SelectValue />
@@ -406,6 +413,13 @@ export function InvoiceExportPage() {
                 ))}
               </SelectContent>
             </Select>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
+              <Checkbox
+                checked={hideGenerated}
+                onCheckedChange={(checked) => setHideGenerated(checked === true)}
+              />
+              {t('invoices.export.hideGenerated')}
+            </label>
           </div>
         </CardContent>
       </Card>
@@ -518,7 +532,7 @@ export function InvoiceExportPage() {
             <div className="py-8 text-center text-muted-foreground">{t('common.loading')}</div>
           ) : error ? (
             <div className="py-8 text-center text-destructive">{t('common.error')}: {error.message}</div>
-          ) : invoices.length === 0 ? (
+          ) : filteredInvoices.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground" data-testid="no-invoices">
               {t('invoices.export.noInvoices')}
             </div>
@@ -550,9 +564,9 @@ export function InvoiceExportPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invoices.map((invoice) => {
+                {filteredInvoices.map((invoice) => {
                   const key = invoiceKey(invoice)
-                  const record = recordByKey.get(key)
+                  const record = recordByContract.get(invoice.contractId)
                   return (
                     <Fragment key={key}>
                       <TableRow
