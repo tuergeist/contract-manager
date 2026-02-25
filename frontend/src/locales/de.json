@@ -482,6 +482,7 @@
       "description": "Rechnungen für den gewählten Abrechnungszeitraum erstellen und finalisieren. Wählen Sie unten Verträge aus und klicken Sie auf \"Erstellen & Finalisieren\", um Rechnungsdatensätze mit fortlaufenden Nummern zu erzeugen. \"PDF exportieren\" und \"Einzelne PDFs\" finalisieren nicht — noch nicht finalisierte Rechnungen werden als Vorschau ohne Rechnungsnummer einbezogen.",
       "selectPeriod": "Zeitraum auswählen",
       "totalInvoices": "Anzahl Rechnungen",
+      "ungeneratedNet": "Davon nicht erstellt (netto)",
       "totalAmount": "Gesamtbetrag",
       "preview": "Vorschau",
       "noInvoices": "Keine Rechnungen für diesen Monat",

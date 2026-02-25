@@ -482,6 +482,7 @@
       "description": "Generate and finalize invoices for the selected billing period. Select contracts below and click \"Generate & Finalize\" to create invoice records with sequential numbers. \"Export PDF\" and \"Individual PDFs\" do not finalize — invoices that have not been finalized yet will be included as previews without invoice numbers.",
       "selectPeriod": "Select Period",
       "totalInvoices": "Total Invoices",
+      "ungeneratedNet": "Ungenerated (net)",
       "totalAmount": "Total Amount",
       "preview": "Preview",
       "noInvoices": "No invoices for this month",

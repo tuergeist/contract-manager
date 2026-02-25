@@ -234,6 +234,7 @@ export function InvoiceExportPage() {
     let totalNet = 0
     let totalTax = 0
     let totalGross = 0
+    let ungeneratedNet = 0
     for (const inv of invoices) {
       const record = recordByKey.get(invoiceKey(inv))
       if (record) {
@@ -241,10 +242,13 @@ export function InvoiceExportPage() {
         totalTax += Number(record.taxAmount) || 0
         totalGross += Number(record.totalGross) || 0
       } else {
-        totalNet += Number(inv.totalAmount) || 0
+        const net = Number(inv.totalAmount) || 0
+        totalNet += net
+        totalGross += net
+        ungeneratedNet += net
       }
     }
-    return { count: invoices.length, totalNet, totalTax, totalGross }
+    return { count: invoices.length, totalNet, totalTax, totalGross, ungeneratedNet }
   }, [invoices, recordByKey])
 
   const yearOptions = useMemo(() => {
@@ -429,6 +433,12 @@ export function InvoiceExportPage() {
                     <p className="text-2xl font-bold" data-testid="total-gross">{formatCurrency(totals.totalGross)}</p>
                   </div>
                 </>
+              )}
+              {totals.ungeneratedNet > 0 && (
+                <div>
+                  <p className="text-sm text-muted-foreground">{t('invoices.export.ungeneratedNet')}</p>
+                  <p className="text-lg font-semibold text-orange-600">{formatCurrency(totals.ungeneratedNet)}</p>
+                </div>
               )}
             </div>
           </CardContent>
