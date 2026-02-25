@@ -7,4 +7,11 @@ class McpConfig(AppConfig):
     verbose_name = "MCP Server"
 
     def ready(self):
-        import apps.mcp.tools  # noqa: F401 — registers MCP toolsets via metaclass
+        from mcp_server.djangomcp import global_mcp_server, ToolsetMeta
+
+        import apps.mcp.tools  # noqa: F401 — populates ToolsetMeta registry
+
+        for name, cls in ToolsetMeta.iter_all():
+            if name.startswith("_"):
+                continue
+            global_mcp_server.register_mcptoolset(cls())
