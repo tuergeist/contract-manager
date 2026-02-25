@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.6.14",
+    "date": "2026-02-25",
+    "title": "Fix Feedback Submission (Todoist API)",
+    "description": "Feedback submission was broken due to deprecated Todoist REST v2 endpoints. Migrated to the supported v1 API.",
+    "type": "bugfix",
+    "details": [
+      "Migrated Todoist integration from deprecated REST v2 to v1 API",
+      "Fixed task creation, file uploads, and comment attachments"
+    ]
+  },
+  {
     "version": "2.6.13",
     "date": "2026-02-25",
     "title": "Clearer Invoice Generation Summary",
