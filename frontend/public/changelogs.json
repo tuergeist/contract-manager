@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.8.3",
+    "date": "2026-02-26",
+    "title": "Fix CI Build for VAT Sentence Release",
+    "description": "Added missing database migration that was not committed in 2.8.2, causing CI test failures.",
+    "type": "bugfix",
+    "details": [
+      "Added missing migration 0019 for vat_text_eu, vat_text_non_eu, and vat_sentence fields"
+    ]
+  },
+  {
     "version": "2.8.2",
     "date": "2026-02-26",
     "title": "Configurable VAT Sentences for EU/Non-EU",
