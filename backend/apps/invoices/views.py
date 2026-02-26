@@ -93,17 +93,15 @@ class InvoicePreviewHtmlView(View):
 
         # Look up invoice number from finalized record
         invoice_number = ""
-        try:
-            record = InvoiceRecord.objects.get(
-                tenant=user.tenant,
-                contract_id=contract_id,
-                billing_date__year=year,
-                billing_date__month=month,
-                status=InvoiceRecord.Status.FINALIZED,
-            )
+        record = InvoiceRecord.objects.filter(
+            tenant=user.tenant,
+            contract_id=contract_id,
+            billing_date__year=year,
+            billing_date__month=month,
+            status=InvoiceRecord.Status.FINALIZED,
+        ).first()
+        if record:
             invoice_number = record.invoice_number
-        except InvoiceRecord.DoesNotExist:
-            pass
 
         html = service.generate_invoice_html(
             invoice, language=language, invoice_number=invoice_number

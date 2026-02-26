@@ -508,6 +508,7 @@ class Contract(TenantModel):
                     events[billing_date]["items"].append({
                         "item_id": item.id,
                         "product_name": item.product.name if item.product else (item.description or "Discount"),
+                        "description": item.description if item.product else "",
                         "quantity": item.quantity,
                         "unit_price": price_at_date,
                         "amount": amount,
@@ -548,6 +549,7 @@ class Contract(TenantModel):
             events[start_date]["items"].append({
                 "item_id": item.id,
                 "product_name": item.product.name if item.product else (item.description or "Discount"),
+                "description": item.description if item.product else "",
                 "quantity": item.quantity,
                 "unit_price": price_at_date,
                 "amount": amount.quantize(Decimal("0.01")),
@@ -591,6 +593,7 @@ class Contract(TenantModel):
                     events[billing_date]["items"].append({
                         "item_id": item.id,
                         "product_name": item.product.name if item.product else (item.description or "Discount"),
+                        "description": item.description if item.product else "",
                         "quantity": item.quantity,
                         "unit_price": price_at_date,
                         "amount": amount,
@@ -620,6 +623,7 @@ class Contract(TenantModel):
             events[billing_date]["items"].append({
                 "item_id": item.id,
                 "product_name": item.product.name if item.product else (item.description or "Discount"),
+                "description": item.description if item.product else "",
                 "quantity": item.quantity,
                 "unit_price": price_at_date,
                 "amount": amount,
@@ -791,6 +795,7 @@ class Contract(TenantModel):
                     events[recognition_date]["items"].append({
                         "item_id": item.id,
                         "product_name": item.product.name if item.product else (item.description or "Discount"),
+                        "description": item.description if item.product else "",
                         "quantity": item.quantity,
                         "unit_price": price_at_date,
                         "amount": amount,
@@ -828,6 +833,7 @@ class Contract(TenantModel):
             events[start_date]["items"].append({
                 "item_id": item.id,
                 "product_name": item.product.name if item.product else (item.description or "Discount"),
+                "description": item.description if item.product else "",
                 "quantity": item.quantity,
                 "unit_price": price_at_date,
                 "amount": amount.quantize(Decimal("0.01")),
@@ -860,6 +866,7 @@ class Contract(TenantModel):
                     events[recognition_date]["items"].append({
                         "item_id": item.id,
                         "product_name": item.product.name if item.product else (item.description or "Discount"),
+                        "description": item.description if item.product else "",
                         "quantity": item.quantity,
                         "unit_price": price_at_date,
                         "amount": amount,
@@ -889,6 +896,7 @@ class Contract(TenantModel):
             events[recognition_date]["items"].append({
                 "item_id": item.id,
                 "product_name": item.product.name if item.product else (item.description or "Discount"),
+                "description": item.description if item.product else "",
                 "quantity": item.quantity,
                 "unit_price": price_at_date,
                 "amount": amount,
