@@ -37,7 +37,7 @@ import {
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear, formatCurrency, formatPercent } from '@/lib/utils'
 import { useDocumentTitle } from '@/lib/useDocumentTitle'
-import { getToken } from '@/lib/auth'
+import { getToken, useAuth } from '@/lib/auth'
 import { useAuditLogs, AuditLogTable } from '@/features/audit'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -3495,6 +3495,8 @@ interface BillingScheduleResult {
 function ForecastTab({ contractId }: { contractId: string }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { hasPermission } = useAuth()
+  const canCreateOffers = hasPermission('offers', 'write')
   const [months, setMonths] = useState('13')
   const [includeAllHistory, setIncludeAllHistory] = useState(false)
   const [creatingForDate, setCreatingForDate] = useState<string | null>(null)
@@ -3509,6 +3511,7 @@ function ForecastTab({ contractId }: { contractId: string }) {
 
   const { data: offersData } = useQuery(OFFERS_FOR_CONTRACT_QUERY, {
     variables: { contractId: parseInt(contractId) },
+    skip: !canCreateOffers,
   })
 
   const [createOffer] = useMutation(CREATE_OFFER_MUTATION)
@@ -3614,9 +3617,11 @@ function ForecastTab({ contractId }: { contractId: string }) {
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     {t('contracts.forecast.invoice')}
                   </th>
+                  {canCreateOffers && (
                   <th className="px-6 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500">
                     {t('offers.title')}
                   </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -3684,6 +3689,7 @@ function ForecastTab({ contractId }: { contractId: string }) {
                         <span className="text-gray-400">—</span>
                       )}
                     </td>
+                    {canCreateOffers && (
                     <td className="whitespace-nowrap px-6 py-4 text-center text-sm">
                       {(() => {
                         const existingOffer = offersByDate.get(event.date)
@@ -3715,6 +3721,7 @@ function ForecastTab({ contractId }: { contractId: string }) {
                         )
                       })()}
                     </td>
+                    )}
                   </tr>
                   )
                 })}
@@ -3727,7 +3734,7 @@ function ForecastTab({ contractId }: { contractId: string }) {
                   <td className="whitespace-nowrap px-6 py-3 text-right text-sm font-bold text-gray-900">
                     {formatCurrency(schedule.totalForecast)}
                   </td>
-                  <td colSpan={2}></td>
+                  <td colSpan={canCreateOffers ? 2 : 1}></td>
                 </tr>
               </tfoot>
             </table>
