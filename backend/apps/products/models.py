@@ -1,4 +1,6 @@
 """Product models."""
+from decimal import Decimal
+
 from django.db import models
 
 from apps.core.models import TenantModel
@@ -70,6 +72,13 @@ class Product(TenantModel):
     )
     synced_at = models.DateTimeField(null=True, blank=True)
     hubspot_deleted_at = models.DateTimeField(null=True, blank=True)
+    tax_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Override tax rate in % (e.g. 7.00). Empty = use company default.",
+    )
 
     class Meta:
         ordering = ["name"]
@@ -77,6 +86,17 @@ class Product(TenantModel):
 
     def __str__(self):
         return self.name
+
+    def get_effective_tax_rate(self, default_tax_rate: Decimal) -> Decimal:
+        """Return the effective tax rate for this product.
+
+        Uses product-specific rate if set, otherwise the company default.
+        Note: For EU/non-EU customers, 0% is applied regardless — that
+        logic lives in the BookingService.
+        """
+        if self.tax_rate is not None:
+            return self.tax_rate
+        return default_tax_rate
 
 
 class ProductPrice(TenantModel):

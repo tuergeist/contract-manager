@@ -35,6 +35,7 @@ class ProductType:
     billing_frequency: auto
     is_active: auto
     synced_at: auto
+    tax_rate: auto
     category: ProductCategoryType | None
 
     @strawberry.field
