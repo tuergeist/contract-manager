@@ -1064,6 +1064,12 @@ class HubSpotService:
         hubspot_deal_id = str(deal_data["id"])
         properties = deal_data.get("properties", {})
 
+        # Only import closed won deals
+        dealstage = properties.get("dealstage", "")
+        if dealstage != "closedwon":
+            logger.debug("Deal %s stage is '%s', skipping (not closedwon)", hubspot_deal_id, dealstage)
+            return "skipped"
+
         # Check if contract already exists for this deal
         existing = Contract.objects.filter(
             tenant=self.tenant,

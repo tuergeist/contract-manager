@@ -1,27 +1,8 @@
-## Requirements
-
-### Requirement: System calculates invoices due in a given month
-
-The system SHALL calculate all invoices due for a specified month by aggregating billing events from all active contracts within the tenant.
-
-#### Scenario: Invoices calculated for month with active contracts
-- **WHEN** user requests invoices for January 2026
-- **THEN** system returns all billing events scheduled for January 2026 across all active contracts
-- **AND** each invoice includes contract ID, customer info, billing date, and line items
-
-#### Scenario: Invoices filtered by contract status
-- **WHEN** user requests invoices for a month
-- **THEN** system only includes invoices from contracts with status "active"
-- **AND** draft, paused, cancelled, and ended contracts are excluded
-
-#### Scenario: No invoices in requested month
-- **WHEN** user requests invoices for a month with no billing events
-- **THEN** system returns an empty list
-- **AND** no error is raised
+## MODIFIED Requirements
 
 ### Requirement: Invoice includes complete billing details
 
-Each generated invoice SHALL include all information needed for customer billing and accounting, including contract metadata such as invoice text, PO number, and order confirmation number.
+Each generated invoice SHALL include all information needed for customer billing and accounting, including contract metadata such as invoice text, PO number, order confirmation number, and customer VAT ID when available.
 
 #### Scenario: Invoice contains required fields
 - **WHEN** an invoice is generated
@@ -57,65 +38,10 @@ Each generated invoice SHALL include all information needed for customer billing
 - **WHEN** a preview PDF is generated
 - **THEN** it SHALL include sample PO number, order confirmation number, and invoice text to demonstrate the layout
 
-### Requirement: Invoice generation is tenant-scoped
+#### Scenario: Invoice PDF shows customer VAT ID when present
+- **WHEN** an invoice is generated for a customer with `vat_id` set
+- **THEN** the PDF SHALL display the VAT ID below the customer address block with label "USt-IdNr." (DE) or "VAT ID" (EN)
 
-The system SHALL only return invoices for contracts belonging to the current user's tenant.
-
-#### Scenario: Multi-tenant isolation
-- **WHEN** user from Tenant A requests invoices
-- **THEN** only contracts from Tenant A are included
-- **AND** contracts from other tenants are never visible
-
-### Requirement: One-off items billed only once
-
-One-off contract items SHALL appear in exactly one invoice at their billing start date.
-
-#### Scenario: One-off item included once
-- **WHEN** a contract has a one-off item with billing_start_date in January 2026
-- **THEN** the item appears in January 2026 invoice only
-- **AND** does not appear in subsequent months
-
-#### Scenario: One-off item with past billing date
-- **WHEN** user requests invoices for February 2026
-- **AND** a one-off item has billing_start_date in January 2026
-- **THEN** the one-off item is not included in February invoice
-
-### Requirement: Single invoice record query by ID
-
-The GraphQL API SHALL provide an `invoice_record(id: Int!)` query that returns a single invoice record with all related data including payment matches.
-
-#### Scenario: Fetch existing invoice record
-- **WHEN** user queries `invoice_record(id: 123)` and a record with that ID exists in their tenant
-- **THEN** the system SHALL return the full InvoiceRecordType including payment matches, email fields, and pdf_url
-
-#### Scenario: Invoice record not found
-- **WHEN** user queries `invoice_record(id: 999)` and no record exists with that ID in their tenant
-- **THEN** the system SHALL return null
-
-#### Scenario: Invoice record belongs to different tenant
-- **WHEN** user queries `invoice_record(id: 123)` and the record belongs to a different tenant
-- **THEN** the system SHALL return null
-- **AND** no data from the other tenant SHALL be exposed
-
-### Requirement: Invoice email uses tenant-configured template
-
-The `send_invoice_email_task` SHALL use the tenant's custom email template when available, falling back to the hardcoded default when no custom template is configured.
-
-#### Scenario: Custom template configured for customer language
-- **WHEN** the system sends an invoice email
-- **AND** the customer's language is DE
-- **AND** the tenant has a custom DE template in settings
-- **THEN** the email subject and body SHALL be rendered from the custom template
-- **AND** all placeholders SHALL be substituted with invoice data
-
-#### Scenario: No custom template configured
-- **WHEN** the system sends an invoice email
-- **AND** the tenant has no custom template for the customer's language
-- **THEN** the email subject and body SHALL be rendered from the hardcoded default template
-
-#### Scenario: Custom template has rendering error
-- **WHEN** the system sends an invoice email using a custom template
-- **AND** rendering fails (e.g., invalid placeholder)
-- **THEN** the system SHALL fall back to the hardcoded default template
-- **AND** SHALL still send the email successfully
-- **AND** SHALL log a warning about the template error
+#### Scenario: Invoice PDF omits VAT ID line when empty
+- **WHEN** an invoice is generated for a customer without a VAT ID
+- **THEN** no VAT ID line SHALL appear in the recipient address block
