@@ -120,6 +120,8 @@ class CompanyLegalDataType:
     website: str
     share_capital: str
     default_tax_rate: Decimal
+    vat_text_eu: str
+    vat_text_non_eu: str
 
 
 @strawberry.input
@@ -144,6 +146,8 @@ class CompanyLegalDataInput:
     website: str = ""
     share_capital: str = ""
     default_tax_rate: Decimal = Decimal("19.00")
+    vat_text_eu: str = "Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge gem. § 13b UStG)"
+    vat_text_non_eu: str = "Umsatzsteuer nicht geschuldet gemäß § 3a Abs. 2 UStG"
 
 
 @strawberry.type
@@ -1194,6 +1198,8 @@ class InvoiceMutation:
                     "website": input.website,
                     "share_capital": input.share_capital,
                     "default_tax_rate": input.default_tax_rate,
+                    "vat_text_eu": input.vat_text_eu,
+                    "vat_text_non_eu": input.vat_text_non_eu,
                 },
             )
         except Exception as e:
@@ -2537,6 +2543,8 @@ def _convert_legal_data(ld) -> CompanyLegalDataType:
         website=ld.website,
         share_capital=ld.share_capital,
         default_tax_rate=ld.default_tax_rate,
+        vat_text_eu=ld.vat_text_eu,
+        vat_text_non_eu=ld.vat_text_non_eu,
     )
 
 

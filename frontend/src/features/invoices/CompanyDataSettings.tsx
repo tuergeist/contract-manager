@@ -25,6 +25,8 @@ const COMPANY_LEGAL_DATA_QUERY = gql`
       website
       shareCapital
       defaultTaxRate
+      vatTextEu
+      vatTextNonEu
     }
   }
 `
@@ -60,6 +62,8 @@ interface FormData {
   website: string
   shareCapital: string
   defaultTaxRate: string
+  vatTextEu: string
+  vatTextNonEu: string
 }
 
 const emptyForm: FormData = {
@@ -81,6 +85,8 @@ const emptyForm: FormData = {
   website: '',
   shareCapital: '',
   defaultTaxRate: '19.00',
+  vatTextEu: 'Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge gem. § 13b UStG)',
+  vatTextNonEu: 'Umsatzsteuer nicht geschuldet gemäß § 3a Abs. 2 UStG',
 }
 
 interface CompanyDataSettingsProps {
@@ -119,6 +125,8 @@ export function CompanyDataSettings({ showHeader = true }: CompanyDataSettingsPr
         website: d.website || '',
         shareCapital: d.shareCapital || '',
         defaultTaxRate: d.defaultTaxRate || '19.00',
+        vatTextEu: d.vatTextEu ?? 'Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge gem. § 13b UStG)',
+        vatTextNonEu: d.vatTextNonEu ?? 'Umsatzsteuer nicht geschuldet gemäß § 3a Abs. 2 UStG',
       })
     }
   }, [data])
@@ -150,6 +158,8 @@ export function CompanyDataSettings({ showHeader = true }: CompanyDataSettingsPr
         website: (ld.website as string) || prev.website,
         shareCapital: (ld.share_capital as string) || prev.shareCapital,
         defaultTaxRate: (ld.default_tax_rate as string) || prev.defaultTaxRate,
+        vatTextEu: prev.vatTextEu,
+        vatTextNonEu: prev.vatTextNonEu,
       }))
       setToast({ type: 'success', message: t('invoices.extraction.appliedCompanyData') })
       setTimeout(() => setToast(null), 5000)
@@ -278,6 +288,24 @@ export function CompanyDataSettings({ showHeader = true }: CompanyDataSettingsPr
             <div>
               <label className={labelClass}>{t('invoices.companyData.defaultTaxRate')}</label>
               <input className={inputClass} type="number" step="0.01" value={form.defaultTaxRate} onChange={e => updateField('defaultTaxRate', e.target.value)} />
+            </div>
+          </div>
+        </section>
+
+        {/* VAT Sentences */}
+        <section className="rounded-lg border bg-white p-6">
+          <h2 className="mb-2 text-lg font-semibold text-gray-900">{t('invoices.companyData.sectionVatSentences')}</h2>
+          <p className="mb-4 text-xs text-gray-500">{t('invoices.companyData.vatSentencesHint')}</p>
+          <div className="grid gap-4">
+            <div>
+              <label className={labelClass}>{t('invoices.companyData.vatTextEu')}</label>
+              <textarea className={inputClass} rows={2} value={form.vatTextEu} onChange={e => updateField('vatTextEu', e.target.value)} />
+              <p className="mt-1 text-xs text-gray-400">{t('invoices.companyData.vatTextEuHint')}</p>
+            </div>
+            <div>
+              <label className={labelClass}>{t('invoices.companyData.vatTextNonEu')}</label>
+              <textarea className={inputClass} rows={2} value={form.vatTextNonEu} onChange={e => updateField('vatTextNonEu', e.target.value)} />
+              <p className="mt-1 text-xs text-gray-400">{t('invoices.companyData.vatTextNonEuHint')}</p>
             </div>
           </div>
         </section>

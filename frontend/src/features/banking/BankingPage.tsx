@@ -114,6 +114,8 @@ const BANK_TRANSACTIONS = gql`
           name
           iban
           bic
+          customerId
+          customerName
         }
         bookingText
         reference
@@ -264,6 +266,8 @@ interface Counterparty {
   name: string
   iban: string
   bic: string
+  customerId: number | null
+  customerName: string | null
 }
 
 interface BankTransaction {
@@ -1197,6 +1201,14 @@ export function BankingPage() {
                                 <span className="truncate">-</span>
                               )}
                             </div>
+                            {tx.counterparty?.customerId ? (
+                              <span
+                                className="flex-shrink-0 rounded p-1 text-blue-400"
+                                title={t('banking.linkedToCustomer', { name: tx.counterparty.customerName })}
+                              >
+                                <Link2 className="h-3.5 w-3.5" />
+                              </span>
+                            ) : (
                             <Popover
                               open={editingTxCounterparty?.id === tx.id}
                               onOpenChange={(open) => {
@@ -1289,6 +1301,7 @@ export function BankingPage() {
                                 )}
                               </PopoverContent>
                             </Popover>
+                            )}
                           </div>
                         </td>
                         <td className="px-4 py-2.5 text-gray-600">

@@ -107,6 +107,18 @@ class CompanyLegalData(TimestampedModel):
         help_text="Default tax rate in % (e.g., 19.00)",
     )
 
+    # Configurable VAT sentences for foreign customers
+    vat_text_eu = models.TextField(
+        blank=True,
+        default="Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge gem. § 13b UStG)",
+        help_text="VAT sentence for EU customers (reverse charge)",
+    )
+    vat_text_non_eu = models.TextField(
+        blank=True,
+        default="Umsatzsteuer nicht geschuldet gemäß § 3a Abs. 2 UStG",
+        help_text="VAT sentence for non-EU customers (place of supply)",
+    )
+
     class Meta:
         verbose_name = "Company Legal Data"
         verbose_name_plural = "Company Legal Data"
@@ -151,6 +163,8 @@ class CompanyLegalData(TimestampedModel):
             "website": self.website,
             "share_capital": self.share_capital,
             "default_tax_rate": str(self.default_tax_rate),
+            "vat_text_eu": self.vat_text_eu,
+            "vat_text_non_eu": self.vat_text_non_eu,
         }
 
 
@@ -381,6 +395,9 @@ class InvoiceRecord(TenantModel):
     contract_name = models.CharField(max_length=255)
     invoice_text = models.TextField(blank=True)
     pdf_file = models.FileField(upload_to=invoice_record_upload_path, blank=True)
+
+    # Frozen VAT sentence
+    vat_sentence = models.TextField(blank=True, help_text="Frozen VAT sentence at generation time")
 
     # Void tracking
     void_reason = models.TextField(blank=True, help_text="Reason for voiding the invoice")

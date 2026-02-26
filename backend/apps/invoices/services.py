@@ -134,6 +134,92 @@ def _is_domestic_customer(company_country: str, customer_address: dict) -> bool:
     return company_code == customer_code
 
 
+# EU member state ISO 3166-1 alpha-2 codes (27 members)
+EU_COUNTRY_CODES = {
+    "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR",
+    "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL",
+    "PL", "PT", "RO", "SK", "SI", "ES", "SE",
+}
+
+# Mapping common country name variants to ISO codes for EU classification
+_COUNTRY_TO_ISO = {
+    "deutschland": "DE", "germany": "DE", "de": "DE",
+    "österreich": "AT", "austria": "AT", "at": "AT",
+    "schweiz": "CH", "switzerland": "CH", "ch": "CH",
+    "frankreich": "FR", "france": "FR", "fr": "FR",
+    "italien": "IT", "italy": "IT", "it": "IT",
+    "spanien": "ES", "spain": "ES", "es": "ES",
+    "portugal": "PT", "pt": "PT",
+    "niederlande": "NL", "netherlands": "NL", "nl": "NL",
+    "belgien": "BE", "belgium": "BE", "be": "BE",
+    "luxemburg": "LU", "luxembourg": "LU", "lu": "LU",
+    "polen": "PL", "poland": "PL", "pl": "PL",
+    "tschechien": "CZ", "czech republic": "CZ", "czechia": "CZ", "cz": "CZ",
+    "slowakei": "SK", "slovakia": "SK", "sk": "SK",
+    "ungarn": "HU", "hungary": "HU", "hu": "HU",
+    "rumänien": "RO", "romania": "RO", "ro": "RO",
+    "bulgarien": "BG", "bulgaria": "BG", "bg": "BG",
+    "kroatien": "HR", "croatia": "HR", "hr": "HR",
+    "slowenien": "SI", "slovenia": "SI", "si": "SI",
+    "griechenland": "GR", "greece": "GR", "gr": "GR",
+    "irland": "IE", "ireland": "IE", "ie": "IE",
+    "dänemark": "DK", "denmark": "DK", "dk": "DK",
+    "schweden": "SE", "sweden": "SE", "se": "SE",
+    "finnland": "FI", "finland": "FI", "fi": "FI",
+    "estland": "EE", "estonia": "EE", "ee": "EE",
+    "lettland": "LV", "latvia": "LV", "lv": "LV",
+    "litauen": "LT", "lithuania": "LT", "lt": "LT",
+    "malta": "MT", "mt": "MT",
+    "zypern": "CY", "cyprus": "CY", "cy": "CY",
+    "vereinigte staaten": "US", "united states": "US", "usa": "US", "us": "US",
+    "vereinigtes königreich": "GB", "united kingdom": "GB", "uk": "GB", "gb": "GB",
+}
+
+
+def _get_country_iso(country: str) -> str:
+    """Resolve a country name or code to an ISO 3166-1 alpha-2 code."""
+    key = _normalize_country(country)
+    return _COUNTRY_TO_ISO.get(key, key.upper() if len(key) == 2 else key)
+
+
+def _classify_customer(company_country: str, customer_address: dict) -> str:
+    """Classify a customer as domestic, eu, or non_eu relative to the company.
+
+    Returns one of: "domestic", "eu", "non_eu".
+    """
+    if _is_domestic_customer(company_country, customer_address):
+        return "domestic"
+
+    customer_country_raw = customer_address.get("country", "")
+    if not customer_country_raw:
+        return "non_eu"
+
+    customer_iso = _get_country_iso(customer_country_raw)
+    if customer_iso in EU_COUNTRY_CODES:
+        return "eu"
+    return "non_eu"
+
+
+def _get_vat_sentence(classification: str, legal_data) -> str:
+    """Return the appropriate VAT sentence for the customer classification.
+
+    Args:
+        classification: "domestic", "eu", or "non_eu"
+        legal_data: CompanyLegalData instance (or object with vat_text_eu/vat_text_non_eu)
+
+    Returns:
+        VAT sentence string (empty for domestic customers).
+    """
+    if classification == "domestic":
+        return ""
+    if classification == "eu":
+        text = getattr(legal_data, "vat_text_eu", "") or ""
+        return text or "Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge gem. § 13b UStG)"
+    # non_eu
+    text = getattr(legal_data, "vat_text_non_eu", "") or ""
+    return text or "Umsatzsteuer nicht geschuldet gemäß § 3a Abs. 2 UStG"
+
+
 def _get_company_language(tenant) -> str:
     """Return the global default invoice language.
 
@@ -289,9 +375,10 @@ class InvoiceService:
         from apps.invoices.models import CompanyLegalData, InvoiceTemplate
 
         # Company legal data (fallback to tenant name)
+        legal_data_obj = None
         try:
-            legal_data = self.tenant.legal_data
-            company = legal_data.to_snapshot()
+            legal_data_obj = self.tenant.legal_data
+            company = legal_data_obj.to_snapshot()
         except CompanyLegalData.DoesNotExist:
             company = {
                 "company_name": self.tenant.name,
@@ -346,6 +433,7 @@ class InvoiceService:
             "footer_text": footer_text,
             "logo_url": logo_url,
             "tax_rate": tax_rate,
+            "legal_data_obj": legal_data_obj,
         }
 
     def generate_pdf(
@@ -377,6 +465,7 @@ class InvoiceService:
         template_ctx = self._get_template_context()
         default_tax_rate = template_ctx["tax_rate"]
         company_country = template_ctx["company"].get("country", "")
+        legal_data_obj = template_ctx["legal_data_obj"]
 
         # Render each invoice as HTML
         html_parts = []
@@ -385,9 +474,11 @@ class InvoiceService:
             inv_language = customer_languages.get(invoice.customer_id, language)
             labels = LABELS.get(inv_language, LABELS["en"])
 
-            # Apply tax only for domestic customers
-            domestic = _is_domestic_customer(company_country, invoice.customer_address)
+            # Classify customer and resolve VAT sentence
+            classification = _classify_customer(company_country, invoice.customer_address)
+            domestic = classification == "domestic"
             tax_rate = default_tax_rate if domestic else Decimal("0.00")
+            vat_sentence = _get_vat_sentence(classification, legal_data_obj) if legal_data_obj else ""
 
             # Calculate tax for this invoice
             total_net = invoice.total_amount
@@ -437,7 +528,7 @@ class InvoiceService:
                     "currency_symbol": currency_symbol,
                     "invoice_number": getattr(invoice, "invoice_number", ""),
                     "tax_rate": tax_rate,
-                    "reverse_charge": not domestic,
+                    "vat_sentence": vat_sentence,
                     **template_ctx,
                 },
             )
@@ -465,11 +556,14 @@ class InvoiceService:
         template_ctx = self._get_template_context()
         default_tax_rate = template_ctx["tax_rate"]
         company_country = template_ctx["company"].get("country", "")
+        legal_data_obj = template_ctx["legal_data_obj"]
 
         labels = LABELS.get(language, LABELS["en"])
 
-        domestic = _is_domestic_customer(company_country, invoice.customer_address)
+        classification = _classify_customer(company_country, invoice.customer_address)
+        domestic = classification == "domestic"
         tax_rate = default_tax_rate if domestic else Decimal("0.00")
+        vat_sentence = _get_vat_sentence(classification, legal_data_obj) if legal_data_obj else ""
 
         total_net = invoice.total_amount
         tax_amount, total_gross = self.calculate_tax(total_net, tax_rate)
@@ -517,7 +611,7 @@ class InvoiceService:
                 "currency_symbol": currency_symbol,
                 "invoice_number": invoice_number,
                 "tax_rate": tax_rate,
-                "reverse_charge": not domestic,
+                "vat_sentence": vat_sentence,
                 **template_ctx,
             },
         )
@@ -589,7 +683,7 @@ class InvoiceService:
                 "currency_symbol": currency_symbol,
                 "invoice_number": "PREVIEW-2025-0001",
                 "tax_rate": tax_rate,
-                "reverse_charge": False,
+                "vat_sentence": "",
                 **template_ctx,
             },
         )
@@ -683,7 +777,11 @@ class InvoiceService:
             ),
         }
 
-        is_reverse_charge = record.tax_rate == Decimal("0.00")
+        # Use frozen vat_sentence from record if available, otherwise fall back
+        vat_sentence = getattr(record, "vat_sentence", "") or ""
+        if not vat_sentence and record.tax_rate == Decimal("0.00"):
+            # Legacy records without vat_sentence: use default reverse charge text
+            vat_sentence = LABELS.get(language, LABELS["en"]).get("reverse_charge", "")
 
         return {
             "invoice": invoice_dict,
@@ -692,7 +790,7 @@ class InvoiceService:
             "currency_symbol": currency_symbol,
             "invoice_number": record.invoice_number,
             "tax_rate": record.tax_rate,
-            "reverse_charge": is_reverse_charge,
+            "vat_sentence": vat_sentence,
             **template_ctx,
         }
 
@@ -1215,9 +1313,11 @@ class InvoiceService:
                 if exists:
                     continue
 
-                # Apply tax only for domestic customers
-                domestic = _is_domestic_customer(company_country, invoice_data.customer_address)
+                # Classify customer and resolve VAT sentence
+                classification = _classify_customer(company_country, invoice_data.customer_address)
+                domestic = classification == "domestic"
                 tax_rate = default_tax_rate if domestic else Decimal("0.00")
+                vat_sentence = _get_vat_sentence(classification, legal_data)
 
                 # Calculate amounts
                 total_net = invoice_data.total_amount
@@ -1261,6 +1361,7 @@ class InvoiceService:
                     customer_name=invoice_data.customer_name,
                     contract_name=invoice_data.contract_name,
                     invoice_text=invoice_data.invoice_text,
+                    vat_sentence=vat_sentence,
                 )
                 created_records.append(record)
 
