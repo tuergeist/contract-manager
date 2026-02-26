@@ -1175,8 +1175,9 @@
       "status": "Status",
       "connected": "Verbunden",
       "notConnected": "Nicht verbunden",
-      "apiKey": "API-Schlüssel",
-      "apiKeyPlaceholder": "HubSpot Private App Token eingeben",
+      "apiKey": "Access Token",
+      "apiKeyDescription": "Das Access Token Ihrer HubSpot Private App (Einstellungen > Integrationen > Private Apps).",
+      "apiKeyPlaceholder": "pat-na1-...",
       "lastSync": "Letzte Synchronisierung",
       "syncNow": "Jetzt synchronisieren",
       "connectionSuccess": "Verbindung erfolgreich hergestellt",
@@ -1198,10 +1199,10 @@
       "filtersSaveFailed": "Filter konnten nicht gespeichert werden",
       "selectProperty": "Eigenschaft auswählen...",
       "noPropertiesFound": "Keine Eigenschaften gefunden",
-      "setupGuide": "Service-Key Anforderungen",
+      "setupGuide": "Private App einrichten",
       "setup": {
-        "intro": "Ein HubSpot Service-Key mit folgenden Berechtigungen wird benötigt:",
-        "createKeyLink": "Erstellen Sie einen Service-Key unter Einstellungen > Integrationen > Private Apps in Ihrem HubSpot-Portal."
+        "intro": "Erstellen Sie eine Private App in HubSpot (Einstellungen > Integrationen > Private Apps) mit folgenden Berechtigungen:",
+        "createKeyLink": "Kopieren Sie das Access Token aus Ihrer Private App und fügen Sie es oben ein."
       },
       "billingContactLabel": "Rechnungskontakt-Label",
       "billingContactLabelDescription": "Wählen Sie das HubSpot-Zuordnungslabel, das Rechnungskontakte identifiziert. Deren E-Mail-Adressen werden als Rechnungs-E-Mails synchronisiert.",

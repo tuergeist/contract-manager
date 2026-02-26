@@ -750,6 +750,7 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
               <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700">
                 {t('settings.hubspot.apiKey')}
               </label>
+              <p className="text-xs text-gray-500 mt-0.5">{t('settings.hubspot.apiKeyDescription')}</p>
               <div className="mt-1 flex gap-2">
                 <input
                   id="apiKey"

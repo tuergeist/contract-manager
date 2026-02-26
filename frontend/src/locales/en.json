@@ -1175,8 +1175,9 @@
       "status": "Status",
       "connected": "Connected",
       "notConnected": "Not connected",
-      "apiKey": "API Key",
-      "apiKeyPlaceholder": "Enter HubSpot Private App Token",
+      "apiKey": "Access Token",
+      "apiKeyDescription": "The access token from your HubSpot Private App (Settings > Integrations > Private Apps).",
+      "apiKeyPlaceholder": "pat-na1-...",
       "lastSync": "Last sync",
       "syncNow": "Sync now",
       "connectionSuccess": "Connection successful",
@@ -1198,10 +1199,10 @@
       "filtersSaveFailed": "Failed to save filters",
       "selectProperty": "Select property...",
       "noPropertiesFound": "No properties found",
-      "setupGuide": "Service key requirements",
+      "setupGuide": "Private App setup",
       "setup": {
-        "intro": "A HubSpot service key is required with the following scopes:",
-        "createKeyLink": "Create a service key under Settings > Integrations > Private Apps in your HubSpot portal."
+        "intro": "Create a Private App in HubSpot (Settings > Integrations > Private Apps) with the following scopes:",
+        "createKeyLink": "Copy the access token from your Private App and paste it above."
       },
       "billingContactLabel": "Billing Contact Label",
       "billingContactLabelDescription": "Select the HubSpot association label used to identify billing contacts. Their email addresses will be synced as billing emails.",
