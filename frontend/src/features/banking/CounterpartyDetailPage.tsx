@@ -46,7 +46,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { TransactionMatchSheet } from './TransactionMatchSheet'
-import { Link2 } from 'lucide-react'
+import { Link2, FileText } from 'lucide-react'
 
 const COUNTERPARTY_DETAIL = gql`
   query CounterpartyDetail($id: ID!) {
@@ -113,6 +113,11 @@ const BANK_TRANSACTIONS = gql`
         bookingText
         reference
         accountName
+        matchedInvoice {
+          invoiceId
+          invoiceNumber
+          invoiceType
+        }
       }
       totalCount
       page
@@ -231,6 +236,7 @@ interface BankTransaction {
   bookingText: string
   reference: string
   accountName: string
+  matchedInvoice: { invoiceId: string; invoiceNumber: string; invoiceType: string } | null
 }
 
 interface CounterpartySummary {
@@ -1038,11 +1044,25 @@ export function CounterpartyDetailPage() {
                               setMatchSheetTxId(tx.id)
                               setMatchSheetOpen(true)
                             }}
-                            className="text-gray-300 hover:text-gray-500"
+                            className={`${tx.matchedInvoice ? 'text-blue-600 hover:text-blue-800' : 'text-gray-300 hover:text-gray-500'}`}
                             title={t('banking.matchView.matchButton')}
                           >
                             <Link2 className="h-4 w-4" />
                           </button>
+                          {tx.matchedInvoice && (
+                            <Link
+                              to={
+                                tx.matchedInvoice.invoiceType === 'imported'
+                                  ? `/invoices/${tx.matchedInvoice.invoiceId}?type=imported`
+                                  : `/invoices/${tx.matchedInvoice.invoiceId}`
+                              }
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-blue-600 hover:text-blue-800"
+                              title={`${t('banking.matchedInvoice')}: ${tx.matchedInvoice.invoiceNumber}`}
+                            >
+                              <FileText className="h-4 w-4" />
+                            </Link>
+                          )}
                           {formatCurrency(tx.amount, { currency: tx.currency || 'EUR' })}
                         </div>
                       </td>
