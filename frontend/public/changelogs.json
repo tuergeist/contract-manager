@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.8.5",
+    "date": "2026-02-26",
+    "title": "Only import closed-won HubSpot deals",
+    "description": "Deal sync now rejects non-won deals in both batch sync and webhook paths, preventing draft contracts from renewal pipeline inquiries.",
+    "type": "bugfix",
+    "details": [
+      "Added closedwon stage check in _sync_deal() so webhook-triggered deals are also filtered",
+      "Deals in stages like 'Inquiry received' are now skipped with a debug log"
+    ]
+  },
+  {
     "version": "2.8.4",
     "date": "2026-02-26",
     "title": "Invoice Template and VAT Default Improvements",
