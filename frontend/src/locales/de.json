@@ -1046,7 +1046,20 @@
       "email": "E-Mail (M365)",
       "notifications": "Benachrichtigungen",
       "contracts": "Verträge",
-      "helpVideos": "Hilfe-Videos"
+      "helpVideos": "Hilfe-Videos",
+      "banking": "Banking"
+    },
+    "banking": {
+      "title": "Banking-Einstellungen",
+      "description": "Toleranz für die Zuordnung von Zahlungen zu Rechnungen konfigurieren (z.\u00a0B. Bankgebühren).",
+      "feeToleranceFixed": "Feste Toleranz (EUR)",
+      "feeToleranceFixedHint": "Absoluter Betrag, um den eine Zahlung abweichen darf (z.\u00a0B. Bankgebühren)",
+      "feeTolerancePercent": "Prozentuale Toleranz (%)",
+      "feeTolerancePercentHint": "Zusätzlicher Prozentsatz des Rechnungsbetrags, der toleriert wird",
+      "formulaHint": "Toleranz = Fest + (Prozent × Rechnungsbetrag)",
+      "save": "Einstellungen speichern",
+      "saved": "Banking-Einstellungen gespeichert",
+      "saveFailed": "Banking-Einstellungen konnten nicht gespeichert werden"
     },
     "smtp": {
       "title": "SMTP-Benachrichtigungsdienst",
@@ -1528,7 +1541,8 @@
       "removeMatch": "Zuordnung entfernen",
       "imported": "Importiert",
       "generated": "Generiert",
-      "matchButton": "Zuordnen"
+      "matchButton": "Zuordnen",
+      "withinTolerance": "innerhalb der Toleranz"
     }
   },
   "liquidity": {

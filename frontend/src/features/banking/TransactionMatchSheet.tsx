@@ -48,6 +48,15 @@ const TRANSACTION_MATCH_DETAILS = gql`
   }
 `
 
+const BANKING_SETTINGS_FOR_MATCH = gql`
+  query BankingSettingsForMatch {
+    bankingSettings {
+      feeToleranceFixed
+      feeTolerancePercent
+    }
+  }
+`
+
 const SEARCH_INVOICES_FOR_MATCHING = gql`
   query SearchInvoicesForMatching($search: String!, $unmatchedOnly: Boolean, $limit: Int) {
     searchInvoicesForMatching(search: $search, unmatchedOnly: $unmatchedOnly, limit: $limit) {
@@ -141,12 +150,10 @@ interface Props {
   onMatchChanged?: () => void
 }
 
-const OVERBOOKING_TOLERANCE = 0.03 // 3%
-
 export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMatchChanged }: Props) {
   const { t } = useTranslation()
   const [searchText, setSearchText] = useState('')
-  const [unmatchedOnly, setUnmatchedOnly] = useState(false)
+  const [unmatchedOnly, setUnmatchedOnly] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const { data, loading, refetch } = useQuery(TRANSACTION_MATCH_DETAILS, {
@@ -154,6 +161,8 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
     skip: !transactionId || !open,
     fetchPolicy: 'network-only',
   })
+
+  const { data: settingsData } = useQuery(BANKING_SETTINGS_FOR_MATCH)
 
   const { data: searchData, loading: searchLoading } = useQuery(SEARCH_INVOICES_FOR_MATCHING, {
     variables: { search: searchText, unmatchedOnly, limit: 20 },
@@ -213,20 +222,35 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
 
   // Calculate difference status
   const getDifferenceStatus = () => {
-    if (!txn) return 'neutral'
+    if (!txn || txn.matches.length === 0) return 'neutral'
     const diff = parseFloat(txn.difference)
     const txnAmount = Math.abs(parseFloat(txn.amount))
+    const totalMatched = parseFloat(txn.totalMatched)
     if (txnAmount === 0) return 'neutral'
 
-    if (Math.abs(diff) <= 0.01) return 'matched'
+    // Underpaid: transaction amount > total matched invoices
     if (diff > 0) return 'underpaid'
-    // Overpaid
-    const overPercent = Math.abs(diff) / txnAmount
-    if (overPercent > OVERBOOKING_TOLERANCE) return 'overbooking'
-    return 'matched'
+
+    // Exact match (rounding)
+    if (Math.abs(diff) <= 0.01) return 'matched'
+
+    // Configurable tolerance: fixed + percent of matched total
+    const tolFixed = parseFloat(settingsData?.bankingSettings?.feeToleranceFixed ?? '0')
+    const tolPercent = parseFloat(settingsData?.bankingSettings?.feeTolerancePercent ?? '0')
+    const tolerance = tolFixed + (totalMatched * tolPercent / 100)
+
+    if (Math.abs(diff) <= tolerance) return 'matched'
+    return 'overbooking'
   }
 
   const diffStatus = getDifferenceStatus()
+
+  // Check if matched within tolerance (has a difference but still considered matched)
+  const isWithinTolerance = () => {
+    if (!txn || diffStatus !== 'matched') return false
+    const diff = parseFloat(txn.difference)
+    return Math.abs(diff) > 0.01
+  }
 
   const searchResults: InvoiceSearchResult[] = searchData?.searchInvoicesForMatching?.items ?? []
   // Filter out already matched invoices from search results
@@ -289,7 +313,16 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
               <div className="flex items-center justify-between">
                 <span>{t('banking.matchView.totalMatched')}: {formatCurrency(txn.totalMatched, { currency: txn.currency })}</span>
                 <span className="font-medium">
-                  {diffStatus === 'matched' && t('banking.matchView.fullyMatched')}
+                  {diffStatus === 'matched' && !isWithinTolerance() && t('banking.matchView.fullyMatched')}
+                  {diffStatus === 'matched' && isWithinTolerance() && (
+                    <>
+                      {t('banking.matchView.fullyMatched')}
+                      {' '}
+                      <span className="text-xs font-normal">
+                        ({formatCurrency(txn.difference, { currency: txn.currency })} {t('banking.matchView.withinTolerance')})
+                      </span>
+                    </>
+                  )}
                   {diffStatus === 'underpaid' && `${formatCurrency(txn.difference, { currency: txn.currency })} ${t('banking.matchView.remaining')}`}
                   {diffStatus === 'overbooking' && `${formatCurrency(txn.difference, { currency: txn.currency })}`}
                 </span>

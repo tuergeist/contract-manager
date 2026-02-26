@@ -1,4 +1,6 @@
 """GraphQL schema for tenants."""
+from decimal import Decimal
+
 import strawberry
 from strawberry import auto
 import strawberry_django
@@ -339,6 +341,13 @@ class SmtpSettingsType:
     use_tls: bool
     is_configured: bool
     password_set: bool
+
+
+@strawberry.type
+class BankingSettingsType:
+    """Banking fee tolerance settings for invoice matching."""
+    fee_tolerance_fixed: Decimal
+    fee_tolerance_percent: Decimal
 
 
 @strawberry.type
@@ -697,6 +706,18 @@ class TenantQuery:
             use_tls=config.get("use_tls", True),
             is_configured=is_configured,
             password_set=bool(config.get("password")),
+        )
+
+    @strawberry.field
+    def banking_settings(self, info: Info[Context, None]) -> BankingSettingsType | None:
+        """Get banking fee tolerance settings for current tenant."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return None
+        config = (user.tenant.settings or {}).get("banking", {})
+        return BankingSettingsType(
+            fee_tolerance_fixed=Decimal(config.get("fee_tolerance_fixed", "0")),
+            fee_tolerance_percent=Decimal(config.get("fee_tolerance_percent", "0")),
         )
 
     @strawberry.field
@@ -1679,6 +1700,29 @@ class TenantMutation:
             "from_name": from_name.strip(),
             "from_address": from_address.strip(),
             "use_tls": use_tls,
+        }
+        tenant.save(update_fields=["settings"])
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def save_banking_settings(
+        self,
+        info: Info[Context, None],
+        fee_tolerance_fixed: Decimal,
+        fee_tolerance_percent: Decimal,
+    ) -> OperationResult:
+        """Save banking fee tolerance settings. Requires settings.write."""
+        user = require_perm(info, "settings", "write")
+        tenant = user.tenant
+        if not tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+        if fee_tolerance_fixed < 0 or fee_tolerance_percent < 0:
+            return OperationResult(success=False, error="Tolerance values must be >= 0")
+        if not tenant.settings:
+            tenant.settings = {}
+        tenant.settings["banking"] = {
+            "fee_tolerance_fixed": str(fee_tolerance_fixed),
+            "fee_tolerance_percent": str(fee_tolerance_percent),
         }
         tenant.save(update_fields=["settings"])
         return OperationResult(success=True)

@@ -1046,7 +1046,20 @@
       "email": "Email (M365)",
       "notifications": "Notifications",
       "contracts": "Contracts",
-      "helpVideos": "Help Videos"
+      "helpVideos": "Help Videos",
+      "banking": "Banking"
+    },
+    "banking": {
+      "title": "Banking Settings",
+      "description": "Configure tolerance for matching payments to invoices (e.g. for banking fees).",
+      "feeToleranceFixed": "Fixed Tolerance (EUR)",
+      "feeToleranceFixedHint": "Absolute amount a payment may fall short (e.g. banking fees)",
+      "feeTolerancePercent": "Percentage Tolerance (%)",
+      "feeTolerancePercentHint": "Additional percentage of invoice total that is tolerated",
+      "formulaHint": "Tolerance = Fixed + (Percent × invoice total)",
+      "save": "Save Settings",
+      "saved": "Banking settings saved",
+      "saveFailed": "Failed to save banking settings"
     },
     "smtp": {
       "title": "SMTP Notification Service",
@@ -1528,7 +1541,8 @@
       "removeMatch": "Remove match",
       "imported": "Imported",
       "generated": "Generated",
-      "matchButton": "Match"
+      "matchButton": "Match",
+      "withinTolerance": "within tolerance"
     }
   },
   "liquidity": {
