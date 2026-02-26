@@ -79,7 +79,6 @@ const HUBSPOT_SETTINGS_QUERY = gql`
       }
       billingContactLabel
       portalId
-      clientSecretSet
       syncMode
       webhookLastReceived
     }
@@ -181,8 +180,8 @@ const SET_BILLING_CONTACT_LABEL = gql`
 `
 
 const SAVE_WEBHOOK_SETTINGS = gql`
-  mutation SaveWebhookSettings($portalId: String, $clientSecret: String, $syncMode: String) {
-    saveWebhookSettings(portalId: $portalId, clientSecret: $clientSecret, syncMode: $syncMode) {
+  mutation SaveWebhookSettings($portalId: String, $syncMode: String) {
+    saveWebhookSettings(portalId: $portalId, syncMode: $syncMode) {
       success
       error
     }
@@ -281,7 +280,6 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
   const [saveWebhookSettings, { loading: savingWebhook }] = useMutation(SAVE_WEBHOOK_SETTINGS)
 
   const [webhookPortalId, setWebhookPortalId] = useState('')
-  const [webhookClientSecret, setWebhookClientSecret] = useState('')
   const [webhookMessage, setWebhookMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [webhookCopied, setWebhookCopied] = useState(false)
 
@@ -582,14 +580,9 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
   const handleSaveWebhookSettings = async () => {
     setWebhookMessage(null)
     try {
-      const variables: Record<string, string> = {}
-      if (webhookPortalId) variables.portalId = webhookPortalId
-      if (webhookClientSecret) variables.clientSecret = webhookClientSecret
-
-      const result = await saveWebhookSettings({ variables })
+      const result = await saveWebhookSettings({ variables: { portalId: webhookPortalId } })
       if (result.data?.saveWebhookSettings?.success) {
         setWebhookMessage({ type: 'success', text: t('settings.hubspot.webhookSaved') })
-        setWebhookClientSecret('')
         refetchSettings()
       } else {
         setWebhookMessage({
@@ -1075,14 +1068,14 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
                           />
                           {t('settings.hubspot.syncModePolling')}
                         </label>
-                        <label className={`flex items-center gap-2 text-sm ${!hubspotSettings?.portalId || !hubspotSettings?.clientSecretSet ? 'text-gray-400' : ''}`}>
+                        <label className={`flex items-center gap-2 text-sm ${!hubspotSettings?.portalId ? 'text-gray-400' : ''}`}>
                           <input
                             type="radio"
                             name="syncMode"
                             value="webhooks"
                             checked={hubspotSettings?.syncMode === 'webhooks'}
                             onChange={() => handleToggleSyncMode('webhooks')}
-                            disabled={!hubspotSettings?.portalId || !hubspotSettings?.clientSecretSet}
+                            disabled={!hubspotSettings?.portalId}
                             className="text-blue-600"
                           />
                           {t('settings.hubspot.syncModeWebhooks')}
@@ -1102,22 +1095,10 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
                       />
                     </div>
 
-                    {/* Client Secret */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700">{t('settings.hubspot.clientSecret')}</label>
-                      <input
-                        type="password"
-                        value={webhookClientSecret}
-                        onChange={(e) => setWebhookClientSecret(e.target.value)}
-                        placeholder={hubspotSettings?.clientSecretSet ? '••••••••••••••••' : t('settings.hubspot.clientSecretPlaceholder')}
-                        className="mt-1 block w-full max-w-xs rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
-                    </div>
-
                     {/* Save button */}
                     <button
                       onClick={handleSaveWebhookSettings}
-                      disabled={savingWebhook || (!webhookPortalId && !webhookClientSecret)}
+                      disabled={savingWebhook || !webhookPortalId}
                       className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                     >
                       {savingWebhook ? <Loader2 className="h-4 w-4 animate-spin inline mr-1" /> : null}

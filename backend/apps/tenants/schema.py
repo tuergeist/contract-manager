@@ -176,7 +176,6 @@ class HubSpotSettings:
     last_auto_sync_deals: str | None = None
     billing_contact_label: str | None = None
     portal_id: str | None = None
-    client_secret_set: bool = False
     sync_mode: str | None = None
     webhook_last_received: str | None = None
 
@@ -534,7 +533,7 @@ class TenantQuery:
             last_auto_sync_deals=config.get("last_auto_sync_deals"),
             billing_contact_label=config.get("billing_contact_label"),
             portal_id=config.get("portal_id"),
-            client_secret_set=bool(config.get("client_secret")),
+
             sync_mode=config.get("sync_mode"),
             webhook_last_received=config.get("webhook_last_received"),
         )
@@ -957,10 +956,9 @@ class TenantMutation:
         self,
         info: Info[Context, None],
         portal_id: str | None = None,
-        client_secret: str | None = None,
         sync_mode: str | None = None,
     ) -> HubSpotTestResult:
-        """Save HubSpot webhook settings (portal ID, client secret, sync mode)."""
+        """Save HubSpot webhook settings (portal ID, sync mode)."""
         user = get_current_user(info)
         if not user.tenant:
             return HubSpotTestResult(success=False, error="No tenant assigned")
@@ -972,25 +970,18 @@ class TenantMutation:
         if portal_id is not None:
             tenant.hubspot_config["portal_id"] = portal_id.strip()
 
-        if client_secret is not None:
-            if client_secret.strip():
-                tenant.hubspot_config["client_secret"] = client_secret.strip()
-            else:
-                tenant.hubspot_config.pop("client_secret", None)
-
         if sync_mode is not None:
             if sync_mode not in ("polling", "webhooks"):
                 return HubSpotTestResult(
                     success=False, error="Invalid sync mode. Must be 'polling' or 'webhooks'."
                 )
-            # Require portal_id and client_secret to enable webhook mode
+            # Require portal_id to enable webhook mode
             if sync_mode == "webhooks":
                 pid = tenant.hubspot_config.get("portal_id", "")
-                secret = tenant.hubspot_config.get("client_secret", "")
-                if not pid or not secret:
+                if not pid:
                     return HubSpotTestResult(
                         success=False,
-                        error="Portal ID and Client Secret are required for webhook mode.",
+                        error="Portal ID is required for webhook mode.",
                     )
             tenant.hubspot_config["sync_mode"] = sync_mode
 

@@ -1,6 +1,5 @@
 """Tests for HubSpot webhook receiver and event processing."""
 
-import hashlib
 import json
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, Mock, patch
@@ -25,7 +24,6 @@ def tenant_with_webhooks(db):
         hubspot_config={
             "api_key": "test-key",
             "portal_id": "12345678",
-            "client_secret": "test-secret-key",
             "sync_mode": "webhooks",
             "auto_sync_enabled": True,
         },
@@ -48,15 +46,10 @@ def tenant_polling(db):
     return tenant
 
 
-def _sign_payload(secret: str, body: bytes) -> str:
-    """Compute HubSpot v1 signature."""
-    return hashlib.sha256(secret.encode("utf-8") + body).hexdigest()
-
-
 class TestWebhookEndpoint:
     """Tests for the /api/hubspot/webhook/ endpoint."""
 
-    def test_valid_signature_returns_200(self, tenant_with_webhooks):
+    def test_known_portal_dispatches_event(self, tenant_with_webhooks):
         client = HttpClient()
         events = [
             {
@@ -67,7 +60,6 @@ class TestWebhookEndpoint:
             }
         ]
         body = json.dumps(events).encode("utf-8")
-        signature = _sign_payload("test-secret-key", body)
 
         with patch("apps.customers.tasks.process_hubspot_webhook_event") as mock_task:
             mock_task.delay = MagicMock()
@@ -75,36 +67,10 @@ class TestWebhookEndpoint:
                 "/api/hubspot/webhook/",
                 data=body,
                 content_type="application/json",
-                HTTP_X_HUBSPOT_SIGNATURE=signature,
             )
 
         assert response.status_code == 200
         mock_task.delay.assert_called_once()
-
-    def test_missing_signature_returns_401(self, tenant_with_webhooks):
-        client = HttpClient()
-        body = json.dumps([{"portalId": 12345678, "objectId": 1}]).encode("utf-8")
-
-        response = client.post(
-            "/api/hubspot/webhook/",
-            data=body,
-            content_type="application/json",
-        )
-        assert response.status_code == 401
-
-    def test_invalid_signature_returns_401(self, tenant_with_webhooks):
-        client = HttpClient()
-        body = json.dumps(
-            [{"subscriptionType": "company.creation", "portalId": 12345678, "objectId": 1}]
-        ).encode("utf-8")
-
-        response = client.post(
-            "/api/hubspot/webhook/",
-            data=body,
-            content_type="application/json",
-            HTTP_X_HUBSPOT_SIGNATURE="invalid-signature",
-        )
-        assert response.status_code == 401
 
     def test_unknown_portal_returns_200(self, tenant_with_webhooks):
         client = HttpClient()
@@ -115,7 +81,6 @@ class TestWebhookEndpoint:
             "/api/hubspot/webhook/",
             data=body,
             content_type="application/json",
-            HTTP_X_HUBSPOT_SIGNATURE="anything",
         )
         # Returns 200 to prevent HubSpot retries
         assert response.status_code == 200
@@ -123,15 +88,22 @@ class TestWebhookEndpoint:
     def test_empty_payload_returns_200(self, tenant_with_webhooks):
         client = HttpClient()
         body = json.dumps([]).encode("utf-8")
-        signature = _sign_payload("test-secret-key", body)
 
         response = client.post(
             "/api/hubspot/webhook/",
             data=body,
             content_type="application/json",
-            HTTP_X_HUBSPOT_SIGNATURE=signature,
         )
         assert response.status_code == 200
+
+    def test_invalid_json_returns_400(self, tenant_with_webhooks):
+        client = HttpClient()
+        response = client.post(
+            "/api/hubspot/webhook/",
+            data=b"not json",
+            content_type="application/json",
+        )
+        assert response.status_code == 400
 
     def test_get_method_returns_405(self, tenant_with_webhooks):
         client = HttpClient()
@@ -145,7 +117,6 @@ class TestWebhookEndpoint:
             for i in range(5)
         ]
         body = json.dumps(events).encode("utf-8")
-        signature = _sign_payload("test-secret-key", body)
 
         with patch("apps.customers.tasks.process_hubspot_webhook_event") as mock_task:
             mock_task.delay = MagicMock()
@@ -153,11 +124,26 @@ class TestWebhookEndpoint:
                 "/api/hubspot/webhook/",
                 data=body,
                 content_type="application/json",
-                HTTP_X_HUBSPOT_SIGNATURE=signature,
             )
 
         assert response.status_code == 200
         assert mock_task.delay.call_count == 5
+
+    def test_updates_last_received_timestamp(self, tenant_with_webhooks):
+        client = HttpClient()
+        events = [{"subscriptionType": "company.creation", "portalId": 12345678, "objectId": 1}]
+        body = json.dumps(events).encode("utf-8")
+
+        with patch("apps.customers.tasks.process_hubspot_webhook_event") as mock_task:
+            mock_task.delay = MagicMock()
+            client.post(
+                "/api/hubspot/webhook/",
+                data=body,
+                content_type="application/json",
+            )
+
+        tenant_with_webhooks.refresh_from_db()
+        assert tenant_with_webhooks.hubspot_config.get("webhook_last_received") is not None
 
 
 class TestWebhookEventProcessing:
@@ -358,8 +344,8 @@ def _run_graphql(query, variables, context):
 
 
 SAVE_WEBHOOK_SETTINGS = """
-    mutation SaveWebhookSettings($portalId: String, $clientSecret: String, $syncMode: String) {
-        saveWebhookSettings(portalId: $portalId, clientSecret: $clientSecret, syncMode: $syncMode) {
+    mutation SaveWebhookSettings($portalId: String, $syncMode: String) {
+        saveWebhookSettings(portalId: $portalId, syncMode: $syncMode) {
             success
             error
         }
@@ -370,7 +356,6 @@ HUBSPOT_SETTINGS_QUERY = """
     query {
         hubspotSettings {
             portalId
-            clientSecretSet
             syncMode
             webhookLastReceived
         }
@@ -398,11 +383,11 @@ class TestWebhookSettingsGraphQL:
             is_admin=True,
         )
 
-    def test_save_portal_id_and_secret(self, admin_user, tenant):
+    def test_save_portal_id(self, admin_user, tenant):
         ctx = _make_context(admin_user)
         result = _run_graphql(
             SAVE_WEBHOOK_SETTINGS,
-            {"portalId": "12345678", "clientSecret": "my-secret"},
+            {"portalId": "12345678"},
             ctx,
         )
         assert result.errors is None
@@ -410,11 +395,9 @@ class TestWebhookSettingsGraphQL:
 
         tenant.refresh_from_db()
         assert tenant.hubspot_config["portal_id"] == "12345678"
-        assert tenant.hubspot_config["client_secret"] == "my-secret"
 
     def test_switch_to_webhook_mode(self, admin_user, tenant):
         tenant.hubspot_config["portal_id"] = "12345678"
-        tenant.hubspot_config["client_secret"] = "my-secret"
         tenant.save(update_fields=["hubspot_config"])
 
         ctx = _make_context(admin_user)
@@ -429,7 +412,7 @@ class TestWebhookSettingsGraphQL:
         tenant.refresh_from_db()
         assert tenant.hubspot_config["sync_mode"] == "webhooks"
 
-    def test_webhook_mode_requires_portal_and_secret(self, admin_user, tenant):
+    def test_webhook_mode_requires_portal_id(self, admin_user, tenant):
         ctx = _make_context(admin_user)
         result = _run_graphql(
             SAVE_WEBHOOK_SETTINGS,
@@ -456,7 +439,6 @@ class TestWebhookSettingsGraphQL:
     def test_query_returns_webhook_fields(self, admin_user, tenant):
         tenant.hubspot_config.update({
             "portal_id": "99887766",
-            "client_secret": "secret-val",
             "sync_mode": "webhooks",
             "webhook_last_received": "2026-02-25T10:00:00Z",
         })
@@ -468,15 +450,14 @@ class TestWebhookSettingsGraphQL:
 
         settings = result.data["hubspotSettings"]
         assert settings["portalId"] == "99887766"
-        assert settings["clientSecretSet"] is True
         assert settings["syncMode"] == "webhooks"
         assert settings["webhookLastReceived"] == "2026-02-25T10:00:00Z"
 
-    def test_query_no_secret_returns_false(self, admin_user, tenant):
+    def test_query_defaults(self, admin_user, tenant):
         ctx = _make_context(admin_user)
         result = _run_graphql(HUBSPOT_SETTINGS_QUERY, {}, ctx)
         assert result.errors is None
 
         settings = result.data["hubspotSettings"]
-        assert settings["clientSecretSet"] is False
         assert settings["portalId"] is None
+        assert settings["syncMode"] is None

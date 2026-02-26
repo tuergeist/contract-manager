@@ -1217,8 +1217,6 @@
       "syncModeWebhooks": "Webhooks (Echtzeit)",
       "portalId": "Portal-ID",
       "portalIdPlaceholder": "z.B. 12345678",
-      "clientSecret": "Client Secret",
-      "clientSecretPlaceholder": "Ihr HubSpot-App Client Secret",
       "webhookSave": "Webhook-Einstellungen speichern",
       "webhookSaved": "Webhook-Einstellungen gespeichert",
       "webhookSaveFailed": "Webhook-Einstellungen konnten nicht gespeichert werden",
