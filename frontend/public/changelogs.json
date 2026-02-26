@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.8.11",
+    "date": "2026-02-26",
+    "title": "Fix Invoice Export Status & Missing Numbers",
+    "description": "Sent, paid, and dunning invoices no longer show as 'Not Generated' on the export page, and PDF exports now include correct invoice numbers for all active statuses.",
+    "type": "bugfix",
+    "details": [
+      "Fixed StatusBadge on invoice export page to show correct status for sent, paid, and dunning invoices instead of 'Not Generated'",
+      "Fixed PDF export enrichment to include invoice numbers for sent, paid, and dunning records (previously only queried finalized)",
+      "Added match status icons to counterparty detail transaction rows"
+    ]
+  },
+  {
     "version": "2.8.10",
     "date": "2026-02-26",
     "title": "Configurable Banking Fee Tolerance",
