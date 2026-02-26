@@ -273,26 +273,68 @@ So reicht es, auf einem Produkt `tax_rate = 7.00` zu setzen, und die Zuordnung
 auf Konto 4300 erfolgt automatisch. Für EU/Drittland-Kunden greift immer das
 Klassifizierungs-Mapping, unabhängig vom Produkt-Steuersatz.
 
-### 1.5 Debitoren-Konto (Erweiterung Customer)
+### 1.5 Debitoren-Konten (flexibles Mapping)
 
-Neues Feld auf dem bestehenden Customer-Model:
+Die konkreten Debitoren-Kontonummern sind primär für den DATEV-Export relevant.
+Im laufenden Betrieb reicht es, dass pro Kunde ein Konto geführt wird.
+Das eigentliche Nummern-Mapping passiert **vor dem Export**, damit es mit
+bestehenden DATEV-Bestandsdaten zusammenpasst.
 
-```python
-# In apps/customers/models.py - Customer model erweitern:
+**Konzept: Zweistufig — internes Konto + Export-Mapping**
 
-debitor_account_number = models.CharField(
-    max_length=10,
-    blank=True,
-    default="",
-    help_text="Debitoren-Kontonummer (z.B. '10001'). Leer = noch nicht vergeben.",
-)
+```
+Stufe 1 (laufend):   Customer ←→ DebitorAccount  (interne Zuordnung, ohne feste Nummer)
+Stufe 2 (vor Export): DebitorAccount → Kontonummer  (DATEV-Mapping, flexibel anpassbar)
 ```
 
-**Debitoren-Schema (Konfiguration auf Tenant-Ebene):**
+```python
+class DebitorAccount(TenantModel):
+    """Debitoren-Konto: Verbindung zwischen Kunde und Buchhaltung.
+
+    Die Kontonummer kann leer bleiben und wird erst vor dem Export
+    zugewiesen — manuell oder automatisch. So können bestehende
+    DATEV-Nummern importiert und abgeglichen werden.
+    """
+
+    customer = models.OneToOneField(
+        "customers.Customer",
+        on_delete=models.CASCADE,
+        related_name="debitor_account",
+    )
+    account_number = models.CharField(
+        max_length=10,
+        blank=True,
+        default="",
+        help_text="DATEV-Kontonummer (z.B. '10001'). Leer = noch nicht zugewiesen.",
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Hinweise (z.B. 'Altsystem: D-4711', 'Zusammenlegung mit X')",
+    )
+
+    class Meta:
+        ordering = ["account_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "account_number"],
+                condition=models.Q(account_number__gt=""),
+                name="unique_debitor_number_per_tenant",
+            ),
+        ]
+
+    def __str__(self):
+        num = self.account_number or "(ohne Nummer)"
+        return f"Debitor {num} – {self.customer}"
+```
+
+**DebitorAccountScheme (Nummernkreis-Konfiguration):**
 
 ```python
 class DebitorAccountScheme(TimestampedModel):
-    """Konfiguration für die automatische Vergabe von Debitoren-Kontonummern."""
+    """Konfiguration für die automatische Vergabe von Debitoren-Kontonummern.
+
+    Wird beim Auto-Assign vor dem Export verwendet.
+    """
 
     tenant = models.OneToOneField(
         "tenants.Tenant",
@@ -319,10 +361,38 @@ class DebitorAccountScheme(TimestampedModel):
     )
 ```
 
-**Vergabe-Logik:**
-- Manuell: Nutzer kann jederzeit eine Nummer zuweisen
-- Auto-Assign: Beim ersten Finalisieren einer Rechnung für einen Kunden ohne Debitorennummer wird automatisch die nächste freie Nummer vergeben
-- Bereits vorhandene Nummern (z.B. aus DATEV-Import) werden respektiert
+**Vergabe-Logik (flexibel, vor Export):**
+
+```
+Zeitpunkt der Nummernvergabe:
+- NICHT bei Rechnungs-Finalisierung (zu früh)
+- VOR dem DATEV-Export: Validierung zeigt Kunden ohne Nummer
+- Nutzer entscheidet: manuell zuweisen ODER auto-assign
+
+Ablauf vor Export:
+1. System zeigt: "5 Kunden ohne Debitorennummer"
+2. Nutzer kann:
+   a) Einzeln manuell zuweisen (z.B. bestehende DATEV-Nummer übernehmen)
+   b) DATEV-Bestandsdaten importieren (CSV: Kundenname → Kontonummer)
+   c) "Alle fehlenden automatisch vergeben" (ab next_number)
+3. Erst wenn alle Kunden im Zeitraum eine Nummer haben → Export möglich
+```
+
+**Import bestehender DATEV-Nummern:**
+
+```
+CSV-Import: Kundenname/Kunden-Nr. → Debitorennummer
+┌──────────────────┬─────────────────┐
+│ Kunde            │ Debitor-Konto   │
+├──────────────────┼─────────────────┤
+│ Muster GmbH      │ 10001           │
+│ TechCorp B.V.    │ 10015           │
+│ US Corp Inc.      │ 10023           │
+└──────────────────┴─────────────────┘
+
+→ Matching per Kundenname oder Kunden-Nr.
+→ Konflikte werden angezeigt (z.B. Nummer bereits vergeben)
+```
 
 ### 1.6 BookingEntry (Buchungssatz)
 
@@ -505,7 +575,8 @@ class BookingService:
         - Manuell über die UI angestoßen
 
         Schritte:
-        1. Debitor-Konto des Kunden ermitteln (auto-assign falls nötig)
+        1. Debitor-Konto des Kunden nachschlagen
+           (Fehler wenn nicht vorhanden — muss vor Export zugewiesen sein)
         2. USt-Klassifizierung bestimmen (domestic/eu/non_eu)
         3. Für jeden Line Item:
            a. Effektiven Steuersatz bestimmen (Produkt.tax_rate oder Default)
@@ -622,12 +693,31 @@ type RevenueAccountMappingType {
   revenueAccount: RevenueAccountType!
 }
 
-# Debitoren-Schema
+# Debitoren
 type DebitorAccountSchemeType {
   prefix: String!
   startNumber: Int!
   nextNumber: Int!
   endNumber: Int!
+}
+
+type DebitorAccountType {
+  id: ID!
+  customer: CustomerType!
+  accountNumber: String!
+  notes: String!
+  createdAt: DateTime!
+}
+
+type Query {
+  # ...bestehende Queries...
+
+  # Debitoren (für Export-Vorbereitung)
+  debitorAccounts(
+    hasNumber: Boolean          # true=nur mit Nummer, false=nur ohne
+  ): [DebitorAccountType!]!
+  debitorAccountScheme: DebitorAccountSchemeType
+  customersWithoutDebitor: [CustomerType!]!
 }
 
 # Buchungssätze
@@ -733,15 +823,18 @@ type Mutation {
   updateRevenueAccountMapping(id: ID!, input: RevenueAccountMappingInput!): RevenueAccountMappingType!
   deleteRevenueAccountMapping(id: ID!): Boolean!
 
-  # Debitoren
+  # Debitoren (flexibles Mapping — vor Export)
   updateDebitorAccountScheme(input: DebitorAccountSchemeInput!): DebitorAccountSchemeType!
   assignDebitorAccount(
     customerId: ID!
-    accountNumber: String     # null = auto-assign
-  ): CustomerType!
+    accountNumber: String     # null = auto-assign nächste freie Nummer
+  ): DebitorAccountType!
   bulkAssignDebitorAccounts(
-    customerIds: [ID!]!       # Auto-assign für alle
-  ): [CustomerType!]!
+    customerIds: [ID!]        # null = alle ohne Nummer, sonst nur diese
+  ): BulkAssignResult!
+  importDebitorAccounts(
+    mappings: [DebitorImportInput!]!  # CSV-Import: Kunde → Nummer
+  ): DebitorImportResult!
 
   # Buchungssätze generieren
   generateBookings(invoiceRecordId: ID!): [BookingEntryType!]!
@@ -787,6 +880,39 @@ input DebitorAccountSchemeInput {
   startNumber: Int
   nextNumber: Int
   endNumber: Int
+}
+
+input DebitorImportInput {
+  customerNumber: String      # Matching per Kunden-Nr. (CUS174)
+  customerName: String        # Fallback-Matching per Name
+  accountNumber: String!      # Debitorennummer aus DATEV
+}
+
+type DebitorAccountType {
+  id: ID!
+  customer: CustomerType!
+  accountNumber: String!
+  notes: String!
+  createdAt: DateTime!
+}
+
+type BulkAssignResult {
+  assigned: Int!
+  skipped: Int!
+  errors: [String!]!
+}
+
+type DebitorImportResult {
+  matched: Int!
+  created: Int!
+  conflicts: [DebitorImportConflict!]!
+}
+
+type DebitorImportConflict {
+  customerName: String!
+  importedNumber: String!
+  existingNumber: String!
+  reason: String!
 }
 ```
 
@@ -871,37 +997,23 @@ Route: `/settings` → Tab "Buchhaltung" / "Accounting"
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 Kunden-Detail: Debitoren-Konto
+### 4.2 Kunden-Detail: Debitoren-Konto (optional sichtbar)
 
-Im bestehenden Customer-Detail wird das Debitorenkonto angezeigt/bearbeitbar:
+Im Customer-Detail wird das Debitorenkonto angezeigt, wenn vorhanden.
+Kein Pflichtfeld — die Nummer wird vor dem Export zugewiesen.
 
 ```
 ┌─ Kundendaten ───────────────────────────────────────────────────┐
 │                                                                  │
 │  Name:              Muster GmbH                                  │
 │  Kunden-Nr.:        CUS174                                       │
-│  ★ Debitor-Konto:   [ 10001 ]  [Auto-Vergabe]                   │
+│  Debitor-Konto:     10001        (oder "—" wenn noch nicht)     │
 │  USt-IdNr.:         DE123456789                                  │
 │  ...                                                             │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.3 Kunden-Liste: Spalte Debitor-Konto
-
-Optionale neue Spalte in der Kundenliste:
-
-```
-┌──────────────────────┬────────────┬──────────────┬──────────┐
-│ Name                 │ Kunden-Nr. │ Debitor-Kto. │ Verträge │
-├──────────────────────┼────────────┼──────────────┼──────────┤
-│ Muster GmbH          │ CUS174     │ 10001        │ 3        │
-│ TechCorp B.V.        │ CUS201     │ 10015        │ 1        │
-│ US Corp Inc.          │ CUS305     │ —            │ 2        │
-└──────────────────────┴────────────┴──────────────┴──────────┘
-                                     [Alle zuweisen]
-```
-
-### 4.4 Rechnungsübersicht: Buchungssätze
+### 4.3 Rechnungsübersicht: Buchungssätze
 
 Im bestehenden Rechnungs-Detail oder als Expand-Row:
 
@@ -925,9 +1037,12 @@ Im bestehenden Rechnungs-Detail oder als Expand-Row:
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.5 Neue Seite: Buchhaltungs-Export
+### 4.4 Neue Seite: Buchhaltungs-Export
 
 Route: `/accounting` oder `/settings/accounting/export`
+
+Der Export-Flow enthält den zentralen Schritt **Debitoren-Mapping** — hier
+werden Kontonummern zugewiesen, bevor der Export generiert wird.
 
 ```
 ┌─ DATEV-Export ──────────────────────────────────────────────────┐
@@ -935,17 +1050,36 @@ Route: `/accounting` oder `/settings/accounting/export`
 │  Zeitraum:  [02/2026 ▼]  bis  [02/2026 ▼]                      │
 │  Format:    [DATEV Buchungsstapel (CSV) ▼]                      │
 │                                                                  │
-│  ┌─ Vorschau / Validierung ────────────────────────────────────┐│
+│  ┌─ Schritt 1: Validierung ───────────────────────────────────┐│
 │  │                                                              ││
-│  │  ✅ 42 Rechnungen mit Buchungssätzen                         ││
-│  │  ⚠️  3 Rechnungen ohne Buchungssätze                         ││
-│  │  ⚠️  2 Kunden ohne Debitorennummer                           ││
+│  │  ✅ 42 Rechnungen mit Erlöskonto-Zuordnung                   ││
 │  │  ❌ 1 Line Item ohne Erlöskonto-Zuordnung                    ││
 │  │                                                              ││
 │  │  [Details anzeigen]                                          ││
 │  └──────────────────────────────────────────────────────────────┘│
 │                                                                  │
-│  [Exportieren]                                                   │
+│  ┌─ Schritt 2: Debitoren-Mapping ─────────────────────────────┐│
+│  │                                                              ││
+│  │  ✅ 28 Kunden mit Debitorennummer                             ││
+│  │  ⚠️  5 Kunden ohne Debitorennummer:                           ││
+│  │                                                              ││
+│  │  ┌──────────────────┬────────────┬──────────────┬──────────┐││
+│  │  │ Kunde            │ Kunden-Nr. │ Debitor-Kto. │          │││
+│  │  ├──────────────────┼────────────┼──────────────┼──────────┤││
+│  │  │ NewCo GmbH        │ CUS412     │ [        ]   │ [Auto]   │││
+│  │  │ StartupX UG       │ CUS418     │ [        ]   │ [Auto]   │││
+│  │  │ Alpha Ltd.         │ CUS423     │ [        ]   │ [Auto]   │││
+│  │  │ Beta Corp          │ CUS425     │ [        ]   │ [Auto]   │││
+│  │  │ Gamma S.A.         │ CUS431     │ [        ]   │ [Auto]   │││
+│  │  └──────────────────┴────────────┴──────────────┴──────────┘││
+│  │                                                              ││
+│  │  [DATEV-Nummern importieren (CSV)]                           ││
+│  │  [Alle fehlenden automatisch vergeben]                       ││
+│  │                                                              ││
+│  │  Nächste freie Nummer: 10029  (Bereich: 10000–69999)         ││
+│  └──────────────────────────────────────────────────────────────┘│
+│                                                                  │
+│  [Exportieren]  (erst aktiv wenn alle Kunden eine Nummer haben)  │
 │                                                                  │
 │  ┌─ Bisherige Exporte ─────────────────────────────────────────┐│
 │  │ Datum       │ Zeitraum     │ Einträge │ Betrag    │         ││
@@ -963,9 +1097,8 @@ Route: `/accounting` oder `/settings/accounting/export`
 
 1. Product-Model erweitern: `tax_rate` (optionaler abweichender Steuersatz)
 2. Neue Django App `backend/apps/accounting/` erstellen
-3. Models: `RevenueAccount`, `TaxAccount`, `RevenueAccountMapping`, `DebitorAccountScheme`, `BookingEntry`, `AccountingExport`
-4. Customer-Model erweitern: `debitor_account_number`
-5. Migrations erstellen (products + accounting + customers)
+3. Models: `RevenueAccount`, `TaxAccount`, `RevenueAccountMapping`, `DebitorAccount`, `DebitorAccountScheme`, `BookingEntry`, `AccountingExport`
+4. Migrations erstellen (products + accounting)
 6. Management-Command: `seed_skr04_accounts` (Standard-Konten + Default-Mappings anlegen)
 7. Tests für Models
 
@@ -974,7 +1107,7 @@ Route: `/accounting` oder `/settings/accounting/export`
 1. `BookingService.resolve_revenue_account()` – Mapping-Auflösung
 2. `BookingService.generate_bookings()` – Buchungssätze pro Rechnung
 3. `BookingService.generate_bookings_for_period()` – Batch
-4. Auto-Assign Debitorennummer bei Finalisierung
+4. Debitor-Nummern-Vergabe: manuell, CSV-Import, Auto-Assign (vor Export)
 5. Tests für Service-Logik
 
 ### Phase 3: DATEV-Export
@@ -1007,10 +1140,10 @@ Route: `/accounting` oder `/settings/accounting/export`
 ### Phase 6: Frontend – Integration
 
 1. Product-Detail/Liste: Steuersatz-Feld (Ausnahme-Konfiguration)
-2. Customer-Detail: Debitor-Konto Feld
-3. Customer-Liste: Debitor-Spalte + Bulk-Assign
-4. Rechnungs-Detail: Buchungssätze anzeigen
-5. Export-Seite: Validierung + DATEV-Download
+2. Customer-Detail: Debitor-Konto anzeigen (read-only, informativ)
+3. Rechnungs-Detail: Buchungssätze anzeigen
+4. Export-Seite: Validierung → Debitoren-Mapping → DATEV-Download
+5. Export-Seite: DATEV-Import für bestehende Debitorennummern
 6. i18n (de/en)
 
 ---
@@ -1049,7 +1182,9 @@ Route: `/accounting` oder `/settings/accounting/export`
         ┌──────────────────▼──────────────────┐
         │         BookingService              │
         │                                      │
-        │  1. Customer → Debitor-Konto (10001) │
+        │  1. Customer → DebitorAccount          │
+        │     (Nummer muss vor Export vergeben   │
+        │      sein, sonst Validierungsfehler)   │
         │  2. classify_customer → domestic/eu   │
         │  3. Pro Line Item:                    │
         │     a. Effektiver USt-Satz bestimmen  │
@@ -1203,9 +1338,12 @@ Route: `/accounting` oder `/settings/accounting/export`
 | `test_generate_bookings_non_eu` | Buchungssätze für Drittland-Rechnung |
 | `test_generate_bookings_storno` | Storno erzeugt Negativbuchungen |
 | `test_generate_bookings_mixed_items` | Rechnung mit Items verschiedener Erlöskonten |
-| `test_debitor_auto_assign` | Automatische Debitor-Vergabe bei Finalisierung |
-| `test_debitor_manual_assign` | Manuelle Debitor-Vergabe |
+| `test_debitor_manual_assign` | Manuelle Debitor-Vergabe vor Export |
+| `test_debitor_auto_assign_bulk` | Auto-Assign für alle fehlenden Nummern |
 | `test_debitor_no_duplicate` | Keine doppelte Vergabe |
+| `test_debitor_csv_import` | DATEV-Bestandsdaten importieren (CSV → Kontonummer) |
+| `test_debitor_import_conflict` | Konflikterkennung bei Import (Nummer bereits vergeben) |
+| `test_export_blocked_without_debitor` | Export nicht möglich ohne Debitorennummer |
 | `test_datev_export_header` | DATEV CSV Header korrekt |
 | `test_datev_export_domestic_row` | Inlandsbuchung korrekt formatiert |
 | `test_datev_export_eu_row` | EU-Buchung mit USt-ID korrekt |
@@ -1222,5 +1360,6 @@ Route: `/accounting` oder `/settings/accounting/export`
 | `test_revenue_accounts_crud` | Erlöskonten anlegen/bearbeiten/löschen |
 | `test_seed_skr04_defaults` | Standard-Konten laden |
 | `test_mapping_crud` | Zuordnungen anlegen/bearbeiten/löschen |
-| `test_debitor_assign_customer` | Debitor-Konto auf Kunden-Detail zuweisen |
-| `test_datev_export_flow` | Export-Seite: Validierung → Download |
+| `test_datev_export_debitor_mapping` | Export-Seite: Debitoren zuweisen vor Export |
+| `test_datev_export_import_csv` | DATEV-Nummern per CSV importieren |
+| `test_datev_export_flow` | Export-Seite: Validierung → Mapping → Download |
