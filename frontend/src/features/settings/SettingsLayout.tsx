@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { User, Settings, Puzzle, Users, FileUp, Landmark } from 'lucide-react'
+import { User, Settings, Puzzle, Users, FileUp, Landmark, BookOpen } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { UserSettings } from './UserSettings'
 import { TeamSettingsTabs } from './TeamSettingsTabs'
@@ -9,6 +9,7 @@ import { InvoiceSettingsTabs } from './InvoiceSettingsTabs'
 import { GeneralSettingsTabs } from './GeneralSettingsTabs'
 import { IntegrationSettingsTabs } from './IntegrationSettingsTabs'
 import { BankingSettings } from './BankingSettings'
+import { AccountingSettings } from './AccountingSettings'
 
 export function SettingsLayout() {
   const { t } = useTranslation()
@@ -21,6 +22,7 @@ export function SettingsLayout() {
     if (location.pathname.startsWith('/settings/team')) return 'team'
     if (location.pathname.startsWith('/settings/invoices')) return 'invoices'
     if (location.pathname.startsWith('/settings/banking')) return 'banking'
+    if (location.pathname.startsWith('/settings/accounting')) return 'accounting'
     if (location.pathname.startsWith('/settings/integrations')) return 'integrations'
     if (location.pathname.startsWith('/settings/general')) return 'general'
     return 'user'
@@ -44,6 +46,9 @@ export function SettingsLayout() {
         break
       case 'banking':
         navigate('/settings/banking')
+        break
+      case 'accounting':
+        navigate('/settings/accounting')
         break
       default:
         navigate('/settings')
@@ -69,6 +74,7 @@ export function SettingsLayout() {
             <TabsTrigger value="invoices"><FileUp className="mr-1.5 h-4 w-4" />{t('settings.tabs.invoices')}</TabsTrigger>
           )}
           <TabsTrigger value="banking"><Landmark className="mr-1.5 h-4 w-4" />{t('settings.tabs.banking')}</TabsTrigger>
+          <TabsTrigger value="accounting"><BookOpen className="mr-1.5 h-4 w-4" />{t('settings.tabs.accounting')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="user">
@@ -97,6 +103,10 @@ export function SettingsLayout() {
 
         <TabsContent value="banking">
           <BankingSettings />
+        </TabsContent>
+
+        <TabsContent value="accounting">
+          <AccountingSettings />
         </TabsContent>
       </Tabs>
     </div>

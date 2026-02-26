@@ -21,6 +21,7 @@ const PRODUCTS_QUERY = gql`
           id
           name
         }
+        taxRate
         currentPrice {
           id
           price
@@ -53,6 +54,7 @@ interface Product {
   sku: string | null
   description: string | null
   type: string
+  taxRate: string | null
   isActive: boolean
   syncedAt: string | null
   category: ProductCategory | null
@@ -214,6 +216,9 @@ export function ProductList() {
                       <SortIcon field="price" />
                     </div>
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('products.taxRate')}
+                  </th>
                   <th
                     className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
                     onClick={() => handleSort('isActive')}
@@ -260,6 +265,9 @@ export function ProductList() {
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       {formatCurrency(product.currentPrice?.price)}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                      {product.taxRate ? `${product.taxRate}%` : <span className="text-gray-300">{t('products.taxRateDefault')}</span>}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
                       <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
