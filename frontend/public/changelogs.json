@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.8.6",
+    "date": "2026-02-26",
+    "title": "Fix VAT sentence defaults to English",
+    "description": "Existing German VAT sentence defaults are now migrated to English, matching the intended language for foreign customer invoices.",
+    "type": "bugfix",
+    "details": [
+      "Added data migration to update existing CompanyLegalData rows from German to English VAT sentences"
+    ]
+  },
+  {
     "version": "2.8.5",
     "date": "2026-02-26",
     "title": "Only import closed-won HubSpot deals",
