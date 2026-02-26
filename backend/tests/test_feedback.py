@@ -166,13 +166,17 @@ class TestGitHubFeedbackServiceCreateFeedback:
 
     @patch("apps.core.github_feedback.GitHubFeedbackService._upload_screenshot")
     @patch("apps.core.github_feedback.httpx.post")
-    def test_screenshot_embedded_in_body(self, mock_post, mock_upload, configured_settings):
+    def test_screenshot_added_as_comment(self, mock_post, mock_upload, configured_settings):
         mock_upload.return_value = "https://raw.githubusercontent.com/owner/repo/main/.feedback/screenshots/test.png"
-        mock_response = Mock()
-        mock_response.is_success = True
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"number": 1, "html_url": "https://github.com/owner/repo/issues/1"}
-        mock_post.return_value = mock_response
+        # First call = issue creation, second call = comment with screenshot
+        issue_response = Mock()
+        issue_response.is_success = True
+        issue_response.status_code = 201
+        issue_response.json.return_value = {"number": 1, "html_url": "https://github.com/owner/repo/issues/1"}
+        comment_response = Mock()
+        comment_response.is_success = True
+        comment_response.status_code = 201
+        mock_post.side_effect = [issue_response, comment_response]
 
         service = GitHubFeedbackService()
         service.create_feedback(
@@ -182,36 +186,20 @@ class TestGitHubFeedbackServiceCreateFeedback:
             screenshot="data:image/png;base64,abc123",
         )
 
-        body = mock_post.call_args[1]["json"]["body"]
-        assert "![Screenshot](https://raw.githubusercontent.com/" in body
-        assert "desc" in body
+        # Issue body should NOT contain screenshot (it goes in a comment)
+        issue_body = mock_post.call_args_list[0][1]["json"]["body"]
+        assert "![Screenshot]" not in issue_body
+        assert issue_body == "desc"
+
+        # Second call should be the comment with screenshot
+        assert mock_post.call_count == 2
+        comment_body = mock_post.call_args_list[1][1]["json"]["body"]
+        assert "![Screenshot](https://raw.githubusercontent.com/" in comment_body
         mock_upload.assert_called_once_with("data:image/png;base64,abc123")
 
     @patch("apps.core.github_feedback.GitHubFeedbackService._upload_screenshot")
     @patch("apps.core.github_feedback.httpx.post")
-    def test_screenshot_without_data_prefix(self, mock_post, mock_upload, configured_settings):
-        mock_upload.return_value = "https://raw.githubusercontent.com/owner/repo/main/.feedback/screenshots/test.png"
-        mock_response = Mock()
-        mock_response.is_success = True
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"number": 1, "html_url": "https://github.com/owner/repo/issues/1"}
-        mock_post.return_value = mock_response
-
-        service = GitHubFeedbackService()
-        service.create_feedback(
-            title="Visual bug",
-            description="desc",
-            feedback_type="bug",
-            screenshot="abc123base64data",
-        )
-
-        body = mock_post.call_args[1]["json"]["body"]
-        assert "![Screenshot](https://raw.githubusercontent.com/" in body
-        mock_upload.assert_called_once_with("abc123base64data")
-
-    @patch("apps.core.github_feedback.GitHubFeedbackService._upload_screenshot")
-    @patch("apps.core.github_feedback.httpx.post")
-    def test_screenshot_upload_failure_omits_image(self, mock_post, mock_upload, configured_settings):
+    def test_screenshot_upload_failure_still_creates_issue(self, mock_post, mock_upload, configured_settings):
         mock_upload.return_value = None
         mock_response = Mock()
         mock_response.is_success = True
@@ -220,13 +208,17 @@ class TestGitHubFeedbackServiceCreateFeedback:
         mock_post.return_value = mock_response
 
         service = GitHubFeedbackService()
-        service.create_feedback(
+        result = service.create_feedback(
             title="Visual bug",
             description="desc",
             feedback_type="bug",
             screenshot="abc123base64data",
         )
 
+        # Issue should still be created successfully
+        assert result.url == "https://github.com/owner/repo/issues/1"
+        # Only one POST call (issue creation), no comment since upload failed
+        assert mock_post.call_count == 1
         body = mock_post.call_args[1]["json"]["body"]
         assert "![Screenshot]" not in body
         assert body == "desc"

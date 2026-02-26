@@ -40,6 +40,14 @@ class GitHubFeedbackService(FeedbackService):
     def is_configured(self) -> bool:
         return bool(self.repo and self.token)
 
+    @property
+    def _headers(self) -> dict:
+        return {
+            "Authorization": f"Bearer {self.token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
     def create_feedback(
         self,
         *,
@@ -51,24 +59,13 @@ class GitHubFeedbackService(FeedbackService):
         if not self.is_configured():
             raise GitHubFeedbackError("GitHub feedback is not configured")
 
-        body = description
-        if screenshot:
-            screenshot_url = self._upload_screenshot(screenshot)
-            if screenshot_url:
-                body += f"\n\n### Screenshot\n\n![Screenshot]({screenshot_url})"
-
         label = LABEL_MAP.get(feedback_type, "feedback")
 
+        # Create the issue first (without screenshot) so it always succeeds
         payload = {
             "title": title,
-            "body": body,
+            "body": description,
             "labels": [label],
-        }
-
-        headers = {
-            "Authorization": f"Bearer {self.token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
         }
 
         url = f"{self.API_URL}/repos/{self.repo}/issues"
@@ -77,7 +74,7 @@ class GitHubFeedbackService(FeedbackService):
             response = httpx.post(
                 url,
                 json=payload,
-                headers=headers,
+                headers=self._headers,
                 timeout=self.TIMEOUT,
             )
         except httpx.TimeoutException:
@@ -101,46 +98,88 @@ class GitHubFeedbackService(FeedbackService):
             )
 
         data = response.json()
+        issue_number = data.get("number")
         issue_url = data.get("html_url", "")
 
-        logger.info("Created GitHub issue #%s in %s", data.get("number"), self.repo)
+        logger.info("Created GitHub issue #%s in %s", issue_number, self.repo)
+
+        # Attach screenshot as a separate comment (non-blocking)
+        if screenshot and issue_number:
+            self._add_screenshot_comment(issue_number, screenshot)
 
         return FeedbackResult(url=issue_url)
+
+    def _add_screenshot_comment(self, issue_number: int, screenshot: str) -> None:
+        """Upload screenshot and add it as a comment on the issue."""
+        screenshot_url = self._upload_screenshot(screenshot)
+        if not screenshot_url:
+            return
+
+        comment_body = f"### Screenshot\n\n![Screenshot]({screenshot_url})"
+        url = f"{self.API_URL}/repos/{self.repo}/issues/{issue_number}/comments"
+
+        try:
+            response = httpx.post(
+                url,
+                json={"body": comment_body},
+                headers=self._headers,
+                timeout=self.TIMEOUT,
+            )
+            if not response.is_success:
+                logger.warning(
+                    "Failed to add screenshot comment to issue #%s: HTTP %s – %s",
+                    issue_number,
+                    response.status_code,
+                    response.text[:500],
+                )
+        except Exception as e:
+            logger.warning("Failed to add screenshot comment to issue #%s: %s", issue_number, e)
 
     def _upload_screenshot(self, screenshot: str) -> Optional[str]:
         """Upload screenshot to the repo and return the raw URL."""
         try:
             img_data = screenshot
-            if "," in img_data:
+            # Detect MIME type from data URL prefix
+            ext = "png"
+            if img_data.startswith("data:"):
+                prefix = img_data.split(",", 1)[0]
+                if "jpeg" in prefix or "jpg" in prefix:
+                    ext = "jpg"
                 img_data = img_data.split(",", 1)[1]
+
             # Validate it's valid base64
             base64.b64decode(img_data)
 
-            filename = f".feedback/screenshots/{uuid.uuid4().hex}.png"
+            filename = f".feedback/screenshots/{uuid.uuid4().hex}.{ext}"
             url = f"{self.API_URL}/repos/{self.repo}/contents/{filename}"
 
-            headers = {
-                "Authorization": f"Bearer {self.token}",
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            }
-
             payload = {
-                "message": f"Upload feedback screenshot",
+                "message": "Upload feedback screenshot",
                 "content": img_data,
                 "branch": "main",
             }
 
             response = httpx.put(
-                url, json=payload, headers=headers, timeout=self.TIMEOUT
+                url, json=payload, headers=self._headers, timeout=self.TIMEOUT
             )
 
             if not response.is_success:
-                logger.warning("Failed to upload screenshot to GitHub: %s", response.text)
+                logger.error(
+                    "Screenshot upload failed: HTTP %s – %s "
+                    "(token may need 'contents:write' permission)",
+                    response.status_code,
+                    response.text[:500],
+                )
                 return None
 
             data = response.json()
-            return data.get("content", {}).get("download_url")
+            download_url = data.get("content", {}).get("download_url")
+            if not download_url:
+                logger.error(
+                    "Screenshot uploaded but no download_url in response: %s",
+                    data.get("content", {}).keys(),
+                )
+            return download_url
         except Exception as e:
-            logger.warning("Failed to upload screenshot: %s", e)
+            logger.error("Screenshot upload failed: %s", e)
             return None
