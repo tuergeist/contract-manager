@@ -165,7 +165,7 @@ class TestGitHubFeedbackServiceCreateFeedback:
             service.create_feedback(title="t", description="d", feedback_type="bug")
 
     @patch("apps.core.github_feedback.httpx.post")
-    def test_screenshot_skipped_with_debug_log(self, mock_post, configured_settings, caplog):
+    def test_screenshot_embedded_in_body(self, mock_post, configured_settings):
         mock_response = Mock()
         mock_response.is_success = True
         mock_response.status_code = 201
@@ -173,17 +173,35 @@ class TestGitHubFeedbackServiceCreateFeedback:
         mock_post.return_value = mock_response
 
         service = GitHubFeedbackService()
-        with caplog.at_level(logging.DEBUG, logger="apps.core.github_feedback"):
-            service.create_feedback(
-                title="Visual bug",
-                description="desc",
-                feedback_type="bug",
-                screenshot="data:image/png;base64,abc123",
-            )
+        service.create_feedback(
+            title="Visual bug",
+            description="desc",
+            feedback_type="bug",
+            screenshot="data:image/png;base64,abc123",
+        )
 
-        assert "Screenshot provided but not supported" in caplog.text
-        # Only one API call (no upload)
-        mock_post.assert_called_once()
+        body = mock_post.call_args[1]["json"]["body"]
+        assert "![Screenshot](data:image/png;base64,abc123)" in body
+        assert "desc" in body
+
+    @patch("apps.core.github_feedback.httpx.post")
+    def test_screenshot_without_data_prefix(self, mock_post, configured_settings):
+        mock_response = Mock()
+        mock_response.is_success = True
+        mock_response.status_code = 201
+        mock_response.json.return_value = {"number": 1, "html_url": "https://github.com/owner/repo/issues/1"}
+        mock_post.return_value = mock_response
+
+        service = GitHubFeedbackService()
+        service.create_feedback(
+            title="Visual bug",
+            description="desc",
+            feedback_type="bug",
+            screenshot="abc123base64data",
+        )
+
+        body = mock_post.call_args[1]["json"]["body"]
+        assert "![Screenshot](data:image/png;base64,abc123base64data)" in body
 
     @patch("apps.core.github_feedback.httpx.post")
     def test_handles_401_error(self, mock_post, configured_settings):

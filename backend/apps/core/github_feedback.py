@@ -49,14 +49,19 @@ class GitHubFeedbackService(FeedbackService):
         if not self.is_configured():
             raise GitHubFeedbackError("GitHub feedback is not configured")
 
+        body = description
         if screenshot:
-            logger.debug("Screenshot provided but not supported by GitHub feedback backend, skipping")
+            # Embed screenshot as base64 data URL image in markdown
+            img_data = screenshot
+            if not img_data.startswith("data:"):
+                img_data = f"data:image/png;base64,{img_data}"
+            body += f"\n\n### Screenshot\n\n![Screenshot]({img_data})"
 
         label = LABEL_MAP.get(feedback_type, "feedback")
 
         payload = {
             "title": title,
-            "body": description,
+            "body": body,
             "labels": [label],
         }
 
