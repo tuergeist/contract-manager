@@ -1,5 +1,6 @@
 import { ApolloClient, InMemoryCache, createHttpLink, from } from '@apollo/client'
 import { setContext } from '@apollo/client/link/context'
+import { onError } from '@apollo/client/link/error'
 
 const httpLink = createHttpLink({
   uri: '/graphql',
@@ -16,8 +17,22 @@ const authLink = setContext((_, { headers }) => {
   }
 })
 
+const errorLink = onError(({ graphQLErrors }) => {
+  if (!graphQLErrors) return
+
+  const hasAuthError = graphQLErrors.some(
+    (err) => err.message === 'Authentication required'
+  )
+
+  if (hasAuthError && localStorage.getItem('auth_token')) {
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('refresh_token')
+    window.location.href = '/login'
+  }
+})
+
 export const apolloClient = new ApolloClient({
-  link: from([authLink, httpLink]),
+  link: from([errorLink, authLink, httpLink]),
   cache: new InMemoryCache(),
   defaultOptions: {
     watchQuery: {
