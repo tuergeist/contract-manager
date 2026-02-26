@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.8.10",
+    "date": "2026-02-26",
+    "title": "Configurable Banking Fee Tolerance",
+    "description": "Invoice matching now uses configurable tolerance settings instead of a hardcoded 3% threshold, and the counterparty-to-customer linking flow is streamlined.",
+    "type": "feature",
+    "details": [
+      "Added Banking settings tab (Settings > Banking) to configure fixed and percentage fee tolerance for invoice matching",
+      "Transaction match sheet now uses tenant-configurable tolerance instead of hardcoded 3%",
+      "Differences within tolerance are shown as 'Fully matched' with the actual amount displayed",
+      "Unmatched-only toggle now defaults to on in the transaction match sheet",
+      "Counterparty link-to-customer dialog auto-populates search with the first word of the counterparty name",
+      "Added icons to all settings tab triggers matching the sidebar navigation"
+    ]
+  },
+  {
     "version": "2.8.8",
     "date": "2026-02-26",
     "title": "Webhook Event Log & Invoice Price Display",
