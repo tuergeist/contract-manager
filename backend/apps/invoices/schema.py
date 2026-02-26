@@ -146,8 +146,8 @@ class CompanyLegalDataInput:
     website: str = ""
     share_capital: str = ""
     default_tax_rate: Decimal = Decimal("19.00")
-    vat_text_eu: str = "Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge gem. § 13b UStG)"
-    vat_text_non_eu: str = "Umsatzsteuer nicht geschuldet gemäß § 3a Abs. 2 UStG"
+    vat_text_eu: str = "Reverse Charge – VAT liability transferred to the recipient (§ 13b UStG)"
+    vat_text_non_eu: str = "VAT not applicable – place of supply rules (§ 3a(2) UStG)"
 
 
 @strawberry.type

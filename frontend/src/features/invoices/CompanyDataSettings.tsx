@@ -85,8 +85,8 @@ const emptyForm: FormData = {
   website: '',
   shareCapital: '',
   defaultTaxRate: '19.00',
-  vatTextEu: 'Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge gem. § 13b UStG)',
-  vatTextNonEu: 'Umsatzsteuer nicht geschuldet gemäß § 3a Abs. 2 UStG',
+  vatTextEu: 'Reverse Charge – VAT liability transferred to the recipient (§ 13b UStG)',
+  vatTextNonEu: 'VAT not applicable – place of supply rules (§ 3a(2) UStG)',
 }
 
 interface CompanyDataSettingsProps {
@@ -125,8 +125,8 @@ export function CompanyDataSettings({ showHeader = true }: CompanyDataSettingsPr
         website: d.website || '',
         shareCapital: d.shareCapital || '',
         defaultTaxRate: d.defaultTaxRate || '19.00',
-        vatTextEu: d.vatTextEu ?? 'Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge gem. § 13b UStG)',
-        vatTextNonEu: d.vatTextNonEu ?? 'Umsatzsteuer nicht geschuldet gemäß § 3a Abs. 2 UStG',
+        vatTextEu: d.vatTextEu ?? 'Reverse Charge – VAT liability transferred to the recipient (§ 13b UStG)',
+        vatTextNonEu: d.vatTextNonEu ?? 'VAT not applicable – place of supply rules (§ 3a(2) UStG)',
       })
     }
   }, [data])

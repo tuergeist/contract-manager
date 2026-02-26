@@ -214,10 +214,10 @@ def _get_vat_sentence(classification: str, legal_data) -> str:
         return ""
     if classification == "eu":
         text = getattr(legal_data, "vat_text_eu", "") or ""
-        return text or "Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge gem. § 13b UStG)"
+        return text or "Reverse Charge – VAT liability transferred to the recipient (§ 13b UStG)"
     # non_eu
     text = getattr(legal_data, "vat_text_non_eu", "") or ""
-    return text or "Umsatzsteuer nicht geschuldet gemäß § 3a Abs. 2 UStG"
+    return text or "VAT not applicable – place of supply rules (§ 3a(2) UStG)"
 
 
 def _get_company_language(tenant) -> str:

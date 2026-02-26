@@ -110,12 +110,12 @@ class CompanyLegalData(TimestampedModel):
     # Configurable VAT sentences for foreign customers
     vat_text_eu = models.TextField(
         blank=True,
-        default="Steuerschuldnerschaft des Leistungsempfängers (Reverse Charge gem. § 13b UStG)",
+        default="Reverse Charge – VAT liability transferred to the recipient (§ 13b UStG)",
         help_text="VAT sentence for EU customers (reverse charge)",
     )
     vat_text_non_eu = models.TextField(
         blank=True,
-        default="Umsatzsteuer nicht geschuldet gemäß § 3a Abs. 2 UStG",
+        default="VAT not applicable – place of supply rules (§ 3a(2) UStG)",
         help_text="VAT sentence for non-EU customers (place of supply)",
     )
 
