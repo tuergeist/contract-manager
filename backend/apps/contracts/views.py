@@ -1,5 +1,6 @@
 """REST views for contract attachments and export."""
 import io
+from datetime import date
 from decimal import Decimal
 
 from django.http import HttpResponse, JsonResponse, FileResponse
@@ -179,6 +180,7 @@ class ContractExportView(View):
         }
 
         wb = Workbook()
+        today = date.today()
         currency = tenant.currency
         currency_format = f'#,##0.00 "{currency}"'
 
@@ -237,7 +239,8 @@ class ContractExportView(View):
             for item in contract.items.all():
                 if item.is_one_off:
                     continue
-                monthly += item.monthly_unit_price * item.quantity
+                price_periods = list(item.price_periods.all())
+                monthly += item.get_price_at_cached(today, price_periods) * item.quantity
 
             arr = monthly * 12
 
@@ -336,7 +339,11 @@ class ContractExportView(View):
                     or contract.order_confirmation_number
                     or ""
                 )
-                total_amount = item.unit_price * item.quantity
+                price_periods = list(item.price_periods.all())
+                current_price = item.get_price_at_cached(today, price_periods, normalize_to_monthly=False)
+                matching = [pp for pp in price_periods if pp.valid_from <= today and (pp.valid_to is None or pp.valid_to >= today)]
+                current_period = max(matching, key=lambda pp: pp.valid_from).price_period if matching else item.price_period
+                total_amount = current_price * item.quantity
 
                 ws_details.cell(row=row, column=1, value=customer_name)
                 ws_details.cell(
@@ -365,7 +372,7 @@ class ContractExportView(View):
                 ws_details.cell(row=row, column=15, value=item.quantity)
 
                 pc = ws_details.cell(
-                    row=row, column=16, value=float(item.unit_price)
+                    row=row, column=16, value=float(current_price)
                 )
                 pc.number_format = currency_format
 
@@ -373,7 +380,7 @@ class ContractExportView(View):
                     row=row,
                     column=17,
                     value=price_period_names.get(
-                        item.price_period, item.price_period
+                        current_period, current_period
                     ),
                 )
 
