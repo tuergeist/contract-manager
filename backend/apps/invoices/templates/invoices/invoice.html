@@ -409,11 +409,10 @@
                     {% else %}
                         {{ item.description|linebreaksbr }}
                     {% endif %}
-                    {% if item.is_prorated %}<br><span class="prorated">{{ labels.prorated }} ({{ item.prorate_factor|money:language }})</span>{% endif %}
                     {% if item.is_one_off %}<br><span class="prorated">{{ labels.one_off }}</span>{% endif %}
                 </td>
                 <td class="quantity">{{ item.quantity }}</td>
-                <td class="unit-price">{{ currency_symbol }}{{ item.unit_price|money:language }}</td>
+                <td class="unit-price">{{ currency_symbol }}{{ item.unit_price|money:language }}{% if not item.is_one_off %}<span class="prorated"> {{ labels.per_month }}</span>{% endif %}</td>
                 <td>{{ currency_symbol }}{{ item.amount|money:language }}</td>
             </tr>
             {% endfor %}
