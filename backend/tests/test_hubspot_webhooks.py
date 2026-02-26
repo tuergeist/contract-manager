@@ -8,7 +8,7 @@ import pytest
 from django.test import Client as HttpClient
 
 from apps.core.context import Context
-from apps.customers.models import Customer
+from apps.customers.models import Customer, WebhookEventLog
 from apps.customers.tasks import process_hubspot_webhook_event, sync_all_hubspot_tenants
 from apps.products.models import Product
 from apps.tenants.models import Tenant, User
@@ -461,3 +461,175 @@ class TestWebhookSettingsGraphQL:
         settings = result.data["hubspotSettings"]
         assert settings["portalId"] is None
         assert settings["syncMode"] is None
+
+
+class TestWebhookEventLog:
+    """Tests for WebhookEventLog creation and GraphQL query."""
+
+    def test_successful_event_creates_log(self, tenant_with_webhooks):
+        company_data = {
+            "id": "800",
+            "properties": {
+                "name": "Logged Corp",
+                "address": "",
+                "city": "",
+                "zip": "",
+                "country_list": "",
+            },
+        }
+        event = {
+            "subscriptionType": "company.creation",
+            "objectId": 800,
+            "portalId": 12345678,
+        }
+
+        with patch.object(
+            __import__("apps.customers.hubspot", fromlist=["HubSpotService"]).HubSpotService,
+            "fetch_company",
+            return_value=company_data,
+        ):
+            process_hubspot_webhook_event(event, tenant_with_webhooks.id)
+
+        log = WebhookEventLog.objects.get(tenant=tenant_with_webhooks, object_id="800")
+        assert log.subscription_type == "company.creation"
+        assert log.object_kind == "company"
+        assert log.status == "processed"
+        assert log.result == "company_synced"
+        assert log.error_message == ""
+
+    def test_failed_event_creates_log(self, tenant_with_webhooks):
+        event = {
+            "subscriptionType": "company.creation",
+            "objectId": 900,
+            "portalId": 12345678,
+        }
+
+        with patch.object(
+            __import__("apps.customers.hubspot", fromlist=["HubSpotService"]).HubSpotService,
+            "fetch_company",
+            side_effect=Exception("API timeout"),
+        ):
+            with pytest.raises(Exception, match="API timeout"):
+                process_hubspot_webhook_event(event, tenant_with_webhooks.id)
+
+        log = WebhookEventLog.objects.get(tenant=tenant_with_webhooks, object_id="900")
+        assert log.status == "failed"
+        assert "API timeout" in log.error_message
+
+    def test_ignored_event_creates_log(self, tenant_with_webhooks):
+        event = {
+            "subscriptionType": "contact.creation",
+            "objectId": 1000,
+            "portalId": 12345678,
+        }
+
+        result = process_hubspot_webhook_event(event, tenant_with_webhooks.id)
+
+        assert result == "ignored"
+        log = WebhookEventLog.objects.get(tenant=tenant_with_webhooks, object_id="1000")
+        assert log.status == "ignored"
+        assert log.object_kind == ""
+
+    def test_deletion_event_creates_log(self, tenant_with_webhooks):
+        Customer.objects.create(
+            tenant=tenant_with_webhooks,
+            hubspot_id="1100",
+            name="Delete Me",
+            is_active=True,
+        )
+        event = {
+            "subscriptionType": "company.deletion",
+            "objectId": 1100,
+            "portalId": 12345678,
+        }
+
+        result = process_hubspot_webhook_event(event, tenant_with_webhooks.id)
+
+        assert result == "company_deleted"
+        log = WebhookEventLog.objects.get(tenant=tenant_with_webhooks, object_id="1100")
+        assert log.status == "processed"
+        assert log.result == "company_deleted"
+
+
+WEBHOOK_EVENT_LOGS_QUERY = """
+    query WebhookEventLogs($limit: Int) {
+        webhookEventLogs(limit: $limit) {
+            id
+            subscriptionType
+            objectId
+            objectKind
+            status
+            result
+            errorMessage
+            receivedAt
+        }
+    }
+"""
+
+
+class TestWebhookEventLogGraphQL:
+    """Tests for the webhookEventLogs query."""
+
+    @pytest.fixture
+    def tenant(self, db):
+        return Tenant.objects.create(
+            name="EventLog Tenant",
+            is_active=True,
+            hubspot_config={"api_key": "test-key"},
+        )
+
+    @pytest.fixture
+    def admin_user(self, tenant):
+        return User.objects.create_user(
+            email="admin@eventlog-test.local",
+            password="admin123",
+            tenant=tenant,
+            is_admin=True,
+        )
+
+    def test_returns_event_logs(self, admin_user, tenant):
+        now = datetime.now(timezone.utc)
+        WebhookEventLog.objects.create(
+            tenant=tenant,
+            subscription_type="company.creation",
+            object_id="42",
+            object_kind="company",
+            status=WebhookEventLog.Status.PROCESSED,
+            result="company_synced",
+            received_at=now,
+        )
+
+        ctx = _make_context(admin_user)
+        result = _run_graphql(WEBHOOK_EVENT_LOGS_QUERY, {"limit": 10}, ctx)
+        assert result.errors is None
+
+        logs = result.data["webhookEventLogs"]
+        assert len(logs) == 1
+        assert logs[0]["subscriptionType"] == "company.creation"
+        assert logs[0]["objectId"] == "42"
+        assert logs[0]["objectKind"] == "company"
+        assert logs[0]["status"] == "processed"
+
+    def test_returns_empty_when_no_logs(self, admin_user):
+        ctx = _make_context(admin_user)
+        result = _run_graphql(WEBHOOK_EVENT_LOGS_QUERY, {"limit": 10}, ctx)
+        assert result.errors is None
+        assert result.data["webhookEventLogs"] == []
+
+    def test_respects_limit(self, admin_user, tenant):
+        now = datetime.now(timezone.utc)
+        for i in range(5):
+            WebhookEventLog.objects.create(
+                tenant=tenant,
+                subscription_type="company.creation",
+                object_id=str(i),
+                object_kind="company",
+                status=WebhookEventLog.Status.PROCESSED,
+                result="company_synced",
+                received_at=now,
+            )
+
+        ctx = _make_context(admin_user)
+        result = _run_graphql(WEBHOOK_EVENT_LOGS_QUERY, {"limit": 3}, ctx)
+        assert result.errors is None
+        assert len(result.data["webhookEventLogs"]) == 3

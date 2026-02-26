@@ -129,6 +129,56 @@ class CustomerAttachment(TenantModel):
         super().delete(*args, **kwargs)
 
 
+class WebhookEventLog(TenantModel):
+    """Log entry for a processed HubSpot webhook event."""
+
+    class Status(models.TextChoices):
+        PROCESSED = "processed", "Processed"
+        FAILED = "failed", "Failed"
+        IGNORED = "ignored", "Ignored"
+
+    subscription_type = models.CharField(
+        max_length=100,
+        help_text="HubSpot event type, e.g. company.creation",
+    )
+    object_id = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="HubSpot object ID",
+    )
+    object_kind = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Object kind: company, product, or deal",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PROCESSED,
+    )
+    result = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Processing result code, e.g. company_synced",
+    )
+    error_message = models.TextField(
+        blank=True,
+        help_text="Error details if status is failed",
+    )
+    received_at = models.DateTimeField(
+        help_text="When the webhook event was received",
+    )
+
+    class Meta:
+        ordering = ["-received_at"]
+        indexes = [
+            models.Index(fields=["tenant", "-received_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.subscription_type} ({self.status})"
+
+
 class CustomerLink(TenantModel):
     """A named link attached to a customer."""
 

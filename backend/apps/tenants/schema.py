@@ -181,6 +181,19 @@ class HubSpotSettings:
 
 
 @strawberry.type
+class WebhookEventLogType:
+    """A single webhook event log entry."""
+    id: int
+    subscription_type: str
+    object_id: str
+    object_kind: str
+    status: str
+    result: str
+    error_message: str
+    received_at: str
+
+
+@strawberry.type
 class HubSpotTestResult:
     """Result of HubSpot connection test."""
 
@@ -537,6 +550,33 @@ class TenantQuery:
             sync_mode=config.get("sync_mode"),
             webhook_last_received=config.get("webhook_last_received"),
         )
+
+    @strawberry.field
+    def webhook_event_logs(
+        self, info: Info[Context, None], limit: int = 20
+    ) -> list[WebhookEventLogType]:
+        """Get recent webhook event logs for the current tenant."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return []
+
+        from apps.customers.models import WebhookEventLog
+
+        limit = min(limit, 100)
+        qs = WebhookEventLog.objects.filter(tenant=user.tenant)[:limit]
+        return [
+            WebhookEventLogType(
+                id=e.id,
+                subscription_type=e.subscription_type,
+                object_id=e.object_id,
+                object_kind=e.object_kind,
+                status=e.status,
+                result=e.result,
+                error_message=e.error_message,
+                received_at=e.received_at.isoformat(),
+            )
+            for e in qs
+        ]
 
     @strawberry.field
     def activation_checklist_settings(

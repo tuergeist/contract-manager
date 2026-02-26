@@ -150,16 +150,31 @@ def process_hubspot_webhook_event(event: dict, tenant_id: int) -> str:
     Fetches the full record from HubSpot and upserts it locally.
     """
     from apps.customers.hubspot import HubSpotError, HubSpotService
-    from apps.customers.models import Customer
+    from apps.customers.models import Customer, WebhookEventLog
     from apps.products.models import Product
     from apps.tenants.models import Tenant
 
     subscription_type = event.get("subscriptionType", "")
     object_id = str(event.get("objectId", ""))
+    received_at = datetime.now(timezone.utc)
 
     object_kind = _EVENT_TYPE_MAP.get(subscription_type)
     if not object_kind:
         logger.debug("Ignoring unsupported webhook event type: %s", subscription_type)
+        # Log ignored events if we can find the tenant
+        try:
+            tenant = Tenant.objects.get(id=tenant_id, is_active=True)
+            WebhookEventLog.objects.create(
+                tenant=tenant,
+                subscription_type=subscription_type,
+                object_id=object_id,
+                object_kind="",
+                status=WebhookEventLog.Status.IGNORED,
+                result="ignored",
+                received_at=received_at,
+            )
+        except Tenant.DoesNotExist:
+            pass
         return "ignored"
 
     try:
@@ -171,6 +186,39 @@ def process_hubspot_webhook_event(event: dict, tenant_id: int) -> str:
     service = HubSpotService(tenant)
 
     is_deletion = subscription_type.endswith(".deletion")
+
+    try:
+        result = _process_event(
+            service, tenant, subscription_type, object_id, object_kind, is_deletion
+        )
+        WebhookEventLog.objects.create(
+            tenant=tenant,
+            subscription_type=subscription_type,
+            object_id=object_id,
+            object_kind=object_kind,
+            status=WebhookEventLog.Status.PROCESSED,
+            result=result,
+            received_at=received_at,
+        )
+        return result
+    except Exception as e:
+        WebhookEventLog.objects.create(
+            tenant=tenant,
+            subscription_type=subscription_type,
+            object_id=object_id,
+            object_kind=object_kind,
+            status=WebhookEventLog.Status.FAILED,
+            result="error",
+            error_message=str(e),
+            received_at=received_at,
+        )
+        raise
+
+
+def _process_event(service, tenant, subscription_type, object_id, object_kind, is_deletion):
+    """Process a single webhook event and return a result string."""
+    from apps.customers.models import Customer
+    from apps.products.models import Product
 
     if object_kind == "company":
         if is_deletion:
@@ -186,7 +234,6 @@ def process_hubspot_webhook_event(event: dict, tenant_id: int) -> str:
 
         company_data = service.fetch_company(object_id)
         if company_data is None:
-            # Record deleted before we could fetch it
             customer = Customer.objects.filter(
                 tenant=tenant, hubspot_id=object_id
             ).first()

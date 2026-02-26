@@ -188,6 +188,21 @@ const SAVE_WEBHOOK_SETTINGS = gql`
   }
 `
 
+const WEBHOOK_EVENT_LOGS_QUERY = gql`
+  query WebhookEventLogs($limit: Int) {
+    webhookEventLogs(limit: $limit) {
+      id
+      subscriptionType
+      objectId
+      objectKind
+      status
+      result
+      errorMessage
+      receivedAt
+    }
+  }
+`
+
 const M365_SETTINGS_QUERY = gql`
   query M365Settings {
     m365Settings {
@@ -278,6 +293,8 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
   const { data: contactLabelsData } = useQuery(HUBSPOT_CONTACT_LABELS_QUERY)
   const [setBillingContactLabel] = useMutation(SET_BILLING_CONTACT_LABEL)
   const [saveWebhookSettings, { loading: savingWebhook }] = useMutation(SAVE_WEBHOOK_SETTINGS)
+
+  const { data: webhookLogsData } = useQuery(WEBHOOK_EVENT_LOGS_QUERY, { variables: { limit: 20 } })
 
   const [webhookPortalId, setWebhookPortalId] = useState('')
   const [webhookMessage, setWebhookMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -1133,6 +1150,48 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
                       <p className="text-xs text-gray-400">
                         {t('settings.hubspot.webhookLastReceived')}: {formatDateTime(hubspotSettings.webhookLastReceived)}
                       </p>
+                    )}
+
+                    {/* Webhook Event Log */}
+                    {webhookLogsData?.webhookEventLogs && webhookLogsData.webhookEventLogs.length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-xs font-medium text-gray-700 mb-2">{t('settings.hubspot.webhookEventLog')}</h4>
+                        <div className="overflow-x-auto rounded border border-gray-200">
+                          <table className="min-w-full text-xs">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-3 py-1.5 text-left font-medium text-gray-500">{t('settings.hubspot.webhookEventTime')}</th>
+                                <th className="px-3 py-1.5 text-left font-medium text-gray-500">{t('settings.hubspot.webhookEventType')}</th>
+                                <th className="px-3 py-1.5 text-left font-medium text-gray-500">{t('settings.hubspot.webhookEventObject')}</th>
+                                <th className="px-3 py-1.5 text-left font-medium text-gray-500">{t('settings.hubspot.webhookEventStatus')}</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {webhookLogsData.webhookEventLogs.map((event: { id: number; subscriptionType: string; objectId: string; objectKind: string; status: string; result: string; errorMessage: string; receivedAt: string }) => (
+                                <tr key={event.id} className="hover:bg-gray-50">
+                                  <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{formatDateTime(event.receivedAt)}</td>
+                                  <td className="px-3 py-1.5 text-gray-700">{event.subscriptionType}</td>
+                                  <td className="px-3 py-1.5 text-gray-500">
+                                    {event.objectKind}{event.objectId ? ` #${event.objectId}` : ''}
+                                  </td>
+                                  <td className="px-3 py-1.5">
+                                    <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium ${
+                                      event.status === 'processed' ? 'bg-green-50 text-green-700' :
+                                      event.status === 'failed' ? 'bg-red-50 text-red-700' :
+                                      'bg-gray-100 text-gray-600'
+                                    }`}>
+                                      {event.status}
+                                    </span>
+                                    {event.errorMessage && (
+                                      <span className="ml-1 text-red-500" title={event.errorMessage}>!</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>

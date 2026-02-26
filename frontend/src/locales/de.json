@@ -1228,7 +1228,14 @@
       "webhookSaveFailed": "Webhook-Einstellungen konnten nicht gespeichert werden",
       "webhookUrl": "Webhook-URL (in HubSpot konfigurieren)",
       "copyUrl": "URL kopieren",
-      "webhookLastReceived": "Letzter Webhook empfangen"
+      "webhookLastReceived": "Letzter Webhook empfangen",
+      "webhookEventLog": "Letzte Webhook-Aktivität",
+      "webhookEventLogEmpty": "Noch keine Webhook-Ereignisse aufgezeichnet.",
+      "webhookEventTime": "Zeit",
+      "webhookEventType": "Ereignis",
+      "webhookEventObject": "Objekt",
+      "webhookEventStatus": "Status",
+      "webhookEventResult": "Ergebnis"
     },
     "m365": {
       "title": "Microsoft 365 E-Mail",
