@@ -16,7 +16,40 @@ env:
   IMAGE_PREFIX: ${{ github.repository }}
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      should_test: ${{ steps.check.outputs.should_test }}
+      is_release: ${{ steps.check.outputs.is_release }}
+      tag: ${{ steps.check.outputs.tag }}
+      minor_tag: ${{ steps.check.outputs.minor_tag }}
+    steps:
+      - name: Determine run mode
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            echo "should_test=true" >> "$GITHUB_OUTPUT"
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "minor_tag=$(echo "$GITHUB_REF_NAME" | cut -d. -f1-2)" >> "$GITHUB_OUTPUT"
+          else
+            # Branch push: skip entirely if this commit also has a version tag
+            TAG=$(gh api "repos/${GITHUB_REPOSITORY}/tags" --per-page=5 \
+              --jq ".[] | select(.commit.sha == \"${GITHUB_SHA}\") | .name" | head -1)
+            if [[ -n "$TAG" ]]; then
+              echo "::notice::Commit ${GITHUB_SHA::7} is tagged $TAG — skipping branch run"
+              echo "should_test=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "should_test=true" >> "$GITHUB_OUTPUT"
+            fi
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
   test-backend:
+    needs: [preflight]
+    if: needs.preflight.outputs.should_test == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -60,6 +93,8 @@ jobs:
         run: pytest --tb=short
 
   test-frontend:
+    needs: [preflight]
+    if: needs.preflight.outputs.should_test == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -85,28 +120,9 @@ jobs:
         working-directory: ./frontend
         run: npm run build
 
-  check-tag:
-    needs: [test-backend, test-frontend]
-    runs-on: ubuntu-latest
-    outputs:
-      is_release: ${{ steps.check.outputs.is_release }}
-      tag: ${{ steps.check.outputs.tag }}
-      minor_tag: ${{ steps.check.outputs.minor_tag }}
-    steps:
-      - name: Check for version tag
-        id: check
-        run: |
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            echo "is_release=true" >> "$GITHUB_OUTPUT"
-            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
-            echo "minor_tag=$(echo "$GITHUB_REF_NAME" | cut -d. -f1-2)" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_release=false" >> "$GITHUB_OUTPUT"
-          fi
-
   build-backend:
-    needs: [check-tag]
-    if: needs.check-tag.outputs.is_release == 'true'
+    needs: [preflight, test-backend, test-frontend]
+    if: needs.preflight.outputs.is_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -133,18 +149,18 @@ jobs:
           file: ./backend/Dockerfile.prod
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/backend:${{ needs.check-tag.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/backend:${{ needs.check-tag.outputs.minor_tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/backend:${{ needs.preflight.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/backend:${{ needs.preflight.outputs.minor_tag }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/backend:${{ github.sha }}
           build-args: |
-            BUILD_VERSION=${{ needs.check-tag.outputs.tag }}
+            BUILD_VERSION=${{ needs.preflight.outputs.tag }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   build-frontend:
-    needs: [check-tag]
-    if: needs.check-tag.outputs.is_release == 'true'
+    needs: [preflight, test-backend, test-frontend]
+    if: needs.preflight.outputs.is_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -171,12 +187,12 @@ jobs:
           file: ./frontend/Dockerfile.prod
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend:${{ needs.check-tag.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend:${{ needs.check-tag.outputs.minor_tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend:${{ needs.preflight.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend:${{ needs.preflight.outputs.minor_tag }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend:${{ github.sha }}
           build-args: |
             VITE_API_URL=/graphql
-            BUILD_VERSION=${{ needs.check-tag.outputs.tag }}
+            BUILD_VERSION=${{ needs.preflight.outputs.tag }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
