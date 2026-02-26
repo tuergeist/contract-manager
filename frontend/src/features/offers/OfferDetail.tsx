@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn, formatCurrency, formatDate } from '@/lib/utils'
+import { getToken } from '@/lib/auth'
 import { SendOfferDialog } from './SendOfferDialog'
 
 const OFFER_QUERY = gql`
@@ -128,6 +129,22 @@ export function OfferDetail() {
   const isDraft = offer.status === 'draft'
   const isSent = offer.status === 'sent'
 
+  // Fetch PDF via authenticated endpoint and create blob URL
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!offer.pdfUrl) return
+    const token = getToken()
+    fetch(`/api/offers/${offer.id}/pdf/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => (r.ok ? r.blob() : Promise.reject()))
+      .then((blob) => setPdfBlobUrl(URL.createObjectURL(blob)))
+      .catch(() => setPdfBlobUrl(null))
+    return () => {
+      setPdfBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null })
+    }
+  }, [offer.id, offer.pdfUrl])
+
   const handleStatusChange = async (newStatus: string) => {
     const result = await updateStatus({
       variables: { id: offer.id, status: newStatus },
@@ -189,9 +206,9 @@ export function OfferDetail() {
         </div>
         <div className="flex items-center gap-2">
           {/* Download PDF */}
-          {offer.pdfUrl && (
+          {pdfBlobUrl && (
             <Button variant="outline" size="sm" asChild>
-              <a href={offer.pdfUrl} target="_blank" rel="noopener noreferrer">
+              <a href={pdfBlobUrl} target="_blank" rel="noopener noreferrer">
                 <Download className="w-4 h-4 mr-2" />
                 PDF
               </a>
@@ -354,10 +371,10 @@ export function OfferDetail() {
 
         {/* Right: PDF Preview */}
         <div>
-          {offer.pdfUrl ? (
+          {pdfBlobUrl ? (
             <div className="rounded-lg border bg-white overflow-hidden" style={{ height: '80vh' }}>
               <iframe
-                src={offer.pdfUrl}
+                src={pdfBlobUrl}
                 className="w-full h-full"
                 title={`Offer ${offer.offerNumber}`}
               />
