@@ -128,6 +128,7 @@ _EVENT_TYPE_MAP = {
     "company.propertyChange": "company",
     "company.deletion": "company",
     "company.merge": "company",
+    "company.associationChange": "company_association",
     "product.creation": "product",
     "product.propertyChange": "product",
     "product.deletion": "product",
@@ -248,6 +249,23 @@ def _process_event(service, tenant, subscription_type, object_id, object_kind, i
         is_active = service._company_matches_filters(properties)
         service._sync_company(company_data, is_active=is_active)
         return "company_synced"
+
+    elif object_kind == "company_association":
+        # Association change on a company — re-sync billing contacts
+        billing_label = service.config.get("billing_contact_label")
+        if not billing_label:
+            return "no_billing_label_configured"
+
+        customer = Customer.objects.filter(
+            tenant=tenant, hubspot_id=object_id
+        ).first()
+        if not customer:
+            return "customer_not_found"
+
+        import httpx
+        with httpx.Client() as client:
+            service._sync_billing_contacts_for_customer(client, customer, billing_label)
+        return "billing_contacts_synced"
 
     elif object_kind == "product":
         if is_deletion:
