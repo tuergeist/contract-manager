@@ -228,12 +228,14 @@ class InvoiceExportView(View):
                 {"error": "No invoices found for this month"}, status=404
             )
 
-        # Enrich invoices with invoice numbers from finalized records
+        # Enrich invoices with invoice numbers from generated records
+        # (finalized, sent, paid, dunning — anything with an invoice number)
         records = InvoiceRecord.objects.filter(
             tenant=user.tenant,
             billing_date__year=year,
             billing_date__month=month,
-            status=InvoiceRecord.Status.FINALIZED,
+        ).exclude(
+            status__in=[InvoiceRecord.Status.DRAFT, InvoiceRecord.Status.VOIDED],
         ).values_list("contract_id", "invoice_number")
         invoice_number_map = {cid: num for cid, num in records}
         for inv in invoices:
