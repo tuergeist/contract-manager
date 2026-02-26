@@ -1,5 +1,7 @@
 """GitHub Issues feedback backend."""
+import base64
 import logging
+import uuid
 from typing import Optional
 
 import httpx
@@ -51,11 +53,9 @@ class GitHubFeedbackService(FeedbackService):
 
         body = description
         if screenshot:
-            # Embed screenshot as base64 data URL image in markdown
-            img_data = screenshot
-            if not img_data.startswith("data:"):
-                img_data = f"data:image/png;base64,{img_data}"
-            body += f"\n\n### Screenshot\n\n![Screenshot]({img_data})"
+            screenshot_url = self._upload_screenshot(screenshot)
+            if screenshot_url:
+                body += f"\n\n### Screenshot\n\n![Screenshot]({screenshot_url})"
 
         label = LABEL_MAP.get(feedback_type, "feedback")
 
@@ -106,3 +106,41 @@ class GitHubFeedbackService(FeedbackService):
         logger.info("Created GitHub issue #%s in %s", data.get("number"), self.repo)
 
         return FeedbackResult(url=issue_url)
+
+    def _upload_screenshot(self, screenshot: str) -> Optional[str]:
+        """Upload screenshot to the repo and return the raw URL."""
+        try:
+            img_data = screenshot
+            if "," in img_data:
+                img_data = img_data.split(",", 1)[1]
+            # Validate it's valid base64
+            base64.b64decode(img_data)
+
+            filename = f".feedback/screenshots/{uuid.uuid4().hex}.png"
+            url = f"{self.API_URL}/repos/{self.repo}/contents/{filename}"
+
+            headers = {
+                "Authorization": f"Bearer {self.token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            }
+
+            payload = {
+                "message": f"Upload feedback screenshot",
+                "content": img_data,
+                "branch": "main",
+            }
+
+            response = httpx.put(
+                url, json=payload, headers=headers, timeout=self.TIMEOUT
+            )
+
+            if not response.is_success:
+                logger.warning("Failed to upload screenshot to GitHub: %s", response.text)
+                return None
+
+            data = response.json()
+            return data.get("content", {}).get("download_url")
+        except Exception as e:
+            logger.warning("Failed to upload screenshot: %s", e)
+            return None
