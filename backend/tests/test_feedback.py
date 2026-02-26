@@ -164,8 +164,10 @@ class TestGitHubFeedbackServiceCreateFeedback:
         with pytest.raises(GitHubFeedbackError, match="not configured"):
             service.create_feedback(title="t", description="d", feedback_type="bug")
 
+    @patch("apps.core.github_feedback.GitHubFeedbackService._upload_screenshot")
     @patch("apps.core.github_feedback.httpx.post")
-    def test_screenshot_embedded_in_body(self, mock_post, configured_settings):
+    def test_screenshot_embedded_in_body(self, mock_post, mock_upload, configured_settings):
+        mock_upload.return_value = "https://raw.githubusercontent.com/owner/repo/main/.feedback/screenshots/test.png"
         mock_response = Mock()
         mock_response.is_success = True
         mock_response.status_code = 201
@@ -181,11 +183,14 @@ class TestGitHubFeedbackServiceCreateFeedback:
         )
 
         body = mock_post.call_args[1]["json"]["body"]
-        assert "![Screenshot](data:image/png;base64,abc123)" in body
+        assert "![Screenshot](https://raw.githubusercontent.com/" in body
         assert "desc" in body
+        mock_upload.assert_called_once_with("data:image/png;base64,abc123")
 
+    @patch("apps.core.github_feedback.GitHubFeedbackService._upload_screenshot")
     @patch("apps.core.github_feedback.httpx.post")
-    def test_screenshot_without_data_prefix(self, mock_post, configured_settings):
+    def test_screenshot_without_data_prefix(self, mock_post, mock_upload, configured_settings):
+        mock_upload.return_value = "https://raw.githubusercontent.com/owner/repo/main/.feedback/screenshots/test.png"
         mock_response = Mock()
         mock_response.is_success = True
         mock_response.status_code = 201
@@ -201,7 +206,30 @@ class TestGitHubFeedbackServiceCreateFeedback:
         )
 
         body = mock_post.call_args[1]["json"]["body"]
-        assert "![Screenshot](data:image/png;base64,abc123base64data)" in body
+        assert "![Screenshot](https://raw.githubusercontent.com/" in body
+        mock_upload.assert_called_once_with("abc123base64data")
+
+    @patch("apps.core.github_feedback.GitHubFeedbackService._upload_screenshot")
+    @patch("apps.core.github_feedback.httpx.post")
+    def test_screenshot_upload_failure_omits_image(self, mock_post, mock_upload, configured_settings):
+        mock_upload.return_value = None
+        mock_response = Mock()
+        mock_response.is_success = True
+        mock_response.status_code = 201
+        mock_response.json.return_value = {"number": 1, "html_url": "https://github.com/owner/repo/issues/1"}
+        mock_post.return_value = mock_response
+
+        service = GitHubFeedbackService()
+        service.create_feedback(
+            title="Visual bug",
+            description="desc",
+            feedback_type="bug",
+            screenshot="abc123base64data",
+        )
+
+        body = mock_post.call_args[1]["json"]["body"]
+        assert "![Screenshot]" not in body
+        assert body == "desc"
 
     @patch("apps.core.github_feedback.httpx.post")
     def test_handles_401_error(self, mock_post, configured_settings):
