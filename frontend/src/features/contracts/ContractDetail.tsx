@@ -33,6 +33,7 @@ import {
   CheckCircle2,
   CircleDot,
   Undo2,
+  FileSignature,
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear, formatCurrency, formatPercent } from '@/lib/utils'
 import { useDocumentTitle } from '@/lib/useDocumentTitle'
@@ -427,6 +428,29 @@ const BILLING_SCHEDULE_QUERY = gql`
       periodStart
       periodEnd
       error
+    }
+  }
+`
+
+const OFFERS_FOR_CONTRACT_QUERY = gql`
+  query OffersForContract($contractId: Int!) {
+    offersForContract(contractId: $contractId) {
+      id
+      offerNumber
+      billingDate
+      status
+    }
+  }
+`
+
+const CREATE_OFFER_MUTATION = gql`
+  mutation CreateOffer($contractId: Int!, $billingDate: Date!) {
+    createOffer(contractId: $contractId, billingDate: $billingDate) {
+      success
+      error
+      offer {
+        id
+      }
     }
   }
 `
@@ -3470,8 +3494,10 @@ interface BillingScheduleResult {
 
 function ForecastTab({ contractId }: { contractId: string }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [months, setMonths] = useState('13')
   const [includeAllHistory, setIncludeAllHistory] = useState(false)
+  const [creatingForDate, setCreatingForDate] = useState<string | null>(null)
 
   const { data, loading, error } = useQuery(BILLING_SCHEDULE_QUERY, {
     variables: {
@@ -3480,6 +3506,38 @@ function ForecastTab({ contractId }: { contractId: string }) {
       includeAllHistory,
     },
   })
+
+  const { data: offersData } = useQuery(OFFERS_FOR_CONTRACT_QUERY, {
+    variables: { contractId: parseInt(contractId) },
+  })
+
+  const [createOffer] = useMutation(CREATE_OFFER_MUTATION)
+
+  // Build a map of billingDate -> offer for quick lookup
+  const offersByDate = useMemo(() => {
+    const map = new Map<string, { id: number; offerNumber: string; status: string }>()
+    if (offersData?.offersForContract) {
+      for (const offer of offersData.offersForContract) {
+        map.set(offer.billingDate, { id: offer.id, offerNumber: offer.offerNumber, status: offer.status })
+      }
+    }
+    return map
+  }, [offersData])
+
+  const handleCreateOffer = async (billingDate: string) => {
+    setCreatingForDate(billingDate)
+    try {
+      const result = await createOffer({
+        variables: { contractId: parseInt(contractId), billingDate },
+        refetchQueries: [{ query: OFFERS_FOR_CONTRACT_QUERY, variables: { contractId: parseInt(contractId) } }],
+      })
+      if (result.data?.createOffer?.success) {
+        navigate(`/offers/${result.data.createOffer.offer.id}`)
+      }
+    } finally {
+      setCreatingForDate(null)
+    }
+  }
 
   const schedule = data?.billingSchedule as BillingScheduleResult | undefined
 
@@ -3556,6 +3614,9 @@ function ForecastTab({ contractId }: { contractId: string }) {
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     {t('contracts.forecast.invoice')}
                   </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('offers.title')}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -3623,6 +3684,37 @@ function ForecastTab({ contractId }: { contractId: string }) {
                         <span className="text-gray-400">—</span>
                       )}
                     </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-center text-sm">
+                      {(() => {
+                        const existingOffer = offersByDate.get(event.date)
+                        if (existingOffer) {
+                          return (
+                            <Link
+                              to={`/offers/${existingOffer.id}`}
+                              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline"
+                              title={t('offers.forecast.viewOffer')}
+                            >
+                              <FileSignature className="h-4 w-4" />
+                              <span className="text-xs">{existingOffer.offerNumber}</span>
+                            </Link>
+                          )
+                        }
+                        return (
+                          <button
+                            onClick={() => handleCreateOffer(event.date)}
+                            disabled={creatingForDate !== null}
+                            className="inline-flex items-center gap-1 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
+                            title={t('offers.forecast.createOffer')}
+                          >
+                            {creatingForDate === event.date ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <FileSignature className="h-4 w-4" />
+                            )}
+                          </button>
+                        )
+                      })()}
+                    </td>
                   </tr>
                   )
                 })}
@@ -3635,7 +3727,7 @@ function ForecastTab({ contractId }: { contractId: string }) {
                   <td className="whitespace-nowrap px-6 py-3 text-right text-sm font-bold text-gray-900">
                     {formatCurrency(schedule.totalForecast)}
                   </td>
-                  <td></td>
+                  <td colSpan={2}></td>
                 </tr>
               </tfoot>
             </table>

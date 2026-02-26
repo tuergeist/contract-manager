@@ -69,6 +69,7 @@ const navItems: NavItem[] = [
   { to: '/contracts', icon: FileText, labelKey: 'nav.contracts' },
   { to: '/projects', icon: FolderKanban, labelKey: 'nav.projects' },
   { to: '/invoices', icon: FileUp, labelKey: 'nav.invoices', permission: 'invoices.read' },
+  { to: '/offers', icon: FileSignature, labelKey: 'nav.offers', permission: 'offers.read' },
   { to: '/banking', icon: Landmark, labelKey: 'nav.banking', permission: 'banking.read' },
   { to: '/forecasts', icon: TrendingUp, labelKey: 'nav.forecasts' },
   { to: '/audit-log', icon: History, labelKey: 'nav.auditLog' },

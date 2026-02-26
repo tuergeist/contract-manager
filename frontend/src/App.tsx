@@ -23,6 +23,8 @@ import { CounterpartyDetailPage } from './features/banking/CounterpartyDetailPag
 import { TodoBoard } from './features/todos/TodoBoard'
 import { AboutPage } from './features/about/AboutPage'
 import { ProjectList } from './features/projects/ProjectList'
+import { OfferList } from './features/offers/OfferList'
+import { OfferDetail } from './features/offers/OfferDetail'
 
 function App() {
   return (
@@ -53,6 +55,8 @@ function App() {
         <Route path="invoices/export" element={<InvoiceExportPage />} />
         <Route path="invoices/:id" element={<InvoiceDetail />} />
         <Route path="invoices" element={<InvoiceList />} />
+        <Route path="offers/:id" element={<OfferDetail />} />
+        <Route path="offers" element={<OfferList />} />
         <Route path="banking" element={<BankingPage />} />
         <Route path="banking/counterparty/:id" element={<CounterpartyDetailPage />} />
         <Route path="audit-log" element={<AuditLogPage />} />
