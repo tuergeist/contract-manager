@@ -1009,7 +1009,8 @@
       "general": "Allgemein",
       "integrations": "Integrationen",
       "team": "Team",
-      "invoices": "Rechnungen"
+      "invoices": "Rechnungen",
+      "banking": "Banking"
     },
     "integrationTabs": {
       "hubspot": "HubSpot",
@@ -1046,8 +1047,7 @@
       "email": "E-Mail (M365)",
       "notifications": "Benachrichtigungen",
       "contracts": "Verträge",
-      "helpVideos": "Hilfe-Videos",
-      "banking": "Banking"
+      "helpVideos": "Hilfe-Videos"
     },
     "banking": {
       "title": "Banking-Einstellungen",
