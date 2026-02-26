@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.8.2",
+    "date": "2026-02-26",
+    "title": "Configurable VAT Sentences for EU/Non-EU",
+    "description": "Invoices now show different VAT texts for EU customers (reverse charge) and non-EU customers (place of supply), both configurable in company settings.",
+    "type": "feature",
+    "details": [
+      "Added EU vs non-EU customer classification based on country codes for correct VAT treatment",
+      "Added configurable VAT text fields for EU and non-EU customers in company data settings",
+      "VAT sentence is frozen on invoice records at generation time for auditability",
+      "Legacy invoice records without a stored VAT sentence fall back to the previous reverse charge text",
+      "Added linked customer icon on bank transaction counterparties"
+    ]
+  },
+  {
     "version": "2.8.1",
     "date": "2026-02-26",
     "title": "Invoice PDF and Authentication Fixes",
