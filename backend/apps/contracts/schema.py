@@ -802,6 +802,7 @@ class BillingScheduleItem:
 
     item_id: int
     product_name: str
+    description: str = ""
     quantity: int
     unit_price: Decimal
     amount: Decimal
@@ -1658,6 +1659,7 @@ class ContractQuery:
                         BillingScheduleItem(
                             item_id=item["item_id"],
                             product_name=item["product_name"],
+                            description=item.get("description", ""),
                             quantity=item["quantity"],
                             unit_price=item["unit_price"],
                             amount=item["amount"],

@@ -408,6 +408,7 @@ const BILLING_SCHEDULE_QUERY = gql`
         items {
           itemId
           productName
+          description
           quantity
           unitPrice
           amount
@@ -3437,6 +3438,7 @@ function RemoveItemButton({
 interface BillingScheduleItem {
   itemId: number
   productName: string
+  description: string
   quantity: number
   unitPrice: string
   amount: string
@@ -3573,7 +3575,7 @@ function ForecastTab({ contractId }: { contractId: string }) {
                         {event.items.map((item, itemIndex) => (
                           <div key={itemIndex} className="text-sm">
                             <span className="text-gray-900">
-                              {item.productName} × {item.quantity}
+                              {item.productName || item.description || '-'} × {item.quantity}
                             </span>
                             {item.isProrated && item.prorateFactor && (
                               <span className="ml-2 rounded bg-yellow-100 px-1.5 py-0.5 text-xs text-yellow-800">
