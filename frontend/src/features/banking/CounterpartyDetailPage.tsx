@@ -281,6 +281,7 @@ export function CounterpartyDetailPage() {
   const [customerSearch, setCustomerSearch] = useState('')
   const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('')
   const [customerPopoverOpen, setCustomerPopoverOpen] = useState(false)
+  const customerSearchInputRef = useRef<HTMLInputElement>(null)
 
   // Filters
   const [filterAccountId, setFilterAccountId] = useState<string>('all')
@@ -568,7 +569,13 @@ export function CounterpartyDetailPage() {
               <GitMerge className="h-4 w-4" />
             </button>
             <button
-              onClick={() => setCustomerLinkDialogOpen(true)}
+              onClick={() => {
+                const firstWord = (summary?.name ?? '').split(/[\s\-_,./]+/)[0] || ''
+                setCustomerSearch(firstWord)
+                setDebouncedCustomerSearch(firstWord)
+                setCustomerLinkDialogOpen(true)
+                setCustomerPopoverOpen(true)
+              }}
               className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
               title={t('banking.linkToCustomer')}
             >
@@ -708,9 +715,15 @@ export function CounterpartyDetailPage() {
                   {t('banking.searchCustomers')}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[400px] p-0" align="start">
+              <PopoverContent className="w-[400px] p-0" align="start"
+                onOpenAutoFocus={(e) => {
+                  e.preventDefault()
+                  setTimeout(() => customerSearchInputRef.current?.focus(), 0)
+                }}
+              >
                 <Command shouldFilter={false}>
                   <CommandInput
+                    ref={customerSearchInputRef}
                     placeholder={t('common.search')}
                     value={customerSearch}
                     onValueChange={setCustomerSearch}
