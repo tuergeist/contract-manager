@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.10.1",
+    "date": "2026-02-27",
+    "title": "Fix Revenue Goals for Ended Contracts",
+    "description": "Excluded ended contracts from the revenue goals dashboard to prevent stale data from inflating forecasts.",
+    "type": "bugfix",
+    "details": [
+      "Excluded ended contracts from revenue-by-stream calculations and unclassified items list"
+    ]
+  },
+  {
     "version": "2.10.0",
     "date": "2026-02-27",
     "title": "Revenue Goals Tracking",
