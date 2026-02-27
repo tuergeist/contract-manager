@@ -760,6 +760,141 @@ class TestOneOffItemBillingSchedule:
         assert event["total"] == Decimal("20000.00")
 
 
+class TestMidCycleItemBilling:
+    """Test that items added mid-billing-cycle get a pro-rated first event."""
+
+    def test_annual_item_added_april_prorated_without_alignment(self, tenant, annual_contract, product):
+        """
+        Scenario: Annual contract Jan-Dec, item 1 billed Jan, item 2 added April 1.
+        Without alignment, item 2 should still get a pro-rated Apr-Dec event.
+        """
+        # Item 1: 12,000 EUR/year (1,000/month), starts with contract
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("1000.00"),
+        )
+
+        # Item 2: 6,000 EUR/year (500/month), billing effective April 1
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            description="New service",
+            quantity=1,
+            unit_price=Decimal("500.00"),
+            billing_start_date=date(2026, 4, 1),
+        )
+
+        schedule = annual_contract.get_billing_schedule(
+            from_date=date(2026, 1, 1),
+            to_date=date(2026, 12, 31),
+        )
+
+        # Should have 2 events: Jan 1 (item 1) and Apr 1 (item 2 pro-rated)
+        assert len(schedule) == 2
+
+        jan_event = schedule[0]
+        assert jan_event["date"] == date(2026, 1, 1)
+        assert len(jan_event["items"]) == 1
+        assert jan_event["total"] == Decimal("12000.00")  # 1000 * 12
+
+        apr_event = schedule[1]
+        assert apr_event["date"] == date(2026, 4, 1)
+        assert len(apr_event["items"]) == 1
+        assert apr_event["items"][0]["is_prorated"] is True
+        # 9 months (Apr-Dec): 500 * 12 * 9/12 = 4500
+        assert apr_event["items"][0]["amount"] == Decimal("4500.00")
+        assert apr_event["total"] == Decimal("4500.00")
+
+    def test_annual_item_added_mid_cycle_full_year_next(self, tenant, annual_contract, product):
+        """
+        After the pro-rated first period, the next year should bill in full.
+        """
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("500.00"),
+            billing_start_date=date(2026, 4, 1),
+        )
+
+        schedule = annual_contract.get_billing_schedule(
+            from_date=date(2026, 1, 1),
+            to_date=date(2027, 12, 31),
+        )
+
+        # Apr 2026 (pro-rated) + Jan 2027 (full year)
+        assert len(schedule) == 2
+        assert schedule[0]["date"] == date(2026, 4, 1)
+        assert schedule[0]["items"][0]["amount"] == Decimal("4500.00")
+
+        assert schedule[1]["date"] == date(2027, 1, 1)
+        assert schedule[1]["items"][0]["is_prorated"] is False
+        assert schedule[1]["items"][0]["amount"] == Decimal("6000.00")
+
+    def test_quarterly_item_added_mid_cycle(self, tenant, customer, product):
+        """Item added mid-quarter should get pro-rated stub event."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Quarterly Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.QUARTERLY,
+            billing_anchor_day=1,
+        )
+        # Item starts Feb 1 — mid Q1 cycle (Jan-Mar)
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("300.00"),
+            billing_start_date=date(2026, 2, 1),
+        )
+
+        schedule = contract.get_billing_schedule(
+            from_date=date(2026, 1, 1),
+            to_date=date(2026, 6, 30),
+        )
+
+        # Feb 1 (pro-rated 2 months) + Apr 1 (full quarter)
+        assert len(schedule) == 2
+        assert schedule[0]["date"] == date(2026, 2, 1)
+        assert schedule[0]["items"][0]["is_prorated"] is True
+        # 2 months out of 3: 300 * 3 * 2/3 = 600
+        assert schedule[0]["items"][0]["amount"] == Decimal("600.00")
+
+        assert schedule[1]["date"] == date(2026, 4, 1)
+        assert schedule[1]["items"][0]["amount"] == Decimal("900.00")
+
+    def test_no_prorate_when_item_starts_on_cycle(self, tenant, annual_contract, product):
+        """Item starting exactly on cycle date should NOT get a pro-rated stub."""
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=annual_contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("500.00"),
+            billing_start_date=date(2027, 1, 1),
+        )
+
+        schedule = annual_contract.get_billing_schedule(
+            from_date=date(2027, 1, 1),
+            to_date=date(2027, 12, 31),
+        )
+
+        assert len(schedule) == 1
+        assert schedule[0]["date"] == date(2027, 1, 1)
+        assert schedule[0]["items"][0]["is_prorated"] is False
+        assert schedule[0]["items"][0]["amount"] == Decimal("6000.00")
+
+
 class TestContractDurationCalculation:
     """Test contract duration calculation methods."""
 

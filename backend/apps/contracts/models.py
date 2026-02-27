@@ -483,6 +483,35 @@ class Contract(TenantModel):
         while billing_date < start_date:
             billing_date += relativedelta(months=interval_months)
 
+        # If the item starts mid-cycle, generate a pro-rated first event
+        # e.g. annual contract Jan-Dec, item starts April → bill Apr-Dec pro-rated
+        if billing_date > start_date and start_date >= from_date and start_date <= to_date:
+            if end_date is None or start_date <= end_date:
+                # Effective end of this stub period
+                stub_end = min(billing_date, end_date) if end_date and end_date < billing_date else billing_date
+                months_in_stub = (
+                    (stub_end.year - start_date.year) * 12
+                    + (stub_end.month - start_date.month)
+                )
+                if months_in_stub > 0:
+                    prorate_factor = Decimal(months_in_stub) / Decimal(interval_months)
+                    if price_periods_list is not None:
+                        price_at_date = item.get_price_at_cached(start_date, price_periods_list)
+                    else:
+                        price_at_date = item.get_price_at(start_date)
+                    amount = (item.quantity * price_at_date * interval_months * prorate_factor).quantize(Decimal("0.01"))
+                    events[start_date]["items"].append({
+                        "item_id": item.id,
+                        "product_name": item.product.name if item.product else (item.description or "Discount"),
+                        "description": item.description if item.product else "",
+                        "quantity": item.quantity,
+                        "unit_price": price_at_date,
+                        "amount": amount,
+                        "is_prorated": True,
+                        "prorate_factor": prorate_factor.quantize(Decimal("0.0001")),
+                    })
+                    events[start_date]["total"] += amount
+
         # Generate billing events
         while billing_date <= to_date:
             if billing_date >= from_date:
