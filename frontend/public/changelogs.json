@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.9.1",
+    "date": "2026-02-27",
+    "title": "Fix PDF Generation & Offer Detail Page",
+    "description": "Fixed ZUGFeRD PDF generation for Acrobat compatibility and resolved blank offer detail page in production.",
+    "type": "bugfix",
+    "details": [
+      "Fixed /Interpolate using PDF Name instead of Boolean, causing Acrobat validation errors",
+      "Bumped PDF version declaration from 1.7 to 2.0 to match ZUGFeRD /AF features",
+      "Fixed blank offer detail page caused by React hooks called after early returns"
+    ]
+  },
+  {
     "version": "2.9.0",
     "date": "2026-02-27",
     "title": "Offer Management & Forecast Caching",
