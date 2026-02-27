@@ -1,5 +1,21 @@
 [
   {
+    "version": "2.10.0",
+    "date": "2026-02-27",
+    "title": "Revenue Goals Tracking",
+    "description": "Classify revenue into streams, set yearly targets per stream, and track progress on a new Goals dashboard with forecasts and actuals.",
+    "type": "feature",
+    "details": [
+      "Added revenue type classification (Recurring, Advanced Development, Training & Implementation) for products and contract items",
+      "Added revenue goals settings to define yearly targets per revenue stream",
+      "Added Goals dashboard tab on Forecasts page with progress bars, YTD actuals, and full-year forecasts",
+      "Added expandable warning banner listing unclassified revenue items with links to their contracts",
+      "Added inline revenue type editing on the Products page (permission-gated)",
+      "Added sortable and filterable revenue type column on the Products page",
+      "Moved revenue type field out of advanced options for non-product contract items"
+    ]
+  },
+  {
     "version": "2.9.1",
     "date": "2026-02-27",
     "title": "Fix PDF Generation & Offer Detail Page",
