@@ -363,6 +363,7 @@
     },
     "revenueType": {
       "label": "Revenue Type",
+      "selectPlaceholder": "Select revenue type",
       "inherited": "Inherited from product",
       "required": "Revenue type is required for items without a product",
       "override": "Override revenue type"

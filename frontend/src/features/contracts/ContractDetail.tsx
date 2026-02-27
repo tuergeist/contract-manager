@@ -2502,6 +2502,33 @@ function AddItemModal({
             />
           </div>
 
+          {/* Revenue Type - shown prominently when no product selected */}
+          {!productId ? (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {t('contracts.revenueType.label')}
+              </label>
+              <Select value={revenueType} onValueChange={setRevenueType}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t('contracts.revenueType.selectPlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recurring">{t('products.revenueTypes.recurring')}</SelectItem>
+                  <SelectItem value="advanced_development">{t('products.revenueTypes.advancedDevelopment')}</SelectItem>
+                  <SelectItem value="training_implementation">{t('products.revenueTypes.trainingImplementation')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          ) : selectedProduct?.revenueType ? (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('contracts.revenueType.label')}</label>
+              <p className="text-sm text-muted-foreground">
+                {t(`products.revenueTypes.${selectedProduct.revenueType === 'advanced_development' ? 'advancedDevelopment' : selectedProduct.revenueType === 'training_implementation' ? 'trainingImplementation' : 'recurring'}`)}
+                {' '}({t('contracts.revenueType.inherited')})
+              </p>
+            </div>
+          ) : null}
+
           {/* Item-specific overrides - collapsed by default */}
           <details className="group rounded-lg border">
             <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground">
@@ -2518,34 +2545,6 @@ function AddItemModal({
                   onChange={(e) => setOrderConfirmationNumber(e.target.value)}
                 />
               </div>
-
-              {/* Revenue Type */}
-              {!productId ? (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    {t('contracts.revenueType.label')} <span className="text-red-500">*</span>
-                  </label>
-                  <Select value={revenueType} onValueChange={setRevenueType}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('contracts.revenueType.label')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="recurring">{t('products.revenueTypes.recurring')}</SelectItem>
-                      <SelectItem value="advanced_development">{t('products.revenueTypes.advancedDevelopment')}</SelectItem>
-                      <SelectItem value="training_implementation">{t('products.revenueTypes.trainingImplementation')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">{t('contracts.revenueType.required')}</p>
-                </div>
-              ) : selectedProduct?.revenueType ? (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">{t('contracts.revenueType.label')}</label>
-                  <p className="text-sm text-muted-foreground">
-                    {t(`products.revenueTypes.${selectedProduct.revenueType === 'advanced_development' ? 'advancedDevelopment' : selectedProduct.revenueType === 'training_implementation' ? 'trainingImplementation' : 'recurring'}`)}
-                    {' '}({t('contracts.revenueType.inherited')})
-                  </p>
-                </div>
-              ) : null}
 
               {/* Delivery Tracking + Depends On */}
               <div className="grid grid-cols-2 gap-4">
@@ -3360,6 +3359,33 @@ function EditItemModal({
             </div>
           )}
 
+          {/* Revenue Type - shown prominently when no product selected */}
+          {!productId ? (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {t('contracts.revenueType.label')}
+              </label>
+              <Select value={revenueType} onValueChange={setRevenueType}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t('contracts.revenueType.selectPlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recurring">{t('products.revenueTypes.recurring')}</SelectItem>
+                  <SelectItem value="advanced_development">{t('products.revenueTypes.advancedDevelopment')}</SelectItem>
+                  <SelectItem value="training_implementation">{t('products.revenueTypes.trainingImplementation')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          ) : selectedProduct?.revenueType ? (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('contracts.revenueType.label')}</label>
+              <p className="text-sm text-muted-foreground">
+                {t(`products.revenueTypes.${selectedProduct.revenueType === 'advanced_development' ? 'advancedDevelopment' : selectedProduct.revenueType === 'training_implementation' ? 'trainingImplementation' : 'recurring'}`)}
+                {' '}({t('contracts.revenueType.inherited')})
+              </p>
+            </div>
+          ) : null}
+
           {/* Item-specific overrides - auto-open if any field has a value */}
           <details className="group rounded-lg border" open={!!(orderConfirmationNumber || startDate || billingStartDate || billingEndDate || alignToContractAt) || undefined}>
             <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground">
@@ -3376,34 +3402,6 @@ function EditItemModal({
                   onChange={(e) => setOrderConfirmationNumber(e.target.value)}
                 />
               </div>
-
-              {/* Revenue Type */}
-              {!productId ? (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    {t('contracts.revenueType.label')} <span className="text-red-500">*</span>
-                  </label>
-                  <Select value={revenueType} onValueChange={setRevenueType}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('contracts.revenueType.label')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="recurring">{t('products.revenueTypes.recurring')}</SelectItem>
-                      <SelectItem value="advanced_development">{t('products.revenueTypes.advancedDevelopment')}</SelectItem>
-                      <SelectItem value="training_implementation">{t('products.revenueTypes.trainingImplementation')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">{t('contracts.revenueType.required')}</p>
-                </div>
-              ) : selectedProduct?.revenueType ? (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">{t('contracts.revenueType.label')}</label>
-                  <p className="text-sm text-muted-foreground">
-                    {t(`products.revenueTypes.${selectedProduct.revenueType === 'advanced_development' ? 'advancedDevelopment' : selectedProduct.revenueType === 'training_implementation' ? 'trainingImplementation' : 'recurring'}`)}
-                    {' '}({t('contracts.revenueType.inherited')})
-                  </p>
-                </div>
-              ) : null}
 
               {/* Start Date + Billing Start Date - 2 columns */}
               <div className="grid grid-cols-2 gap-4">

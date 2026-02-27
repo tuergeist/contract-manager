@@ -363,9 +363,10 @@
     },
     "revenueType": {
       "label": "Umsatzart",
+      "selectPlaceholder": "Umsatzart wählen",
       "inherited": "Vom Produkt geerbt",
-      "required": "Umsatzart ist erforderlich f\u00fcr Positionen ohne Produkt",
-      "override": "Umsatzart \u00fcberschreiben"
+      "required": "Umsatzart ist erforderlich für Positionen ohne Produkt",
+      "override": "Umsatzart überschreiben"
     },
     "actions": {
       "save": "Vertrag speichern",
