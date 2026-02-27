@@ -101,6 +101,22 @@ export function OfferDetail() {
 
   const offer = data?.offer
 
+  // Hooks must be called before any early returns (Rules of Hooks)
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!offer?.pdfUrl) return
+    const token = getToken()
+    fetch(`/api/offers/${offer.id}/pdf/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => (r.ok ? r.blob() : Promise.reject()))
+      .then((blob) => setPdfBlobUrl(URL.createObjectURL(blob)))
+      .catch(() => setPdfBlobUrl(null))
+    return () => {
+      setPdfBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null })
+    }
+  }, [offer?.id, offer?.pdfUrl])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -128,22 +144,6 @@ export function OfferDetail() {
   const isExpired = offer.validUntil && offer.validUntil < today
   const isDraft = offer.status === 'draft'
   const isSent = offer.status === 'sent'
-
-  // Fetch PDF via authenticated endpoint and create blob URL
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null)
-  useEffect(() => {
-    if (!offer.pdfUrl) return
-    const token = getToken()
-    fetch(`/api/offers/${offer.id}/pdf/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => (r.ok ? r.blob() : Promise.reject()))
-      .then((blob) => setPdfBlobUrl(URL.createObjectURL(blob)))
-      .catch(() => setPdfBlobUrl(null))
-    return () => {
-      setPdfBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null })
-    }
-  }, [offer.id, offer.pdfUrl])
 
   const handleStatusChange = async (newStatus: string) => {
     const result = await updateStatus({

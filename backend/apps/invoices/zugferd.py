@@ -24,6 +24,7 @@ from PIL import ImageCms
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import (
     ArrayObject,
+    BooleanObject,
     DecodedStreamObject,
     DictionaryObject,
     NameObject,
@@ -103,7 +104,7 @@ def _fix_image_interpolation(writer: PdfWriter) -> None:
             xobj = xobjects[key].get_object()
             subtype = xobj.get("/Subtype")
             if subtype == "/Image" and xobj.get("/Interpolate"):
-                xobj[NameObject("/Interpolate")] = NameObject("/false")
+                xobj[NameObject("/Interpolate")] = BooleanObject(False)
 
 
 def _add_pdfa_output_intent(pdf_bytes: bytes) -> bytes:
@@ -161,8 +162,8 @@ def _add_pdfa_output_intent(pdf_bytes: bytes) -> bytes:
         )
 
     # Ensure file ID in trailer (ISO 32000-1:2008 §14.4, required by PDF/A-3)
-    if not writer.pdf_header:
-        writer.pdf_header = b"%PDF-1.7"
+    # PDF 2.0 required for /AF and /AFRelationship used by ZUGFeRD/Factur-X
+    writer.pdf_header = b"%PDF-2.0"
     buf = BytesIO()
     writer.write(buf)
     buf.seek(0)
