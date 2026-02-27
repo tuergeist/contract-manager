@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.10.2",
+    "date": "2026-02-27",
+    "title": "Fix Editing Price-Locked Items",
+    "description": "Fixed price-locked contract items blocking all edits, and added a difference column to the revenue goals dashboard.",
+    "type": "bugfix",
+    "details": [
+      "Fixed price-locked items rejecting saves even when only non-price fields changed (e.g. revenue type, lock toggle)",
+      "Added absolute difference column (forecast vs target) to revenue goals dashboard",
+      "Moved revenue type field out of advanced options for non-product items"
+    ]
+  },
+  {
     "version": "2.10.1",
     "date": "2026-02-27",
     "title": "Fix Revenue Goals for Ended Contracts",
