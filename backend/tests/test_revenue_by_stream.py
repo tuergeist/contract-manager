@@ -149,6 +149,31 @@ class TestCalculateRevenueByStream:
         assert stream_map["unclassified"]["full_year_forecast"] > Decimal("0")
 
     @patch("apps.contracts.schema.date")
+    def test_ended_contracts_excluded(self, mock_date, tenant, customer, recurring_product):
+        """Contracts with end_date before the queried year should be excluded."""
+        mock_date.today.return_value = date(2026, 6, 15)
+        mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
+
+        contract = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Ended 2025",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 12, 31),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+        ContractItem.objects.create(
+            tenant=tenant, contract=contract,
+            product=recurring_product,
+            quantity=1, unit_price=Decimal("1000.00"),
+        )
+
+        result = calculate_revenue_by_stream(tenant, 2026)
+        stream_map = {s["revenue_type"]: s for s in result}
+        # Contract ended before 2026 — should contribute zero
+        assert stream_map["recurring"]["full_year_forecast"] == Decimal("0")
+
+    @patch("apps.contracts.schema.date")
     def test_all_standard_streams_present(self, mock_date, tenant, customer):
         """Even with no items, all 3 standard streams should be present."""
         mock_date.today.return_value = date(2026, 6, 15)

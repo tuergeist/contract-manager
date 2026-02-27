@@ -1146,6 +1146,8 @@ def calculate_revenue_by_stream(tenant, year: int) -> list[dict]:
     active_contracts = Contract.objects.filter(
         tenant=tenant,
         status=Contract.Status.ACTIVE,
+    ).exclude(
+        end_date__lt=year_start,
     ).prefetch_related("items", "items__product", "items__price_periods", "items__depends_on")
 
     # Accumulators: stream -> {ytd, forecast}
@@ -2773,9 +2775,12 @@ class ContractQuery:
         if not user.tenant:
             return []
 
+        current_year_start = date.today().replace(month=1, day=1)
         items = ContractItem.objects.filter(
             tenant=user.tenant,
             contract__status=Contract.Status.ACTIVE,
+        ).exclude(
+            contract__end_date__lt=current_year_start,
         ).select_related("product", "contract", "contract__customer")
 
         result = []
