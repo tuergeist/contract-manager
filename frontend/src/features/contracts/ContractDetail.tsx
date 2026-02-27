@@ -34,6 +34,7 @@ import {
   CircleDot,
   Undo2,
   FileSignature,
+  AlertTriangle,
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear, formatCurrency, formatPercent } from '@/lib/utils'
 import { useDocumentTitle } from '@/lib/useDocumentTitle'
@@ -224,6 +225,9 @@ const CONTRACT_DETAIL_QUERY = gql`
         commentCount
       }
       timeTrackingMappingsCount
+      hasInvoices
+      invoicedItemIds
+      itemInvoicedUntil
     }
   }
 `
@@ -640,6 +644,9 @@ interface Contract {
   links: ContractLink[]
   todos: TodoItem[]
   timeTrackingMappingsCount: number
+  hasInvoices: boolean
+  invoicedItemIds: number[]
+  itemInvoicedUntil: Record<string, string>
 }
 
 function SortableRow({
@@ -1179,23 +1186,31 @@ export function ContractDetail() {
       {activeTab === 'items' && (
         <div>
           {canEdit && (
-            <div className="mb-4 flex justify-end gap-2">
-              {recurringItems.length > 0 && (
-                <button
-                  onClick={() => setShowPriceIncreaseModal(true)}
-                  className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  <TrendingUp className="h-4 w-4" />
-                  {t('contracts.detail.priceIncrease')}
-                </button>
+            <div className="mb-4 flex items-center gap-3">
+              {contract.hasInvoices && (
+                <div className="flex flex-1 items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{t('contracts.detail.invoiceWarning')}</span>
+                </div>
               )}
-              <button
-                onClick={() => setShowAddItemModal(true)}
-                className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-              >
-                <Plus className="h-4 w-4" />
-                {t('contracts.detail.addItem')}
-              </button>
+              <div className="ml-auto flex shrink-0 gap-2">
+                {recurringItems.length > 0 && (
+                  <button
+                    onClick={() => setShowPriceIncreaseModal(true)}
+                    className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    <TrendingUp className="h-4 w-4" />
+                    {t('contracts.detail.priceIncrease')}
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowAddItemModal(true)}
+                  className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  <Plus className="h-4 w-4" />
+                  {t('contracts.detail.addItem')}
+                </button>
+              </div>
             </div>
           )}
 
@@ -1349,36 +1364,39 @@ export function ContractDetail() {
                                       )}
                                     </td>
                                     {canEdit && (
-                                      <td className="whitespace-nowrap px-6 py-4 text-right">
-                                        {item.deliveryStatus === 'pending' && (
+                                      <td className="whitespace-nowrap px-6 py-4">
+                                        <div className="flex items-center justify-end gap-2">
+                                          {item.deliveryStatus === 'pending' && (
+                                            <button
+                                              onClick={() => { setDeliveryItem(item); setDeliveryDate(new Date().toISOString().slice(0, 10)) }}
+                                              className="text-gray-400 hover:text-green-600"
+                                              title={t('contracts.delivery.markDelivered')}
+                                            >
+                                              <CheckCircle2 className="h-4 w-4" />
+                                            </button>
+                                          )}
+                                          {item.deliveryStatus === 'delivered' && (
+                                            <button
+                                              onClick={() => handleRevertDelivery(item)}
+                                              className="text-gray-400 hover:text-amber-600"
+                                              title={t('contracts.delivery.revertToPending')}
+                                            >
+                                              <Undo2 className="h-4 w-4" />
+                                            </button>
+                                          )}
                                           <button
-                                            onClick={() => { setDeliveryItem(item); setDeliveryDate(new Date().toISOString().slice(0, 10)) }}
-                                            className="mr-2 text-gray-400 hover:text-green-600"
-                                            title={t('contracts.delivery.markDelivered')}
+                                            onClick={() => setEditingItem(item)}
+                                            className="text-gray-400 hover:text-blue-600"
                                           >
-                                            <CheckCircle2 className="h-4 w-4" />
+                                            <Edit className="h-4 w-4" />
                                           </button>
-                                        )}
-                                        {item.deliveryStatus === 'delivered' && (
-                                          <button
-                                            onClick={() => handleRevertDelivery(item)}
-                                            className="mr-2 text-gray-400 hover:text-amber-600"
-                                            title={t('contracts.delivery.revertToPending')}
-                                          >
-                                            <Undo2 className="h-4 w-4" />
-                                          </button>
-                                        )}
-                                        <button
-                                          onClick={() => setEditingItem(item)}
-                                          className="mr-2 text-gray-400 hover:text-blue-600"
-                                        >
-                                          <Edit className="h-4 w-4" />
-                                        </button>
-                                        <RemoveItemButton
-                                          itemId={item.id}
-                                          itemName={itemName}
-                                          onSuccess={() => refetch()}
-                                        />
+                                          <RemoveItemButton
+                                            itemId={item.id}
+                                            itemName={itemName}
+                                            isInvoiced={contract.invoicedItemIds.includes(Number(item.id))}
+                                            onSuccess={() => refetch()}
+                                          />
+                                        </div>
                                       </td>
                                     )}
                                   </tr>
@@ -1496,36 +1514,39 @@ export function ContractDetail() {
                                         {formatCurrency(oneOffTotal.toString())}
                                       </td>
                                       {canEdit && (
-                                        <td className="whitespace-nowrap px-6 py-4 text-right">
-                                          {item.deliveryStatus === 'pending' && (
+                                        <td className="whitespace-nowrap px-6 py-4">
+                                          <div className="flex items-center justify-end gap-2">
+                                            {item.deliveryStatus === 'pending' && (
+                                              <button
+                                                onClick={() => { setDeliveryItem(item); setDeliveryDate(new Date().toISOString().slice(0, 10)) }}
+                                                className="text-gray-400 hover:text-green-600"
+                                                title={t('contracts.delivery.markDelivered')}
+                                              >
+                                                <CheckCircle2 className="h-4 w-4" />
+                                              </button>
+                                            )}
+                                            {item.deliveryStatus === 'delivered' && (
+                                              <button
+                                                onClick={() => handleRevertDelivery(item)}
+                                                className="text-gray-400 hover:text-amber-600"
+                                                title={t('contracts.delivery.revertToPending')}
+                                              >
+                                                <Undo2 className="h-4 w-4" />
+                                              </button>
+                                            )}
                                             <button
-                                              onClick={() => { setDeliveryItem(item); setDeliveryDate(new Date().toISOString().slice(0, 10)) }}
-                                              className="mr-2 text-gray-400 hover:text-green-600"
-                                              title={t('contracts.delivery.markDelivered')}
+                                              onClick={() => setEditingItem(item)}
+                                              className="text-gray-400 hover:text-blue-600"
                                             >
-                                              <CheckCircle2 className="h-4 w-4" />
+                                              <Edit className="h-4 w-4" />
                                             </button>
-                                          )}
-                                          {item.deliveryStatus === 'delivered' && (
-                                            <button
-                                              onClick={() => handleRevertDelivery(item)}
-                                              className="mr-2 text-gray-400 hover:text-amber-600"
-                                              title={t('contracts.delivery.revertToPending')}
-                                            >
-                                              <Undo2 className="h-4 w-4" />
-                                            </button>
-                                          )}
-                                          <button
-                                            onClick={() => setEditingItem(item)}
-                                            className="mr-2 text-gray-400 hover:text-blue-600"
-                                          >
-                                            <Edit className="h-4 w-4" />
-                                          </button>
-                                          <RemoveItemButton
-                                            itemId={item.id}
-                                            itemName={itemName}
-                                            onSuccess={() => refetch()}
-                                          />
+                                            <RemoveItemButton
+                                              itemId={item.id}
+                                              itemName={itemName}
+                                              isInvoiced={contract.invoicedItemIds.includes(Number(item.id))}
+                                              onSuccess={() => refetch()}
+                                            />
+                                          </div>
                                         </td>
                                       )}
                                     </tr>
@@ -1866,6 +1887,7 @@ export function ContractDetail() {
         <EditItemModal
           item={editingItem}
           siblingItems={contract?.items || []}
+          invoicedUntil={contract?.itemInvoicedUntil?.[editingItem.id]}
           onClose={() => setEditingItem(null)}
           onSuccess={() => {
             setEditingItem(null)
@@ -2617,11 +2639,13 @@ function AddItemModal({
 function EditItemModal({
   item,
   siblingItems,
+  invoicedUntil,
   onClose,
   onSuccess,
 }: {
   item: ContractItem
   siblingItems: ContractItem[]
+  invoicedUntil?: string
   onClose: () => void
   onSuccess: () => void
 }) {
@@ -3365,6 +3389,7 @@ function EditItemModal({
                     <Input
                       type="date"
                       value={billingEndDate}
+                      min={invoicedUntil || undefined}
                       onChange={(e) => setBillingEndDate(e.target.value)}
                       className="flex-1"
                     />
@@ -3374,9 +3399,15 @@ function EditItemModal({
                       </Button>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {t('contracts.item.billingEndDateHint')}
-                  </p>
+                  {invoicedUntil ? (
+                    <p className="text-xs text-amber-600">
+                      {t('contracts.item.billingEndMinHint', { date: formatDate(invoicedUntil) })}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {t('contracts.item.billingEndDateHint')}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">{t('contracts.item.alignToContractAt')}</label>
@@ -3421,10 +3452,12 @@ function EditItemModal({
 function RemoveItemButton({
   itemId,
   itemName,
+  isInvoiced,
   onSuccess,
 }: {
   itemId: string
   itemName: string
+  isInvoiced?: boolean
   onSuccess: () => void
 }) {
   const { t } = useTranslation()
@@ -3448,11 +3481,22 @@ function RemoveItemButton({
     }
   }
 
+  if (isInvoiced) {
+    return (
+      <span
+        title={t('contracts.item.cannotDeleteInvoiced')}
+        className="inline-flex text-gray-300 cursor-not-allowed"
+      >
+        <Trash2 className="h-4 w-4" />
+      </span>
+    )
+  }
+
   return (
     <button
       onClick={handleRemove}
       disabled={loading}
-      className="text-gray-400 hover:text-red-600 disabled:opacity-50"
+      className="inline-flex text-gray-400 hover:text-red-600 disabled:opacity-50"
     >
       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
     </button>
