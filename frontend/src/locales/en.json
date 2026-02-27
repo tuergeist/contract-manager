@@ -429,6 +429,7 @@
       "target": "Target",
       "ytdActual": "YTD Actual",
       "forecast": "Forecast",
+      "difference": "Difference",
       "progress": "Progress",
       "total": "Total",
       "noTarget": "No target set",

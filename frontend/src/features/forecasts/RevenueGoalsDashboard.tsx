@@ -141,8 +141,7 @@ export function RevenueGoalsDashboard() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-medium">{t('forecasts.goals.title')}</h2>
+      <div className="flex justify-end">
         <select
           value={selectedYear}
           onChange={(e) => setSelectedYear(parseInt(e.target.value))}
@@ -243,6 +242,9 @@ export function RevenueGoalsDashboard() {
                   <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                     {t('forecasts.goals.forecast')}
                   </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('forecasts.goals.difference')}
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 w-48">
                     {t('forecasts.goals.progress')}
                   </th>
@@ -271,6 +273,15 @@ export function RevenueGoalsDashboard() {
                       </td>
                       <td className="px-6 py-4 text-sm text-right font-medium text-gray-900">
                         {formatCurrency(forecast.toString())}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-right">
+                        {target ? (
+                          <span className={forecast - target >= 0 ? 'text-emerald-600 font-medium' : 'text-red-600 font-medium'}>
+                            {forecast - target >= 0 ? '+' : ''}{formatCurrency((forecast - target).toString())}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         {progress !== null ? (
@@ -310,6 +321,13 @@ export function RevenueGoalsDashboard() {
                   </td>
                   <td className="px-6 py-4 text-sm text-right font-bold text-gray-900">
                     {formatCurrency(totalForecast.toString())}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-right">
+                    {totalTarget > 0 ? (
+                      <span className={`font-bold ${totalForecast - totalTarget >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {totalForecast - totalTarget >= 0 ? '+' : ''}{formatCurrency((totalForecast - totalTarget).toString())}
+                      </span>
+                    ) : '-'}
                   </td>
                   <td className="px-6 py-4">
                     {totalTarget > 0 ? (

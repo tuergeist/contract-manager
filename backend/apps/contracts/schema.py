@@ -3190,7 +3190,7 @@ class ContractMutation:
                 if input.quantity is not None:
                     item.quantity = input.quantity
                 if input.unit_price is not None:
-                    if is_price_locked:
+                    if is_price_locked and input.unit_price != item.unit_price:
                         return ContractItemResult(error="Price is locked and cannot be changed")
                     item.unit_price = input.unit_price
                 if input.price_period is not None:
