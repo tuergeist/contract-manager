@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Settings } from './Settings'
 import { ForecastCacheSettings } from './ForecastCacheSettings'
+import { RevenueGoalSettings } from './RevenueGoalSettings'
 
 export function GeneralSettingsTabs() {
   const { t } = useTranslation()
@@ -12,6 +13,7 @@ export function GeneralSettingsTabs() {
   const getActiveSubTab = () => {
     if (location.pathname.includes('/general/help-videos')) return 'helpVideos'
     if (location.pathname.includes('/general/performance')) return 'performance'
+    if (location.pathname.includes('/general/revenue-goals')) return 'revenueGoals'
     return 'contracts'
   }
 
@@ -25,6 +27,9 @@ export function GeneralSettingsTabs() {
       case 'performance':
         navigate('/settings/general/performance')
         break
+      case 'revenueGoals':
+        navigate('/settings/general/revenue-goals')
+        break
       default:
         navigate('/settings/general')
     }
@@ -36,6 +41,7 @@ export function GeneralSettingsTabs() {
         <TabsTrigger value="contracts">{t('settings.generalTabs.contracts')}</TabsTrigger>
         <TabsTrigger value="helpVideos">{t('settings.generalTabs.helpVideos')}</TabsTrigger>
         <TabsTrigger value="performance">{t('settings.generalTabs.performance')}</TabsTrigger>
+        <TabsTrigger value="revenueGoals">{t('settings.generalTabs.revenueGoals')}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="contracts">
@@ -48,6 +54,10 @@ export function GeneralSettingsTabs() {
 
       <TabsContent value="performance">
         <ForecastCacheSettings />
+      </TabsContent>
+
+      <TabsContent value="revenueGoals">
+        <RevenueGoalSettings />
       </TabsContent>
     </Tabs>
   )

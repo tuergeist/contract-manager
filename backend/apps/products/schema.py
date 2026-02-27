@@ -7,7 +7,8 @@ from strawberry.types import Info
 from django.db.models import OuterRef, Subquery
 
 from apps.core.context import Context
-from apps.core.permissions import get_current_user, require_perm
+from apps.core.models import RevenueType
+from apps.core.permissions import check_perm, get_current_user, require_perm
 from .models import Product, ProductCategory, ProductPrice
 
 
@@ -35,6 +36,7 @@ class ProductType:
     billing_frequency: auto
     is_active: auto
     synced_at: auto
+    revenue_type: auto
     category: ProductCategoryType | None
 
     @strawberry.field
@@ -73,6 +75,7 @@ class ProductQuery:
         info: Info[Context, None],
         search: str | None = None,
         is_active: bool | None = None,
+        revenue_type: str | None = None,
         page: int = 1,
         page_size: int = 20,
         sort_by: str | None = "name",
@@ -94,11 +97,17 @@ class ProductQuery:
         if is_active is not None:
             queryset = queryset.filter(is_active=is_active)
 
+        if revenue_type is not None:
+            if revenue_type == "unclassified":
+                queryset = queryset.filter(revenue_type__isnull=True)
+            else:
+                queryset = queryset.filter(revenue_type=revenue_type)
+
         if search:
             queryset = queryset.filter(name__icontains=search)
 
         # Sorting
-        allowed_sort_fields = {"name", "sku", "is_active", "synced_at", "price"}
+        allowed_sort_fields = {"name", "sku", "is_active", "synced_at", "price", "revenue_type"}
         if sort_by == "price":
             # Annotate with current price for sorting
             current_price_subquery = ProductPrice.objects.filter(
@@ -135,3 +144,43 @@ class ProductQuery:
         if user.tenant:
             return Product.objects.filter(tenant=user.tenant, id=id).first()
         return None
+
+
+@strawberry.type
+class SetProductRevenueTypeResult:
+    product: ProductType | None = None
+    success: bool = False
+    error: str | None = None
+
+
+@strawberry.type
+class ProductMutation:
+    @strawberry.mutation
+    def set_product_revenue_type(
+        self,
+        info: Info[Context, None],
+        product_id: strawberry.ID,
+        revenue_type: str,
+    ) -> SetProductRevenueTypeResult:
+        """Set the revenue type classification for a product."""
+        user, err = check_perm(info, "products", "write")
+        if err:
+            return SetProductRevenueTypeResult(error=err)
+        if not user.tenant:
+            return SetProductRevenueTypeResult(error="No tenant")
+
+        # Validate revenue_type
+        valid_types = [c[0] for c in RevenueType.choices]
+        if revenue_type not in valid_types:
+            return SetProductRevenueTypeResult(
+                error=f"Invalid revenue type. Must be one of: {', '.join(valid_types)}"
+            )
+
+        product = Product.objects.filter(tenant=user.tenant, id=product_id).first()
+        if not product:
+            return SetProductRevenueTypeResult(error="Product not found")
+
+        product.revenue_type = revenue_type
+        product.save(update_fields=["revenue_type", "updated_at"])
+
+        return SetProductRevenueTypeResult(product=product, success=True)

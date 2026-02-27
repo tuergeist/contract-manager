@@ -126,7 +126,15 @@
     "inactive": "Inactive",
     "total": "Products",
     "searchPlaceholder": "Search by name...",
-    "showInactive": "Show inactive"
+    "showInactive": "Show inactive",
+    "revenueType": "Revenue Type",
+    "allRevenueTypes": "All revenue types",
+    "revenueTypes": {
+      "recurring": "Recurring Revenue",
+      "advancedDevelopment": "Advanced Development",
+      "trainingImplementation": "Training + Implementation",
+      "unclassified": "Unclassified"
+    }
   },
   "contracts": {
     "title": "Contracts",
@@ -353,6 +361,12 @@
       "estimatedDeliveryDatePlaceholder": "Select estimated delivery date",
       "eta": "ETA"
     },
+    "revenueType": {
+      "label": "Revenue Type",
+      "inherited": "Inherited from product",
+      "required": "Revenue type is required for items without a product",
+      "override": "Override revenue type"
+    },
     "actions": {
       "save": "Save Contract",
       "cancel": "Cancel",
@@ -405,7 +419,26 @@
   },
   "forecasts": {
     "revenueTab": "Revenue",
-    "liquidityTab": "Liquidity"
+    "liquidityTab": "Liquidity",
+    "goalsTab": "Goals",
+    "goals": {
+      "title": "Revenue Goals",
+      "year": "Year",
+      "stream": "Revenue Stream",
+      "target": "Target",
+      "ytdActual": "YTD Actual",
+      "forecast": "Forecast",
+      "progress": "Progress",
+      "total": "Total",
+      "noTarget": "No target set",
+      "setGoals": "Set goals in Settings",
+      "onTrack": "On track",
+      "overTarget": "Over target",
+      "unclassified": "Unclassified",
+      "unclassifiedWarning": "Some revenue is not classified to a stream",
+      "noUnclassifiedItems": "No unclassified items found",
+      "openContract": "Open contract"
+    }
   },
   "forecast": {
     "title": "Revenue Forecast",
@@ -1056,7 +1089,18 @@
       "notifications": "Notifications",
       "contracts": "Contracts",
       "helpVideos": "Help Videos",
-      "performance": "Performance"
+      "performance": "Performance",
+      "revenueGoals": "Revenue Goals"
+    },
+    "revenueGoals": {
+      "title": "Revenue Goals",
+      "description": "Set yearly revenue targets for each stream",
+      "year": "Year",
+      "target": "Target",
+      "save": "Save Goals",
+      "saved": "Goals saved",
+      "saveFailed": "Failed to save goals",
+      "noGoals": "No goals defined for this year"
     },
     "forecastCache": {
       "title": "Forecast Cache",

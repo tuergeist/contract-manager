@@ -126,7 +126,15 @@
     "inactive": "Inaktiv",
     "total": "Produkte",
     "searchPlaceholder": "Nach Name suchen...",
-    "showInactive": "Inaktive anzeigen"
+    "showInactive": "Inaktive anzeigen",
+    "revenueType": "Umsatzart",
+    "allRevenueTypes": "Alle Umsatzarten",
+    "revenueTypes": {
+      "recurring": "Wiederkehrend",
+      "advancedDevelopment": "Weiterentwicklung",
+      "trainingImplementation": "Training + Implementierung",
+      "unclassified": "Nicht klassifiziert"
+    }
   },
   "contracts": {
     "title": "Verträge",
@@ -353,6 +361,12 @@
       "estimatedDeliveryDatePlaceholder": "Voraussichtliches Lieferdatum auswählen",
       "eta": "ETA"
     },
+    "revenueType": {
+      "label": "Umsatzart",
+      "inherited": "Vom Produkt geerbt",
+      "required": "Umsatzart ist erforderlich f\u00fcr Positionen ohne Produkt",
+      "override": "Umsatzart \u00fcberschreiben"
+    },
     "actions": {
       "save": "Vertrag speichern",
       "cancel": "Abbrechen",
@@ -405,7 +419,26 @@
   },
   "forecasts": {
     "revenueTab": "Umsatz",
-    "liquidityTab": "Liquidität"
+    "liquidityTab": "Liquidit\u00e4t",
+    "goalsTab": "Ziele",
+    "goals": {
+      "title": "Umsatzziele",
+      "year": "Jahr",
+      "stream": "Umsatzart",
+      "target": "Ziel",
+      "ytdActual": "YTD Ist",
+      "forecast": "Prognose",
+      "progress": "Fortschritt",
+      "total": "Gesamt",
+      "noTarget": "Kein Ziel gesetzt",
+      "setGoals": "Ziele in Einstellungen setzen",
+      "onTrack": "Im Plan",
+      "overTarget": "\u00dcber Ziel",
+      "unclassified": "Nicht klassifiziert",
+      "unclassifiedWarning": "Einige Ums\u00e4tze sind keiner Kategorie zugeordnet",
+      "noUnclassifiedItems": "Keine nicht klassifizierten Positionen gefunden",
+      "openContract": "Vertrag \u00f6ffnen"
+    }
   },
   "forecast": {
     "title": "Umsatzvorschau",
@@ -1056,7 +1089,18 @@
       "notifications": "Benachrichtigungen",
       "contracts": "Verträge",
       "helpVideos": "Hilfe-Videos",
-      "performance": "Performance"
+      "performance": "Performance",
+      "revenueGoals": "Umsatzziele"
+    },
+    "revenueGoals": {
+      "title": "Umsatzziele",
+      "description": "J\u00e4hrliche Umsatzziele pro Kategorie festlegen",
+      "year": "Jahr",
+      "target": "Ziel",
+      "save": "Ziele speichern",
+      "saved": "Ziele gespeichert",
+      "saveFailed": "Fehler beim Speichern der Ziele",
+      "noGoals": "Keine Ziele f\u00fcr dieses Jahr definiert"
     },
     "forecastCache": {
       "title": "Forecast-Cache",

@@ -4,7 +4,7 @@ import uuid
 
 from django.db import models
 
-from apps.core.models import TenantModel
+from apps.core.models import RevenueType, TenantModel
 
 
 class ContractGroup(TenantModel):
@@ -1011,6 +1011,13 @@ class ContractItem(TenantModel):
         default=False,
         help_text="If True, this item is billed only once (not recurring).",
     )
+    revenue_type = models.CharField(
+        max_length=30,
+        choices=RevenueType.choices,
+        null=True,
+        blank=True,
+        help_text="Revenue stream override. If null, inherits from product.",
+    )
     order_confirmation_number = models.CharField(
         max_length=100,
         blank=True,
@@ -1071,6 +1078,14 @@ class ContractItem(TenantModel):
         if self.product:
             return f"{self.product.name} x{self.quantity}"
         return self.description[:50] if self.description else f"Item {self.id}"
+
+    def get_effective_revenue_type(self) -> str | None:
+        """Resolve revenue type: explicit override → product → None."""
+        if self.revenue_type:
+            return self.revenue_type
+        if self.product and self.product.revenue_type:
+            return self.product.revenue_type
+        return None
 
     @property
     def total_price(self):
@@ -1445,6 +1460,24 @@ class ContractLink(TenantModel):
 
     def __str__(self):
         return f"{self.name} ({self.contract})"
+
+
+class RevenueGoal(TenantModel):
+    """Yearly revenue target per revenue stream."""
+
+    year = models.IntegerField()
+    revenue_type = models.CharField(
+        max_length=30,
+        choices=RevenueType.choices,
+    )
+    target_amount = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        unique_together = ["tenant", "year", "revenue_type"]
+        ordering = ["year", "revenue_type"]
+
+    def __str__(self):
+        return f"{self.year} {self.get_revenue_type_display()}: {self.target_amount}"
 
 
 class ContractComment(TenantModel):

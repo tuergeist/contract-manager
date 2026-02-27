@@ -1,7 +1,7 @@
 """Product models."""
 from django.db import models
 
-from apps.core.models import TenantModel
+from apps.core.models import RevenueType, TenantModel
 
 
 class ProductCategory(TenantModel):
@@ -59,6 +59,13 @@ class Product(TenantModel):
         null=True,
         blank=True,
         help_text="Default billing frequency for this product",
+    )
+    revenue_type = models.CharField(
+        max_length=30,
+        choices=RevenueType.choices,
+        null=True,
+        blank=True,
+        help_text="Revenue stream classification: Advanced Development, Training + Implementation, or Recurring",
     )
     is_active = models.BooleanField(default=True)
     successor = models.ForeignKey(

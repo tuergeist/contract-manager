@@ -4,7 +4,7 @@ import strawberry
 from apps.core.schema import AuthMutation, CoreQuery, FeedbackMutation
 from apps.tenants.schema import TenantQuery, TenantMutation
 from apps.customers.schema import CustomerQuery, CustomerMutation
-from apps.products.schema import ProductQuery
+from apps.products.schema import ProductQuery, ProductMutation
 from apps.contracts.schema import (
     ContractQuery,
     ContractMutation,
@@ -38,7 +38,7 @@ class Query(
 
 
 @strawberry.type
-class Mutation(AuthMutation, FeedbackMutation, TenantMutation, CustomerMutation, ContractMutation, ContractImportMutation, TodoMutation, InvoiceMutation, BankingMutation, OfferMutation):
+class Mutation(AuthMutation, FeedbackMutation, TenantMutation, CustomerMutation, ProductMutation, ContractMutation, ContractImportMutation, TodoMutation, InvoiceMutation, BankingMutation, OfferMutation):
     pass
 
 

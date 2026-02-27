@@ -152,6 +152,8 @@ const CONTRACT_DETAIL_QUERY = gql`
         deliveryStatus
         deliveredAt
         estimatedDeliveryDate
+        revenueType
+        effectiveRevenueType
         dependsOn {
           id
           product {
@@ -279,6 +281,7 @@ const PRODUCTS_FOR_SELECT_QUERY = gql`
         name
         sku
         isActive
+        revenueType
         currentPrice {
           price
         }
@@ -528,6 +531,7 @@ interface Product {
   name: string
   sku: string | null
   isActive: boolean
+  revenueType: string | null
   currentPrice: { price: string } | null
 }
 
@@ -574,6 +578,8 @@ interface ContractItem {
     description: string
   }[]
   pricePeriods: PricePeriod[] | null
+  revenueType: string | null
+  effectiveRevenueType: string | null
   product: {
     id: string
     name: string
@@ -2220,6 +2226,7 @@ function AddItemModal({
   const [deliveryTracking, setDeliveryTracking] = useState(false)
   const [dependsOnItemId, setDependsOnItemId] = useState('none')
   const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState('')
+  const [revenueType, setRevenueType] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [productSearchOpen, setProductSearchOpen] = useState(false)
   const [productSearchTerm, setProductSearchTerm] = useState('')
@@ -2309,6 +2316,7 @@ function AddItemModal({
             deliveryTracking,
             dependsOnItemId: dependsOnItemId && dependsOnItemId !== 'none' ? dependsOnItemId : null,
             estimatedDeliveryDate: deliveryTracking && estimatedDeliveryDate ? estimatedDeliveryDate : null,
+            revenueType: revenueType || null,
           },
         },
       })
@@ -2511,6 +2519,34 @@ function AddItemModal({
                 />
               </div>
 
+              {/* Revenue Type */}
+              {!productId ? (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    {t('contracts.revenueType.label')} <span className="text-red-500">*</span>
+                  </label>
+                  <Select value={revenueType} onValueChange={setRevenueType}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('contracts.revenueType.label')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="recurring">{t('products.revenueTypes.recurring')}</SelectItem>
+                      <SelectItem value="advanced_development">{t('products.revenueTypes.advancedDevelopment')}</SelectItem>
+                      <SelectItem value="training_implementation">{t('products.revenueTypes.trainingImplementation')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{t('contracts.revenueType.required')}</p>
+                </div>
+              ) : selectedProduct?.revenueType ? (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t('contracts.revenueType.label')}</label>
+                  <p className="text-sm text-muted-foreground">
+                    {t(`products.revenueTypes.${selectedProduct.revenueType === 'advanced_development' ? 'advancedDevelopment' : selectedProduct.revenueType === 'training_implementation' ? 'trainingImplementation' : 'recurring'}`)}
+                    {' '}({t('contracts.revenueType.inherited')})
+                  </p>
+                </div>
+              ) : null}
+
               {/* Delivery Tracking + Depends On */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center space-x-2">
@@ -2676,6 +2712,7 @@ function EditItemModal({
   const [deliveryTracking, setDeliveryTracking] = useState(!!item.deliveryStatus)
   const [dependsOnItemId, setDependsOnItemId] = useState(item.dependsOn?.id || 'none')
   const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState(item.estimatedDeliveryDate || '')
+  const [revenueType, setRevenueType] = useState(item.revenueType || '')
   const [error, setError] = useState<string | null>(null)
 
   const { data: productsData, loading: loadingProducts } = useQuery(PRODUCTS_FOR_SELECT_QUERY, {
@@ -2686,7 +2723,7 @@ function EditItemModal({
     if (a.isActive !== b.isActive) return a.isActive ? -1 : 1
     return a.name.localeCompare(b.name)
   })
-  const selectedProduct = products.find((p) => p.id === productId) || (item.product ? { id: item.product.id, name: item.product.name, sku: item.product.sku, isActive: true, currentPrice: null } as Product : null)
+  const selectedProduct = products.find((p) => p.id === productId) || (item.product ? { id: item.product.id, name: item.product.name, sku: item.product.sku, isActive: true, revenueType: null, currentPrice: null } as Product : null)
 
   const handleProductSelect = (id: string) => {
     setProductId(id)
@@ -2833,6 +2870,7 @@ function EditItemModal({
             deliveryTracking,
             dependsOnItemId: dependsOnItemId && dependsOnItemId !== 'none' ? dependsOnItemId : null,
             estimatedDeliveryDate: deliveryTracking && estimatedDeliveryDate ? estimatedDeliveryDate : null,
+            revenueType: revenueType || null,
           },
         },
       })
@@ -3338,6 +3376,34 @@ function EditItemModal({
                   onChange={(e) => setOrderConfirmationNumber(e.target.value)}
                 />
               </div>
+
+              {/* Revenue Type */}
+              {!productId ? (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    {t('contracts.revenueType.label')} <span className="text-red-500">*</span>
+                  </label>
+                  <Select value={revenueType} onValueChange={setRevenueType}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('contracts.revenueType.label')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="recurring">{t('products.revenueTypes.recurring')}</SelectItem>
+                      <SelectItem value="advanced_development">{t('products.revenueTypes.advancedDevelopment')}</SelectItem>
+                      <SelectItem value="training_implementation">{t('products.revenueTypes.trainingImplementation')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{t('contracts.revenueType.required')}</p>
+                </div>
+              ) : selectedProduct?.revenueType ? (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t('contracts.revenueType.label')}</label>
+                  <p className="text-sm text-muted-foreground">
+                    {t(`products.revenueTypes.${selectedProduct.revenueType === 'advanced_development' ? 'advancedDevelopment' : selectedProduct.revenueType === 'training_implementation' ? 'trainingImplementation' : 'recurring'}`)}
+                    {' '}({t('contracts.revenueType.inherited')})
+                  </p>
+                </div>
+              ) : null}
 
               {/* Start Date + Billing Start Date - 2 columns */}
               <div className="grid grid-cols-2 gap-4">

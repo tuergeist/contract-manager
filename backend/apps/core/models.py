@@ -2,6 +2,12 @@
 from django.db import models
 
 
+class RevenueType(models.TextChoices):
+    ADVANCED_DEVELOPMENT = "advanced_development", "Advanced Development"
+    TRAINING_IMPLEMENTATION = "training_implementation", "Training + Implementation"
+    RECURRING = "recurring", "Recurring Revenue"
+
+
 class TimestampedModel(models.Model):
     """Abstract base model with created and modified timestamps."""
 

@@ -21,7 +21,7 @@ from apps.customers.models import Customer
 from apps.customers.schema import CustomerType
 from apps.products.models import Product
 from apps.products.schema import ProductType
-from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, TimeTrackingProjectMapping
+from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, RevenueGoal, TimeTrackingProjectMapping
 from .forecast_cache import (
     dict_to_forecast_result,
     forecast_result_to_dict,
@@ -240,6 +240,9 @@ class ContractItemType:
     dependent_items: List["ContractItemType"] = strawberry.field(default_factory=list)
     # Year-specific pricing
     price_periods: List[ContractItemPriceType] = strawberry.field(default_factory=list)
+    # Revenue type classification
+    revenue_type: str | None = None
+    effective_revenue_type: str | None = None
 
 
 @strawberry_django.type(Contract)
@@ -402,6 +405,8 @@ class ContractType:
                         delivery_status=item.depends_on.delivery_status,
                         delivered_at=item.depends_on.delivered_at,
                         estimated_delivery_date=item.depends_on.estimated_delivery_date,
+                        revenue_type=item.depends_on.revenue_type,
+                        effective_revenue_type=item.depends_on.get_effective_revenue_type(),
                     ) if item.depends_on else None,
                     dependent_items=[
                         ContractItemType(
@@ -419,10 +424,14 @@ class ContractType:
                             delivery_status=dep.delivery_status,
                             delivered_at=dep.delivered_at,
                             estimated_delivery_date=dep.estimated_delivery_date,
+                            revenue_type=dep.revenue_type,
+                            effective_revenue_type=dep.get_effective_revenue_type(),
                         )
                         for dep in item.dependent_items.all()
                     ],
                     price_periods=price_periods,
+                    revenue_type=item.revenue_type,
+                    effective_revenue_type=item.get_effective_revenue_type(),
                 )
             )
         return result
@@ -645,6 +654,7 @@ class ContractItemInput:
     delivery_tracking: bool = False
     depends_on_item_id: strawberry.ID | None = None
     estimated_delivery_date: date | None = None
+    revenue_type: str | None = None
 
 
 @strawberry.input
@@ -667,6 +677,7 @@ class UpdateContractItemInput:
     delivery_tracking: bool | None = None
     depends_on_item_id: strawberry.ID | None = UNSET
     estimated_delivery_date: date | None = UNSET
+    revenue_type: str | None = UNSET
 
 
 @strawberry.input
@@ -1115,6 +1126,85 @@ def calculate_dashboard_kpis(tenant) -> dict:
     }
 
 
+def calculate_revenue_by_stream(tenant, year: int) -> list[dict]:
+    """
+    Calculate revenue grouped by revenue stream (effective_revenue_type)
+    for a given year.
+
+    Returns a list of dicts, one per stream, each with:
+    - revenue_type: str (or "unclassified")
+    - ytd_actual: Decimal (Jan 1 → today, or full year if year < current)
+    - full_year_forecast: Decimal (Jan 1 → Dec 31)
+    """
+    today = date.today()
+    year_start = date(year, 1, 1)
+    year_end = date(year, 12, 31)
+
+    # For YTD: if current year, use today; if past year, use year_end; if future, 0
+    ytd_cutoff = min(today, year_end) if year <= today.year else None
+
+    active_contracts = Contract.objects.filter(
+        tenant=tenant,
+        status=Contract.Status.ACTIVE,
+    ).prefetch_related("items", "items__product", "items__price_periods", "items__depends_on")
+
+    # Accumulators: stream -> {ytd, forecast}
+    streams: dict[str, dict[str, Decimal]] = {}
+
+    for contract in active_contracts:
+        items = list(contract.items.all())
+
+        # Build a lookup: item_id -> effective_revenue_type
+        item_revenue_types: dict[int, str] = {}
+        for item in items:
+            ert = item.get_effective_revenue_type()
+            item_revenue_types[item.id] = ert or "unclassified"
+
+        schedule = contract.get_recognition_schedule(
+            from_date=year_start,
+            to_date=year_end,
+            include_history=True,
+            items=items,
+            include_eta_items=True,
+        )
+
+        for event in schedule:
+            event_date = event["date"]
+            for ei in event["items"]:
+                stream = item_revenue_types.get(ei["item_id"], "unclassified")
+                if stream not in streams:
+                    streams[stream] = {"ytd": Decimal("0"), "forecast": Decimal("0")}
+
+                amount = ei["amount"]
+                streams[stream]["forecast"] += amount
+
+                if ytd_cutoff and event_date <= ytd_cutoff:
+                    streams[stream]["ytd"] += amount
+
+    # Ensure all 3 standard streams are present
+    from apps.core.models import RevenueType
+    for rt_value, _ in RevenueType.choices:
+        if rt_value not in streams:
+            streams[rt_value] = {"ytd": Decimal("0"), "forecast": Decimal("0")}
+
+    result = []
+    for stream, data in streams.items():
+        result.append({
+            "revenue_type": stream,
+            "ytd_actual": data["ytd"],
+            "full_year_forecast": data["forecast"],
+        })
+
+    return result
+
+
+@strawberry.type
+class RevenueStreamDataType:
+    revenue_type: str
+    ytd_actual: Decimal
+    full_year_forecast: Decimal
+
+
 @strawberry.type
 class DashboardKPIsType:
     """Dashboard KPI metrics for contract portfolio."""
@@ -1496,6 +1586,41 @@ def _determine_cell_invoice_status(invoice, period_str: str, today: date, is_qua
         return "sent"
 
     return "actionable"
+
+
+# =============================================================================
+# Revenue Goal Types
+# =============================================================================
+
+
+@strawberry.type
+class RevenueGoalType:
+    id: int
+    year: int
+    revenue_type: str
+    target_amount: Decimal
+
+
+@strawberry.type
+class RevenueGoalResult:
+    goal: RevenueGoalType | None = None
+    success: bool = False
+    error: str | None = None
+
+
+@strawberry.type
+class UnclassifiedItemType:
+    """A contract item without a revenue type classification."""
+    item_id: int
+    product_name: str | None
+    description: str
+    is_one_off: bool
+    unit_price: Decimal
+    quantity: int
+    contract_id: int
+    contract_name: str
+    customer_name: str
+    customer_id: int
 
 
 @strawberry.type
@@ -2595,6 +2720,81 @@ class ContractQuery:
         ).select_related("author")
         return [_build_contract_comment(c, user) for c in comments]
 
+    @strawberry.field
+    def revenue_goals(
+        self,
+        info: Info[Context, None],
+        year: int,
+    ) -> list[RevenueGoalType]:
+        """Get revenue goals for a given year."""
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+
+        goals = RevenueGoal.objects.filter(tenant=user.tenant, year=year)
+        return [
+            RevenueGoalType(
+                id=g.id,
+                year=g.year,
+                revenue_type=g.revenue_type,
+                target_amount=g.target_amount,
+            )
+            for g in goals
+        ]
+
+    @strawberry.field
+    def revenue_by_stream(
+        self,
+        info: Info[Context, None],
+        year: int,
+    ) -> list[RevenueStreamDataType]:
+        """Get revenue data broken down by revenue stream for a given year."""
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+
+        stream_data = calculate_revenue_by_stream(user.tenant, year)
+        return [
+            RevenueStreamDataType(
+                revenue_type=s["revenue_type"],
+                ytd_actual=s["ytd_actual"],
+                full_year_forecast=s["full_year_forecast"],
+            )
+            for s in stream_data
+        ]
+
+    @strawberry.field
+    def unclassified_revenue_items(
+        self,
+        info: Info[Context, None],
+    ) -> list[UnclassifiedItemType]:
+        """Get contract items from active contracts that have no effective revenue type."""
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+
+        items = ContractItem.objects.filter(
+            tenant=user.tenant,
+            contract__status=Contract.Status.ACTIVE,
+        ).select_related("product", "contract", "contract__customer")
+
+        result = []
+        for item in items:
+            if item.get_effective_revenue_type() is None:
+                result.append(UnclassifiedItemType(
+                    item_id=item.id,
+                    product_name=item.product.name if item.product else None,
+                    description=item.description or "",
+                    is_one_off=item.is_one_off,
+                    unit_price=item.unit_price,
+                    quantity=item.quantity,
+                    contract_id=item.contract_id,
+                    contract_name=item.contract.name or f"Contract {item.contract_id}",
+                    customer_name=item.contract.customer.name,
+                    customer_id=item.contract.customer_id,
+                ))
+        return result
+
 
 def _check_price_period_overlap(
     item: ContractItem,
@@ -2879,6 +3079,7 @@ class ContractMutation:
                     delivery_status="pending" if input.delivery_tracking else None,
                     estimated_delivery_date=input.estimated_delivery_date if input.delivery_tracking else None,
                     depends_on=depends_on_item,
+                    revenue_type=input.revenue_type,
                 )
 
                 # Create amendment record only for non-draft contracts
@@ -2929,6 +3130,8 @@ class ContractMutation:
                     depends_on=None,
                     dependent_items=[],
                     price_periods=[],  # Newly created items have no price periods
+                    revenue_type=item.revenue_type,
+                    effective_revenue_type=item.get_effective_revenue_type(),
                 ),
                 success=True,
             )
@@ -3049,6 +3252,9 @@ class ContractMutation:
                             return ContractItemResult(error="Dependency target must have delivery tracking enabled")
                         item.depends_on = dep_item
 
+                if input.revenue_type is not UNSET:
+                    item.revenue_type = input.revenue_type
+
                 item.save()
 
                 # Create amendment record only for non-draft contracts
@@ -3141,6 +3347,8 @@ class ContractMutation:
                     depends_on=None,
                     dependent_items=[],
                     price_periods=price_periods,
+                    revenue_type=item.revenue_type,
+                    effective_revenue_type=item.get_effective_revenue_type(),
                 ),
                 success=True,
             )
@@ -4983,4 +5191,67 @@ class ContractImportMutation:
             return DeleteResult(error="You can only delete your own comments")
 
         comment.delete()
+        return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def set_revenue_goal(
+        self,
+        info: Info[Context, None],
+        year: int,
+        revenue_type: str,
+        target_amount: Decimal,
+    ) -> RevenueGoalResult:
+        """Create or update a revenue goal for a year and revenue type."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return RevenueGoalResult(error=err)
+        if not user.tenant:
+            return RevenueGoalResult(error="No tenant assigned")
+
+        from apps.core.models import RevenueType
+        valid_types = [c[0] for c in RevenueType.choices]
+        if revenue_type not in valid_types:
+            return RevenueGoalResult(
+                error=f"Invalid revenue type. Must be one of: {', '.join(valid_types)}"
+            )
+
+        goal, _ = RevenueGoal.objects.update_or_create(
+            tenant=user.tenant,
+            year=year,
+            revenue_type=revenue_type,
+            defaults={"target_amount": target_amount},
+        )
+
+        return RevenueGoalResult(
+            goal=RevenueGoalType(
+                id=goal.id,
+                year=goal.year,
+                revenue_type=goal.revenue_type,
+                target_amount=goal.target_amount,
+            ),
+            success=True,
+        )
+
+    @strawberry.mutation
+    def delete_revenue_goal(
+        self,
+        info: Info[Context, None],
+        year: int,
+        revenue_type: str,
+    ) -> DeleteResult:
+        """Delete a revenue goal."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return DeleteResult(error=err)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        deleted, _ = RevenueGoal.objects.filter(
+            tenant=user.tenant,
+            year=year,
+            revenue_type=revenue_type,
+        ).delete()
+
+        if deleted == 0:
+            return DeleteResult(error="Revenue goal not found")
         return DeleteResult(success=True)

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Contract, ContractItem, ContractAmendment
+from .models import Contract, ContractItem, ContractAmendment, RevenueGoal
 
 
 class ContractItemInline(admin.TabularInline):
@@ -33,3 +33,9 @@ class ContractAmendmentAdmin(admin.ModelAdmin):
     list_display = ["contract", "type", "effective_date", "created_at"]
     list_filter = ["contract__tenant", "type"]
     search_fields = ["contract__customer__name", "description"]
+
+
+@admin.register(RevenueGoal)
+class RevenueGoalAdmin(admin.ModelAdmin):
+    list_display = ["year", "revenue_type", "target_amount", "tenant"]
+    list_filter = ["tenant", "year", "revenue_type"]

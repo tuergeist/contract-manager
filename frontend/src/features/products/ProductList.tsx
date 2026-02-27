@@ -1,20 +1,22 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery, gql } from '@apollo/client'
+import { useQuery, useMutation, gql } from '@apollo/client'
 import { Loader2, Search, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { usePersistedState } from '@/lib/usePersistedState'
+import { useAuth } from '@/lib/auth'
 import { formatDateTime, formatCurrency } from '@/lib/utils'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 
 const PRODUCTS_QUERY = gql`
-  query Products($search: String, $isActive: Boolean, $page: Int, $pageSize: Int, $sortBy: String, $sortOrder: String) {
-    products(search: $search, isActive: $isActive, page: $page, pageSize: $pageSize, sortBy: $sortBy, sortOrder: $sortOrder) {
+  query Products($search: String, $isActive: Boolean, $revenueType: String, $page: Int, $pageSize: Int, $sortBy: String, $sortOrder: String) {
+    products(search: $search, isActive: $isActive, revenueType: $revenueType, page: $page, pageSize: $pageSize, sortBy: $sortBy, sortOrder: $sortOrder) {
       items {
         id
         name
         sku
         description
         type
+        revenueType
         isActive
         syncedAt
         category {
@@ -36,6 +38,25 @@ const PRODUCTS_QUERY = gql`
   }
 `
 
+const SET_PRODUCT_REVENUE_TYPE = gql`
+  mutation SetProductRevenueType($productId: ID!, $revenueType: String!) {
+    setProductRevenueType(productId: $productId, revenueType: $revenueType) {
+      success
+      error
+      product {
+        id
+        revenueType
+      }
+    }
+  }
+`
+
+const REVENUE_TYPE_OPTIONS = [
+  { value: 'recurring', i18nKey: 'products.revenueTypes.recurring', bg: 'bg-green-100 text-green-800' },
+  { value: 'advanced_development', i18nKey: 'products.revenueTypes.advancedDevelopment', bg: 'bg-orange-100 text-orange-800' },
+  { value: 'training_implementation', i18nKey: 'products.revenueTypes.trainingImplementation', bg: 'bg-cyan-100 text-cyan-800' },
+] as const
+
 interface ProductPrice {
   id: number
   price: string
@@ -53,6 +74,7 @@ interface Product {
   sku: string | null
   description: string | null
   type: string
+  revenueType: string | null
   isActive: boolean
   syncedAt: string | null
   category: ProductCategory | null
@@ -70,27 +92,34 @@ interface ProductsData {
   }
 }
 
-type SortField = 'name' | 'sku' | 'price' | 'isActive' | 'syncedAt'
+type SortField = 'name' | 'sku' | 'price' | 'isActive' | 'syncedAt' | 'revenueType'
 type SortOrder = 'asc' | 'desc'
 
 const PAGE_SIZE = 20
 
 export function ProductList() {
   const { t } = useTranslation()
+  const { hasPermission } = useAuth()
+  const canEditProducts = hasPermission('products', 'write')
   const [searchTerm, setSearchTerm] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
   const [showInactive, setShowInactive] = useState(false)
+  const [revenueTypeFilter, setRevenueTypeFilter] = useState<string>('')
   const [sortBy, setSortBy] = usePersistedState<SortField>('products-sort-by', 'name')
   const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('products-sort-order', 'asc')
+  const [editingProductId, setEditingProductId] = useState<string | null>(null)
+
+  const [setProductRevenueType] = useMutation(SET_PRODUCT_REVENUE_TYPE)
 
   const { data, loading, error } = useQuery<ProductsData>(PRODUCTS_QUERY, {
     variables: {
       search: searchTerm || null,
       isActive: showInactive ? null : true,
+      revenueType: revenueTypeFilter || null,
       page,
       pageSize: PAGE_SIZE,
-      sortBy: sortBy === 'isActive' ? 'is_active' : sortBy === 'syncedAt' ? 'synced_at' : sortBy,
+      sortBy: sortBy === 'isActive' ? 'is_active' : sortBy === 'syncedAt' ? 'synced_at' : sortBy === 'revenueType' ? 'revenue_type' : sortBy,
       sortOrder,
     },
   })
@@ -118,6 +147,21 @@ export function ProductList() {
     return sortOrder === 'asc'
       ? <ArrowUp className="ml-1 h-4 w-4" />
       : <ArrowDown className="ml-1 h-4 w-4" />
+  }
+
+  const handleRevenueTypeChange = async (productId: string, newRevenueType: string) => {
+    setEditingProductId(null)
+    await setProductRevenueType({
+      variables: { productId, revenueType: newRevenueType },
+      optimisticResponse: {
+        setProductRevenueType: {
+          __typename: 'SetProductRevenueTypeResult',
+          success: true,
+          error: null,
+          product: { __typename: 'ProductType', id: productId, revenueType: newRevenueType },
+        },
+      },
+    })
   }
 
   const productsData = data?.products
@@ -151,6 +195,20 @@ export function ProductList() {
             />
           </div>
         </form>
+        <select
+          value={revenueTypeFilter}
+          onChange={(e) => {
+            setRevenueTypeFilter(e.target.value)
+            setPage(1)
+          }}
+          className="rounded-md border border-gray-300 py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        >
+          <option value="">{t('products.allRevenueTypes')}</option>
+          <option value="recurring">{t('products.revenueTypes.recurring')}</option>
+          <option value="advanced_development">{t('products.revenueTypes.advancedDevelopment')}</option>
+          <option value="training_implementation">{t('products.revenueTypes.trainingImplementation')}</option>
+          <option value="unclassified">{t('products.revenueTypes.unclassified')}</option>
+        </select>
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
           <input
             type="checkbox"
@@ -207,6 +265,15 @@ export function ProductList() {
                   </th>
                   <th
                     className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                    onClick={() => handleSort('revenueType')}
+                  >
+                    <div className="flex items-center">
+                      {t('products.revenueType')}
+                      <SortIcon field="revenueType" />
+                    </div>
+                  </th>
+                  <th
+                    className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
                     onClick={() => handleSort('price')}
                   >
                     <div className="flex items-center">
@@ -257,6 +324,42 @@ export function ProductList() {
                       }`}>
                         {product.type === 'subscription' ? t('products.subscription') : t('products.oneOff')}
                       </span>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      {editingProductId === product.id ? (
+                        <select
+                          autoFocus
+                          defaultValue={product.revenueType || ''}
+                          onChange={(e) => handleRevenueTypeChange(product.id, e.target.value)}
+                          onBlur={() => setEditingProductId(null)}
+                          className="rounded-md border border-blue-400 py-1 px-2 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="" disabled>{t('products.revenueTypes.unclassified')}</option>
+                          {REVENUE_TYPE_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{t(opt.i18nKey)}</option>
+                          ))}
+                        </select>
+                      ) : product.revenueType ? (
+                        <span
+                          onClick={canEditProducts ? () => setEditingProductId(product.id) : undefined}
+                          className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
+                            product.revenueType === 'recurring'
+                              ? 'bg-green-100 text-green-800'
+                              : product.revenueType === 'advanced_development'
+                              ? 'bg-orange-100 text-orange-800'
+                              : 'bg-cyan-100 text-cyan-800'
+                          } ${canEditProducts ? 'cursor-pointer hover:ring-2 hover:ring-blue-300' : ''}`}
+                        >
+                          {t(`products.revenueTypes.${product.revenueType === 'advanced_development' ? 'advancedDevelopment' : product.revenueType === 'training_implementation' ? 'trainingImplementation' : 'recurring'}`)}
+                        </span>
+                      ) : (
+                        <span
+                          onClick={canEditProducts ? () => setEditingProductId(product.id) : undefined}
+                          className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-yellow-100 text-yellow-800 ${canEditProducts ? 'cursor-pointer hover:ring-2 hover:ring-blue-300' : ''}`}
+                        >
+                          {t('products.revenueTypes.unclassified')}
+                        </span>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       {formatCurrency(product.currentPrice?.price)}
