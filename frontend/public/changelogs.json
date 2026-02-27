@@ -1,5 +1,24 @@
 [
   {
+    "version": "2.9.0",
+    "date": "2026-02-27",
+    "title": "Offer Management & Forecast Caching",
+    "description": "Full offer lifecycle with PDF generation and email sending, plus Redis caching for revenue and recognition forecasts with signal-based invalidation.",
+    "type": "feature",
+    "details": [
+      "Added offer management: create, edit, send offers with PDF generation, email delivery, and configurable number schemes",
+      "Added Redis caching for revenue and recognition forecast queries with per-tenant configurable TTL (default 60 min)",
+      "Added automatic cache invalidation via signals when contracts, items, or invoices change",
+      "Added refresh button on forecast page to bypass cache on demand",
+      "Added forecast cache TTL setting under Settings > General > Performance",
+      "Fixed mid-cycle billing to pro-rate the first period for items added between billing cycles",
+      "Fixed GitHub feedback screenshots not arriving on issues",
+      "Moved invoice warning inline with Price Increase and Add Item buttons",
+      "Secured offer PDF downloads via authenticated API endpoint",
+      "Hidden forecast offer column when user lacks offers.write permission"
+    ]
+  },
+  {
     "version": "2.8.11",
     "date": "2026-02-26",
     "title": "Fix Invoice Export Status & Missing Numbers",
