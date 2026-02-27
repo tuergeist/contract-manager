@@ -219,6 +219,7 @@
       "items": "Positionen",
       "amendments": "Nachträge",
       "addItem": "Position hinzufügen",
+      "invoiceWarning": "Für diesen Vertrag wurden bereits Rechnungen erstellt. Änderungen an Positionen können die Rechnungskonsistenz beeinträchtigen. Beim Hinzufügen neuer Positionen bitte ein Abrechnungsstartdatum setzen.",
       "editContract": "Vertrag bearbeiten",
       "cancelContract": "Vertrag kündigen",
       "totalValue": "Gesamtwert",
@@ -293,10 +294,12 @@
       "billingStartDateHint": "Wann die Rechnung gestellt wird - Umsatzbuchung.",
       "billingEndDate": "Abrechnungsende",
       "billingEndDateHint": "Leer lassen für fortlaufende Abrechnung",
+      "billingEndMinHint": "Abgerechnet bis {{date}} — Enddatum darf nicht davor liegen.",
       "alignToContractAt": "Angleichung an Vertragszyklus",
       "suggestedDate": "Vorgeschlagen",
       "ongoing": "fortlaufend",
       "alignsAt": "Angleichung",
+      "cannotDeleteInvoiced": "Diese Position wurde bereits abgerechnet und kann nicht gelöscht werden. Setzen Sie stattdessen ein Abrechnungsende.",
       "isOneOff": "Einmalzahlung",
       "isOneOffHint": "Wird nur einmal abgerechnet, nicht Teil des ARR",
       "oneOffBadge": "Einmalig",
@@ -426,7 +429,8 @@
     "statusActionable": "Rechnung ausstehend",
     "statusSent": "Versendet",
     "statusPaid": "Bezahlt",
-    "statusOverdue": "Überfällig (60+ Tage)"
+    "statusOverdue": "Überfällig (60+ Tage)",
+    "refresh": "Aktualisieren"
   },
   "import": {
     "title": "Vertragsimport",
@@ -1051,7 +1055,17 @@
       "email": "E-Mail (M365)",
       "notifications": "Benachrichtigungen",
       "contracts": "Verträge",
-      "helpVideos": "Hilfe-Videos"
+      "helpVideos": "Hilfe-Videos",
+      "performance": "Performance"
+    },
+    "forecastCache": {
+      "title": "Forecast-Cache",
+      "description": "Umsatz- und Anerkennungsprognosen werden zwischengespeichert, um die Ladezeit zu verbessern. Der Cache wird automatisch geleert, wenn Verträge oder Rechnungen geändert werden.",
+      "ttlLabel": "Cache-Dauer (Minuten)",
+      "ttlHint": "Wie lange Prognoseergebnisse zwischengespeichert werden, bevor sie neu berechnet werden. Minimum 1 Minute.",
+      "save": "Einstellungen speichern",
+      "saved": "Forecast-Cache-Einstellungen gespeichert",
+      "saveFailed": "Forecast-Cache-Einstellungen konnten nicht gespeichert werden"
     },
     "banking": {
       "title": "Banking-Einstellungen",

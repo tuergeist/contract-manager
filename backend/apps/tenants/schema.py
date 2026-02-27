@@ -721,6 +721,14 @@ class TenantQuery:
         )
 
     @strawberry.field
+    def forecast_cache_ttl(self, info: Info[Context, None]) -> int:
+        """Get forecast cache TTL in minutes for current tenant."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return 60
+        return (user.tenant.settings or {}).get("forecast_cache_ttl", 60)
+
+    @strawberry.field
     def notification_preferences(self, info: Info[Context, None]) -> NotificationPreferencesType | None:
         """Get the current user's notification subscription preferences."""
         user = get_current_user(info)
@@ -1724,6 +1732,25 @@ class TenantMutation:
             "fee_tolerance_fixed": str(fee_tolerance_fixed),
             "fee_tolerance_percent": str(fee_tolerance_percent),
         }
+        tenant.save(update_fields=["settings"])
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def save_forecast_cache_ttl(
+        self,
+        info: Info[Context, None],
+        minutes: int,
+    ) -> OperationResult:
+        """Save forecast cache TTL in minutes. Requires settings.write."""
+        user = require_perm(info, "settings", "write")
+        tenant = user.tenant
+        if not tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+        if minutes < 1:
+            return OperationResult(success=False, error="TTL must be at least 1 minute")
+        if not tenant.settings:
+            tenant.settings = {}
+        tenant.settings["forecast_cache_ttl"] = minutes
         tenant.save(update_fields=["settings"])
         return OperationResult(success=True)
 

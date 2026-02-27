@@ -22,6 +22,12 @@ from apps.customers.schema import CustomerType
 from apps.products.models import Product
 from apps.products.schema import ProductType
 from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, TimeTrackingProjectMapping
+from .forecast_cache import (
+    dict_to_forecast_result,
+    forecast_result_to_dict,
+    get_cached_forecast,
+    set_cached_forecast,
+)
 from .services import ExcelParser, ImportService, MatchStatus
 
 if TYPE_CHECKING:
@@ -270,6 +276,37 @@ class ContractType:
     def has_invoices(self) -> bool:
         """Check if contract has any generated or imported invoices."""
         return self.invoice_records.exists() or self.imported_invoices.exists()
+
+    @strawberry.field
+    def invoiced_item_ids(self) -> list[int]:
+        """Return IDs of contract items that appear in non-voided invoices."""
+        from apps.invoices.models import InvoiceRecord
+
+        item_ids: set[int] = set()
+        for record in self.invoice_records.exclude(
+            status=InvoiceRecord.Status.VOIDED
+        ).only("line_items_snapshot"):
+            for line in record.line_items_snapshot or []:
+                if line.get("item_id"):
+                    item_ids.add(line["item_id"])
+        return sorted(item_ids)
+
+    @strawberry.field
+    def item_invoiced_until(self) -> strawberry.scalars.JSON:
+        """Return {item_id: "YYYY-MM-DD"} mapping the latest invoiced period end per item."""
+        from apps.invoices.models import InvoiceRecord
+
+        result: dict[int, "date"] = {}
+        for record in self.invoice_records.exclude(
+            status=InvoiceRecord.Status.VOIDED
+        ).only("line_items_snapshot", "period_end"):
+            for line in record.line_items_snapshot or []:
+                item_id = line.get("item_id")
+                if item_id:
+                    existing = result.get(item_id)
+                    if existing is None or record.period_end > existing:
+                        result[item_id] = record.period_end
+        return {str(k): v.isoformat() for k, v in result.items()}
 
     @strawberry.field
     def group(self) -> ContractGroupType | None:
@@ -1692,6 +1729,7 @@ class ContractQuery:
         view: str = "monthly",
         pro_rata: bool = False,
         exclude_one_off: bool = False,
+        refresh: bool = False,
     ) -> RevenueForecastResult:
         """
         Calculate revenue forecast for all active contracts.
@@ -1719,6 +1757,12 @@ class ContractQuery:
                 grand_total=Decimal("0"),
                 error="No tenant assigned",
             )
+
+        cache_params = dict(view=view, months=months, quarters=quarters, pro_rata=pro_rata, exclude_one_off=exclude_one_off)
+        if not refresh:
+            cached = get_cached_forecast("forecast", user.tenant.id, **cache_params)
+            if cached is not None:
+                return dict_to_forecast_result(cached)
 
         today = date.today()
         is_quarterly = view == "quarterly"
@@ -1917,12 +1961,14 @@ class ContractQuery:
 
         grand_total = sum(t.amount for t in totals_list)
 
-        return RevenueForecastResult(
+        result = RevenueForecastResult(
             month_columns=period_columns,
             monthly_totals=totals_list,
             contracts=contract_rows,
             grand_total=grand_total,
         )
+        set_cached_forecast("forecast", user.tenant, forecast_result_to_dict(result), **cache_params)
+        return result
 
     @strawberry.field
     def recognition_forecast(
@@ -1933,6 +1979,7 @@ class ContractQuery:
         view: str = "monthly",
         pro_rata: bool = False,
         exclude_one_off: bool = False,
+        refresh: bool = False,
     ) -> RevenueForecastResult:
         """
         Calculate recognition forecast for all active contracts.
@@ -1963,6 +2010,12 @@ class ContractQuery:
                 grand_total=Decimal("0"),
                 error="No tenant assigned",
             )
+
+        cache_params = dict(view=view, months=months, quarters=quarters, pro_rata=pro_rata, exclude_one_off=exclude_one_off)
+        if not refresh:
+            cached = get_cached_forecast("recognition", user.tenant.id, **cache_params)
+            if cached is not None:
+                return dict_to_forecast_result(cached)
 
         today = date.today()
         is_quarterly = view == "quarterly"
@@ -2160,12 +2213,14 @@ class ContractQuery:
 
         grand_total = sum(t.amount for t in totals_list)
 
-        return RevenueForecastResult(
+        result = RevenueForecastResult(
             month_columns=period_columns,
             monthly_totals=totals_list,
             contracts=contract_rows,
             grand_total=grand_total,
         )
+        set_cached_forecast("recognition", user.tenant, forecast_result_to_dict(result), **cache_params)
+        return result
 
     @strawberry.field
     def contracts(
@@ -2939,6 +2994,23 @@ class ContractMutation:
                 if input.billing_start_date is not UNSET:
                     item.billing_start_date = input.billing_start_date
                 if input.billing_end_date is not UNSET:
+                    if input.billing_end_date is not None:
+                        # Prevent ending billing within an already-invoiced period
+                        from apps.invoices.models import InvoiceRecord
+
+                        max_period_end = None
+                        for record in item.contract.invoice_records.exclude(
+                            status=InvoiceRecord.Status.VOIDED
+                        ).only("line_items_snapshot", "period_end"):
+                            for line in record.line_items_snapshot or []:
+                                if line.get("item_id") == item.id:
+                                    if max_period_end is None or record.period_end > max_period_end:
+                                        max_period_end = record.period_end
+                                    break
+                        if max_period_end and input.billing_end_date < max_period_end:
+                            return ContractItemResult(
+                                error=f"Billing end date cannot be before {max_period_end.isoformat()} — this item is invoiced until that date."
+                            )
                     item.billing_end_date = input.billing_end_date
                 if input.align_to_contract_at is not UNSET:
                     item.align_to_contract_at = input.align_to_contract_at
@@ -3091,6 +3163,18 @@ class ContractMutation:
         ).select_related("contract", "product").first()
         if not item:
             return DeleteResult(error="Item not found")
+
+        # Guard: prevent deleting items that appear in non-voided invoices
+        from apps.invoices.models import InvoiceRecord
+
+        for record in item.contract.invoice_records.exclude(
+            status=InvoiceRecord.Status.VOIDED
+        ).only("line_items_snapshot"):
+            for line in record.line_items_snapshot or []:
+                if line.get("item_id") == item.id:
+                    return DeleteResult(
+                        error="Cannot delete an invoiced item. Set a billing end date instead."
+                    )
 
         try:
             with transaction.atomic():

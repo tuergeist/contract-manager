@@ -219,6 +219,7 @@
       "items": "Items",
       "amendments": "Amendments",
       "addItem": "Add Item",
+      "invoiceWarning": "Invoices have been generated for this contract. Changes to items may affect billing consistency. When adding new items, make sure to set a billing start date.",
       "editContract": "Edit Contract",
       "cancelContract": "Cancel Contract",
       "totalValue": "Total Value",
@@ -293,10 +294,12 @@
       "billingStartDateHint": "When invoice is issued - Revenue booking.",
       "billingEndDate": "Billing End",
       "billingEndDateHint": "Leave empty for ongoing billing",
+      "billingEndMinHint": "Invoiced until {{date}} — end date must not be before this.",
       "alignToContractAt": "Align to Contract Cycle",
       "suggestedDate": "Suggested",
       "ongoing": "ongoing",
       "alignsAt": "Aligns at",
+      "cannotDeleteInvoiced": "This item has been invoiced and cannot be deleted. Set a billing end date instead.",
       "isOneOff": "One-off payment",
       "isOneOffHint": "Billed only once, not included in ARR",
       "oneOffBadge": "One-off",
@@ -426,7 +429,8 @@
     "statusActionable": "Invoice pending",
     "statusSent": "Sent",
     "statusPaid": "Paid",
-    "statusOverdue": "Overdue (60+ days)"
+    "statusOverdue": "Overdue (60+ days)",
+    "refresh": "Refresh"
   },
   "import": {
     "title": "Contract Import",
@@ -1051,7 +1055,17 @@
       "email": "Email (M365)",
       "notifications": "Notifications",
       "contracts": "Contracts",
-      "helpVideos": "Help Videos"
+      "helpVideos": "Help Videos",
+      "performance": "Performance"
+    },
+    "forecastCache": {
+      "title": "Forecast Cache",
+      "description": "Revenue and recognition forecasts are cached to improve page load speed. The cache is automatically cleared when contracts or invoices change.",
+      "ttlLabel": "Cache Duration (minutes)",
+      "ttlHint": "How long forecast results are cached before being recomputed. Minimum 1 minute.",
+      "save": "Save Settings",
+      "saved": "Forecast cache settings saved",
+      "saveFailed": "Failed to save forecast cache settings"
     },
     "banking": {
       "title": "Banking Settings",

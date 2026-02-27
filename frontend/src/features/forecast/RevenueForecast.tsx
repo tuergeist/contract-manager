@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
 import { Link } from 'react-router-dom'
-import { Loader2, TrendingUp, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Loader2, TrendingUp, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -15,8 +15,8 @@ import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { formatCurrency } from '@/lib/utils'
 
 const REVENUE_FORECAST_QUERY = gql`
-  query RevenueForecast($months: Int, $quarters: Int, $view: String, $proRata: Boolean, $excludeOneOff: Boolean) {
-    revenueForecast(months: $months, quarters: $quarters, view: $view, proRata: $proRata, excludeOneOff: $excludeOneOff) {
+  query RevenueForecast($months: Int, $quarters: Int, $view: String, $proRata: Boolean, $excludeOneOff: Boolean, $refresh: Boolean) {
+    revenueForecast(months: $months, quarters: $quarters, view: $view, proRata: $proRata, excludeOneOff: $excludeOneOff, refresh: $refresh) {
       monthColumns
       monthlyTotals {
         month
@@ -41,8 +41,8 @@ const REVENUE_FORECAST_QUERY = gql`
 `
 
 const RECOGNITION_FORECAST_QUERY = gql`
-  query RecognitionForecast($months: Int, $quarters: Int, $view: String, $proRata: Boolean, $excludeOneOff: Boolean) {
-    recognitionForecast(months: $months, quarters: $quarters, view: $view, proRata: $proRata, excludeOneOff: $excludeOneOff) {
+  query RecognitionForecast($months: Int, $quarters: Int, $view: String, $proRata: Boolean, $excludeOneOff: Boolean, $refresh: Boolean) {
+    recognitionForecast(months: $months, quarters: $quarters, view: $view, proRata: $proRata, excludeOneOff: $excludeOneOff, refresh: $refresh) {
       monthColumns
       monthlyTotals {
         month
@@ -103,6 +103,7 @@ export function RevenueForecast() {
   const [excludeOneOff, setExcludeOneOff] = useState(false)
   const [sortField, setSortField] = useState<SortField>(null)
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
+  const [refreshing, setRefreshing] = useState(false)
 
   // Adjust periods when switching views
   const handleViewChange = (newView: ViewType) => {
@@ -114,7 +115,7 @@ export function RevenueForecast() {
     }
   }
 
-  const { data, loading, error } = useQuery(
+  const { data, loading, error, refetch } = useQuery(
     forecastType === 'billing' ? REVENUE_FORECAST_QUERY : RECOGNITION_FORECAST_QUERY,
     {
       variables: {
@@ -126,6 +127,22 @@ export function RevenueForecast() {
       },
     }
   )
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await refetch({
+        months: view === 'monthly' ? parseInt(periods) : null,
+        quarters: view === 'quarterly' ? parseInt(periods) : null,
+        view,
+        proRata,
+        excludeOneOff,
+        refresh: true,
+      })
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   const forecast = (forecastType === 'billing'
     ? data?.revenueForecast
@@ -308,6 +325,18 @@ export function RevenueForecast() {
             </label>
           </div>
           <HelpVideoButton />
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing || loading}
+            className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {refreshing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            {t('forecast.refresh')}
+          </button>
         </div>
       </div>
 
