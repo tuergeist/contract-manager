@@ -1022,9 +1022,12 @@ def calculate_dashboard_kpis(tenant) -> dict:
     next_year_end = date(today.year + 1, 12, 31)
 
     # Get all active contracts with items, products, and price_periods prefetched
+    # Exclude contracts with end_date in the past (effectively ended)
     active_contracts = Contract.objects.filter(
         tenant=tenant,
         status=Contract.Status.ACTIVE,
+    ).filter(
+        Q(end_date__isnull=True) | Q(end_date__gte=today)
     ).prefetch_related("items", "items__product", "items__price_periods", "items__depends_on")
 
     total_active_contracts = active_contracts.count()
