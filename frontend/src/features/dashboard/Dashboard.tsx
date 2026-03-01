@@ -1,13 +1,13 @@
-import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, gql } from '@apollo/client'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { KPICard } from './KPICard'
-import { TodoList, type TodoItem } from '@/features/todos'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
+import { formatCurrency } from '@/lib/utils'
 
 const DASHBOARD_KPIS_QUERY = gql`
-  query DashboardKPIs {
+  query DashboardKPIs($year: Int!) {
     dashboardKpis {
       totalActiveContracts
       totalContractValue
@@ -20,29 +20,16 @@ const DASHBOARD_KPIS_QUERY = gql`
       nextYearOneOff
       nextYearDiscounts
     }
-  }
-`
-
-const MY_TODOS_QUERY = gql`
-  query MyTodos($limit: Int) {
-    myTodos(limit: $limit) {
+    newBusinessMetrics(year: $year) {
+      wonNewArr
+      wonDevelopmentRevenue
+      wonDealCount
+    }
+    newBusinessGoals(year: $year) {
       id
-      text
-      reminderDate
-      isPublic
-      isCompleted
-      completedAt
-      entityType
-      entityName
-      entityId
-      createdById
-      createdByName
-      assignedToId
-      assignedToName
-      contractId
-      contractItemId
-      customerId
-      commentCount
+      year
+      goalType
+      targetAmount
     }
   }
 `
@@ -61,44 +48,33 @@ interface DashboardKPIs {
   nextYearDiscounts: string
 }
 
-interface DashboardKPIsData {
-  dashboardKpis: DashboardKPIs
+interface NewBusinessMetrics {
+  wonNewArr: string
+  wonDevelopmentRevenue: string
+  wonDealCount: number
 }
 
-interface TodosData {
-  myTodos?: TodoItem[]
+interface NewBusinessGoal {
+  id: number
+  year: number
+  goalType: string
+  targetAmount: string
+}
+
+interface DashboardKPIsData {
+  dashboardKpis: DashboardKPIs
+  newBusinessMetrics: NewBusinessMetrics
+  newBusinessGoals: NewBusinessGoal[]
 }
 
 export function Dashboard() {
   const { t } = useTranslation()
-  const [myClosedDays, setMyClosedDays] = useState<'none' | '2' | '14'>('2')
+  const navigate = useNavigate()
 
-  const { data: kpisData, loading: kpisLoading, error: kpisError } = useQuery<DashboardKPIsData>(DASHBOARD_KPIS_QUERY)
-  const { data: myTodosData, loading: myTodosLoading, refetch: refetchMyTodos } = useQuery<TodosData>(MY_TODOS_QUERY, {
-    variables: { limit: 50 },
+  const currentYear = new Date().getFullYear()
+  const { data: kpisData, loading: kpisLoading, error: kpisError } = useQuery<DashboardKPIsData>(DASHBOARD_KPIS_QUERY, {
+    variables: { year: currentYear },
   })
-
-  const handleTodoUpdate = () => {
-    refetchMyTodos()
-  }
-
-  // Filter todos: show completed based on selected days window
-  const filterTodos = (todos: TodoItem[], closedDays: 'none' | '2' | '14') => {
-    const now = new Date()
-    return todos.filter((todo) => {
-      if (!todo.isCompleted) return true
-      if (closedDays === 'none') return false
-      if (!todo.completedAt) return false
-      const cutoff = new Date(now.getTime() - parseInt(closedDays) * 24 * 60 * 60 * 1000)
-      return new Date(todo.completedAt) >= cutoff
-    }).sort((a, b) => Number(a.isCompleted) - Number(b.isCompleted))
-  }
-
-  const myTodos = useMemo(
-    () => filterTodos(myTodosData?.myTodos || [], myClosedDays),
-    [myTodosData, myClosedDays]
-  )
-
   if (kpisLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -117,6 +93,16 @@ export function Dashboard() {
   }
 
   const kpis = kpisData?.dashboardKpis
+  const nb = kpisData?.newBusinessMetrics
+  const nbGoalMap: Record<string, number> = {}
+  for (const g of kpisData?.newBusinessGoals || []) {
+    nbGoalMap[g.goalType] = parseFloat(g.targetAmount)
+  }
+  const newBusinessCards = nb ? [
+    { key: 'new_arr', label: t('forecasts.newBusiness.wonNewArr'), actual: parseFloat(nb.wonNewArr), target: nbGoalMap['new_arr'] || 0, isCurrency: true },
+    { key: 'new_development', label: t('forecasts.newBusiness.wonDevelopment'), actual: parseFloat(nb.wonDevelopmentRevenue), target: nbGoalMap['new_development'] || 0, isCurrency: true },
+    { key: 'new_deal_count', label: t('forecasts.newBusiness.wonDealCount'), actual: nb.wonDealCount, target: nbGoalMap['new_deal_count'] || 0, isCurrency: false },
+  ] : []
 
   const formatForecastSubtitle = (oneOff: string | undefined, discounts: string | undefined) => {
     const fmt = (v: number) => new Intl.NumberFormat('de-DE', {
@@ -178,38 +164,52 @@ export function Dashboard() {
         />
       </div>
 
-      {/* Todos Section */}
-      <div>
-        <div className="rounded-lg border bg-card p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">{t('todos.myTodos')}</h2>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>{t('todos.showCompleted')}</span>
-              <div className="inline-flex rounded-md border">
-                {(['none', '2', '14'] as const).map((val) => (
-                  <button
-                    key={val}
-                    onClick={() => setMyClosedDays(val)}
-                    className={`px-2 py-1 text-xs first:rounded-l-md last:rounded-r-md ${myClosedDays === val ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                  >
-                    {val === 'none' ? t('todos.closedNone') : t('todos.closedDays', { days: val })}
-                  </button>
-                ))}
-              </div>
-            </div>
+      {/* New Business KPIs */}
+      {nb && (nb.wonDealCount > 0 || parseFloat(nb.wonNewArr) > 0) && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold mb-3">{t('forecasts.newBusiness.title')}</h2>
+          <div
+            className="grid gap-4 md:grid-cols-3 cursor-pointer"
+            onClick={() => navigate(`/contracts?newBusiness=true&wonYear=${currentYear}`)}
+          >
+            {newBusinessCards.map((card) => {
+              const progress = card.target > 0 ? (card.actual / card.target) * 100 : null
+              const diff = card.actual - card.target
+              const overTarget = progress !== null && progress > 100
+
+              return (
+                <div key={card.key} className="rounded-lg border bg-card p-4 hover:border-blue-300 hover:shadow-sm transition-all">
+                  <p className="text-sm font-medium text-muted-foreground">{card.label}</p>
+                  <p className="mt-1 text-2xl font-semibold">
+                    {card.isCurrency ? formatCurrency(card.actual.toString()) : card.actual}
+                  </p>
+                  {card.target > 0 && (
+                    <>
+                      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{t('forecasts.goals.target')}: {card.isCurrency ? formatCurrency(card.target.toString()) : card.target}</span>
+                        <span className={diff >= 0 ? 'text-emerald-600 font-medium' : 'text-red-600 font-medium'}>
+                          {diff >= 0 ? '+' : ''}{card.isCurrency ? formatCurrency(diff.toString()) : diff}
+                        </span>
+                      </div>
+                      <div className="mt-2 relative h-2 w-full rounded-full bg-gray-200">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            overTarget ? 'bg-emerald-500' : (progress ?? 0) >= 80 ? 'bg-blue-500' : 'bg-blue-400'
+                          }`}
+                          style={{ width: `${Math.min(progress ?? 0, 100)}%` }}
+                        />
+                      </div>
+                      <p className={`mt-1 text-xs font-medium ${overTarget ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                        {Math.round(progress!)}%
+                      </p>
+                    </>
+                  )}
+                </div>
+              )
+            })}
           </div>
-          {myTodosLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <TodoList
-              todos={myTodos}
-              onUpdate={handleTodoUpdate}
-            />
-          )}
         </div>
-      </div>
+      )}
 
     </div>
   )
