@@ -117,9 +117,9 @@ class TestTotalContractValue:
             customer=customer,
             name="Fixed Term",
             status=Contract.Status.ACTIVE,
-            start_date=date(2025, 1, 1),
-            end_date=date(2025, 12, 31),
-            billing_start_date=date(2025, 1, 1),
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31),
+            billing_start_date=date(2026, 1, 1),
             billing_interval=Contract.BillingInterval.MONTHLY,
         )
         ContractItem.objects.create(
