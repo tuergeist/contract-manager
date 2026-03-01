@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.10.3",
+    "date": "2026-03-01",
+    "title": "New Business KPIs on Dashboard",
+    "description": "Dashboard now shows new business metrics (won ARR, development revenue, deal count) with goal tracking, replacing the todos section.",
+    "type": "feature",
+    "details": [
+      "Added new business KPI cards to dashboard with target tracking, progress bars, and click-through to filtered contracts list",
+      "Removed My Todos section from dashboard",
+      "Fixed active contracts count excluding contracts with end date in the past"
+    ]
+  },
+  {
     "version": "2.10.2",
     "date": "2026-02-27",
     "title": "Fix Editing Price-Locked Items",
