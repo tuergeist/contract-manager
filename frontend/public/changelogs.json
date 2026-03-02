@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.12.1",
+    "date": "2026-03-02",
+    "title": "Fix won deals counting draft contracts",
+    "description": "New business metrics now only count active contracts, excluding drafts that haven't been activated yet.",
+    "type": "bugfix",
+    "details": [
+      "Fixed won deals and new business metrics incorrectly including draft contracts with a deal won date"
+    ]
+  },
+  {
     "version": "2.12.0",
     "date": "2026-03-02",
     "title": "Time Tracking Auto-Link Rules",
