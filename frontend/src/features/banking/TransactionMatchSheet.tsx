@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { Loader2, Search, Unlink, FileText } from 'lucide-react'
+import { Loader2, Search, Unlink, FileText, CheckCircle2 } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -32,6 +32,7 @@ const TRANSACTION_MATCH_DETAILS = gql`
       accountName
       totalMatched
       difference
+      customerId
       matches {
         id
         invoiceId
@@ -102,6 +103,26 @@ const DELETE_PAYMENT_MATCH = gql`
   }
 `
 
+const SUGGESTED_INVOICE_MATCHES = gql`
+  query SuggestedInvoiceMatches($transactionId: Int!) {
+    suggestedInvoiceMatches(transactionId: $transactionId) {
+      customerName
+      customerId
+      items {
+        id
+        invoiceNumber
+        amount
+        customerName
+        invoiceType
+        status
+        invoiceDate
+        isPaid
+        amountDifference
+      }
+    }
+  }
+`
+
 // --- Types ---
 
 interface MatchDetail {
@@ -129,7 +150,18 @@ interface TransactionMatchData {
   accountName: string
   totalMatched: string
   difference: string
+  customerId: number | null
   matches: MatchDetail[]
+}
+
+interface SuggestedMatch extends InvoiceSearchResult {
+  amountDifference: string
+}
+
+interface SuggestedMatchesData {
+  customerName: string
+  customerId: number
+  items: SuggestedMatch[]
 }
 
 interface InvoiceSearchResult {
@@ -164,6 +196,14 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
 
   const { data: settingsData } = useQuery(BANKING_SETTINGS_FOR_MATCH)
 
+  const customerId = data?.transactionMatchDetails?.customerId ?? null
+
+  const { data: suggestionsData, loading: suggestionsLoading, refetch: refetchSuggestions } = useQuery(SUGGESTED_INVOICE_MATCHES, {
+    variables: { transactionId },
+    skip: !transactionId || !open || customerId === null,
+    fetchPolicy: 'network-only',
+  })
+
   const { data: searchData, loading: searchLoading } = useQuery(SEARCH_INVOICES_FOR_MATCHING, {
     variables: { search: searchText, unmatchedOnly, limit: 20 },
     skip: !searchText || searchText.length < 2,
@@ -175,6 +215,7 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
   const [deleteMatch] = useMutation(DELETE_PAYMENT_MATCH)
 
   const txn: TransactionMatchData | null = data?.transactionMatchDetails ?? null
+  const suggestions: SuggestedMatchesData | null = suggestionsData?.suggestedInvoiceMatches ?? null
 
   const handleAddMatch = async (invoice: InvoiceSearchResult) => {
     if (!transactionId) return
@@ -196,6 +237,7 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
 
       if (result.success) {
         refetch()
+        if (customerId !== null) refetchSuggestions()
         onMatchChanged?.()
       } else {
         setError(result.error || 'Failed to create match')
@@ -383,6 +425,78 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
                 </div>
               )}
             </div>
+
+            {/* Suggested Matches */}
+            {customerId !== null && (
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">
+                  {t('banking.matchView.suggestedMatches')}
+                  {suggestions && ` — ${suggestions.customerName}`}
+                </h3>
+
+                {suggestionsLoading && (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                  </div>
+                )}
+
+                {!suggestionsLoading && suggestions && suggestions.items.length === 0 && (
+                  <div className="rounded-lg border border-dashed border-gray-300 p-3 text-center text-sm text-gray-500">
+                    {t('banking.matchView.allSuggestionsMatched')}
+                  </div>
+                )}
+
+                {!suggestionsLoading && suggestions && suggestions.items.length > 0 && (
+                  <div className="space-y-1">
+                    {suggestions.items.map(inv => {
+                      const diff = parseFloat(inv.amountDifference)
+                      const isExact = Math.abs(diff) < 0.01
+                      return (
+                        <button
+                          key={`${inv.invoiceType}-${inv.id}`}
+                          className={`w-full flex items-center justify-between rounded-lg border p-2.5 text-left transition-colors ${
+                            isExact
+                              ? 'border-green-300 bg-green-50 hover:bg-green-100'
+                              : 'border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-200'
+                          }`}
+                          onClick={() => handleAddMatch(inv)}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium truncate">{inv.invoiceNumber}</span>
+                              <Badge variant="outline" className="text-xs shrink-0">
+                                {inv.invoiceType === 'imported'
+                                  ? t('banking.matchView.imported')
+                                  : t('banking.matchView.generated')}
+                              </Badge>
+                              {isExact && (
+                                <Badge className="text-xs shrink-0 bg-green-600 text-white hover:bg-green-600">
+                                  <CheckCircle2 className="h-3 w-3 mr-0.5" />
+                                  {t('banking.matchView.exactMatch')}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-500 truncate">
+                              {inv.invoiceDate && formatDate(inv.invoiceDate)}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 ml-2 shrink-0">
+                            {!isExact && (
+                              <span className={`text-xs ${diff > 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+                                {diff > 0 ? '+' : ''}{formatCurrency(inv.amountDifference)}
+                              </span>
+                            )}
+                            <span className="text-sm font-medium">
+                              {formatCurrency(inv.amount)}
+                            </span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Invoice Search */}
             <div className="border-t pt-4">

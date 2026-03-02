@@ -72,7 +72,10 @@
       "nextYearForecast": "Prognose nächstes Jahr",
       "nextYearForecastExplanation": "Prognostizierter Gesamtumsatz für das nächste Kalenderjahr. Ohne Verträge, die vor dem nächsten Jahr enden.",
       "inclOneOff": "inkl. {{amount}} einmalig",
-      "inclDiscounts": "inkl. {{amount}} Rabatte"
+      "inclDiscounts": "inkl. {{amount}} Rabatte",
+      "wonNewArrExplanation": "Jährlich wiederkehrender Umsatz aus gewonnenen HubSpot-Deals dieses Jahres.",
+      "wonDevelopmentExplanation": "Entwicklungs- und Schulungsumsatz aus gewonnenen HubSpot-Deals dieses Jahres.",
+      "wonDealCountExplanation": "Anzahl der gewonnenen HubSpot-Deals dieses Jahres."
     }
   },
   "customers": {
@@ -149,6 +152,7 @@
     "statusLabel": "Status",
     "startDate": "Startdatum",
     "endDate": "Enddatum",
+    "dealWonDate": "Deal-Gewinn-Datum",
     "arr": "ARR",
     "updatedAt": "Aktualisiert",
     "remainingMonths": "Restlaufzeit",
@@ -440,6 +444,13 @@
       "unclassifiedWarning": "Einige Ums\u00e4tze sind keiner Kategorie zugeordnet",
       "noUnclassifiedItems": "Keine nicht klassifizierten Positionen gefunden",
       "openContract": "Vertrag \u00f6ffnen"
+    },
+    "newBusiness": {
+      "title": "Neugeschäft",
+      "wonNewArr": "Gewonnener neuer ARR",
+      "wonDevelopment": "Gewonnener Entwicklungsumsatz",
+      "wonDealCount": "Gewonnene Deals",
+      "wonDeals": "Gewonnene Deals"
     }
   },
   "forecast": {
@@ -1104,6 +1115,13 @@
       "saveFailed": "Fehler beim Speichern der Ziele",
       "noGoals": "Keine Ziele f\u00fcr dieses Jahr definiert"
     },
+    "newBusinessGoals": {
+      "title": "Neugeschäft-Ziele",
+      "description": "Jährliche Ziele für gewonnene Deals aus HubSpot",
+      "wonNewArr": "Gewonnener neuer ARR",
+      "wonDevelopment": "Gewonnener Entwicklungsumsatz",
+      "wonDealCount": "Gewonnene Deals"
+    },
     "forecastCache": {
       "title": "Forecast-Cache",
       "description": "Umsatz- und Anerkennungsprognosen werden zwischengespeichert, um die Ladezeit zu verbessern. Der Cache wird automatisch geleert, wenn Verträge oder Rechnungen geändert werden.",
@@ -1606,7 +1624,10 @@
       "imported": "Importiert",
       "generated": "Generiert",
       "matchButton": "Zuordnen",
-      "withinTolerance": "innerhalb der Toleranz"
+      "withinTolerance": "innerhalb der Toleranz",
+      "suggestedMatches": "Vorgeschlagene Zuordnungen",
+      "exactMatch": "Exakte Übereinstimmung",
+      "allSuggestionsMatched": "Alle Rechnungen dieses Kunden sind zugeordnet"
     }
   },
   "liquidity": {

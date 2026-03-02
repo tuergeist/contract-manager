@@ -72,7 +72,10 @@
       "nextYearForecast": "Next Year Forecast",
       "nextYearForecastExplanation": "Projected total revenue for the next calendar year. Excludes contracts ending before next year.",
       "inclOneOff": "incl. {{amount}} one-off",
-      "inclDiscounts": "incl. {{amount}} discounts"
+      "inclDiscounts": "incl. {{amount}} discounts",
+      "wonNewArrExplanation": "Annualized recurring revenue from HubSpot deals won this year.",
+      "wonDevelopmentExplanation": "Development and training revenue from HubSpot deals won this year.",
+      "wonDealCountExplanation": "Number of HubSpot deals won this year."
     }
   },
   "customers": {
@@ -149,6 +152,7 @@
     "statusLabel": "Status",
     "startDate": "Start Date",
     "endDate": "End Date",
+    "dealWonDate": "Deal Won Date",
     "arr": "ARR",
     "updatedAt": "Updated",
     "remainingMonths": "Remaining",
@@ -440,6 +444,13 @@
       "unclassifiedWarning": "Some revenue is not classified to a stream",
       "noUnclassifiedItems": "No unclassified items found",
       "openContract": "Open contract"
+    },
+    "newBusiness": {
+      "title": "New Business",
+      "wonNewArr": "Won New ARR",
+      "wonDevelopment": "Won Development Revenue",
+      "wonDealCount": "Won Deal Count",
+      "wonDeals": "Won Deals"
     }
   },
   "forecast": {
@@ -1104,6 +1115,13 @@
       "saveFailed": "Failed to save goals",
       "noGoals": "No goals defined for this year"
     },
+    "newBusinessGoals": {
+      "title": "New Business Goals",
+      "description": "Set yearly targets for won deals from HubSpot",
+      "wonNewArr": "Won New ARR",
+      "wonDevelopment": "Won Development Revenue",
+      "wonDealCount": "Won Deal Count"
+    },
     "forecastCache": {
       "title": "Forecast Cache",
       "description": "Revenue and recognition forecasts are cached to improve page load speed. The cache is automatically cleared when contracts or invoices change.",
@@ -1606,7 +1624,10 @@
       "imported": "Imported",
       "generated": "Generated",
       "matchButton": "Match",
-      "withinTolerance": "within tolerance"
+      "withinTolerance": "within tolerance",
+      "suggestedMatches": "Suggested matches",
+      "exactMatch": "Exact match",
+      "allSuggestionsMatched": "All invoices from this customer are matched"
     }
   },
   "liquidity": {

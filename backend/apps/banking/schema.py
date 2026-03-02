@@ -349,6 +349,31 @@ class TransactionMatchDetailsType:
     matches: List[MatchDetailType]
     total_matched: Decimal
     difference: Decimal
+    customer_id: int | None = None
+
+
+@strawberry.type
+class SuggestedMatchType:
+    """An invoice candidate suggested for matching based on counterparty-customer link."""
+
+    id: strawberry.ID
+    invoice_number: str
+    amount: Decimal
+    customer_name: str
+    invoice_type: str  # "imported" or "generated"
+    status: str
+    invoice_date: date | None = None
+    is_paid: bool = False
+    amount_difference: Decimal = Decimal("0")
+
+
+@strawberry.type
+class SuggestedMatchesResultType:
+    """Suggested invoice matches for a transaction."""
+
+    items: List[SuggestedMatchType]
+    customer_name: str
+    customer_id: int
 
 
 # --- Queries ---
@@ -369,7 +394,7 @@ class BankingQuery:
         try:
             txn = (
                 BankTransaction.objects.filter(tenant=user.tenant)
-                .select_related("account", "counterparty")
+                .select_related("account", "counterparty__customer")
                 .prefetch_related(
                     "invoice_matches__invoice__customer",
                     "invoice_matches__invoice_record__customer",
@@ -424,6 +449,104 @@ class BankingQuery:
             matches=matches,
             total_matched=total_matched,
             difference=abs(txn.amount) - total_matched,
+            customer_id=txn.counterparty.customer_id if txn.counterparty else None,
+        )
+
+    @strawberry.field
+    def suggested_invoice_matches(
+        self,
+        info: Info[Context, None],
+        transaction_id: int,
+    ) -> SuggestedMatchesResultType | None:
+        """Suggest invoice candidates based on counterparty-customer link."""
+        user = require_perm(info, "banking", "read")
+        from apps.banking.models import BankTransaction
+        from apps.invoices.models import ImportedInvoice, InvoiceRecord, InvoicePaymentMatch
+
+        try:
+            txn = (
+                BankTransaction.objects.filter(tenant=user.tenant)
+                .select_related("counterparty__customer")
+                .get(id=transaction_id)
+            )
+        except BankTransaction.DoesNotExist:
+            return None
+
+        if not txn.counterparty or not txn.counterparty.customer_id:
+            return None
+
+        customer = txn.counterparty.customer
+        txn_amount = abs(txn.amount)
+
+        # IDs of invoices already matched to this transaction
+        matched_imported_ids = set(
+            InvoicePaymentMatch.objects.filter(
+                transaction=txn, invoice__isnull=False
+            ).values_list("invoice_id", flat=True)
+        )
+        matched_record_ids = set(
+            InvoicePaymentMatch.objects.filter(
+                transaction=txn, invoice_record__isnull=False
+            ).values_list("invoice_record_id", flat=True)
+        )
+
+        candidates: list[SuggestedMatchType] = []
+
+        # Imported invoices
+        imported_qs = ImportedInvoice.objects.filter(
+            tenant=user.tenant,
+            customer=customer,
+            extraction_status__in=["confirmed", "sent"],
+        ).filter(
+            Q(invoice_date__lte=txn.entry_date) | Q(invoice_date__isnull=True)
+        ).exclude(id__in=matched_imported_ids)
+
+        for inv in imported_qs:
+            amt = inv.total_amount or Decimal("0")
+            candidates.append(SuggestedMatchType(
+                id=strawberry.ID(str(inv.id)),
+                invoice_number=inv.invoice_number or "",
+                amount=amt,
+                customer_name=customer.name,
+                invoice_type="imported",
+                status=inv.extraction_status,
+                invoice_date=inv.invoice_date,
+                is_paid=False,
+                amount_difference=amt - txn_amount,
+            ))
+
+        # Generated invoice records
+        record_qs = InvoiceRecord.objects.filter(
+            tenant=user.tenant,
+            customer=customer,
+        ).exclude(
+            status__in=["voided", "paid"]
+        ).filter(
+            Q(invoice_date__lte=txn.entry_date) | Q(invoice_date__isnull=True)
+        ).exclude(id__in=matched_record_ids)
+
+        for rec in record_qs:
+            amt = rec.total_gross or Decimal("0")
+            candidates.append(SuggestedMatchType(
+                id=strawberry.ID(str(rec.id)),
+                invoice_number=rec.invoice_number or "",
+                amount=amt,
+                customer_name=customer.name,
+                invoice_type="generated",
+                status=rec.status,
+                invoice_date=rec.invoice_date,
+                is_paid=False,
+                amount_difference=amt - txn_amount,
+            ))
+
+        # Sort by amount proximity, cap at 20
+        candidates.sort(key=lambda c: abs(c.amount_difference))
+        candidates = candidates[:20]
+
+        return SuggestedMatchesResultType(
+            items=candidates,
+            customer_name=customer.name,
+            customer_id=customer.id,
         )
 
     @strawberry.field
