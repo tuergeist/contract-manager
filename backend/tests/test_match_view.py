@@ -683,3 +683,74 @@ class TestTransactionMatchDetailsCustomerId:
         result = run_graphql(MATCH_DETAILS_CUSTOMER_QUERY, {"transactionId": transaction.id}, make_context(user))
         assert result.errors is None
         assert result.data["transactionMatchDetails"]["customerId"] is None
+
+
+# --- Delete Payment Match Status Revert ---
+
+DELETE_MATCH_MUTATION = """
+mutation($matchId: Int!) {
+  deletePaymentMatch(matchId: $matchId) {
+    success
+    error
+  }
+}
+"""
+
+
+@pytest.mark.django_db
+class TestDeletePaymentMatchStatusRevert:
+    """Deleting a payment match should revert invoice status when no remaining matches."""
+
+    def test_imported_invoice_reverts_to_sent(self, user, tenant, customer, transaction):
+        inv = _create_imported_invoice(tenant, customer, "INV-REVERT-1", "1500.00", "sent")
+        match = InvoicePaymentMatch.objects.create(
+            tenant=tenant, invoice=inv, transaction=transaction,
+            match_type="manual", confidence=Decimal("1.0"),
+        )
+        inv.extraction_status = "paid"
+        inv.save(update_fields=["extraction_status"])
+
+        result = run_graphql(DELETE_MATCH_MUTATION, {"matchId": match.id}, make_context(user))
+        assert result.errors is None
+        assert result.data["deletePaymentMatch"]["success"] is True
+
+        inv.refresh_from_db()
+        assert inv.extraction_status == "sent"
+
+    def test_generated_invoice_reverts_to_sent(self, user, tenant, customer, transaction, generated_invoice):
+        match = InvoicePaymentMatch.objects.create(
+            tenant=tenant, invoice_record=generated_invoice, transaction=transaction,
+            match_type="manual", confidence=Decimal("1.0"),
+        )
+        generated_invoice.status = "paid"
+        generated_invoice.save(update_fields=["status"])
+
+        result = run_graphql(DELETE_MATCH_MUTATION, {"matchId": match.id}, make_context(user))
+        assert result.errors is None
+        assert result.data["deletePaymentMatch"]["success"] is True
+
+        generated_invoice.refresh_from_db()
+        assert generated_invoice.status == "sent"
+
+    def test_imported_stays_paid_with_remaining_match(self, user, tenant, customer, account, counterparty, transaction):
+        inv = _create_imported_invoice(tenant, customer, "INV-MULTI", "1500.00", "paid")
+        txn2 = BankTransaction.objects.create(
+            tenant=tenant, account=account, entry_date=date(2026, 2, 1),
+            amount=Decimal("500.00"), currency="EUR",
+            counterparty=counterparty,
+            import_hash="hash-second",
+        )
+        match1 = InvoicePaymentMatch.objects.create(
+            tenant=tenant, invoice=inv, transaction=transaction,
+            match_type="manual", confidence=Decimal("1.0"),
+        )
+        InvoicePaymentMatch.objects.create(
+            tenant=tenant, invoice=inv, transaction=txn2,
+            match_type="manual", confidence=Decimal("1.0"),
+        )
+
+        result = run_graphql(DELETE_MATCH_MUTATION, {"matchId": match1.id}, make_context(user))
+        assert result.data["deletePaymentMatch"]["success"] is True
+
+        inv.refresh_from_db()
+        assert inv.extraction_status == "paid"  # Still has another match

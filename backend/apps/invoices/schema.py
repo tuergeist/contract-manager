@@ -2190,7 +2190,25 @@ class InvoiceMutation:
         except InvoicePaymentMatch.DoesNotExist:
             return DeleteResult(success=False, error="Match not found")
 
+        # Capture references before deleting
+        invoice = match.invoice
+        invoice_record = match.invoice_record
+
         match.delete()
+
+        # Revert invoice status if no remaining payment matches
+        if invoice and invoice.extraction_status == ImportedInvoice.ExtractionStatus.PAID:
+            has_other_matches = InvoicePaymentMatch.objects.filter(invoice=invoice).exists()
+            if not has_other_matches:
+                invoice.extraction_status = ImportedInvoice.ExtractionStatus.SENT
+                invoice.save(update_fields=["extraction_status"])
+
+        if invoice_record and invoice_record.status == InvoiceRecord.Status.PAID:
+            has_other_matches = InvoicePaymentMatch.objects.filter(invoice_record=invoice_record).exists()
+            if not has_other_matches:
+                invoice_record.status = InvoiceRecord.Status.SENT
+                invoice_record.save(update_fields=["status"])
+
         return DeleteResult(success=True)
 
     # ----- CSV Import / Bulk Upload -----
