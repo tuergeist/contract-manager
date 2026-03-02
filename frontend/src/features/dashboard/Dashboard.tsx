@@ -165,7 +165,7 @@ export function Dashboard() {
       </div>
 
       {/* New Business KPIs */}
-      {nb && (nb.wonDealCount > 0 || parseFloat(nb.wonNewArr) > 0) && (
+      {nb && (nb.wonDealCount > 0 || parseFloat(nb.wonNewArr) > 0 || Object.keys(nbGoalMap).length > 0) && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-3">{t('forecasts.newBusiness.title')}</h2>
           <div
