@@ -1126,6 +1126,7 @@ class HubSpotService:
             status=Contract.Status.DRAFT,
             start_date=closedate,
             billing_start_date=closedate,
+            deal_won_date=closedate,
             billing_interval=Contract.BillingInterval.MONTHLY,  # Will be updated after line items
             billing_anchor_day=1,
         )

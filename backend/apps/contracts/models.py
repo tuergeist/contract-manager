@@ -132,6 +132,11 @@ class Contract(TenantModel):
     )
     start_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
+    deal_won_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date the deal was won (from HubSpot closedate for imported deals)",
+    )
     billing_start_date = models.DateField()
     billing_interval = models.CharField(
         max_length=20,
@@ -167,6 +172,11 @@ class Contract(TenantModel):
         if self.name:
             return f"{self.name} ({self.customer.name})"
         return f"Contract {self.id} - {self.customer.name}"
+
+    @property
+    def is_new_business(self) -> bool:
+        """A contract is new business if it was imported from HubSpot."""
+        return bool(self.hubspot_deal_id)
 
     @property
     def effective_status(self):
@@ -1478,6 +1488,30 @@ class RevenueGoal(TenantModel):
 
     def __str__(self):
         return f"{self.year} {self.get_revenue_type_display()}: {self.target_amount}"
+
+
+class NewBusinessGoalType(models.TextChoices):
+    NEW_ARR = "new_arr", "Won New ARR"
+    NEW_DEVELOPMENT = "new_development", "Won Development Revenue"
+    NEW_DEAL_COUNT = "new_deal_count", "Won Deal Count"
+
+
+class NewBusinessGoal(TenantModel):
+    """Yearly target for new business metrics (won deals)."""
+
+    year = models.IntegerField()
+    goal_type = models.CharField(
+        max_length=30,
+        choices=NewBusinessGoalType.choices,
+    )
+    target_amount = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        unique_together = ["tenant", "year", "goal_type"]
+        ordering = ["year", "goal_type"]
+
+    def __str__(self):
+        return f"{self.year} {self.get_goal_type_display()}: {self.target_amount}"
 
 
 class ContractComment(TenantModel):

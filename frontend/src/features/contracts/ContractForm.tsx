@@ -90,6 +90,8 @@ const CONTRACT_QUERY = gql`
         name
       }
       hasInvoices
+      dealWonDate
+      isNewBusiness
     }
   }
 `
@@ -223,6 +225,8 @@ interface Contract {
   group: { id: string; name: string } | null
   customer: Customer
   hasInvoices: boolean
+  dealWonDate: string | null
+  isNewBusiness: boolean
 }
 
 const formSchema = z.object({
@@ -235,6 +239,7 @@ const formSchema = z.object({
   groupId: z.coerce.string().optional().nullable(),
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().optional(),
+  dealWonDate: z.string().optional(),
   billingStartDate: z.string().optional(),
   billingInterval: z.string(),
   billingAnchorDay: z.number().min(1).max(28),
@@ -317,6 +322,7 @@ export function ContractForm() {
       groupId: null,
       startDate: '',
       endDate: '',
+      dealWonDate: '',
       billingStartDate: '',
       billingInterval: 'monthly',
       billingAnchorDay: 1,
@@ -369,6 +375,7 @@ export function ContractForm() {
         groupId: c.group?.id || null,
         startDate: c.startDate,
         endDate: c.endDate || '',
+        dealWonDate: c.dealWonDate || '',
         billingStartDate: c.billingStartDate,
         billingInterval: c.billingInterval,
         billingAnchorDay: c.billingAnchorDay,
@@ -407,6 +414,7 @@ export function ContractForm() {
               startDate: data.startDate,
               billingStartDate: data.billingStartDate || data.startDate,
               endDate: data.endDate || null,
+              dealWonDate: data.dealWonDate || null,
               billingInterval: data.billingInterval,
               billingAnchorDay: data.billingAnchorDay,
               billingAlignmentDate: data.billingAlignmentDate || null,
@@ -938,6 +946,25 @@ export function ContractForm() {
                         </Button>
                       )}
                     </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Deal Won Date */}
+              <FormField
+                control={form.control}
+                name="dealWonDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('contracts.dealWonDate')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        {...field}
+                        disabled={!isEditing}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

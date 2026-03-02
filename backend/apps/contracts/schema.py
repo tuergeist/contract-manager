@@ -21,7 +21,7 @@ from apps.customers.models import Customer
 from apps.customers.schema import CustomerType
 from apps.products.models import Product
 from apps.products.schema import ProductType
-from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, RevenueGoal, TimeTrackingProjectMapping
+from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, RevenueGoal, NewBusinessGoal, TimeTrackingProjectMapping
 from .forecast_cache import (
     dict_to_forecast_result,
     forecast_result_to_dict,
@@ -273,7 +273,13 @@ class ContractType:
     order_confirmation_number: auto
     notes: auto
     invoice_text: auto
+    deal_won_date: auto
     customer: CustomerType
+
+    @strawberry.field
+    def is_new_business(self) -> bool:
+        """True if this contract was imported from HubSpot (new business)."""
+        return bool(self.hubspot_deal_id)
 
     @strawberry.field
     def has_invoices(self) -> bool:
@@ -636,6 +642,7 @@ class UpdateContractInput:
     notice_period_anchor: str | None = None
     notice_period_after_min_months: int | None = None
     group_id: strawberry.ID | None = UNSET
+    deal_won_date: date | None = UNSET
 
 
 @strawberry.input
@@ -1208,6 +1215,101 @@ class RevenueStreamDataType:
     revenue_type: str
     ytd_actual: Decimal
     full_year_forecast: Decimal
+
+
+def calculate_new_business_metrics(tenant, year: int) -> dict:
+    """
+    Calculate new business metrics for a given year.
+
+    Returns dict with:
+    - won_new_arr: Decimal (annualized recurring revenue from won deals)
+    - won_development_revenue: Decimal (development/training items from won deals)
+    - won_deal_count: int (number of won deals)
+    """
+    from apps.core.models import RevenueType
+
+    won_contracts = Contract.objects.filter(
+        tenant=tenant,
+        hubspot_deal_id__isnull=False,
+        deal_won_date__year=year,
+    ).exclude(
+        hubspot_deal_id=""
+    ).exclude(
+        status=Contract.Status.CANCELLED,
+    ).prefetch_related("items", "items__product")
+
+    won_new_arr = Decimal("0")
+    won_development_revenue = Decimal("0")
+    won_deal_count = won_contracts.count()
+
+    # Also include effectively ended (active with end_date in past)
+    for contract in won_contracts:
+        for item in contract.items.all():
+            ert = item.get_effective_revenue_type()
+            annual_value = item.unit_price * item.quantity
+            # Annualize based on price period
+            period = item.price_period or "monthly"
+            multipliers = {
+                "monthly": 12,
+                "quarterly": 4,
+                "semi_annual": 2,
+                "annual": 1,
+                "biennial": Decimal("0.5"),
+                "triennial": Decimal("1") / 3,
+                "quadrennial": Decimal("0.25"),
+                "quinquennial": Decimal("0.2"),
+            }
+
+            if item.is_one_off:
+                # One-off items: use face value, not annualized
+                if ert in (RevenueType.ADVANCED_DEVELOPMENT, RevenueType.TRAINING_IMPLEMENTATION):
+                    won_development_revenue += annual_value
+            else:
+                annualized = annual_value * multipliers.get(period, 12)
+                if ert == RevenueType.RECURRING:
+                    won_new_arr += annualized
+                elif ert in (RevenueType.ADVANCED_DEVELOPMENT, RevenueType.TRAINING_IMPLEMENTATION):
+                    won_development_revenue += annualized
+                else:
+                    # Unclassified recurring: still counts toward ARR
+                    won_new_arr += annualized
+
+    return {
+        "won_new_arr": won_new_arr,
+        "won_development_revenue": won_development_revenue,
+        "won_deal_count": won_deal_count,
+    }
+
+
+@strawberry.type
+class NewBusinessMetricsType:
+    won_new_arr: Decimal
+    won_development_revenue: Decimal
+    won_deal_count: int
+
+
+@strawberry.type
+class NewBusinessGoalGQLType:
+    id: int
+    year: int
+    goal_type: str
+    target_amount: Decimal
+
+
+@strawberry.type
+class NewBusinessGoalResult:
+    goal: NewBusinessGoalGQLType | None = None
+    success: bool = False
+    error: str | None = None
+
+
+@strawberry.type
+class WonDealType:
+    contract_id: int
+    contract_name: str
+    customer_name: str
+    deal_won_date: str
+    annual_recurring_revenue: Decimal
 
 
 @strawberry.type
@@ -2358,6 +2460,8 @@ class ContractQuery:
         info: Info[Context, None],
         search: str | None = None,
         status: str | None = None,
+        is_new_business: bool | None = None,
+        deal_won_year: int | None = None,
         include_deleted: bool = False,
         page: int = 1,
         page_size: int = 20,
@@ -2406,6 +2510,14 @@ class ContractQuery:
                 )
             else:
                 queryset = queryset.filter(status=status)
+
+        # New business filter
+        if is_new_business is True:
+            queryset = queryset.filter(
+                hubspot_deal_id__isnull=False,
+            ).exclude(hubspot_deal_id="")
+        if deal_won_year is not None:
+            queryset = queryset.filter(deal_won_date__year=deal_won_year)
 
         # Sorting
         allowed_sort_fields = {
@@ -2803,6 +2915,82 @@ class ContractQuery:
                 ))
         return result
 
+    @strawberry.field
+    def new_business_goals(
+        self, info: Info[Context, None], year: int
+    ) -> list[NewBusinessGoalGQLType]:
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+        goals = NewBusinessGoal.objects.filter(tenant=user.tenant, year=year)
+        return [
+            NewBusinessGoalGQLType(
+                id=g.id,
+                year=g.year,
+                goal_type=g.goal_type,
+                target_amount=g.target_amount,
+            )
+            for g in goals
+        ]
+
+    @strawberry.field
+    def new_business_metrics(
+        self, info: Info[Context, None], year: int
+    ) -> NewBusinessMetricsType:
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return NewBusinessMetricsType(
+                won_new_arr=Decimal("0"),
+                won_development_revenue=Decimal("0"),
+                won_deal_count=0,
+            )
+        metrics = calculate_new_business_metrics(user.tenant, year)
+        return NewBusinessMetricsType(
+            won_new_arr=metrics["won_new_arr"],
+            won_development_revenue=metrics["won_development_revenue"],
+            won_deal_count=metrics["won_deal_count"],
+        )
+
+    @strawberry.field
+    def won_deals(
+        self, info: Info[Context, None], year: int
+    ) -> list[WonDealType]:
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+
+        won_contracts = Contract.objects.filter(
+            tenant=user.tenant,
+            hubspot_deal_id__isnull=False,
+            deal_won_date__year=year,
+        ).exclude(
+            hubspot_deal_id=""
+        ).exclude(
+            status=Contract.Status.CANCELLED,
+        ).select_related("customer").prefetch_related("items")
+
+        result = []
+        for contract in won_contracts.order_by("-deal_won_date"):
+            # Calculate ARR for this contract
+            arr = Decimal("0")
+            multipliers = {
+                "monthly": 12, "quarterly": 4, "semi_annual": 2,
+                "annual": 1, "biennial": Decimal("0.5"),
+            }
+            for item in contract.items.all():
+                if not item.is_one_off:
+                    period = item.price_period or "monthly"
+                    arr += item.unit_price * item.quantity * multipliers.get(period, 12)
+
+            result.append(WonDealType(
+                contract_id=contract.id,
+                contract_name=contract.name or f"Contract {contract.id}",
+                customer_name=contract.customer.name,
+                deal_won_date=str(contract.deal_won_date),
+                annual_recurring_revenue=arr,
+            ))
+        return result
+
 
 def _check_price_period_overlap(
     item: ContractItem,
@@ -3020,6 +3208,8 @@ class ContractMutation:
                     if not group:
                         return ContractResult(error="Group not found or belongs to a different customer")
                     contract.group = group
+            if input.deal_won_date is not UNSET:
+                contract.deal_won_date = input.deal_won_date
 
             contract.save()
             return ContractResult(contract=contract, success=True)
@@ -5262,4 +5452,66 @@ class ContractImportMutation:
 
         if deleted == 0:
             return DeleteResult(error="Revenue goal not found")
+        return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def set_new_business_goal(
+        self,
+        info: Info[Context, None],
+        year: int,
+        goal_type: str,
+        target_amount: Decimal,
+    ) -> NewBusinessGoalResult:
+        """Set or update a new business goal (upsert)."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return NewBusinessGoalResult(error=err)
+        if not user.tenant:
+            return NewBusinessGoalResult(error="No tenant assigned")
+
+        from .models import NewBusinessGoalType as NBGType
+        valid_types = [c[0] for c in NBGType.choices]
+        if goal_type not in valid_types:
+            return NewBusinessGoalResult(
+                error=f"Invalid goal type. Must be one of: {', '.join(valid_types)}"
+            )
+
+        goal, _ = NewBusinessGoal.objects.update_or_create(
+            tenant=user.tenant,
+            year=year,
+            goal_type=goal_type,
+            defaults={"target_amount": target_amount},
+        )
+        return NewBusinessGoalResult(
+            goal=NewBusinessGoalGQLType(
+                id=goal.id,
+                year=goal.year,
+                goal_type=goal.goal_type,
+                target_amount=goal.target_amount,
+            ),
+            success=True,
+        )
+
+    @strawberry.mutation
+    def delete_new_business_goal(
+        self,
+        info: Info[Context, None],
+        year: int,
+        goal_type: str,
+    ) -> DeleteResult:
+        """Delete a new business goal."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return DeleteResult(error=err)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        deleted, _ = NewBusinessGoal.objects.filter(
+            tenant=user.tenant,
+            year=year,
+            goal_type=goal_type,
+        ).delete()
+
+        if deleted == 0:
+            return DeleteResult(error="New business goal not found")
         return DeleteResult(success=True)

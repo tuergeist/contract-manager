@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Loader2,
   Search,
@@ -22,6 +22,8 @@ const CONTRACTS_QUERY = gql`
   query Contracts(
     $search: String
     $status: String
+    $isNewBusiness: Boolean
+    $dealWonYear: Int
     $page: Int
     $pageSize: Int
     $sortBy: String
@@ -30,6 +32,8 @@ const CONTRACTS_QUERY = gql`
     contracts(
       search: $search
       status: $status
+      isNewBusiness: $isNewBusiness
+      dealWonYear: $dealWonYear
       page: $page
       pageSize: $pageSize
       sortBy: $sortBy
@@ -41,6 +45,7 @@ const CONTRACTS_QUERY = gql`
         status
         startDate
         endDate
+        dealWonDate
         updatedAt
         arr
         customer {
@@ -68,6 +73,7 @@ interface Contract {
   status: string
   startDate: string
   endDate: string | null
+  dealWonDate: string | null
   updatedAt: string
   arr: string
   customer: Customer
@@ -93,6 +99,7 @@ const CONTRACT_STATUSES = ['draft', 'active', 'paused', 'cancelled', 'ended', 'd
 
 export function ContractList() {
   const { t, i18n } = useTranslation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [searchTerm, setSearchTerm] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('')
@@ -101,10 +108,22 @@ export function ContractList() {
   const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('contracts-sort-order', 'desc')
   const [exporting, setExporting] = useState(false)
 
+  const isNewBusinessFilter = searchParams.get('newBusiness') === 'true'
+  const dealWonYearFilter = searchParams.get('wonYear') ? parseInt(searchParams.get('wonYear')!) : null
+
+  const clearNewBusinessFilter = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('newBusiness')
+    next.delete('wonYear')
+    setSearchParams(next)
+  }
+
   const { data, loading, error } = useQuery<ContractsData>(CONTRACTS_QUERY, {
     variables: {
       search: searchTerm || null,
       status: statusFilter || null,
+      isNewBusiness: isNewBusinessFilter || null,
+      dealWonYear: dealWonYearFilter,
       page,
       pageSize: PAGE_SIZE,
       sortBy,
@@ -258,6 +277,13 @@ export function ContractList() {
             ))}
           </select>
         </div>
+
+        {isNewBusinessFilter && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+            {t('forecasts.newBusiness.title')} {dealWonYearFilter || ''}
+            <button onClick={clearNewBusinessFilter} className="ml-1 hover:text-blue-600">&times;</button>
+          </span>
+        )}
       </div>
 
       {loading ? (
