@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.11.0",
+    "date": "2026-03-02",
+    "title": "Invoice Match Suggestions & Deal Won Tracking",
+    "description": "Transaction match view now auto-suggests invoices for linked counterparties, and deal won tracking enables new business goal monitoring.",
+    "type": "feature",
+    "details": [
+      "Added suggested invoice matches in transaction match sheet for linked counterparties, ranked by amount proximity with one-click matching",
+      "Added deal won date field on contracts, populated from HubSpot closedate on import",
+      "Added new business goals settings (won ARR, development revenue, deal count) alongside revenue goals",
+      "Added isNewBusiness and dealWonYear filters on contract list with dashboard click-through",
+      "Fixed invoice status not reverting from paid when payment match is deleted"
+    ]
+  },
+  {
     "version": "2.10.3",
     "date": "2026-03-01",
     "title": "New Business KPIs on Dashboard",
