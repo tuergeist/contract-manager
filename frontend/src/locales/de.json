@@ -1430,7 +1430,25 @@
     "dataLoading": "Daten werden synchronisiert...",
     "linkedItem": "Position",
     "linkToItem": "Mit Position verknüpfen",
-    "noItemLink": "Keine Position (Vertragsebene)"
+    "noItemLink": "Keine Position (Vertragsebene)",
+    "autoLink": {
+      "title": "Auto-Link Regeln",
+      "addRule": "Auto-Link Regel hinzufügen",
+      "noRules": "Keine Auto-Link Regeln konfiguriert",
+      "pattern": "Muster",
+      "matchType": "Vergleichsart",
+      "contains": "Enthält",
+      "startsWith": "Beginnt mit",
+      "linkedCount": "Verknüpft",
+      "deleteConfirm": "Möchten Sie diese Auto-Link Regel wirklich löschen? Bestehende Verknüpfungen bleiben erhalten.",
+      "auto": "auto",
+      "patternPlaceholder": "z.B. [Kunde DL-Vertrag]",
+      "preview": "Passende Projekte anzeigen",
+      "enterPattern": "Geben Sie ein Muster ein, um passende Projekte zu sehen",
+      "noMatches": "Keine passenden unverknüpften Projekte gefunden",
+      "matchCount": "{{count}} passende(s) Projekt(e)",
+      "create": "Regel erstellen"
+    }
   },
   "todos": {
     "title": "Aufgaben",

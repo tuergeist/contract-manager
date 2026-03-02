@@ -1430,7 +1430,25 @@
     "dataLoading": "Data is syncing...",
     "linkedItem": "Item",
     "linkToItem": "Link to item",
-    "noItemLink": "No item (contract-level)"
+    "noItemLink": "No item (contract-level)",
+    "autoLink": {
+      "title": "Auto-link Rules",
+      "addRule": "Add Auto-link Rule",
+      "noRules": "No auto-link rules configured",
+      "pattern": "Pattern",
+      "matchType": "Match Type",
+      "contains": "Contains",
+      "startsWith": "Starts with",
+      "linkedCount": "Linked",
+      "deleteConfirm": "Are you sure you want to delete this auto-link rule? Existing links will be kept.",
+      "auto": "auto",
+      "patternPlaceholder": "e.g. [Customer DL-Vertrag]",
+      "preview": "Preview matching projects",
+      "enterPattern": "Enter a pattern to see matching projects",
+      "noMatches": "No matching unlinked projects found",
+      "matchCount": "{{count}} matching project(s)",
+      "create": "Create Rule"
+    }
   },
   "todos": {
     "title": "Todos",

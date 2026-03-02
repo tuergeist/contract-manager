@@ -70,6 +70,17 @@ class TimeTrackingProvider(ABC):
 logger = logging.getLogger(__name__)
 
 
+def matches_project_name(pattern: str, match_type: str, project_name: str) -> bool:
+    """Check if a project name matches a pattern (case-insensitive)."""
+    p = pattern.lower()
+    name = project_name.lower()
+    if match_type == "contains":
+        return p in name
+    elif match_type == "starts_with":
+        return name.startswith(p)
+    return False
+
+
 def get_provider(tenant) -> TimeTrackingProvider | None:
     """Factory: returns the configured provider for this tenant."""
     config = tenant.time_tracking_config or {}

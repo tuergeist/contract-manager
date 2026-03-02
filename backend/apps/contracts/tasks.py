@@ -87,3 +87,82 @@ def refresh_all_time_tracking_data() -> int:
         len(mappings),
     )
     return total_synced
+
+
+@shared_task(acks_late=True)
+def auto_link_time_tracking_projects() -> int:
+    """Auto-link time tracking projects based on pattern rules.
+
+    For each active tenant with a configured provider:
+    1. Fetch all projects once
+    2. Match against active auto-link rules (non-cancelled contracts)
+    3. Create mappings for new matches
+
+    Returns:
+        Number of new mappings created.
+    """
+    from apps.contracts.models import AutoLinkRule, Contract, TimeTrackingProjectMapping
+    from apps.contracts.services.time_tracking import get_provider, matches_project_name
+    from apps.tenants.models import Tenant
+
+    tenants = Tenant.objects.filter(is_active=True)
+    total_created = 0
+
+    for tenant in tenants:
+        provider = get_provider(tenant)
+        if not provider:
+            continue
+
+        try:
+            projects = provider.get_projects()
+        except Exception:
+            logger.exception("Failed to fetch projects for tenant %s", tenant.id)
+            continue
+
+        rules = list(
+            AutoLinkRule.objects.filter(
+                tenant=tenant,
+                is_active=True,
+            ).exclude(
+                contract__status=Contract.Status.CANCELLED,
+            ).select_related("contract", "contract_item").order_by("created_at")
+        )
+
+        if not rules:
+            continue
+
+        # Get already-linked project IDs for this tenant
+        linked_ids = set(
+            TimeTrackingProjectMapping.objects.filter(
+                tenant=tenant,
+            ).values_list("external_project_id", flat=True)
+        )
+
+        for rule in rules:
+            for project in projects:
+                if project.id in linked_ids:
+                    continue
+                if not matches_project_name(rule.pattern, rule.match_type, project.name):
+                    continue
+
+                TimeTrackingProjectMapping.objects.create(
+                    tenant=tenant,
+                    contract=rule.contract,
+                    contract_item=rule.contract_item,
+                    external_project_id=project.id,
+                    external_project_name=project.name,
+                    external_customer_name=project.customer_name,
+                    link_source=TimeTrackingProjectMapping.LinkSource.AUTO,
+                    auto_link_rule=rule,
+                )
+                linked_ids.add(project.id)
+                total_created += 1
+
+                # Trigger async data sync for new mapping
+                mapping = TimeTrackingProjectMapping.objects.get(
+                    tenant=tenant, external_project_id=project.id,
+                )
+                sync_time_tracking_mapping_task.delay(mapping.id)
+
+    logger.info("Auto-link created %d new mappings", total_created)
+    return total_created

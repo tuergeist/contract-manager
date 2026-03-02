@@ -21,7 +21,7 @@ from apps.customers.models import Customer
 from apps.customers.schema import CustomerType
 from apps.products.models import Product
 from apps.products.schema import ProductType
-from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, RevenueGoal, NewBusinessGoal, TimeTrackingProjectMapping
+from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, RevenueGoal, NewBusinessGoal, TimeTrackingProjectMapping, AutoLinkRule
 from .forecast_cache import (
     dict_to_forecast_result,
     forecast_result_to_dict,
@@ -1348,6 +1348,19 @@ class TimeTrackingMappingType:
     contract_item_name: str | None = None
     cached_total_hours: float = 0
     contract_item_monthly_revenue: float | None = None  # monthly revenue of linked item
+    link_source: str = "manual"
+
+
+@strawberry.type
+class AutoLinkRuleType:
+    """A pattern-based auto-link rule for time tracking projects."""
+    id: int
+    pattern: str
+    match_type: str
+    is_active: bool
+    contract_item_id: int | None = None
+    contract_item_name: str | None = None
+    created_mappings_count: int = 0
 
 
 @strawberry.type
@@ -1374,6 +1387,7 @@ class TimeTrackingSummaryType:
     by_service: list[ServiceBreakdown]
     by_month: list[MonthlyBreakdown]
     mappings: list[TimeTrackingMappingType]
+    auto_link_rules: list[AutoLinkRuleType] = strawberry.field(default_factory=list)
     last_synced: datetime | None = None
 
 
@@ -2694,7 +2708,29 @@ class ContractQuery:
                 ),
                 cached_total_hours=m.cached_total_hours,
                 contract_item_monthly_revenue=item_monthly_revenue,
+                link_source=m.link_source,
             ))
+
+        # Load auto-link rules for this contract
+        rules = AutoLinkRule.objects.filter(
+            tenant=user.tenant, contract=contract,
+        ).select_related("contract_item", "contract_item__product")
+        rule_types = [
+            AutoLinkRuleType(
+                id=r.id,
+                pattern=r.pattern,
+                match_type=r.match_type,
+                is_active=r.is_active,
+                contract_item_id=r.contract_item_id,
+                contract_item_name=(
+                    r.contract_item.product.name if r.contract_item and r.contract_item.product
+                    else r.contract_item.description[:50] if r.contract_item
+                    else None
+                ),
+                created_mappings_count=r.created_mappings.count(),
+            )
+            for r in rules
+        ]
 
         if not mappings.exists():
             return TimeTrackingSummaryType(
@@ -2703,6 +2739,7 @@ class ContractQuery:
                 by_service=[],
                 by_month=[],
                 mappings=mapping_types,
+                auto_link_rules=rule_types,
             )
 
         cached = get_cached_summary(mappings)
@@ -2726,8 +2763,54 @@ class ContractQuery:
                 for m in cached["by_month"]
             ],
             mappings=mapping_types,
+            auto_link_rules=rule_types,
             last_synced=cached["last_synced"],
         )
+
+    @strawberry.field
+    def preview_auto_link_matches(
+        self,
+        info: Info[Context, None],
+        pattern: str,
+        match_type: str = "contains",
+    ) -> list[TimeTrackingExternalProject]:
+        """Preview which unlinked projects match a pattern."""
+        from apps.contracts.services.time_tracking import get_provider, matches_project_name
+
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+
+        provider = get_provider(user.tenant)
+        if not provider:
+            return []
+
+        if match_type not in ("contains", "starts_with"):
+            return []
+
+        try:
+            projects = provider.get_projects()
+        except Exception:
+            return []
+
+        # Exclude already-linked projects
+        linked_ids = set(
+            TimeTrackingProjectMapping.objects.filter(
+                tenant=user.tenant,
+            ).values_list("external_project_id", flat=True)
+        )
+
+        return [
+            TimeTrackingExternalProject(
+                id=p.id,
+                name=p.name,
+                customer_name=p.customer_name,
+                active=p.active,
+            )
+            for p in projects
+            if p.id not in linked_ids
+            and matches_project_name(pattern, match_type, p.name)
+        ]
 
     @strawberry.field
     def analyze_pdf_attachment(
@@ -4267,6 +4350,73 @@ class ContractMutation:
             return DeleteResult(error="Mapping not found")
 
         mapping.delete()
+        return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def create_auto_link_rule(
+        self,
+        info: Info[Context, None],
+        contract_id: strawberry.ID,
+        pattern: str,
+        match_type: str = "contains",
+        contract_item_id: strawberry.ID | None = None,
+    ) -> DeleteResult:
+        """Create an auto-link rule for time tracking projects."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return DeleteResult(error=err)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        contract = Contract.objects.filter(
+            tenant=user.tenant, id=contract_id
+        ).first()
+        if not contract:
+            return DeleteResult(error="Contract not found")
+
+        if match_type not in ("contains", "starts_with"):
+            return DeleteResult(error="Invalid match type")
+
+        if not pattern.strip():
+            return DeleteResult(error="Pattern cannot be empty")
+
+        contract_item = None
+        if contract_item_id:
+            contract_item = ContractItem.objects.filter(
+                contract=contract, id=contract_item_id
+            ).first()
+            if not contract_item:
+                return DeleteResult(error="Item not found in this contract")
+
+        AutoLinkRule.objects.create(
+            tenant=user.tenant,
+            contract=contract,
+            contract_item=contract_item,
+            pattern=pattern.strip(),
+            match_type=match_type,
+        )
+        return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def delete_auto_link_rule(
+        self,
+        info: Info[Context, None],
+        rule_id: strawberry.ID,
+    ) -> DeleteResult:
+        """Delete an auto-link rule. Existing mappings created by it remain."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return DeleteResult(error=err)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        rule = AutoLinkRule.objects.filter(
+            tenant=user.tenant, id=rule_id
+        ).first()
+        if not rule:
+            return DeleteResult(error="Rule not found")
+
+        rule.delete()
         return DeleteResult(success=True)
 
     @strawberry.mutation

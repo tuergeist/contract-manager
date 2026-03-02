@@ -1408,8 +1408,46 @@ class ContractAttachment(TenantModel):
         super().delete(*args, **kwargs)
 
 
+class AutoLinkRule(TenantModel):
+    """Pattern-based rule for auto-linking time tracking projects to a contract."""
+
+    class MatchType(models.TextChoices):
+        CONTAINS = "contains", "Contains"
+        STARTS_WITH = "starts_with", "Starts with"
+
+    contract = models.ForeignKey(
+        Contract,
+        on_delete=models.CASCADE,
+        related_name="auto_link_rules",
+    )
+    contract_item = models.ForeignKey(
+        ContractItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="auto_link_rules",
+    )
+    pattern = models.CharField(max_length=255)
+    match_type = models.CharField(
+        max_length=20,
+        choices=MatchType.choices,
+        default=MatchType.CONTAINS,
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.get_match_type_display()} '{self.pattern}' -> {self.contract}"
+
+
 class TimeTrackingProjectMapping(TenantModel):
     """Maps an external time tracking project to a contract."""
+
+    class LinkSource(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        AUTO = "auto", "Auto"
 
     contract = models.ForeignKey(
         Contract,
@@ -1426,6 +1464,18 @@ class TimeTrackingProjectMapping(TenantModel):
     external_project_id = models.CharField(max_length=100)
     external_project_name = models.CharField(max_length=255)
     external_customer_name = models.CharField(max_length=255, blank=True, default="")
+    link_source = models.CharField(
+        max_length=10,
+        choices=LinkSource.choices,
+        default=LinkSource.MANUAL,
+    )
+    auto_link_rule = models.ForeignKey(
+        AutoLinkRule,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_mappings",
+    )
 
     # Cached time tracking data (refreshed by Celery Beat)
     cached_total_hours = models.FloatField(default=0)

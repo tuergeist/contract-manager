@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Contract, ContractItem, ContractAmendment, RevenueGoal, NewBusinessGoal
+from .models import Contract, ContractItem, ContractAmendment, RevenueGoal, NewBusinessGoal, AutoLinkRule
 
 
 class ContractItemInline(admin.TabularInline):
@@ -45,3 +45,10 @@ class RevenueGoalAdmin(admin.ModelAdmin):
 class NewBusinessGoalAdmin(admin.ModelAdmin):
     list_display = ["year", "goal_type", "target_amount", "tenant"]
     list_filter = ["tenant", "year", "goal_type"]
+
+
+@admin.register(AutoLinkRule)
+class AutoLinkRuleAdmin(admin.ModelAdmin):
+    list_display = ["pattern", "match_type", "contract", "is_active", "tenant"]
+    list_filter = ["tenant", "match_type", "is_active"]
+    search_fields = ["pattern", "contract__customer__name"]

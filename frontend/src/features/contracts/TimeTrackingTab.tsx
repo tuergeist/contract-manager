@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { Loader2, Plus, Link2, Clock, Search } from 'lucide-react'
+import { Loader2, Plus, Link2, Clock, Search, Trash2, Wand2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -42,6 +42,16 @@ const TIME_TRACKING_SUMMARY_QUERY = gql`
         contractItemName
         cachedTotalHours
         contractItemMonthlyRevenue
+        linkSource
+      }
+      autoLinkRules {
+        id
+        pattern
+        matchType
+        isActive
+        contractItemId
+        contractItemName
+        createdMappingsCount
       }
     }
     timeTrackingSettings {
@@ -93,6 +103,34 @@ const UNMAP_PROJECT_MUTATION = gql`
   }
 `
 
+const CREATE_AUTO_LINK_RULE_MUTATION = gql`
+  mutation CreateAutoLinkRule($contractId: ID!, $pattern: String!, $matchType: String!, $contractItemId: ID) {
+    createAutoLinkRule(contractId: $contractId, pattern: $pattern, matchType: $matchType, contractItemId: $contractItemId) {
+      success
+      error
+    }
+  }
+`
+
+const DELETE_AUTO_LINK_RULE_MUTATION = gql`
+  mutation DeleteAutoLinkRule($ruleId: ID!) {
+    deleteAutoLinkRule(ruleId: $ruleId) {
+      success
+      error
+    }
+  }
+`
+
+const PREVIEW_AUTO_LINK_MATCHES_QUERY = gql`
+  query PreviewAutoLinkMatches($pattern: String!, $matchType: String!) {
+    previewAutoLinkMatches(pattern: $pattern, matchType: $matchType) {
+      id
+      name
+      customerName
+    }
+  }
+`
+
 export interface DeliveryItem {
   id: string
   name: string
@@ -113,6 +151,23 @@ interface Mapping {
   contractItemName: string | null
   cachedTotalHours: number
   contractItemMonthlyRevenue: number | null
+  linkSource: string
+}
+
+interface AutoLinkRule {
+  id: string
+  pattern: string
+  matchType: string
+  isActive: boolean
+  contractItemId: string | null
+  contractItemName: string | null
+  createdMappingsCount: number
+}
+
+interface PreviewMatch {
+  id: string
+  name: string
+  customerName: string
 }
 
 interface ExternalProject {
@@ -125,12 +180,14 @@ interface ExternalProject {
 export function TimeTrackingTab({ contractId, customerName, deliveryItems = [] }: TimeTrackingTabProps) {
   const { t } = useTranslation()
   const [showLinkDialog, setShowLinkDialog] = useState(false)
+  const [showAddRuleDialog, setShowAddRuleDialog] = useState(false)
 
   const { data, loading, refetch } = useQuery(TIME_TRACKING_SUMMARY_QUERY, {
     variables: { contractId },
   })
 
   const [unmapProject] = useMutation(UNMAP_PROJECT_MUTATION)
+  const [deleteAutoLinkRule] = useMutation(DELETE_AUTO_LINK_RULE_MUTATION)
 
   const summary = data?.timeTrackingSummary
   const isConfigured = data?.timeTrackingSettings?.isConfigured
@@ -139,6 +196,12 @@ export function TimeTrackingTab({ contractId, customerName, deliveryItems = [] }
   const handleUnlink = async (mappingId: number) => {
     if (!confirm(t('timeTracking.unlinkConfirm'))) return
     await unmapProject({ variables: { mappingId: String(mappingId) } })
+    refetch()
+  }
+
+  const handleDeleteRule = async (ruleId: string) => {
+    if (!confirm(t('timeTracking.autoLink.deleteConfirm'))) return
+    await deleteAutoLinkRule({ variables: { ruleId } })
     refetch()
   }
 
@@ -160,6 +223,7 @@ export function TimeTrackingTab({ contractId, customerName, deliveryItems = [] }
   }
 
   const mappings: Mapping[] = summary?.mappings || []
+  const autoLinkRules: AutoLinkRule[] = summary?.autoLinkRules || []
 
   return (
     <div className="space-y-6">
@@ -211,6 +275,12 @@ export function TimeTrackingTab({ contractId, customerName, deliveryItems = [] }
                           >
                             {m.externalProjectName}
                           </a>
+                          {m.linkSource === 'auto' && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
+                              <Wand2 className="h-3 w-3" />
+                              {t('timeTracking.autoLink.auto')}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="py-2 text-gray-600">{m.externalCustomerName}</td>
@@ -232,6 +302,64 @@ export function TimeTrackingTab({ contractId, customerName, deliveryItems = [] }
                     </tr>
                   )
                 })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Auto-link Rules */}
+      <div className="rounded-lg border bg-white p-6">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium text-gray-900">
+            {t('timeTracking.autoLink.title')}
+          </h3>
+          <button
+            onClick={() => setShowAddRuleDialog(true)}
+            className="inline-flex items-center gap-2 rounded-md bg-purple-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-purple-700"
+          >
+            <Wand2 className="h-4 w-4" />
+            {t('timeTracking.autoLink.addRule')}
+          </button>
+        </div>
+
+        {autoLinkRules.length === 0 ? (
+          <p className="mt-4 text-sm text-gray-500">{t('timeTracking.autoLink.noRules')}</p>
+        ) : (
+          <div className="mt-4">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-gray-500">
+                  <th className="pb-2 font-medium">{t('timeTracking.autoLink.pattern')}</th>
+                  <th className="pb-2 font-medium">{t('timeTracking.autoLink.matchType')}</th>
+                  <th className="pb-2 font-medium">{t('timeTracking.linkedItem')}</th>
+                  <th className="pb-2 text-right font-medium">{t('timeTracking.autoLink.linkedCount')}</th>
+                  <th className="pb-2 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {autoLinkRules.map((rule) => (
+                  <tr key={rule.id} className="border-b last:border-0">
+                    <td className="py-2 font-mono text-sm">{rule.pattern}</td>
+                    <td className="py-2">
+                      <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                        {rule.matchType === 'contains'
+                          ? t('timeTracking.autoLink.contains')
+                          : t('timeTracking.autoLink.startsWith')}
+                      </span>
+                    </td>
+                    <td className="py-2 text-gray-500 text-xs">{rule.contractItemName || '-'}</td>
+                    <td className="py-2 text-right text-gray-600">{rule.createdMappingsCount}</td>
+                    <td className="py-2 text-right">
+                      <button
+                        onClick={() => handleDeleteRule(rule.id)}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -343,6 +471,19 @@ export function TimeTrackingTab({ contractId, customerName, deliveryItems = [] }
           onClose={() => setShowLinkDialog(false)}
           onLinked={() => {
             setShowLinkDialog(false)
+            refetch()
+          }}
+        />
+      )}
+
+      {/* Add Auto-link Rule Dialog */}
+      {showAddRuleDialog && (
+        <AddRuleDialog
+          contractId={contractId}
+          deliveryItems={deliveryItems}
+          onClose={() => setShowAddRuleDialog(false)}
+          onCreated={() => {
+            setShowAddRuleDialog(false)
             refetch()
           }}
         />
@@ -497,6 +638,152 @@ function LinkProjectDialog({
               </table>
             </div>
           )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+interface AddRuleDialogProps {
+  contractId: string
+  deliveryItems: DeliveryItem[]
+  onClose: () => void
+  onCreated: () => void
+}
+
+function AddRuleDialog({ contractId, deliveryItems, onClose, onCreated }: AddRuleDialogProps) {
+  const { t } = useTranslation()
+  const [pattern, setPattern] = useState('')
+  const [matchType, setMatchType] = useState('contains')
+  const [selectedItemId, setSelectedItemId] = useState('none')
+
+  const { data: previewData, loading: previewLoading } = useQuery(PREVIEW_AUTO_LINK_MATCHES_QUERY, {
+    variables: { pattern, matchType },
+    skip: !pattern.trim(),
+  })
+
+  const [createRule, { loading: creating }] = useMutation(CREATE_AUTO_LINK_RULE_MUTATION)
+
+  const previewMatches: PreviewMatch[] = previewData?.previewAutoLinkMatches || []
+
+  const handleCreate = async () => {
+    if (!pattern.trim()) return
+    const result = await createRule({
+      variables: {
+        contractId,
+        pattern: pattern.trim(),
+        matchType,
+        contractItemId: selectedItemId !== 'none' ? selectedItemId : null,
+      },
+    })
+    if (result.data?.createAutoLinkRule?.success) {
+      onCreated()
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={() => onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{t('timeTracking.autoLink.addRule')}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-gray-700">
+              {t('timeTracking.autoLink.pattern')}
+            </label>
+            <input
+              type="text"
+              value={pattern}
+              onChange={(e) => setPattern(e.target.value)}
+              placeholder={t('timeTracking.autoLink.patternPlaceholder')}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-gray-700">
+              {t('timeTracking.autoLink.matchType')}
+            </label>
+            <Select value={matchType} onValueChange={setMatchType}>
+              <SelectTrigger className="mt-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="contains">{t('timeTracking.autoLink.contains')}</SelectItem>
+                <SelectItem value="starts_with">{t('timeTracking.autoLink.startsWith')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {deliveryItems.length > 0 && (
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                {t('timeTracking.linkToItem')}
+              </label>
+              <Select value={selectedItemId} onValueChange={setSelectedItemId}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t('timeTracking.noItemLink')}</SelectItem>
+                  {deliveryItems.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Preview Panel */}
+          <div>
+            <label className="text-sm font-medium text-gray-700">
+              {t('timeTracking.autoLink.preview')}
+            </label>
+            <div className="mt-1 rounded-md border bg-gray-50 p-3">
+              {!pattern.trim() ? (
+                <p className="text-sm text-gray-400">{t('timeTracking.autoLink.enterPattern')}</p>
+              ) : previewLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                </div>
+              ) : previewMatches.length === 0 ? (
+                <p className="text-sm text-gray-500">{t('timeTracking.autoLink.noMatches')}</p>
+              ) : (
+                <div className="max-h-48 overflow-y-auto">
+                  <p className="mb-2 text-xs text-gray-500">
+                    {t('timeTracking.autoLink.matchCount', { count: previewMatches.length })}
+                  </p>
+                  {previewMatches.map((m) => (
+                    <div key={m.id} className="flex items-center gap-2 py-1 text-sm">
+                      <Wand2 className="h-3 w-3 text-purple-500" />
+                      <span>{m.name}</span>
+                      <span className="text-gray-400">({m.customerName})</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              onClick={onClose}
+              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={!pattern.trim() || creating}
+              className="inline-flex items-center gap-2 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+            >
+              {creating && <Loader2 className="h-4 w-4 animate-spin" />}
+              {t('timeTracking.autoLink.create')}
+            </button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
