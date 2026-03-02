@@ -1232,10 +1232,9 @@ def calculate_new_business_metrics(tenant, year: int) -> dict:
         tenant=tenant,
         hubspot_deal_id__isnull=False,
         deal_won_date__year=year,
+        status=Contract.Status.ACTIVE,
     ).exclude(
         hubspot_deal_id=""
-    ).exclude(
-        status=Contract.Status.CANCELLED,
     ).prefetch_related("items", "items__product")
 
     won_new_arr = Decimal("0")
@@ -3046,10 +3045,9 @@ class ContractQuery:
             tenant=user.tenant,
             hubspot_deal_id__isnull=False,
             deal_won_date__year=year,
+            status=Contract.Status.ACTIVE,
         ).exclude(
             hubspot_deal_id=""
-        ).exclude(
-            status=Contract.Status.CANCELLED,
         ).select_related("customer").prefetch_related("items")
 
         result = []
