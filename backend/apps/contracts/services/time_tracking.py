@@ -75,6 +75,14 @@ class TimeTrackingProvider(ABC):
         """
         raise NotImplementedError
 
+    def get_users(self) -> list[dict]:
+        """Fetch all users from the time tracking provider.
+
+        Returns:
+            List of dicts with 'id' and 'name' keys.
+        """
+        raise NotImplementedError
+
     def get_department_time_data(
         self,
         date_from=None,
@@ -84,6 +92,14 @@ class TimeTrackingProvider(ABC):
 
         Returns:
             Flat list of dicts: {user_id, user_name, service_id, service_name, hours}
+        """
+        raise NotImplementedError
+
+    def get_absences(self, year: int) -> list[dict]:
+        """Fetch absences for a given year.
+
+        Returns:
+            List of dicts: {user_id, date_since, date_until, count_days, type, status}
         """
         raise NotImplementedError
 

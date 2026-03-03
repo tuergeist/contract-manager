@@ -124,6 +124,35 @@ class ClockodoProvider(TimeTrackingProvider):
             logger.error("Failed to fetch Clockodo services: %s", e)
             return []
 
+    def get_users(self) -> list[dict]:
+        """Fetch all users from Clockodo."""
+        try:
+            users = self._get_all_pages("users", "users")
+            return [{"id": str(u["id"]), "name": u.get("name", "")} for u in users]
+        except Exception as e:
+            logger.error("Failed to fetch Clockodo users: %s", e)
+            return []
+
+    def get_absences(self, year: int) -> list[dict]:
+        """Fetch absences for a given year from Clockodo."""
+        try:
+            data = self._get("absences", {"year": year})
+            absences = data.get("absences", [])
+            return [
+                {
+                    "user_id": str(a["users_id"]),
+                    "date_since": a.get("date_since", ""),
+                    "date_until": a.get("date_until", ""),
+                    "count_days": float(a.get("count_days", 0) or 0),
+                    "type": a.get("type", 0),
+                    "status": a.get("status", 0),
+                }
+                for a in absences
+            ]
+        except Exception as e:
+            logger.error("Failed to fetch Clockodo absences: %s", e)
+            return []
+
     def get_department_time_data(
         self,
         date_from: date | None = None,

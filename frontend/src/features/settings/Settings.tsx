@@ -103,6 +103,24 @@ const SAVE_DEPARTMENT_SERVICE_MAPPINGS = gql`
   }
 `
 
+const CLOCKODO_USERS_QUERY = gql`
+  query ClockodoUsers {
+    clockodoUsers { id name }
+  }
+`
+
+const USER_COST_PROFILES_QUERY = gql`
+  query UserCostProfiles {
+    userCostProfiles { id externalUserId externalUserName ftePercentage monthlyIncome defaultDepartmentId }
+  }
+`
+
+const SAVE_USER_COST_PROFILES = gql`
+  mutation SaveUserCostProfiles($profiles: [UserCostProfileInput!]!) {
+    saveUserCostProfiles(profiles: $profiles) { success error }
+  }
+`
+
 const HUBSPOT_SETTINGS_QUERY = gql`
   query HubSpotSettings {
     hubspotSettings {
@@ -325,6 +343,9 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
   const [saveTtSettings, { loading: savingTt }] = useMutation(SAVE_TIME_TRACKING_SETTINGS)
   const [updateTtDisplay] = useMutation(UPDATE_TIME_TRACKING_DISPLAY)
 
+  // Time tracking sub-tab state
+  const [ttSubTab, setTtSubTab] = useState<'connection' | 'departments' | 'costs'>('connection')
+
   // Department state
   const [newDeptName, setNewDeptName] = useState('')
   const [editingDeptId, setEditingDeptId] = useState<string | null>(null)
@@ -341,6 +362,13 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
   const [updateDepartment] = useMutation(UPDATE_DEPARTMENT)
   const [deleteDepartment] = useMutation(DELETE_DEPARTMENT)
   const [saveDeptMappings, { loading: savingMappings }] = useMutation(SAVE_DEPARTMENT_SERVICE_MAPPINGS)
+
+  // User cost profile state
+  const [fetchClockodoUsers, { data: clockodoUsersData, loading: loadingClockodoUsers }] = useLazyQuery(CLOCKODO_USERS_QUERY)
+  const { data: costProfilesData, refetch: refetchCostProfiles } = useQuery(USER_COST_PROFILES_QUERY, { skip: !isTimeTrackingConfigured })
+  const [saveCostProfiles, { loading: savingCostProfiles }] = useMutation(SAVE_USER_COST_PROFILES)
+  const [costProfiles, setCostProfiles] = useState<Record<string, { ftePercentage: number; monthlyIncome: string; defaultDepartmentId: string }>>({})
+  const [costProfileMessage, setCostProfileMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const { data: settingsData, refetch: refetchSettings } = useQuery(HUBSPOT_SETTINGS_QUERY)
   const [saveSettings, { loading: saving }] = useMutation(SAVE_HUBSPOT_SETTINGS)
@@ -400,8 +428,51 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
   useEffect(() => {
     if ((!section || section === 'timeTracking') && isTimeTrackingConfigured) {
       loadServices()
+      fetchClockodoUsers()
     }
-  }, [section, isTimeTrackingConfigured, loadServices])
+  }, [section, isTimeTrackingConfigured, loadServices, fetchClockodoUsers])
+
+  // Initialize cost profiles from existing data
+  useEffect(() => {
+    if (costProfilesData?.userCostProfiles) {
+      const profiles: Record<string, { ftePercentage: number; monthlyIncome: string; defaultDepartmentId: string }> = {}
+      for (const p of costProfilesData.userCostProfiles) {
+        profiles[p.externalUserId] = {
+          ftePercentage: p.ftePercentage,
+          monthlyIncome: String(p.monthlyIncome),
+          defaultDepartmentId: p.defaultDepartmentId || '',
+        }
+      }
+      setCostProfiles(profiles)
+    }
+  }, [costProfilesData?.userCostProfiles])
+
+  const handleSaveCostProfiles = async () => {
+    const clockodoUsers = clockodoUsersData?.clockodoUsers || []
+    const profiles = clockodoUsers
+      .filter((u: { id: string }) => {
+        const p = costProfiles[u.id]
+        return p && (p.ftePercentage !== 100 || p.monthlyIncome !== '0' || p.defaultDepartmentId)
+      })
+      .map((u: { id: string; name: string }) => {
+        const p = costProfiles[u.id] || { ftePercentage: 100, monthlyIncome: '0', defaultDepartmentId: '' }
+        return {
+          externalUserId: u.id,
+          externalUserName: u.name,
+          ftePercentage: p.ftePercentage,
+          monthlyIncome: parseFloat(p.monthlyIncome) || 0,
+          defaultDepartmentId: p.defaultDepartmentId || null,
+        }
+      })
+    const result = await saveCostProfiles({ variables: { profiles } })
+    if (result.data?.saveUserCostProfiles?.success) {
+      setCostProfileMessage({ type: 'success', text: t('settings.departments.costProfilesSaved') })
+      refetchCostProfiles()
+    } else {
+      setCostProfileMessage({ type: 'error', text: result.data?.saveUserCostProfiles?.error || t('settings.departments.costProfilesFailed') })
+    }
+    setTimeout(() => setCostProfileMessage(null), 3000)
+  }
 
   const handleCreateDept = async () => {
     const name = newDeptName.trim()
@@ -1342,241 +1413,358 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
           <h2 className="text-lg font-medium">{t('settings.timeTracking.title')}</h2>
           <p className="mt-1 text-sm text-gray-500">{t('settings.timeTracking.description')}</p>
 
-          <div className="mt-4 space-y-4">
-            {/* Connection Status */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">{t('settings.timeTracking.status')}:</span>
-              {ttSettingsData?.timeTrackingSettings?.isConfigured ? (
-                <span className="flex items-center gap-1 text-sm text-green-600">
-                  <CheckCircle className="h-4 w-4" />
-                  {t('settings.timeTracking.connected')}
-                </span>
-              ) : (
-                <span className="flex items-center gap-1 text-sm text-gray-500">
-                  <XCircle className="h-4 w-4" />
-                  {t('settings.timeTracking.notConnected')}
-                </span>
-              )}
-            </div>
-
-            {/* Provider Selector */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                {t('settings.timeTracking.provider')}
-              </label>
-              <select
-                value={ttProvider}
-                onChange={(e) => setTtProvider(e.target.value)}
-                className="mt-1 block w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="clockodo">{t('settings.timeTracking.clockodo')}</option>
-              </select>
-            </div>
-
-            {/* API Email */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                {t('settings.timeTracking.apiEmail')}
-              </label>
-              <input
-                type="email"
-                value={ttApiEmail}
-                onChange={(e) => setTtApiEmail(e.target.value)}
-                placeholder={t('settings.timeTracking.apiEmailPlaceholder')}
-                className="mt-1 block w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* API Key */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                {t('settings.timeTracking.apiKey')}
-              </label>
-              <div className="mt-1 flex gap-2">
-                <input
-                  type="password"
-                  value={ttApiKey}
-                  onChange={(e) => setTtApiKey(e.target.value)}
-                  placeholder={ttSettingsData?.timeTrackingSettings?.isConfigured ? '••••••••••••••••' : t('settings.timeTracking.apiKeyPlaceholder')}
-                  className="block w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
+          {/* Sub-tab menu */}
+          <div className="mt-4 flex border-b">
+            {(['connection', 'departments', 'costs'] as const).map((tab) => {
+              const labelKey = tab === 'connection' ? 'tabConnection' : tab === 'departments' ? 'tabDepartments' : 'tabUserCosts'
+              const disabled = tab !== 'connection' && !isTimeTrackingConfigured
+              return (
                 <button
-                  onClick={handleSaveTtSettings}
-                  disabled={savingTt || !ttApiKey || !ttApiEmail}
-                  className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  key={tab}
+                  onClick={() => !disabled && setTtSubTab(tab)}
+                  disabled={disabled}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    ttSubTab === tab
+                      ? 'border-blue-500 text-blue-600'
+                      : disabled
+                        ? 'border-transparent text-gray-300 cursor-not-allowed'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
                 >
-                  {savingTt && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {t('settings.timeTracking.saveAndTest')}
+                  {t(`settings.timeTracking.${labelKey}`)}
                 </button>
-              </div>
-              {ttMessage && (
-                <p className={`mt-2 text-sm ${ttMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
-                  {ttMessage.text}
-                </p>
-              )}
-            </div>
-
-            {/* Show Revenue Toggle */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="ttShowRevenue"
-                checked={ttShowRevenue}
-                onChange={async (e) => {
-                  const newValue = e.target.checked
-                  setTtShowRevenue(newValue)
-                  await updateTtDisplay({ variables: { showRevenue: newValue } })
-                }}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <label htmlFor="ttShowRevenue" className="text-sm text-gray-700">
-                {t('settings.timeTracking.showRevenue')}
-              </label>
-            </div>
+              )
+            })}
           </div>
-        </div>}
 
-        {/* Departments — only visible when time tracking is configured */}
-        {(!section || section === 'timeTracking') && isTimeTrackingConfigured && <div className="rounded-lg border bg-white p-6">
-          <h2 className="text-lg font-medium">{t('settings.departments.title')}</h2>
-          <p className="mt-1 text-sm text-gray-500">{t('settings.departments.description')}</p>
+          {/* Connection tab */}
+          {ttSubTab === 'connection' && (
+            <div className="mt-4 space-y-4">
+              {/* Connection Status */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">{t('settings.timeTracking.status')}:</span>
+                {ttSettingsData?.timeTrackingSettings?.isConfigured ? (
+                  <span className="flex items-center gap-1 text-sm text-green-600">
+                    <CheckCircle className="h-4 w-4" />
+                    {t('settings.timeTracking.connected')}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-sm text-gray-500">
+                    <XCircle className="h-4 w-4" />
+                    {t('settings.timeTracking.notConnected')}
+                  </span>
+                )}
+              </div>
 
-          <div className="mt-4 space-y-4">
-            {/* Department list */}
-            <div className="space-y-2">
-              {(deptsData?.departments || []).map((dept: { id: string; name: string }) => (
-                <div key={dept.id} className="flex items-center gap-2">
-                  {editingDeptId === dept.id ? (
-                    <>
-                      <input
-                        type="text"
-                        value={editingDeptName}
-                        onChange={(e) => setEditingDeptName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleRenameDept(dept.id)}
-                        className="block w-full max-w-xs rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => handleRenameDept(dept.id)}
-                        className="rounded p-1 text-green-600 hover:bg-green-50"
-                      >
-                        <Check className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => setEditingDeptId(null)}
-                        className="rounded p-1 text-gray-400 hover:bg-gray-100"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-sm text-gray-900">{dept.name}</span>
-                      <button
-                        onClick={() => { setEditingDeptId(dept.id); setEditingDeptName(dept.name) }}
-                        className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteDept(dept.id)}
-                        className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </>
-                  )}
+              {/* Provider Selector */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  {t('settings.timeTracking.provider')}
+                </label>
+                <select
+                  value={ttProvider}
+                  onChange={(e) => setTtProvider(e.target.value)}
+                  className="mt-1 block w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="clockodo">{t('settings.timeTracking.clockodo')}</option>
+                </select>
+              </div>
+
+              {/* API Email */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  {t('settings.timeTracking.apiEmail')}
+                </label>
+                <input
+                  type="email"
+                  value={ttApiEmail}
+                  onChange={(e) => setTtApiEmail(e.target.value)}
+                  placeholder={t('settings.timeTracking.apiEmailPlaceholder')}
+                  className="mt-1 block w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* API Key */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  {t('settings.timeTracking.apiKey')}
+                </label>
+                <div className="mt-1 flex gap-2">
+                  <input
+                    type="password"
+                    value={ttApiKey}
+                    onChange={(e) => setTtApiKey(e.target.value)}
+                    placeholder={ttSettingsData?.timeTrackingSettings?.isConfigured ? '••••••••••••••••' : t('settings.timeTracking.apiKeyPlaceholder')}
+                    className="block w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={handleSaveTtSettings}
+                    disabled={savingTt || !ttApiKey || !ttApiEmail}
+                    className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {savingTt && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {t('settings.timeTracking.saveAndTest')}
+                  </button>
                 </div>
-              ))}
+                {ttMessage && (
+                  <p className={`mt-2 text-sm ${ttMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                    {ttMessage.text}
+                  </p>
+                )}
+              </div>
 
-              {/* Add department inline */}
+              {/* Show Revenue Toggle */}
               <div className="flex items-center gap-2">
                 <input
-                  type="text"
-                  value={newDeptName}
-                  onChange={(e) => setNewDeptName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreateDept()}
-                  placeholder={t('settings.departments.namePlaceholder')}
-                  className="block w-full max-w-xs rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  type="checkbox"
+                  id="ttShowRevenue"
+                  checked={ttShowRevenue}
+                  onChange={async (e) => {
+                    const newValue = e.target.checked
+                    setTtShowRevenue(newValue)
+                    await updateTtDisplay({ variables: { showRevenue: newValue } })
+                  }}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                <button
-                  onClick={handleCreateDept}
-                  disabled={!newDeptName.trim()}
-                  className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Plus className="h-4 w-4" />
-                  {t('settings.departments.addDepartment')}
-                </button>
+                <label htmlFor="ttShowRevenue" className="text-sm text-gray-700">
+                  {t('settings.timeTracking.showRevenue')}
+                </label>
               </div>
-              {deptMessage && (
-                <p className={`text-sm ${deptMessage.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
-                  {deptMessage.text}
-                </p>
+            </div>
+          )}
+
+          {/* Departments tab */}
+          {ttSubTab === 'departments' && isTimeTrackingConfigured && (
+            <div className="mt-4 space-y-4">
+              {/* Department list */}
+              <div className="space-y-2">
+                {(deptsData?.departments || []).map((dept: { id: string; name: string }) => (
+                  <div key={dept.id} className="flex items-center gap-2">
+                    {editingDeptId === dept.id ? (
+                      <>
+                        <input
+                          type="text"
+                          value={editingDeptName}
+                          onChange={(e) => setEditingDeptName(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleRenameDept(dept.id)}
+                          className="block w-full max-w-xs rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handleRenameDept(dept.id)}
+                          className="rounded p-1 text-green-600 hover:bg-green-50"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => setEditingDeptId(null)}
+                          className="rounded p-1 text-gray-400 hover:bg-gray-100"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-sm text-gray-900">{dept.name}</span>
+                        <button
+                          onClick={() => { setEditingDeptId(dept.id); setEditingDeptName(dept.name) }}
+                          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteDept(dept.id)}
+                          className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+
+                {/* Add department inline */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newDeptName}
+                    onChange={(e) => setNewDeptName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleCreateDept()}
+                    placeholder={t('settings.departments.namePlaceholder')}
+                    className="block w-full max-w-xs rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={handleCreateDept}
+                    disabled={!newDeptName.trim()}
+                    className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Plus className="h-4 w-4" />
+                    {t('settings.departments.addDepartment')}
+                  </button>
+                </div>
+                {deptMessage && (
+                  <p className={`text-sm ${deptMessage.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
+                    {deptMessage.text}
+                  </p>
+                )}
+              </div>
+
+              {/* Service assignment table */}
+              {(deptsData?.departments?.length ?? 0) > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-sm font-medium text-gray-900">{t('settings.departments.serviceAssignment')}</h3>
+                  <p className="mt-1 text-sm text-gray-500">{t('settings.departments.serviceAssignmentDescription')}</p>
+
+                  {loadingServices ? (
+                    <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {t('common.loading')}
+                    </div>
+                  ) : (servicesData?.clockodoServices?.length ?? 0) === 0 ? (
+                    <p className="mt-4 text-sm text-gray-500">{t('settings.departments.noServices')}</p>
+                  ) : (
+                    <div className="mt-3">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b text-left">
+                            <th className="pb-2 font-medium text-gray-700">{t('settings.departments.service')}</th>
+                            <th className="pb-2 font-medium text-gray-700">{t('settings.departments.department')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {servicesData.clockodoServices.map((service: { id: string; name: string }) => (
+                            <tr key={service.id} className="border-b last:border-0">
+                              <td className="py-2 text-gray-900">{service.name}</td>
+                              <td className="py-2">
+                                <select
+                                  value={serviceAssignments[service.id] || ''}
+                                  onChange={(e) => setServiceAssignments(prev => ({ ...prev, [service.id]: e.target.value }))}
+                                  className="block w-full max-w-xs rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                >
+                                  <option value="">{t('settings.departments.unassigned')}</option>
+                                  {deptsData.departments.map((dept: { id: string; name: string }) => (
+                                    <option key={dept.id} value={dept.id}>{dept.name}</option>
+                                  ))}
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="mt-3 flex items-center gap-3">
+                        <button
+                          onClick={handleSaveAssignments}
+                          disabled={savingMappings}
+                          className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {savingMappings ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                          {t('settings.departments.saveAssignments')}
+                        </button>
+                        {assignmentMessage && (
+                          <span className={`text-sm ${assignmentMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                            {assignmentMessage.text}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
+          )}
 
-            {/* Service assignment table */}
-            {(deptsData?.departments?.length ?? 0) > 0 && (
-              <div className="mt-6">
-                <h3 className="text-sm font-medium text-gray-900">{t('settings.departments.serviceAssignment')}</h3>
-                <p className="mt-1 text-sm text-gray-500">{t('settings.departments.serviceAssignmentDescription')}</p>
-
-                {loadingServices ? (
-                  <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {t('common.loading')}
-                  </div>
-                ) : (servicesData?.clockodoServices?.length ?? 0) === 0 ? (
-                  <p className="mt-4 text-sm text-gray-500">{t('settings.departments.noServices')}</p>
-                ) : (
-                  <div className="mt-3">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-left">
-                          <th className="pb-2 font-medium text-gray-700">{t('settings.departments.service')}</th>
-                          <th className="pb-2 font-medium text-gray-700">{t('settings.departments.department')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {servicesData.clockodoServices.map((service: { id: string; name: string }) => (
-                          <tr key={service.id} className="border-b last:border-0">
-                            <td className="py-2 text-gray-900">{service.name}</td>
+          {/* User Costs tab */}
+          {ttSubTab === 'costs' && isTimeTrackingConfigured && (
+            <div className="mt-4">
+              <p className="text-sm text-gray-500">{t('settings.departments.userCostDescription')}</p>
+              {loadingClockodoUsers ? (
+                <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading users...
+                </div>
+              ) : (clockodoUsersData?.clockodoUsers?.length ?? 0) === 0 ? (
+                <p className="mt-4 text-sm text-gray-500">{t('settings.departments.noServices')}</p>
+              ) : (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs font-medium text-gray-500">
+                        <th className="pb-2">{t('settings.departments.userName')}</th>
+                        <th className="pb-2 px-2">{t('settings.departments.ftePercentage')}</th>
+                        <th className="pb-2 px-2">{t('settings.departments.monthlyIncome')}</th>
+                        <th className="pb-2">{t('settings.departments.defaultDepartment')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clockodoUsersData.clockodoUsers.map((u: { id: string; name: string }) => {
+                        const profile = costProfiles[u.id] || { ftePercentage: 100, monthlyIncome: '0', defaultDepartmentId: '' }
+                        return (
+                          <tr key={u.id} className="border-b last:border-0">
+                            <td className="py-2 text-gray-900">{u.name}</td>
+                            <td className="py-2 px-2">
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                value={profile.ftePercentage}
+                                onChange={(e) => setCostProfiles(prev => ({
+                                  ...prev,
+                                  [u.id]: { ...profile, ftePercentage: parseInt(e.target.value) || 0 },
+                                }))}
+                                className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            </td>
+                            <td className="py-2 px-2">
+                              <input
+                                type="number"
+                                min={0}
+                                step="100"
+                                value={profile.monthlyIncome}
+                                onChange={(e) => setCostProfiles(prev => ({
+                                  ...prev,
+                                  [u.id]: { ...profile, monthlyIncome: e.target.value },
+                                }))}
+                                className="w-28 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            </td>
                             <td className="py-2">
                               <select
-                                value={serviceAssignments[service.id] || ''}
-                                onChange={(e) => setServiceAssignments(prev => ({ ...prev, [service.id]: e.target.value }))}
+                                value={profile.defaultDepartmentId}
+                                onChange={(e) => setCostProfiles(prev => ({
+                                  ...prev,
+                                  [u.id]: { ...profile, defaultDepartmentId: e.target.value },
+                                }))}
                                 className="block w-full max-w-xs rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                               >
-                                <option value="">{t('settings.departments.unassigned')}</option>
-                                {deptsData.departments.map((dept: { id: string; name: string }) => (
+                                <option value="">{t('settings.departments.none')}</option>
+                                {deptsData?.departments?.map((dept: { id: string; name: string }) => (
                                   <option key={dept.id} value={dept.id}>{dept.name}</option>
                                 ))}
                               </select>
                             </td>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="mt-3 flex items-center gap-3">
-                      <button
-                        onClick={handleSaveAssignments}
-                        disabled={savingMappings}
-                        className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {savingMappings ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                        {t('settings.departments.saveAssignments')}
-                      </button>
-                      {assignmentMessage && (
-                        <span className={`text-sm ${assignmentMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
-                          {assignmentMessage.text}
-                        </span>
-                      )}
-                    </div>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                  <div className="mt-3 flex items-center gap-3">
+                    <button
+                      onClick={handleSaveCostProfiles}
+                      disabled={savingCostProfiles}
+                      className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {savingCostProfiles ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      {t('settings.departments.saveCostProfiles')}
+                    </button>
+                    {costProfileMessage && (
+                      <span className={`text-sm ${costProfileMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                        {costProfileMessage.text}
+                      </span>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
-          </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>}
 
         {/* Contract Import */}

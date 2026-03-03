@@ -1616,3 +1616,25 @@ class DepartmentServiceMapping(TenantModel):
 
     def __str__(self):
         return f"{self.external_service_name} → {self.department.name}"
+
+
+class UserCostProfile(TenantModel):
+    """Per-user cost profile for department cost analysis."""
+
+    external_user_id = models.CharField(max_length=50)
+    external_user_name = models.CharField(max_length=255)
+    fte_percentage = models.IntegerField(default=100)
+    monthly_income = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    default_department = models.ForeignKey(
+        Department,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cost_profiles",
+    )
+
+    class Meta:
+        unique_together = ["tenant", "external_user_id"]
+
+    def __str__(self):
+        return f"{self.external_user_name} (FTE {self.fte_percentage}%)"

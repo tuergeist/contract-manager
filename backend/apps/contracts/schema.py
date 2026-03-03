@@ -21,7 +21,7 @@ from apps.customers.models import Customer
 from apps.customers.schema import CustomerType
 from apps.products.models import Product
 from apps.products.schema import ProductType
-from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, RevenueGoal, NewBusinessGoal, TimeTrackingProjectMapping, AutoLinkRule, Department, DepartmentServiceMapping
+from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, RevenueGoal, NewBusinessGoal, TimeTrackingProjectMapping, AutoLinkRule, Department, DepartmentServiceMapping, UserCostProfile
 from .forecast_cache import (
     dict_to_forecast_result,
     forecast_result_to_dict,
@@ -1449,6 +1449,7 @@ class UserDepartmentRow:
     user_name: str
     departments: list[UserDepartmentHours]
     total_hours: float
+    absence_days: float | None = None
 
 
 @strawberry.type
@@ -1456,7 +1457,10 @@ class DepartmentTimeAnalysisType:
     """Full department time analysis result."""
     distribution: list[DepartmentTimeEntry]
     user_matrix: list[UserDepartmentRow]
+    user_matrix_filled: list[UserDepartmentRow] | None = None
     total_hours: float
+    cost_distribution: list["DepartmentCostEntry"] | None = None
+    total_cost: float | None = None
 
 
 @strawberry.input
@@ -1465,6 +1469,43 @@ class DepartmentServiceMappingInput:
     external_service_id: str
     external_service_name: str
     department_id: strawberry.ID
+
+
+@strawberry.type
+class ClockodoUserType:
+    """A user from the time tracking provider."""
+    id: str
+    name: str
+
+
+@strawberry.type
+class UserCostProfileType:
+    """A user's cost profile for department cost analysis."""
+    id: strawberry.ID
+    external_user_id: str
+    external_user_name: str
+    fte_percentage: int
+    monthly_income: float
+    default_department_id: strawberry.ID | None
+
+
+@strawberry.input
+class UserCostProfileInput:
+    """Input for saving a user cost profile."""
+    external_user_id: str
+    external_user_name: str
+    fte_percentage: int
+    monthly_income: float
+    default_department_id: strawberry.ID | None = None
+
+
+@strawberry.type
+class DepartmentCostEntry:
+    """Cost distribution for a single department."""
+    department_name: str
+    cost: float
+    percentage: float
+    ftes: float
 
 
 # --- PDF Analysis Types ---
@@ -2913,6 +2954,41 @@ class ContractQuery:
         return [ClockodoServiceType(id=s["id"], name=s["name"]) for s in services]
 
     @strawberry.field
+    def clockodo_users(self, info: Info[Context, None]) -> list[ClockodoUserType]:
+        """Fetch available users from the time tracking provider."""
+        from apps.contracts.services.time_tracking import get_provider
+
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+        provider = get_provider(user.tenant)
+        if not provider:
+            return []
+        try:
+            users = provider.get_users()
+        except NotImplementedError:
+            return []
+        return [ClockodoUserType(id=u["id"], name=u["name"]) for u in users]
+
+    @strawberry.field
+    def user_cost_profiles(self, info: Info[Context, None]) -> list[UserCostProfileType]:
+        """Get all user cost profiles for the current tenant."""
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+        return [
+            UserCostProfileType(
+                id=strawberry.ID(str(p.id)),
+                external_user_id=p.external_user_id,
+                external_user_name=p.external_user_name,
+                fte_percentage=p.fte_percentage,
+                monthly_income=float(p.monthly_income),
+                default_department_id=strawberry.ID(str(p.default_department_id)) if p.default_department_id else None,
+            )
+            for p in UserCostProfile.objects.filter(tenant=user.tenant)
+        ]
+
+    @strawberry.field
     def department_service_mappings(
         self, info: Info[Context, None]
     ) -> list[DepartmentServiceMappingType]:
@@ -2964,6 +3040,62 @@ class ContractQuery:
         if not raw_data:
             return DepartmentTimeAnalysisType(distribution=[], user_matrix=[], total_hours=0)
 
+        # Fetch absences (cached per year)
+        user_absence_days: dict[str, float] = defaultdict(float)
+        try:
+            period_start = date.fromisoformat(date_from) if isinstance(date_from, str) else date_from
+            period_end = date.fromisoformat(date_to) if isinstance(date_to, str) else date_to
+            years = set(range(period_start.year, period_end.year + 1))
+            all_absences: list[dict] = []
+            for yr in years:
+                abs_cache_key = f"absences_{user.tenant_id}_{yr}"
+                cached_abs = cache.get(abs_cache_key, _sentinel)
+                if cached_abs is _sentinel:
+                    try:
+                        cached_abs = provider.get_absences(yr)
+                    except NotImplementedError:
+                        cached_abs = []
+                    cache.set(abs_cache_key, cached_abs, 3600)
+                all_absences.extend(cached_abs)
+
+            for ab in all_absences:
+                # status: 0=enquired, 1=approved, 2=declined, 3=approval cancelled, 4=request cancelled
+                if ab.get("status") in (2, 3, 4):
+                    continue
+                # Skip home office (type=9) — user is still working
+                if ab.get("type") == 9:
+                    continue
+
+                ab_start_str = ab.get("date_since", "")[:10]
+                ab_end_str = ab.get("date_until", "")[:10]
+                if not ab_start_str or not ab_end_str:
+                    continue
+
+                ab_start = date.fromisoformat(ab_start_str)
+                ab_end = date.fromisoformat(ab_end_str)
+
+                # Check overlap with the requested period
+                if ab_end < period_start or ab_start > period_end:
+                    continue
+
+                total_days = ab.get("count_days", 0) or 0
+                if total_days <= 0:
+                    continue
+
+                # If the absence fully falls within the period, use count_days directly
+                if ab_start >= period_start and ab_end <= period_end:
+                    user_absence_days[ab["user_id"]] += total_days
+                else:
+                    # Partial overlap: pro-rate based on calendar days
+                    absence_span = (ab_end - ab_start).days + 1
+                    overlap_start = max(ab_start, period_start)
+                    overlap_end = min(ab_end, period_end)
+                    overlap_days = (overlap_end - overlap_start).days + 1
+                    if absence_span > 0:
+                        user_absence_days[ab["user_id"]] += total_days * (overlap_days / absence_span)
+        except Exception:
+            pass  # Absences are optional, don't fail the whole analysis
+
         # Load service→department mappings
         mappings = DepartmentServiceMapping.objects.filter(
             tenant=user.tenant
@@ -2980,12 +3112,51 @@ class ContractQuery:
 
         unassigned_label = "Unassigned"
 
+        # Build per-user logged hours lookup (keyed by external_user_id)
+        user_id_to_name: dict[str, str] = {}
+        user_logged_hours: dict[str, float] = defaultdict(float)
+
         for entry in raw_data:
             dept_name = service_to_dept.get(entry["service_id"], unassigned_label)
             hours = entry["hours"]
             dept_hours[dept_name] += hours
             user_dept_hours[entry["user_name"]][dept_name] += hours
             total_hours += hours
+            # Track user_id → name mapping and total logged hours
+            if entry.get("user_id"):
+                user_id_to_name[entry["user_id"]] = entry["user_name"]
+                user_logged_hours[entry["user_id"]] += hours
+
+        # Snapshot unfilled user hours for the unfilled matrix
+        unfilled_user_dept_hours: dict[str, dict[str, float]] = {
+            u: dict(depts) for u, depts in user_dept_hours.items()
+        }
+        unfilled_total_hours = total_hours
+
+        # Hour backfilling from UserCostProfile
+        cost_profiles = list(
+            UserCostProfile.objects.filter(tenant=user.tenant).select_related("default_department")
+        )
+        profile_by_user_id: dict[str, "UserCostProfile"] = {
+            p.external_user_id: p for p in cost_profiles
+        }
+
+        has_backfill = False
+        for profile in cost_profiles:
+            if not profile.default_department:
+                continue
+            target_hours = 168.0 * profile.fte_percentage / 100.0
+            logged = user_logged_hours.get(profile.external_user_id, 0.0)
+            if logged < target_hours:
+                backfill = target_hours - logged
+                dept_name = profile.default_department.name
+                user_name = user_id_to_name.get(profile.external_user_id, profile.external_user_name)
+                dept_hours[dept_name] += backfill
+                user_dept_hours[user_name][dept_name] += backfill
+                total_hours += backfill
+                # Update logged hours for cost computation
+                user_logged_hours[profile.external_user_id] = target_hours
+                has_backfill = True
 
         # Build distribution
         distribution = []
@@ -2994,26 +3165,98 @@ class ContractQuery:
             pct = round((h / total_hours * 100) if total_hours > 0 else 0, 1)
             distribution.append(DepartmentTimeEntry(department_name=dept_name, hours=h, percentage=pct))
 
-        # Build user matrix
+        # Build user matrices (unfilled = raw logged, filled = after backfill)
         all_depts = sorted(dept_hours.keys())
+
+        # Build reverse lookup: user_name → user_id for absence days
+        name_to_user_id: dict[str, str] = {v: k for k, v in user_id_to_name.items()}
+
+        def _get_absence_days(user_name: str) -> float | None:
+            uid = name_to_user_id.get(user_name)
+            if uid and uid in user_absence_days:
+                return round(user_absence_days[uid], 1)
+            return None
+
+        # Unfilled matrix (raw hours)
+        all_unfilled_users = sorted(set(list(unfilled_user_dept_hours.keys()) + list(user_dept_hours.keys())))
         user_matrix = []
-        for user_name in sorted(user_dept_hours.keys()):
-            user_total = sum(user_dept_hours[user_name].values())
+        for user_name in all_unfilled_users:
+            user_total = sum(unfilled_user_dept_hours.get(user_name, {}).values())
             dept_entries = []
             for dept_name in all_depts:
-                h = round(user_dept_hours[user_name].get(dept_name, 0), 2)
+                h = round(unfilled_user_dept_hours.get(user_name, {}).get(dept_name, 0), 2)
                 pct = round((h / user_total * 100) if user_total > 0 else 0, 1)
                 dept_entries.append(UserDepartmentHours(department_name=dept_name, hours=h, percentage=pct))
             user_matrix.append(UserDepartmentRow(
                 user_name=user_name,
                 departments=dept_entries,
                 total_hours=round(user_total, 2),
+                absence_days=_get_absence_days(user_name),
             ))
+
+        # Filled matrix (after backfill) — only if backfilling actually occurred
+        user_matrix_filled = None
+        if has_backfill:
+            user_matrix_filled = []
+            for user_name in sorted(user_dept_hours.keys()):
+                user_total = sum(user_dept_hours[user_name].values())
+                dept_entries = []
+                for dept_name in all_depts:
+                    h = round(user_dept_hours[user_name].get(dept_name, 0), 2)
+                    pct = round((h / user_total * 100) if user_total > 0 else 0, 1)
+                    dept_entries.append(UserDepartmentHours(department_name=dept_name, hours=h, percentage=pct))
+                user_matrix_filled.append(UserDepartmentRow(
+                    user_name=user_name,
+                    departments=dept_entries,
+                    total_hours=round(user_total, 2),
+                    absence_days=_get_absence_days(user_name),
+                ))
+
+        # Cost computation
+        cost_distribution_list = None
+        total_cost_value = None
+
+        dept_cost: dict[str, float] = defaultdict(float)
+        dept_ftes: dict[str, float] = defaultdict(float)
+        total_cost = 0.0
+        has_cost_data = False
+
+        for profile in cost_profiles:
+            if float(profile.monthly_income) <= 0:
+                continue
+            target_hours = 168.0 * profile.fte_percentage / 100.0
+            if target_hours <= 0:
+                continue
+            hourly_cost = float(profile.monthly_income) / target_hours
+            user_fte = profile.fte_percentage / 100.0
+            user_name = user_id_to_name.get(profile.external_user_id, profile.external_user_name)
+            user_depts = user_dept_hours.get(user_name, {})
+            user_total = sum(user_depts.values())
+            for d_name, d_hours in user_depts.items():
+                cost = hourly_cost * d_hours
+                dept_cost[d_name] += cost
+                total_cost += cost
+                # FTE allocation: proportional to hours in this department
+                if user_total > 0:
+                    dept_ftes[d_name] += user_fte * (d_hours / user_total)
+            has_cost_data = True
+
+        if has_cost_data and total_cost > 0:
+            cost_distribution_list = []
+            for dept_name in sorted(dept_cost.keys()):
+                c = round(dept_cost[dept_name], 2)
+                pct = round((c / total_cost * 100) if total_cost > 0 else 0, 1)
+                ftes = round(dept_ftes.get(dept_name, 0), 2)
+                cost_distribution_list.append(DepartmentCostEntry(department_name=dept_name, cost=c, percentage=pct, ftes=ftes))
+            total_cost_value = round(total_cost, 2)
 
         return DepartmentTimeAnalysisType(
             distribution=distribution,
             user_matrix=user_matrix,
+            user_matrix_filled=user_matrix_filled,
             total_hours=round(total_hours, 2),
+            cost_distribution=cost_distribution_list,
+            total_cost=total_cost_value,
         )
 
     @strawberry.field
@@ -5971,6 +6214,45 @@ class ContractImportMutation:
                     department_id=int(m.department_id),
                     external_service_id=m.external_service_id,
                     external_service_name=m.external_service_name,
+                )
+
+        return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def save_user_cost_profiles(
+        self,
+        info: Info[Context, None],
+        profiles: list[UserCostProfileInput],
+    ) -> DeleteResult:
+        """Bulk replace all user cost profiles for the tenant."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return DeleteResult(error=err)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        # Validate department IDs
+        dept_ids = {p.default_department_id for p in profiles if p.default_department_id}
+        if dept_ids:
+            valid_dept_ids = set(
+                Department.objects.filter(
+                    tenant=user.tenant, id__in=dept_ids
+                ).values_list("id", flat=True)
+            )
+            invalid = dept_ids - {str(d) for d in valid_dept_ids}
+            if invalid:
+                return DeleteResult(error="Invalid department ID(s)")
+
+        with transaction.atomic():
+            UserCostProfile.objects.filter(tenant=user.tenant).delete()
+            for p in profiles:
+                UserCostProfile.objects.create(
+                    tenant=user.tenant,
+                    external_user_id=p.external_user_id,
+                    external_user_name=p.external_user_name,
+                    fte_percentage=p.fte_percentage,
+                    monthly_income=p.monthly_income,
+                    default_department_id=int(p.default_department_id) if p.default_department_id else None,
                 )
 
         return DeleteResult(success=True)

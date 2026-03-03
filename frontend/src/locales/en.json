@@ -1204,6 +1204,9 @@
     "timeTracking": {
       "title": "Time Tracking",
       "description": "Connect your time tracking system to show tracked hours on contracts",
+      "tabConnection": "Connection",
+      "tabDepartments": "Departments",
+      "tabUserCosts": "User Costs",
       "provider": "Provider",
       "selectProvider": "Select provider...",
       "clockodo": "Clockodo",
@@ -1237,7 +1240,17 @@
       "assignmentsSaved": "Service assignments saved successfully",
       "assignmentsFailed": "Failed to save service assignments",
       "noDepartments": "No departments defined. Add a department to get started.",
-      "noServices": "No services found. Make sure your time tracking provider is configured."
+      "noServices": "No services found. Make sure your time tracking provider is configured.",
+      "userCostSettings": "User Cost Settings",
+      "userCostDescription": "Configure FTE percentage, monthly income, and default department per user for cost analysis.",
+      "userName": "User",
+      "ftePercentage": "FTE %",
+      "monthlyIncome": "Monthly Income",
+      "defaultDepartment": "Default Department",
+      "none": "None",
+      "saveCostProfiles": "Save Cost Profiles",
+      "costProfilesSaved": "User cost profiles saved successfully",
+      "costProfilesFailed": "Failed to save user cost profiles"
     },
     "roles": {
       "title": "Roles & Permissions",
@@ -1267,7 +1280,8 @@
         "todos": "Todos",
         "notes": "Notes",
         "invoices": "Invoices",
-        "banking": "Banking"
+        "banking": "Banking",
+        "offers": "Offers"
       },
       "actions": {
         "read": "Read",
@@ -1885,6 +1899,17 @@
     "showPercentage": "Percentage",
     "noData": "No time tracking data found for the selected period.",
     "noDepartments": "No departments configured. Go to Settings > Time Tracking to set up departments.",
-    "loading": "Loading analysis data..."
+    "loading": "Loading analysis data...",
+    "costDistribution": "Cost Distribution",
+    "totalCost": "Total Cost",
+    "cost": "Cost",
+    "ftes": "FTEs",
+    "chart": "Chart",
+    "table": "Table",
+    "export": "Export CSV",
+    "department": "Department",
+    "logged": "Logged",
+    "filled": "Filled",
+    "absenceDays": "Absent"
   }
 }

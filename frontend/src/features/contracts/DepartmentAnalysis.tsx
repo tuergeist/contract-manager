@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
-import { Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Download } from 'lucide-react'
 
 const DEPARTMENT_TIME_ANALYSIS = gql`
   query DepartmentTimeAnalysis($dateFrom: Date!, $dateTo: Date!) {
@@ -15,12 +15,30 @@ const DEPARTMENT_TIME_ANALYSIS = gql`
       userMatrix {
         userName
         totalHours
+        absenceDays
         departments {
           departmentName
           hours
           percentage
         }
       }
+      userMatrixFilled {
+        userName
+        totalHours
+        absenceDays
+        departments {
+          departmentName
+          hours
+          percentage
+        }
+      }
+      costDistribution {
+        departmentName
+        cost
+        percentage
+        ftes
+      }
+      totalCost
     }
   }
 `
@@ -45,12 +63,13 @@ function lastDayOfMonth(year: number, month: number): Date {
 function getMonthShortcuts(): { label: string; from: string; to: string }[] {
   const now = new Date()
   const shortcuts: { label: string; from: string; to: string }[] = []
+  const year = now.getFullYear()
 
-  // Last 6 months (most recent first, excluding current month)
-  for (let i = 1; i <= 6; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const last = lastDayOfMonth(d.getFullYear(), d.getMonth())
-    const label = d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
+  // All months of current year up to and including current month (most recent first)
+  for (let m = now.getMonth(); m >= 0; m--) {
+    const d = new Date(year, m, 1)
+    const last = lastDayOfMonth(year, m)
+    const label = d.toLocaleDateString(undefined, { month: 'short' })
     shortcuts.push({ label, from: formatDate(d), to: formatDate(last) })
   }
 
@@ -73,6 +92,9 @@ export function DepartmentAnalysis() {
   const [dateFrom, setDateFrom] = useState(formatDate(lastMonthStart))
   const [dateTo, setDateTo] = useState(formatDate(lastMonthEnd))
   const [showPercentage, setShowPercentage] = useState(false)
+  const [chartView, setChartView] = useState<'hours' | 'costs'>('hours')
+  const [costViewMode, setCostViewMode] = useState<'chart' | 'table'>('chart')
+  const [showFilled, setShowFilled] = useState(false)
   const [sortBy, setSortBy] = useState<string>('__user')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
 
@@ -92,11 +114,14 @@ export function DepartmentAnalysis() {
   const distribution = analysis?.distribution || []
   const userMatrix = analysis?.userMatrix || []
   const totalHours = analysis?.totalHours || 0
+  const userMatrixFilled = analysis?.userMatrixFilled || null
+  const costDistribution = analysis?.costDistribution || []
+  const totalCost = analysis?.totalCost || 0
 
   // Get unique department names from distribution for matrix columns
   const deptNames = distribution.map((d: { departmentName: string }) => d.departmentName)
 
-  type MatrixRow = { userName: string; totalHours: number; departments: { departmentName: string; hours: number; percentage: number }[] }
+  type MatrixRow = { userName: string; totalHours: number; absenceDays: number | null; departments: { departmentName: string; hours: number; percentage: number }[] }
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -112,12 +137,17 @@ export function DepartmentAnalysis() {
     return sortOrder === 'asc' ? <ArrowUp className="ml-1 h-4 w-4" /> : <ArrowDown className="ml-1 h-4 w-4" />
   }
 
+  const activeMatrix = showFilled && userMatrixFilled ? userMatrixFilled : userMatrix
+  const hasAbsenceData = activeMatrix.some((r: MatrixRow) => r.absenceDays != null && r.absenceDays > 0)
+
   const sortedMatrix = useMemo(() => {
-    if (!userMatrix.length) return []
-    return [...userMatrix].sort((a: MatrixRow, b: MatrixRow) => {
+    if (!activeMatrix.length) return []
+    return [...activeMatrix].sort((a: MatrixRow, b: MatrixRow) => {
       let cmp: number
       if (sortBy === '__user') {
         cmp = a.userName.localeCompare(b.userName)
+      } else if (sortBy === '__absence') {
+        cmp = (a.absenceDays || 0) - (b.absenceDays || 0)
       } else if (sortBy === '__total') {
         cmp = a.totalHours - b.totalHours
       } else {
@@ -127,7 +157,7 @@ export function DepartmentAnalysis() {
       }
       return sortOrder === 'asc' ? cmp : -cmp
     })
-  }, [userMatrix, sortBy, sortOrder])
+  }, [activeMatrix, sortBy, sortOrder])
 
   if (departments.length === 0 && !loading) {
     return (
@@ -202,61 +232,229 @@ export function DepartmentAnalysis() {
         <>
           {/* Distribution section */}
           <div className="mb-8 rounded-lg border bg-white p-6">
-            <h2 className="mb-4 text-lg font-medium text-gray-900">{t('departmentAnalysis.distribution')}</h2>
-            <p className="mb-4 text-sm text-gray-500">
-              {t('departmentAnalysis.totalHours')}: <span className="font-semibold text-gray-900">{totalHours.toFixed(1)}</span>
-            </p>
-
-            {/* Stacked bar */}
-            <div className="mb-4 flex h-8 overflow-hidden rounded-full">
-              {distribution.map((d: { departmentName: string; percentage: number }, i: number) => (
-                <div
-                  key={d.departmentName}
-                  className={`${COLORS[i % COLORS.length]} transition-all`}
-                  style={{ width: `${d.percentage}%` }}
-                  title={`${d.departmentName}: ${d.percentage.toFixed(1)}%`}
-                />
-              ))}
-            </div>
-
-            {/* Legend / table */}
-            <div className="space-y-2">
-              {distribution.map((d: { departmentName: string; hours: number; percentage: number }, i: number) => (
-                <div key={d.departmentName} className="flex items-center gap-3">
-                  <div className={`h-3 w-3 rounded-full ${COLORS[i % COLORS.length]}`} />
-                  <span className="min-w-[160px] text-sm font-medium text-gray-900">{d.departmentName}</span>
-                  <div className="flex-1">
-                    <div className="h-2 rounded-full bg-gray-100">
-                      <div
-                        className={`h-2 rounded-full ${COLORS[i % COLORS.length]} opacity-60`}
-                        style={{ width: `${d.percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                  <span className="min-w-[60px] text-right text-sm text-gray-600">{d.hours.toFixed(1)}h</span>
-                  <span className="min-w-[50px] text-right text-sm font-medium text-gray-900">{d.percentage.toFixed(1)}%</span>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-medium text-gray-900">
+                {chartView === 'hours' ? t('departmentAnalysis.distribution') : t('departmentAnalysis.costDistribution')}
+              </h2>
+              {costDistribution.length > 0 && totalCost > 0 && (
+                <div className="flex rounded-md border">
+                  <button
+                    onClick={() => setChartView('hours')}
+                    className={`px-3 py-1 text-sm ${chartView === 'hours' ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    {t('departmentAnalysis.showHours')}
+                  </button>
+                  <button
+                    onClick={() => setChartView('costs')}
+                    className={`border-l px-3 py-1 text-sm ${chartView === 'costs' ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    {t('departmentAnalysis.cost')}
+                  </button>
                 </div>
-              ))}
+              )}
             </div>
+
+            {chartView === 'hours' ? (
+              <>
+                <p className="mb-4 text-sm text-gray-500">
+                  {t('departmentAnalysis.totalHours')}: <span className="font-semibold text-gray-900">{totalHours.toFixed(1)}</span>
+                </p>
+
+                {/* Stacked bar */}
+                <div className="mb-4 flex h-8 overflow-hidden rounded-full">
+                  {distribution.map((d: { departmentName: string; percentage: number }, i: number) => (
+                    <div
+                      key={d.departmentName}
+                      className={`${COLORS[i % COLORS.length]} transition-all`}
+                      style={{ width: `${d.percentage}%` }}
+                      title={`${d.departmentName}: ${d.percentage.toFixed(1)}%`}
+                    />
+                  ))}
+                </div>
+
+                {/* Legend / table */}
+                <div className="space-y-2">
+                  {(() => {
+                    const maxPct = Math.max(...distribution.map((d: { percentage: number }) => d.percentage))
+                    const barMax = maxPct > 40 ? Math.min(100, maxPct + 5) : 40
+                    return distribution.map((d: { departmentName: string; hours: number; percentage: number }, i: number) => (
+                      <div key={d.departmentName} className="flex items-center gap-3">
+                        <div className={`h-3 w-3 rounded-full ${COLORS[i % COLORS.length]}`} />
+                        <span className="min-w-[160px] text-sm font-medium text-gray-900">{d.departmentName}</span>
+                        <div className="flex-1">
+                          <div className="h-2 rounded-full bg-gray-100">
+                            <div
+                              className={`h-2 rounded-full ${COLORS[i % COLORS.length]} opacity-60`}
+                              style={{ width: `${(d.percentage / barMax) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                        <span className="min-w-[60px] text-right text-sm text-gray-600">{d.hours.toFixed(1)}h</span>
+                        <span className="min-w-[50px] text-right text-sm font-medium text-gray-900">{d.percentage.toFixed(1)}%</span>
+                      </div>
+                    ))
+                  })()}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mb-4 flex items-center gap-3">
+                  <p className="text-sm text-gray-500">
+                    {t('departmentAnalysis.totalCost')}: <span className="font-semibold text-gray-900">{totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </p>
+                  <div className="ml-auto flex items-center gap-2">
+                    <div className="flex rounded-md border">
+                      <button
+                        onClick={() => setCostViewMode('chart')}
+                        className={`px-3 py-1 text-sm ${costViewMode === 'chart' ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                      >
+                        {t('departmentAnalysis.chart')}
+                      </button>
+                      <button
+                        onClick={() => setCostViewMode('table')}
+                        className={`border-l px-3 py-1 text-sm ${costViewMode === 'table' ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                      >
+                        {t('departmentAnalysis.table')}
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const header = [t('departmentAnalysis.department'), t('departmentAnalysis.ftes'), t('departmentAnalysis.cost'), '%'].join(';')
+                        const rows = costDistribution.map((d: { departmentName: string; cost: number; percentage: number; ftes: number }) =>
+                          [d.departmentName, d.ftes.toFixed(2), d.cost.toFixed(2), d.percentage.toFixed(1)].join(';')
+                        )
+                        const totalFtes = costDistribution.reduce((sum: number, d: { ftes: number }) => sum + d.ftes, 0)
+                        rows.push([t('departmentAnalysis.total'), totalFtes.toFixed(2), totalCost.toFixed(2), '100.0'].join(';'))
+                        const csv = [header, ...rows].join('\n')
+                        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `cost-distribution-${dateFrom}-${dateTo}.csv`
+                        a.click()
+                        URL.revokeObjectURL(url)
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:bg-gray-50"
+                      title={t('departmentAnalysis.export')}
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {costViewMode === 'chart' ? (
+                  <>
+                    {/* Stacked bar */}
+                    <div className="mb-4 flex h-8 overflow-hidden rounded-full">
+                      {costDistribution.map((d: { departmentName: string; percentage: number }, i: number) => (
+                        <div
+                          key={d.departmentName}
+                          className={`${COLORS[i % COLORS.length]} transition-all`}
+                          style={{ width: `${d.percentage}%` }}
+                          title={`${d.departmentName}: ${d.percentage.toFixed(1)}%`}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Legend / bars */}
+                    <div className="space-y-2">
+                      {(() => {
+                        const maxPct = Math.max(...costDistribution.map((d: { percentage: number }) => d.percentage))
+                        const barMax = maxPct > 40 ? Math.min(100, maxPct + 5) : 40
+                        return costDistribution.map((d: { departmentName: string; cost: number; percentage: number; ftes: number }, i: number) => (
+                          <div key={d.departmentName} className="flex items-center gap-3">
+                            <div className={`h-3 w-3 rounded-full ${COLORS[i % COLORS.length]}`} />
+                            <span className="min-w-[160px] text-sm font-medium text-gray-900">{d.departmentName}</span>
+                            <div className="flex-1">
+                              <div className="h-2 rounded-full bg-gray-100">
+                                <div
+                                  className={`h-2 rounded-full ${COLORS[i % COLORS.length]} opacity-60`}
+                                  style={{ width: `${(d.percentage / barMax) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+                            <span className="min-w-[80px] text-right text-sm text-gray-600">{d.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="min-w-[50px] text-right text-sm font-medium text-gray-900">{d.percentage.toFixed(1)}%</span>
+                          </div>
+                        ))
+                      })()}
+                    </div>
+                  </>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{t('departmentAnalysis.department')}</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">{t('departmentAnalysis.ftes')}</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">{t('departmentAnalysis.cost')}</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">%</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 bg-white">
+                        {costDistribution.map((d: { departmentName: string; cost: number; percentage: number; ftes: number }) => (
+                          <tr key={d.departmentName}>
+                            <td className="px-6 py-3 text-sm font-medium text-gray-900">{d.departmentName}</td>
+                            <td className="px-6 py-3 text-right text-sm text-gray-900">{d.ftes.toFixed(2)}</td>
+                            <td className="px-6 py-3 text-right text-sm text-gray-900">{d.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td className="px-6 py-3 text-right text-sm font-medium text-gray-900">{d.percentage.toFixed(1)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-gray-50">
+                        <tr>
+                          <td className="px-6 py-3 text-sm font-semibold text-gray-900">{t('departmentAnalysis.total')}</td>
+                          <td className="px-6 py-3 text-right text-sm font-semibold text-gray-900">
+                            {costDistribution.reduce((sum: number, d: { ftes: number }) => sum + d.ftes, 0).toFixed(2)}
+                          </td>
+                          <td className="px-6 py-3 text-right text-sm font-semibold text-gray-900">
+                            {totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-6 py-3 text-right text-sm font-semibold text-gray-900">100.0%</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* User x Department matrix */}
           <div className="rounded-lg border bg-white p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-medium text-gray-900">{t('departmentAnalysis.userMatrix')}</h2>
-              <div className="flex rounded-md border">
-                <button
-                  onClick={() => setShowPercentage(false)}
-                  className={`px-3 py-1 text-sm ${!showPercentage ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                >
-                  {t('departmentAnalysis.showHours')}
-                </button>
-                <button
-                  onClick={() => setShowPercentage(true)}
-                  className={`border-l px-3 py-1 text-sm ${showPercentage ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                >
-                  {t('departmentAnalysis.showPercentage')}
-                </button>
+              <div className="flex items-center gap-3">
+                {userMatrixFilled && (
+                  <div className="flex rounded-md border">
+                    <button
+                      onClick={() => setShowFilled(false)}
+                      className={`px-3 py-1 text-sm ${!showFilled ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {t('departmentAnalysis.logged')}
+                    </button>
+                    <button
+                      onClick={() => setShowFilled(true)}
+                      className={`border-l px-3 py-1 text-sm ${showFilled ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {t('departmentAnalysis.filled')}
+                    </button>
+                  </div>
+                )}
+                <div className="flex rounded-md border">
+                  <button
+                    onClick={() => setShowPercentage(false)}
+                    className={`px-3 py-1 text-sm ${!showPercentage ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    {t('departmentAnalysis.showHours')}
+                  </button>
+                  <button
+                    onClick={() => setShowPercentage(true)}
+                    className={`border-l px-3 py-1 text-sm ${showPercentage ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    {t('departmentAnalysis.showPercentage')}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -273,6 +471,17 @@ export function DepartmentAnalysis() {
                         <SortIcon field="__user" />
                       </div>
                     </th>
+                    {hasAbsenceData && (
+                      <th
+                        className="cursor-pointer px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                        onClick={() => handleSort('__absence')}
+                      >
+                        <div className="flex items-center justify-end">
+                          {t('departmentAnalysis.absenceDays')}
+                          <SortIcon field="__absence" />
+                        </div>
+                      </th>
+                    )}
                     {deptNames.map((name: string) => (
                       <th
                         key={name}
@@ -297,9 +506,14 @@ export function DepartmentAnalysis() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {sortedMatrix.map((row: { userName: string; totalHours: number; departments: { departmentName: string; hours: number; percentage: number }[] }) => (
+                  {sortedMatrix.map((row: MatrixRow) => (
                     <tr key={row.userName}>
                       <td className="px-6 py-3 text-sm font-medium text-gray-900">{row.userName}</td>
+                      {hasAbsenceData && (
+                        <td className={`px-6 py-3 text-right text-sm ${row.absenceDays && row.absenceDays > 0 ? 'text-orange-600 font-medium' : 'text-gray-300'}`}>
+                          {row.absenceDays != null ? row.absenceDays.toFixed(1) : '-'}
+                        </td>
+                      )}
                       {deptNames.map((name: string) => {
                         const cell = row.departments.find((d: { departmentName: string }) => d.departmentName === name)
                         const value = cell

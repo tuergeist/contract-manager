@@ -1204,6 +1204,9 @@
     "timeTracking": {
       "title": "Zeiterfassung",
       "description": "Verbinden Sie Ihr Zeiterfassungssystem, um erfasste Stunden in Verträgen anzuzeigen",
+      "tabConnection": "Verbindung",
+      "tabDepartments": "Abteilungen",
+      "tabUserCosts": "Mitarbeiterkosten",
       "provider": "Anbieter",
       "selectProvider": "Anbieter auswählen...",
       "clockodo": "Clockodo",
@@ -1237,7 +1240,17 @@
       "assignmentsSaved": "Leistungszuordnungen erfolgreich gespeichert",
       "assignmentsFailed": "Leistungszuordnungen konnten nicht gespeichert werden",
       "noDepartments": "Keine Abteilungen definiert. Fügen Sie eine Abteilung hinzu.",
-      "noServices": "Keine Leistungen gefunden. Stellen Sie sicher, dass Ihr Zeiterfassungsanbieter konfiguriert ist."
+      "noServices": "Keine Leistungen gefunden. Stellen Sie sicher, dass Ihr Zeiterfassungsanbieter konfiguriert ist.",
+      "userCostSettings": "Mitarbeiterkosten",
+      "userCostDescription": "FTE-Prozentsatz, monatliches Einkommen und Standard-Abteilung pro Mitarbeiter für die Kostenanalyse konfigurieren.",
+      "userName": "Benutzer",
+      "ftePercentage": "FTE %",
+      "monthlyIncome": "Monatl. Einkommen",
+      "defaultDepartment": "Standard-Abteilung",
+      "none": "Keine",
+      "saveCostProfiles": "Kostenprofile speichern",
+      "costProfilesSaved": "Mitarbeiter-Kostenprofile erfolgreich gespeichert",
+      "costProfilesFailed": "Kostenprofile konnten nicht gespeichert werden"
     },
     "roles": {
       "title": "Rollen & Berechtigungen",
@@ -1267,7 +1280,8 @@
         "todos": "Aufgaben",
         "notes": "Notizen",
         "invoices": "Rechnungen",
-        "banking": "Banking"
+        "banking": "Banking",
+        "offers": "Angebote"
       },
       "actions": {
         "read": "Lesen",
@@ -1885,6 +1899,17 @@
     "showPercentage": "Prozent",
     "noData": "Keine Zeiterfassungsdaten für den ausgewählten Zeitraum gefunden.",
     "noDepartments": "Keine Abteilungen konfiguriert. Gehen Sie zu Einstellungen > Zeiterfassung, um Abteilungen einzurichten.",
-    "loading": "Analysedaten werden geladen..."
+    "loading": "Analysedaten werden geladen...",
+    "costDistribution": "Kostenverteilung",
+    "totalCost": "Gesamtkosten",
+    "cost": "Kosten",
+    "ftes": "FTEs",
+    "chart": "Diagramm",
+    "table": "Tabelle",
+    "export": "CSV Export",
+    "department": "Abteilung",
+    "logged": "Erfasst",
+    "filled": "Aufgefüllt",
+    "absenceDays": "Abwesend"
   }
 }
