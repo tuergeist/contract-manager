@@ -564,15 +564,19 @@ ANALYSIS_WITH_COST_QUERY = """
 query($dateFrom: Date!, $dateTo: Date!) {
   departmentTimeAnalysis(dateFrom: $dateFrom, dateTo: $dateTo) {
     totalHours
+    totalHoursFilled
     distribution { departmentName hours percentage }
+    distributionFilled { departmentName hours percentage }
     userMatrix {
       userName
       totalHours
+      absenceDays
       departments { departmentName hours percentage }
     }
     userMatrixFilled {
       userName
       totalHours
+      absenceDays
       departments { departmentName hours percentage }
     }
     costDistribution { departmentName cost percentage ftes }
@@ -616,12 +620,20 @@ class TestHourBackfilling:
 
         assert result.errors is None
         data = result.data["departmentTimeAnalysis"]
-        # Total should be 168h (100h logged + 68h backfilled)
-        assert data["totalHours"] == 168.0
+        # Unfilled total shows raw logged hours
+        assert data["totalHours"] == 100.0
+        # Filled total includes backfilled hours
+        assert data["totalHoursFilled"] == 168.0
 
+        # Unfilled distribution shows only logged hours
         dist = {d["departmentName"]: d for d in data["distribution"]}
         assert dist["Engineering"]["hours"] == 100.0
-        assert dist["Sales & Marketing"]["hours"] == 68.0
+        assert dist["Sales & Marketing"]["hours"] == 0.0  # no logged hours in S&M
+
+        # Filled distribution includes backfilled hours
+        dist_filled = {d["departmentName"]: d for d in data["distributionFilled"]}
+        assert dist_filled["Engineering"]["hours"] == 100.0
+        assert dist_filled["Sales & Marketing"]["hours"] == 68.0
 
         # Unfilled user matrix shows raw logged hours
         alice = next(r for r in data["userMatrix"] if r["userName"] == "Alice")
@@ -735,7 +747,8 @@ class TestHourBackfilling:
             }, make_context(user))
 
         data = result.data["departmentTimeAnalysis"]
-        assert data["totalHours"] == 84.0  # 60 + 24 backfilled
+        assert data["totalHours"] == 60.0  # raw logged
+        assert data["totalHoursFilled"] == 84.0  # 60 + 24 backfilled
 
 
 @pytest.mark.django_db

@@ -1456,9 +1456,11 @@ class UserDepartmentRow:
 class DepartmentTimeAnalysisType:
     """Full department time analysis result."""
     distribution: list[DepartmentTimeEntry]
+    distribution_filled: list[DepartmentTimeEntry] | None = None
     user_matrix: list[UserDepartmentRow]
     user_matrix_filled: list[UserDepartmentRow] | None = None
     total_hours: float
+    total_hours_filled: float | None = None
     cost_distribution: list["DepartmentCostEntry"] | None = None
     total_cost: float | None = None
 
@@ -3127,7 +3129,8 @@ class ContractQuery:
                 user_id_to_name[entry["user_id"]] = entry["user_name"]
                 user_logged_hours[entry["user_id"]] += hours
 
-        # Snapshot unfilled user hours for the unfilled matrix
+        # Snapshot unfilled data before backfilling
+        unfilled_dept_hours: dict[str, float] = dict(dept_hours)
         unfilled_user_dept_hours: dict[str, dict[str, float]] = {
             u: dict(depts) for u, depts in user_dept_hours.items()
         }
@@ -3158,15 +3161,22 @@ class ContractQuery:
                 user_logged_hours[profile.external_user_id] = target_hours
                 has_backfill = True
 
-        # Build distribution
+        # Build distributions (unfilled = raw logged, filled = after backfill)
+        all_depts = sorted(dept_hours.keys())
+
         distribution = []
-        for dept_name in sorted(dept_hours.keys()):
-            h = round(dept_hours[dept_name], 2)
-            pct = round((h / total_hours * 100) if total_hours > 0 else 0, 1)
+        for dept_name in all_depts:
+            h = round(unfilled_dept_hours.get(dept_name, 0), 2)
+            pct = round((h / unfilled_total_hours * 100) if unfilled_total_hours > 0 else 0, 1)
             distribution.append(DepartmentTimeEntry(department_name=dept_name, hours=h, percentage=pct))
 
-        # Build user matrices (unfilled = raw logged, filled = after backfill)
-        all_depts = sorted(dept_hours.keys())
+        distribution_filled = None
+        if has_backfill:
+            distribution_filled = []
+            for dept_name in all_depts:
+                h = round(dept_hours[dept_name], 2)
+                pct = round((h / total_hours * 100) if total_hours > 0 else 0, 1)
+                distribution_filled.append(DepartmentTimeEntry(department_name=dept_name, hours=h, percentage=pct))
 
         # Build reverse lookup: user_name → user_id for absence days
         name_to_user_id: dict[str, str] = {v: k for k, v in user_id_to_name.items()}
@@ -3252,9 +3262,11 @@ class ContractQuery:
 
         return DepartmentTimeAnalysisType(
             distribution=distribution,
+            distribution_filled=distribution_filled,
             user_matrix=user_matrix,
             user_matrix_filled=user_matrix_filled,
-            total_hours=round(total_hours, 2),
+            total_hours=round(unfilled_total_hours, 2),
+            total_hours_filled=round(total_hours, 2) if has_backfill else None,
             cost_distribution=cost_distribution_list,
             total_cost=total_cost_value,
         )

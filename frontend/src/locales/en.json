@@ -1901,6 +1901,7 @@
     "noDepartments": "No departments configured. Go to Settings > Time Tracking to set up departments.",
     "loading": "Loading analysis data...",
     "costDistribution": "Cost Distribution",
+    "fteDistribution": "FTE Distribution",
     "totalCost": "Total Cost",
     "cost": "Cost",
     "ftes": "FTEs",
@@ -1910,6 +1911,6 @@
     "department": "Department",
     "logged": "Logged",
     "filled": "Filled",
-    "absenceDays": "Absent"
+    "absenceDays": "Absent days"
   }
 }

@@ -1901,6 +1901,7 @@
     "noDepartments": "Keine Abteilungen konfiguriert. Gehen Sie zu Einstellungen > Zeiterfassung, um Abteilungen einzurichten.",
     "loading": "Analysedaten werden geladen...",
     "costDistribution": "Kostenverteilung",
+    "fteDistribution": "FTE-Verteilung",
     "totalCost": "Gesamtkosten",
     "cost": "Kosten",
     "ftes": "FTEs",
@@ -1910,6 +1911,6 @@
     "department": "Abteilung",
     "logged": "Erfasst",
     "filled": "Aufgefüllt",
-    "absenceDays": "Abwesend"
+    "absenceDays": "Abwesenheitstage"
   }
 }

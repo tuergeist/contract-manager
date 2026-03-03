@@ -7,7 +7,13 @@ const DEPARTMENT_TIME_ANALYSIS = gql`
   query DepartmentTimeAnalysis($dateFrom: Date!, $dateTo: Date!) {
     departmentTimeAnalysis(dateFrom: $dateFrom, dateTo: $dateTo) {
       totalHours
+      totalHoursFilled
       distribution {
+        departmentName
+        hours
+        percentage
+      }
+      distributionFilled {
         departmentName
         hours
         percentage
@@ -111,12 +117,17 @@ export function DepartmentAnalysis() {
 
   const departments = deptsData?.departments || []
   const analysis = data?.departmentTimeAnalysis
-  const distribution = analysis?.distribution || []
+  const distributionRaw = analysis?.distribution || []
+  const distributionFilled = analysis?.distributionFilled || null
   const userMatrix = analysis?.userMatrix || []
-  const totalHours = analysis?.totalHours || 0
+  const totalHoursRaw = analysis?.totalHours || 0
+  const totalHoursFilled = analysis?.totalHoursFilled || null
   const userMatrixFilled = analysis?.userMatrixFilled || null
   const costDistribution = analysis?.costDistribution || []
   const totalCost = analysis?.totalCost || 0
+
+  const distribution = showFilled && distributionFilled ? distributionFilled : distributionRaw
+  const totalHours = showFilled && totalHoursFilled != null ? totalHoursFilled : totalHoursRaw
 
   // Get unique department names from distribution for matrix columns
   const deptNames = distribution.map((d: { departmentName: string }) => d.departmentName)
@@ -172,8 +183,8 @@ export function DepartmentAnalysis() {
     <div>
       <h1 className="text-2xl font-bold mb-6">{t('departmentAnalysis.title')}</h1>
 
-      {/* Month shortcuts */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      {/* Month shortcuts + date range picker */}
+      <div className="mb-6 flex flex-wrap items-center gap-2">
         {monthShortcuts.map((s) => (
           <button
             key={s.from}
@@ -197,26 +208,19 @@ export function DepartmentAnalysis() {
         >
           {ytdLabel}
         </button>
-      </div>
-
-      {/* Date range picker */}
-      <div className="mb-6 flex items-center gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('departmentAnalysis.dateFrom')}</label>
+        <div className="ml-auto flex items-center gap-2">
           <input
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="mt-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('departmentAnalysis.dateTo')}</label>
+          <span className="text-gray-400">–</span>
           <input
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="mt-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
         </div>
       </div>
@@ -226,7 +230,7 @@ export function DepartmentAnalysis() {
           <Loader2 className="h-5 w-5 animate-spin" />
           {t('departmentAnalysis.loading')}
         </div>
-      ) : totalHours === 0 ? (
+      ) : totalHoursRaw === 0 ? (
         <p className="py-12 text-gray-500">{t('departmentAnalysis.noData')}</p>
       ) : (
         <>
@@ -236,22 +240,40 @@ export function DepartmentAnalysis() {
               <h2 className="text-lg font-medium text-gray-900">
                 {chartView === 'hours' ? t('departmentAnalysis.distribution') : t('departmentAnalysis.costDistribution')}
               </h2>
-              {costDistribution.length > 0 && totalCost > 0 && (
-                <div className="flex rounded-md border">
-                  <button
-                    onClick={() => setChartView('hours')}
-                    className={`px-3 py-1 text-sm ${chartView === 'hours' ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                  >
-                    {t('departmentAnalysis.showHours')}
-                  </button>
-                  <button
-                    onClick={() => setChartView('costs')}
-                    className={`border-l px-3 py-1 text-sm ${chartView === 'costs' ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                  >
-                    {t('departmentAnalysis.cost')}
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center gap-3">
+                {distributionFilled && (
+                  <div className="flex rounded-md border">
+                    <button
+                      onClick={() => setShowFilled(false)}
+                      className={`px-3 py-1 text-sm ${!showFilled ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {t('departmentAnalysis.logged')}
+                    </button>
+                    <button
+                      onClick={() => setShowFilled(true)}
+                      className={`border-l px-3 py-1 text-sm ${showFilled ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {t('departmentAnalysis.filled')}
+                    </button>
+                  </div>
+                )}
+                {costDistribution.length > 0 && totalCost > 0 && (
+                  <div className="flex rounded-md border">
+                    <button
+                      onClick={() => setChartView('hours')}
+                      className={`px-3 py-1 text-sm ${chartView === 'hours' ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {t('departmentAnalysis.showHours')}
+                    </button>
+                    <button
+                      onClick={() => setChartView('costs')}
+                      className={`border-l px-3 py-1 text-sm ${chartView === 'costs' ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {t('departmentAnalysis.ftes')}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {chartView === 'hours' ? (
@@ -300,7 +322,7 @@ export function DepartmentAnalysis() {
               <>
                 <div className="mb-4 flex items-center gap-3">
                   <p className="text-sm text-gray-500">
-                    {t('departmentAnalysis.totalCost')}: <span className="font-semibold text-gray-900">{totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    {t('departmentAnalysis.ftes')}: <span className="font-semibold text-gray-900">{costDistribution.reduce((sum: number, d: { ftes: number }) => sum + d.ftes, 0).toFixed(2)}</span>
                   </p>
                   <div className="ml-auto flex items-center gap-2">
                     <div className="flex rounded-md border">
@@ -319,18 +341,18 @@ export function DepartmentAnalysis() {
                     </div>
                     <button
                       onClick={() => {
-                        const header = [t('departmentAnalysis.department'), t('departmentAnalysis.ftes'), t('departmentAnalysis.cost'), '%'].join(';')
-                        const rows = costDistribution.map((d: { departmentName: string; cost: number; percentage: number; ftes: number }) =>
-                          [d.departmentName, d.ftes.toFixed(2), d.cost.toFixed(2), d.percentage.toFixed(1)].join(';')
+                        const header = [t('departmentAnalysis.department'), t('departmentAnalysis.ftes'), '%'].join(';')
+                        const rows = costDistribution.map((d: { departmentName: string; percentage: number; ftes: number }) =>
+                          [d.departmentName, d.ftes.toFixed(2), d.percentage.toFixed(1)].join(';')
                         )
                         const totalFtes = costDistribution.reduce((sum: number, d: { ftes: number }) => sum + d.ftes, 0)
-                        rows.push([t('departmentAnalysis.total'), totalFtes.toFixed(2), totalCost.toFixed(2), '100.0'].join(';'))
+                        rows.push([t('departmentAnalysis.total'), totalFtes.toFixed(2), '100.0'].join(';'))
                         const csv = [header, ...rows].join('\n')
                         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
                         const url = URL.createObjectURL(blob)
                         const a = document.createElement('a')
                         a.href = url
-                        a.download = `cost-distribution-${dateFrom}-${dateTo}.csv`
+                        a.download = `fte-distribution-${dateFrom}-${dateTo}.csv`
                         a.click()
                         URL.revokeObjectURL(url)
                       }}
@@ -361,7 +383,7 @@ export function DepartmentAnalysis() {
                       {(() => {
                         const maxPct = Math.max(...costDistribution.map((d: { percentage: number }) => d.percentage))
                         const barMax = maxPct > 40 ? Math.min(100, maxPct + 5) : 40
-                        return costDistribution.map((d: { departmentName: string; cost: number; percentage: number; ftes: number }, i: number) => (
+                        return costDistribution.map((d: { departmentName: string; percentage: number; ftes: number }, i: number) => (
                           <div key={d.departmentName} className="flex items-center gap-3">
                             <div className={`h-3 w-3 rounded-full ${COLORS[i % COLORS.length]}`} />
                             <span className="min-w-[160px] text-sm font-medium text-gray-900">{d.departmentName}</span>
@@ -373,7 +395,7 @@ export function DepartmentAnalysis() {
                                 />
                               </div>
                             </div>
-                            <span className="min-w-[80px] text-right text-sm text-gray-600">{d.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="min-w-[60px] text-right text-sm text-gray-600">{d.ftes.toFixed(2)}</span>
                             <span className="min-w-[50px] text-right text-sm font-medium text-gray-900">{d.percentage.toFixed(1)}%</span>
                           </div>
                         ))
@@ -387,16 +409,14 @@ export function DepartmentAnalysis() {
                         <tr>
                           <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{t('departmentAnalysis.department')}</th>
                           <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">{t('departmentAnalysis.ftes')}</th>
-                          <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">{t('departmentAnalysis.cost')}</th>
                           <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">%</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 bg-white">
-                        {costDistribution.map((d: { departmentName: string; cost: number; percentage: number; ftes: number }) => (
+                        {costDistribution.map((d: { departmentName: string; percentage: number; ftes: number }) => (
                           <tr key={d.departmentName}>
                             <td className="px-6 py-3 text-sm font-medium text-gray-900">{d.departmentName}</td>
                             <td className="px-6 py-3 text-right text-sm text-gray-900">{d.ftes.toFixed(2)}</td>
-                            <td className="px-6 py-3 text-right text-sm text-gray-900">{d.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                             <td className="px-6 py-3 text-right text-sm font-medium text-gray-900">{d.percentage.toFixed(1)}%</td>
                           </tr>
                         ))}
@@ -406,9 +426,6 @@ export function DepartmentAnalysis() {
                           <td className="px-6 py-3 text-sm font-semibold text-gray-900">{t('departmentAnalysis.total')}</td>
                           <td className="px-6 py-3 text-right text-sm font-semibold text-gray-900">
                             {costDistribution.reduce((sum: number, d: { ftes: number }) => sum + d.ftes, 0).toFixed(2)}
-                          </td>
-                          <td className="px-6 py-3 text-right text-sm font-semibold text-gray-900">
-                            {totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                           <td className="px-6 py-3 text-right text-sm font-semibold text-gray-900">100.0%</td>
                         </tr>
@@ -424,37 +441,19 @@ export function DepartmentAnalysis() {
           <div className="rounded-lg border bg-white p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-medium text-gray-900">{t('departmentAnalysis.userMatrix')}</h2>
-              <div className="flex items-center gap-3">
-                {userMatrixFilled && (
-                  <div className="flex rounded-md border">
-                    <button
-                      onClick={() => setShowFilled(false)}
-                      className={`px-3 py-1 text-sm ${!showFilled ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                    >
-                      {t('departmentAnalysis.logged')}
-                    </button>
-                    <button
-                      onClick={() => setShowFilled(true)}
-                      className={`border-l px-3 py-1 text-sm ${showFilled ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                    >
-                      {t('departmentAnalysis.filled')}
-                    </button>
-                  </div>
-                )}
-                <div className="flex rounded-md border">
-                  <button
-                    onClick={() => setShowPercentage(false)}
-                    className={`px-3 py-1 text-sm ${!showPercentage ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                  >
-                    {t('departmentAnalysis.showHours')}
-                  </button>
-                  <button
-                    onClick={() => setShowPercentage(true)}
-                    className={`border-l px-3 py-1 text-sm ${showPercentage ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                  >
-                    {t('departmentAnalysis.showPercentage')}
-                  </button>
-                </div>
+              <div className="flex rounded-md border">
+                <button
+                  onClick={() => setShowPercentage(false)}
+                  className={`px-3 py-1 text-sm ${!showPercentage ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                >
+                  {t('departmentAnalysis.showHours')}
+                </button>
+                <button
+                  onClick={() => setShowPercentage(true)}
+                  className={`border-l px-3 py-1 text-sm ${showPercentage ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                >
+                  {t('departmentAnalysis.showPercentage')}
+                </button>
               </div>
             </div>
 
