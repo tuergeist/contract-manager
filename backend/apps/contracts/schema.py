@@ -2939,6 +2939,7 @@ class ContractQuery:
     ) -> DepartmentTimeAnalysisType:
         """Compute department time analysis from provider data."""
         from collections import defaultdict
+        from django.core.cache import cache
         from apps.contracts.services.time_tracking import get_provider
 
         user = require_perm(info, "contracts", "read")
@@ -2949,11 +2950,16 @@ class ContractQuery:
         if not provider:
             return DepartmentTimeAnalysisType(distribution=[], user_matrix=[], total_hours=0)
 
-        # Fetch raw user × service data
-        try:
-            raw_data = provider.get_department_time_data(date_from, date_to)
-        except NotImplementedError:
-            return DepartmentTimeAnalysisType(distribution=[], user_matrix=[], total_hours=0)
+        # Fetch raw user × service data (cached for 1 hour)
+        _sentinel = object()
+        cache_key = f"dept_time_{user.tenant_id}_{date_from}_{date_to}"
+        raw_data = cache.get(cache_key, _sentinel)
+        if raw_data is _sentinel:
+            try:
+                raw_data = provider.get_department_time_data(date_from, date_to)
+            except NotImplementedError:
+                return DepartmentTimeAnalysisType(distribution=[], user_matrix=[], total_hours=0)
+            cache.set(cache_key, raw_data, 3600)
 
         if not raw_data:
             return DepartmentTimeAnalysisType(distribution=[], user_matrix=[], total_hours=0)

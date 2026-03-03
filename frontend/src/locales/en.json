@@ -12,6 +12,7 @@
     "auditLog": "Audit Log",
     "banking": "Banking",
     "about": "About",
+    "departmentAnalysis": "Dept. Analysis",
     "settings": "Settings"
   },
   "common": {
@@ -1219,6 +1220,25 @@
       "notConfigured": "Not configured",
       "showRevenue": "Show revenue in time tracking"
     },
+    "departments": {
+      "title": "Departments",
+      "description": "Define departments and assign time tracking services to group hours by department.",
+      "addDepartment": "Add Department",
+      "namePlaceholder": "Department name",
+      "nameRequired": "Department name is required",
+      "alreadyExists": "A department with this name already exists",
+      "confirmDelete": "Are you sure you want to delete this department? All service assignments will be removed.",
+      "serviceAssignment": "Service Assignment",
+      "serviceAssignmentDescription": "Assign each time tracking service to a department for analysis.",
+      "service": "Service",
+      "department": "Department",
+      "unassigned": "Unassigned",
+      "saveAssignments": "Save Assignments",
+      "assignmentsSaved": "Service assignments saved successfully",
+      "assignmentsFailed": "Failed to save service assignments",
+      "noDepartments": "No departments defined. Add a department to get started.",
+      "noServices": "No services found. Make sure your time tracking provider is configured."
+    },
     "roles": {
       "title": "Roles & Permissions",
       "description": "Manage roles and their permissions",
@@ -1847,5 +1867,24 @@
       "saved": "Offer number scheme saved successfully",
       "saveFailed": "Failed to save offer number scheme"
     }
+  },
+  "departmentAnalysis": {
+    "title": "Department Time Analysis",
+    "description": "Analyze time distribution across departments",
+    "dateFrom": "From",
+    "dateTo": "To",
+    "distribution": "Distribution",
+    "userMatrix": "User Breakdown",
+    "totalHours": "Total Hours",
+    "hours": "Hours",
+    "percentage": "%",
+    "user": "User",
+    "total": "Total",
+    "unassigned": "Unassigned",
+    "showHours": "Hours",
+    "showPercentage": "Percentage",
+    "noData": "No time tracking data found for the selected period.",
+    "noDepartments": "No departments configured. Go to Settings > Time Tracking to set up departments.",
+    "loading": "Loading analysis data..."
   }
 }

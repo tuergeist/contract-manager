@@ -25,6 +25,7 @@ import { AboutPage } from './features/about/AboutPage'
 import { ProjectList } from './features/projects/ProjectList'
 import { OfferList } from './features/offers/OfferList'
 import { OfferDetail } from './features/offers/OfferDetail'
+import { DepartmentAnalysis } from './features/contracts/DepartmentAnalysis'
 
 function App() {
   return (
@@ -50,6 +51,7 @@ function App() {
         <Route path="contracts/:id/edit" element={<ContractForm />} />
         <Route path="projects" element={<ProjectList />} />
         <Route path="forecasts" element={<ForecastsPage />} />
+        <Route path="department-analysis" element={<DepartmentAnalysis />} />
         <Route path="settings/*" element={<SettingsLayout />} />
         <Route path="contracts/import" element={<ContractImport />} />
         <Route path="invoices/export" element={<InvoiceExportPage />} />

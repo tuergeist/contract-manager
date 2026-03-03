@@ -169,11 +169,11 @@ class ClockodoProvider(TimeTrackingProvider):
         result = []
         for user_group in data.get("groups", []):
             user_id = user_group.get("group")
-            user_name = users_by_id.get(int(user_id) if user_id else 0, "")
+            user_name = user_group.get("name") or users_by_id.get(int(user_id) if user_id else 0, "")
 
-            for service_group in user_group.get("groups", []):
+            for service_group in user_group.get("sub_groups", []):
                 service_id = service_group.get("group")
-                service_name = services_by_id.get(int(service_id) if service_id else 0, "")
+                service_name = service_group.get("name") or services_by_id.get(int(service_id) if service_id else 0, "")
                 duration_seconds = service_group.get("duration", 0) or 0
                 hours = round(duration_seconds / 3600.0, 2)
 

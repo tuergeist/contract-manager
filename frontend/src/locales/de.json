@@ -12,6 +12,7 @@
     "auditLog": "Änderungsprotokoll",
     "banking": "Bankkonten",
     "about": "Info",
+    "departmentAnalysis": "Abt.-Analyse",
     "settings": "Einstellungen"
   },
   "common": {
@@ -1219,6 +1220,25 @@
       "notConfigured": "Nicht konfiguriert",
       "showRevenue": "Umsatz in Zeiterfassung anzeigen"
     },
+    "departments": {
+      "title": "Abteilungen",
+      "description": "Definieren Sie Abteilungen und ordnen Sie Zeiterfassungs-Leistungen zu, um Stunden nach Abteilung zu gruppieren.",
+      "addDepartment": "Abteilung hinzufügen",
+      "namePlaceholder": "Abteilungsname",
+      "nameRequired": "Abteilungsname ist erforderlich",
+      "alreadyExists": "Eine Abteilung mit diesem Namen existiert bereits",
+      "confirmDelete": "Möchten Sie diese Abteilung wirklich löschen? Alle Leistungszuordnungen werden entfernt.",
+      "serviceAssignment": "Leistungszuordnung",
+      "serviceAssignmentDescription": "Ordnen Sie jede Zeiterfassungs-Leistung einer Abteilung für die Analyse zu.",
+      "service": "Leistung",
+      "department": "Abteilung",
+      "unassigned": "Nicht zugeordnet",
+      "saveAssignments": "Zuordnungen speichern",
+      "assignmentsSaved": "Leistungszuordnungen erfolgreich gespeichert",
+      "assignmentsFailed": "Leistungszuordnungen konnten nicht gespeichert werden",
+      "noDepartments": "Keine Abteilungen definiert. Fügen Sie eine Abteilung hinzu.",
+      "noServices": "Keine Leistungen gefunden. Stellen Sie sicher, dass Ihr Zeiterfassungsanbieter konfiguriert ist."
+    },
     "roles": {
       "title": "Rollen & Berechtigungen",
       "description": "Rollen und deren Berechtigungen verwalten",
@@ -1847,5 +1867,24 @@
       "saved": "Angebotsnummernschema erfolgreich gespeichert",
       "saveFailed": "Angebotsnummernschema konnte nicht gespeichert werden"
     }
+  },
+  "departmentAnalysis": {
+    "title": "Abteilungs-Zeitanalyse",
+    "description": "Zeitverteilung über Abteilungen analysieren",
+    "dateFrom": "Von",
+    "dateTo": "Bis",
+    "distribution": "Verteilung",
+    "userMatrix": "Benutzer-Aufschlüsselung",
+    "totalHours": "Gesamtstunden",
+    "hours": "Stunden",
+    "percentage": "%",
+    "user": "Benutzer",
+    "total": "Gesamt",
+    "unassigned": "Nicht zugeordnet",
+    "showHours": "Stunden",
+    "showPercentage": "Prozent",
+    "noData": "Keine Zeiterfassungsdaten für den ausgewählten Zeitraum gefunden.",
+    "noDepartments": "Keine Abteilungen konfiguriert. Gehen Sie zu Einstellungen > Zeiterfassung, um Abteilungen einzurichten.",
+    "loading": "Analysedaten werden geladen..."
   }
 }

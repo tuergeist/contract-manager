@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { useMutation, useQuery, gql } from '@apollo/client'
-import { RefreshCw, CheckCircle, XCircle, Loader2, Upload, Plus, X, Info, Copy, Check } from 'lucide-react'
+import { useMutation, useQuery, useLazyQuery, gql } from '@apollo/client'
+import { RefreshCw, CheckCircle, XCircle, Loader2, Upload, Plus, X, Info, Copy, Check, Pencil, Trash2, Save } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
 import { HelpVideoSettings } from './HelpVideoSettings'
 
@@ -58,6 +58,48 @@ const SAVE_TIME_TRACKING_SETTINGS = gql`
 const UPDATE_TIME_TRACKING_DISPLAY = gql`
   mutation UpdateTimeTrackingDisplay($showRevenue: Boolean!) {
     updateTimeTrackingDisplay(showRevenue: $showRevenue)
+  }
+`
+
+const DEPARTMENTS_QUERY = gql`
+  query Departments {
+    departments { id name sortOrder }
+  }
+`
+
+const CLOCKODO_SERVICES_QUERY = gql`
+  query ClockodoServices {
+    clockodoServices { id name }
+  }
+`
+
+const DEPARTMENT_SERVICE_MAPPINGS_QUERY = gql`
+  query DepartmentServiceMappings {
+    departmentServiceMappings { id externalServiceId externalServiceName departmentId }
+  }
+`
+
+const CREATE_DEPARTMENT = gql`
+  mutation CreateDepartment($name: String!) {
+    createDepartment(name: $name) { success error }
+  }
+`
+
+const UPDATE_DEPARTMENT = gql`
+  mutation UpdateDepartment($id: ID!, $name: String!) {
+    updateDepartment(id: $id, name: $name) { success error }
+  }
+`
+
+const DELETE_DEPARTMENT = gql`
+  mutation DeleteDepartment($id: ID!) {
+    deleteDepartment(id: $id) { success error }
+  }
+`
+
+const SAVE_DEPARTMENT_SERVICE_MAPPINGS = gql`
+  mutation SaveDepartmentServiceMappings($mappings: [DepartmentServiceMappingInput!]!) {
+    saveDepartmentServiceMappings(mappings: $mappings) { success error }
   }
 `
 
@@ -283,6 +325,23 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
   const [saveTtSettings, { loading: savingTt }] = useMutation(SAVE_TIME_TRACKING_SETTINGS)
   const [updateTtDisplay] = useMutation(UPDATE_TIME_TRACKING_DISPLAY)
 
+  // Department state
+  const [newDeptName, setNewDeptName] = useState('')
+  const [editingDeptId, setEditingDeptId] = useState<string | null>(null)
+  const [editingDeptName, setEditingDeptName] = useState('')
+  const [deptMessage, setDeptMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [serviceAssignments, setServiceAssignments] = useState<Record<string, string>>({}) // serviceId -> deptId
+  const [assignmentMessage, setAssignmentMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  const isTimeTrackingConfigured = !!ttSettingsData?.timeTrackingSettings?.isConfigured
+  const { data: deptsData, refetch: refetchDepts } = useQuery(DEPARTMENTS_QUERY, { skip: !isTimeTrackingConfigured })
+  const [fetchServices, { data: servicesData, loading: loadingServices }] = useLazyQuery(CLOCKODO_SERVICES_QUERY)
+  const { data: mappingsData, refetch: refetchMappings } = useQuery(DEPARTMENT_SERVICE_MAPPINGS_QUERY, { skip: !isTimeTrackingConfigured })
+  const [createDepartment] = useMutation(CREATE_DEPARTMENT)
+  const [updateDepartment] = useMutation(UPDATE_DEPARTMENT)
+  const [deleteDepartment] = useMutation(DELETE_DEPARTMENT)
+  const [saveDeptMappings, { loading: savingMappings }] = useMutation(SAVE_DEPARTMENT_SERVICE_MAPPINGS)
+
   const { data: settingsData, refetch: refetchSettings } = useQuery(HUBSPOT_SETTINGS_QUERY)
   const [saveSettings, { loading: saving }] = useMutation(SAVE_HUBSPOT_SETTINGS)
   const [syncCustomers, { loading: syncingCustomers }] = useMutation(SYNC_HUBSPOT_CUSTOMERS)
@@ -319,6 +378,84 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
       setTtShowRevenue(ttSettingsData.timeTrackingSettings.showRevenue)
     }
   }, [ttSettingsData?.timeTrackingSettings?.showRevenue])
+
+  // Initialize service assignments from existing mappings
+  useEffect(() => {
+    if (mappingsData?.departmentServiceMappings) {
+      const assignments: Record<string, string> = {}
+      for (const m of mappingsData.departmentServiceMappings) {
+        assignments[m.externalServiceId] = m.departmentId
+      }
+      setServiceAssignments(assignments)
+    }
+  }, [mappingsData?.departmentServiceMappings])
+
+  // Fetch services when time tracking section is visible and configured
+  const loadServices = useCallback(() => {
+    if (isTimeTrackingConfigured) {
+      fetchServices()
+    }
+  }, [isTimeTrackingConfigured, fetchServices])
+
+  useEffect(() => {
+    if ((!section || section === 'timeTracking') && isTimeTrackingConfigured) {
+      loadServices()
+    }
+  }, [section, isTimeTrackingConfigured, loadServices])
+
+  const handleCreateDept = async () => {
+    const name = newDeptName.trim()
+    if (!name) return
+    const result = await createDepartment({ variables: { name } })
+    if (result.data?.createDepartment?.success) {
+      setNewDeptName('')
+      setDeptMessage(null)
+      refetchDepts()
+    } else {
+      setDeptMessage({ type: 'error', text: result.data?.createDepartment?.error || 'Failed' })
+    }
+  }
+
+  const handleRenameDept = async (id: string) => {
+    const name = editingDeptName.trim()
+    if (!name) return
+    const result = await updateDepartment({ variables: { id, name } })
+    if (result.data?.updateDepartment?.success) {
+      setEditingDeptId(null)
+      setDeptMessage(null)
+      refetchDepts()
+    } else {
+      setDeptMessage({ type: 'error', text: result.data?.updateDepartment?.error || 'Failed' })
+    }
+  }
+
+  const handleDeleteDept = async (id: string) => {
+    if (!confirm(t('settings.departments.confirmDelete'))) return
+    const result = await deleteDepartment({ variables: { id } })
+    if (result.data?.deleteDepartment?.success) {
+      refetchDepts()
+      refetchMappings()
+    }
+  }
+
+  const handleSaveAssignments = async () => {
+    const services = servicesData?.clockodoServices || []
+    const mappings = services
+      .filter((s: { id: string }) => serviceAssignments[s.id])
+      .map((s: { id: string; name: string }) => ({
+        externalServiceId: s.id,
+        externalServiceName: s.name,
+        departmentId: serviceAssignments[s.id],
+      }))
+    const result = await saveDeptMappings({ variables: { mappings } })
+    if (result.data?.saveDepartmentServiceMappings?.success) {
+      setAssignmentMessage({ type: 'success', text: t('settings.departments.assignmentsSaved') })
+      refetchMappings()
+    } else {
+      setAssignmentMessage({ type: 'error', text: result.data?.saveDepartmentServiceMappings?.error || t('settings.departments.assignmentsFailed') })
+    }
+    setTimeout(() => setAssignmentMessage(null), 3000)
+  }
 
   // Initialize webhook portal ID from settings
   useEffect(() => {
@@ -1296,6 +1433,149 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
                 {t('settings.timeTracking.showRevenue')}
               </label>
             </div>
+          </div>
+        </div>}
+
+        {/* Departments — only visible when time tracking is configured */}
+        {(!section || section === 'timeTracking') && isTimeTrackingConfigured && <div className="rounded-lg border bg-white p-6">
+          <h2 className="text-lg font-medium">{t('settings.departments.title')}</h2>
+          <p className="mt-1 text-sm text-gray-500">{t('settings.departments.description')}</p>
+
+          <div className="mt-4 space-y-4">
+            {/* Department list */}
+            <div className="space-y-2">
+              {(deptsData?.departments || []).map((dept: { id: string; name: string }) => (
+                <div key={dept.id} className="flex items-center gap-2">
+                  {editingDeptId === dept.id ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editingDeptName}
+                        onChange={(e) => setEditingDeptName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleRenameDept(dept.id)}
+                        className="block w-full max-w-xs rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleRenameDept(dept.id)}
+                        className="rounded p-1 text-green-600 hover:bg-green-50"
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => setEditingDeptId(null)}
+                        className="rounded p-1 text-gray-400 hover:bg-gray-100"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm text-gray-900">{dept.name}</span>
+                      <button
+                        onClick={() => { setEditingDeptId(dept.id); setEditingDeptName(dept.name) }}
+                        className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteDept(dept.id)}
+                        className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+
+              {/* Add department inline */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newDeptName}
+                  onChange={(e) => setNewDeptName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreateDept()}
+                  placeholder={t('settings.departments.namePlaceholder')}
+                  className="block w-full max-w-xs rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <button
+                  onClick={handleCreateDept}
+                  disabled={!newDeptName.trim()}
+                  className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Plus className="h-4 w-4" />
+                  {t('settings.departments.addDepartment')}
+                </button>
+              </div>
+              {deptMessage && (
+                <p className={`text-sm ${deptMessage.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
+                  {deptMessage.text}
+                </p>
+              )}
+            </div>
+
+            {/* Service assignment table */}
+            {(deptsData?.departments?.length ?? 0) > 0 && (
+              <div className="mt-6">
+                <h3 className="text-sm font-medium text-gray-900">{t('settings.departments.serviceAssignment')}</h3>
+                <p className="mt-1 text-sm text-gray-500">{t('settings.departments.serviceAssignmentDescription')}</p>
+
+                {loadingServices ? (
+                  <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t('common.loading')}
+                  </div>
+                ) : (servicesData?.clockodoServices?.length ?? 0) === 0 ? (
+                  <p className="mt-4 text-sm text-gray-500">{t('settings.departments.noServices')}</p>
+                ) : (
+                  <div className="mt-3">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-left">
+                          <th className="pb-2 font-medium text-gray-700">{t('settings.departments.service')}</th>
+                          <th className="pb-2 font-medium text-gray-700">{t('settings.departments.department')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {servicesData.clockodoServices.map((service: { id: string; name: string }) => (
+                          <tr key={service.id} className="border-b last:border-0">
+                            <td className="py-2 text-gray-900">{service.name}</td>
+                            <td className="py-2">
+                              <select
+                                value={serviceAssignments[service.id] || ''}
+                                onChange={(e) => setServiceAssignments(prev => ({ ...prev, [service.id]: e.target.value }))}
+                                className="block w-full max-w-xs rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              >
+                                <option value="">{t('settings.departments.unassigned')}</option>
+                                {deptsData.departments.map((dept: { id: string; name: string }) => (
+                                  <option key={dept.id} value={dept.id}>{dept.name}</option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div className="mt-3 flex items-center gap-3">
+                      <button
+                        onClick={handleSaveAssignments}
+                        disabled={savingMappings}
+                        className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {savingMappings ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        {t('settings.departments.saveAssignments')}
+                      </button>
+                      {assignmentMessage && (
+                        <span className={`text-sm ${assignmentMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                          {assignmentMessage.text}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>}
 
