@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.14.0",
+    "date": "2026-03-03",
+    "title": "Department Cost Analysis & Absence Tracking",
+    "description": "Extend department analysis with user cost profiles, FTE-based cost distribution, hour backfilling, and absence day tracking from Clockodo.",
+    "type": "feature",
+    "details": [
+      "Added user cost settings (FTE%, monthly income, default department) in time tracking settings",
+      "Added hour backfilling: fills unlogged hours to default department based on FTE target",
+      "Added cost distribution chart and table showing FTE allocation per department",
+      "Added logged/filled toggle for both distribution chart and user breakdown table",
+      "Added absence days column from Clockodo absences API in user breakdown",
+      "Added CSV export for FTE distribution data",
+      "Reorganized time tracking settings with sub-tabs (Connection, Departments, User Costs)",
+      "Improved layout: date pickers inline with month shortcuts, current year only"
+    ]
+  },
+  {
     "version": "2.13.0",
     "date": "2026-03-03",
     "title": "Department Time Analysis",
