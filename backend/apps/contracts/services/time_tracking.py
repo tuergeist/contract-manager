@@ -67,6 +67,27 @@ class TimeTrackingProvider(ABC):
         ...
 
 
+    def get_services(self) -> list[dict]:
+        """Fetch all services from the time tracking provider.
+
+        Returns:
+            List of dicts with 'id' and 'name' keys.
+        """
+        raise NotImplementedError
+
+    def get_department_time_data(
+        self,
+        date_from=None,
+        date_to=None,
+    ) -> list[dict]:
+        """Get time entries grouped by user and service.
+
+        Returns:
+            Flat list of dicts: {user_id, user_name, service_id, service_name, hours}
+        """
+        raise NotImplementedError
+
+
 logger = logging.getLogger(__name__)
 
 

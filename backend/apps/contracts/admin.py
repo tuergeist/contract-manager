@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Contract, ContractItem, ContractAmendment, RevenueGoal, NewBusinessGoal, AutoLinkRule
+from .models import Contract, ContractItem, ContractAmendment, RevenueGoal, NewBusinessGoal, AutoLinkRule, Department, DepartmentServiceMapping
 
 
 class ContractItemInline(admin.TabularInline):
@@ -52,3 +52,17 @@ class AutoLinkRuleAdmin(admin.ModelAdmin):
     list_display = ["pattern", "match_type", "contract", "is_active", "tenant"]
     list_filter = ["tenant", "match_type", "is_active"]
     search_fields = ["pattern", "contract__customer__name"]
+
+
+@admin.register(Department)
+class DepartmentAdmin(admin.ModelAdmin):
+    list_display = ["name", "sort_order", "tenant"]
+    list_filter = ["tenant"]
+    search_fields = ["name"]
+
+
+@admin.register(DepartmentServiceMapping)
+class DepartmentServiceMappingAdmin(admin.ModelAdmin):
+    list_display = ["external_service_name", "department", "tenant"]
+    list_filter = ["tenant", "department"]
+    search_fields = ["external_service_name"]

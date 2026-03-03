@@ -21,7 +21,7 @@ from apps.customers.models import Customer
 from apps.customers.schema import CustomerType
 from apps.products.models import Product
 from apps.products.schema import ProductType
-from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, RevenueGoal, NewBusinessGoal, TimeTrackingProjectMapping, AutoLinkRule
+from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, RevenueGoal, NewBusinessGoal, TimeTrackingProjectMapping, AutoLinkRule, Department, DepartmentServiceMapping
 from .forecast_cache import (
     dict_to_forecast_result,
     forecast_result_to_dict,
@@ -1396,6 +1396,75 @@ class TimeTrackingMappingResult:
     success: bool
     error: str | None = None
     mapping: TimeTrackingMappingType | None = None
+
+
+# =============================================================================
+# Department Time Analysis Types
+# =============================================================================
+
+
+@strawberry.type
+class DepartmentType:
+    """A department for grouping time tracking services."""
+    id: strawberry.ID
+    name: str
+    sort_order: int
+
+
+@strawberry.type
+class DepartmentServiceMappingType:
+    """A mapping between an external service and a department."""
+    id: strawberry.ID
+    external_service_id: str
+    external_service_name: str
+    department_id: strawberry.ID
+
+
+@strawberry.type
+class ClockodoServiceType:
+    """An external service from the time tracking provider."""
+    id: str
+    name: str
+
+
+@strawberry.type
+class DepartmentTimeEntry:
+    """Time distribution for a single department."""
+    department_name: str
+    hours: float
+    percentage: float
+
+
+@strawberry.type
+class UserDepartmentHours:
+    """Hours for a specific department within a user row."""
+    department_name: str
+    hours: float
+    percentage: float
+
+
+@strawberry.type
+class UserDepartmentRow:
+    """One user's time across all departments."""
+    user_name: str
+    departments: list[UserDepartmentHours]
+    total_hours: float
+
+
+@strawberry.type
+class DepartmentTimeAnalysisType:
+    """Full department time analysis result."""
+    distribution: list[DepartmentTimeEntry]
+    user_matrix: list[UserDepartmentRow]
+    total_hours: float
+
+
+@strawberry.input
+class DepartmentServiceMappingInput:
+    """Input for bulk saving department-service mappings."""
+    external_service_id: str
+    external_service_name: str
+    department_id: strawberry.ID
 
 
 # --- PDF Analysis Types ---
@@ -2810,6 +2879,136 @@ class ContractQuery:
             if p.id not in linked_ids
             and matches_project_name(pattern, match_type, p.name)
         ]
+
+    # -----------------------------------------------------------------
+    # Department Time Analysis Queries
+    # -----------------------------------------------------------------
+
+    @strawberry.field
+    def departments(self, info: Info[Context, None]) -> list[DepartmentType]:
+        """Get all departments for the current tenant."""
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+        return [
+            DepartmentType(id=strawberry.ID(str(d.id)), name=d.name, sort_order=d.sort_order)
+            for d in Department.objects.filter(tenant=user.tenant)
+        ]
+
+    @strawberry.field
+    def clockodo_services(self, info: Info[Context, None]) -> list[ClockodoServiceType]:
+        """Fetch available services from the time tracking provider."""
+        from apps.contracts.services.time_tracking import get_provider
+
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+        provider = get_provider(user.tenant)
+        if not provider:
+            return []
+        try:
+            services = provider.get_services()
+        except NotImplementedError:
+            return []
+        return [ClockodoServiceType(id=s["id"], name=s["name"]) for s in services]
+
+    @strawberry.field
+    def department_service_mappings(
+        self, info: Info[Context, None]
+    ) -> list[DepartmentServiceMappingType]:
+        """Get all department-service mappings for the current tenant."""
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+        return [
+            DepartmentServiceMappingType(
+                id=strawberry.ID(str(m.id)),
+                external_service_id=m.external_service_id,
+                external_service_name=m.external_service_name,
+                department_id=strawberry.ID(str(m.department_id)),
+            )
+            for m in DepartmentServiceMapping.objects.filter(tenant=user.tenant)
+        ]
+
+    @strawberry.field
+    def department_time_analysis(
+        self,
+        info: Info[Context, None],
+        date_from: date,
+        date_to: date,
+    ) -> DepartmentTimeAnalysisType:
+        """Compute department time analysis from provider data."""
+        from collections import defaultdict
+        from apps.contracts.services.time_tracking import get_provider
+
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return DepartmentTimeAnalysisType(distribution=[], user_matrix=[], total_hours=0)
+
+        provider = get_provider(user.tenant)
+        if not provider:
+            return DepartmentTimeAnalysisType(distribution=[], user_matrix=[], total_hours=0)
+
+        # Fetch raw user × service data
+        try:
+            raw_data = provider.get_department_time_data(date_from, date_to)
+        except NotImplementedError:
+            return DepartmentTimeAnalysisType(distribution=[], user_matrix=[], total_hours=0)
+
+        if not raw_data:
+            return DepartmentTimeAnalysisType(distribution=[], user_matrix=[], total_hours=0)
+
+        # Load service→department mappings
+        mappings = DepartmentServiceMapping.objects.filter(
+            tenant=user.tenant
+        ).select_related("department")
+        service_to_dept: dict[str, str] = {}
+        for m in mappings:
+            service_to_dept[m.external_service_id] = m.department.name
+
+        # Aggregate by department
+        dept_hours: dict[str, float] = defaultdict(float)
+        # Aggregate by user × department
+        user_dept_hours: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        total_hours = 0.0
+
+        unassigned_label = "Unassigned"
+
+        for entry in raw_data:
+            dept_name = service_to_dept.get(entry["service_id"], unassigned_label)
+            hours = entry["hours"]
+            dept_hours[dept_name] += hours
+            user_dept_hours[entry["user_name"]][dept_name] += hours
+            total_hours += hours
+
+        # Build distribution
+        distribution = []
+        for dept_name in sorted(dept_hours.keys()):
+            h = round(dept_hours[dept_name], 2)
+            pct = round((h / total_hours * 100) if total_hours > 0 else 0, 1)
+            distribution.append(DepartmentTimeEntry(department_name=dept_name, hours=h, percentage=pct))
+
+        # Build user matrix
+        all_depts = sorted(dept_hours.keys())
+        user_matrix = []
+        for user_name in sorted(user_dept_hours.keys()):
+            user_total = sum(user_dept_hours[user_name].values())
+            dept_entries = []
+            for dept_name in all_depts:
+                h = round(user_dept_hours[user_name].get(dept_name, 0), 2)
+                pct = round((h / user_total * 100) if user_total > 0 else 0, 1)
+                dept_entries.append(UserDepartmentHours(department_name=dept_name, hours=h, percentage=pct))
+            user_matrix.append(UserDepartmentRow(
+                user_name=user_name,
+                departments=dept_entries,
+                total_hours=round(user_total, 2),
+            ))
+
+        return DepartmentTimeAnalysisType(
+            distribution=distribution,
+            user_matrix=user_matrix,
+            total_hours=round(total_hours, 2),
+        )
 
     @strawberry.field
     def analyze_pdf_attachment(
@@ -5662,4 +5861,110 @@ class ContractImportMutation:
 
         if deleted == 0:
             return DeleteResult(error="New business goal not found")
+        return DeleteResult(success=True)
+
+    # -----------------------------------------------------------------
+    # Department CRUD Mutations
+    # -----------------------------------------------------------------
+
+    @strawberry.mutation
+    def create_department(
+        self, info: Info[Context, None], name: str
+    ) -> DeleteResult:
+        """Create a new department."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return DeleteResult(error=err)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        name = name.strip()
+        if not name:
+            return DeleteResult(error="Name is required")
+
+        if Department.objects.filter(tenant=user.tenant, name=name).exists():
+            return DeleteResult(error="A department with this name already exists")
+
+        max_order = Department.objects.filter(tenant=user.tenant).count()
+        Department.objects.create(tenant=user.tenant, name=name, sort_order=max_order)
+        return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def update_department(
+        self, info: Info[Context, None], id: strawberry.ID, name: str
+    ) -> DeleteResult:
+        """Rename a department."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return DeleteResult(error=err)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        name = name.strip()
+        if not name:
+            return DeleteResult(error="Name is required")
+
+        dept = Department.objects.filter(tenant=user.tenant, id=id).first()
+        if not dept:
+            return DeleteResult(error="Department not found")
+
+        if Department.objects.filter(tenant=user.tenant, name=name).exclude(id=id).exists():
+            return DeleteResult(error="A department with this name already exists")
+
+        dept.name = name
+        dept.save(update_fields=["name", "updated_at"])
+        return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def delete_department(
+        self, info: Info[Context, None], id: strawberry.ID
+    ) -> DeleteResult:
+        """Delete a department (cascades service mappings)."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return DeleteResult(error=err)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        dept = Department.objects.filter(tenant=user.tenant, id=id).first()
+        if not dept:
+            return DeleteResult(error="Department not found")
+
+        dept.delete()
+        return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def save_department_service_mappings(
+        self,
+        info: Info[Context, None],
+        mappings: list[DepartmentServiceMappingInput],
+    ) -> DeleteResult:
+        """Bulk replace all department-service mappings for the tenant."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return DeleteResult(error=err)
+        if not user.tenant:
+            return DeleteResult(error="No tenant assigned")
+
+        # Validate all department IDs belong to tenant
+        dept_ids = {m.department_id for m in mappings}
+        valid_dept_ids = set(
+            Department.objects.filter(
+                tenant=user.tenant, id__in=dept_ids
+            ).values_list("id", flat=True)
+        )
+        invalid = dept_ids - {str(d) for d in valid_dept_ids}
+        if invalid:
+            return DeleteResult(error="Invalid department ID(s)")
+
+        with transaction.atomic():
+            DepartmentServiceMapping.objects.filter(tenant=user.tenant).delete()
+            for m in mappings:
+                DepartmentServiceMapping.objects.create(
+                    tenant=user.tenant,
+                    department_id=int(m.department_id),
+                    external_service_id=m.external_service_id,
+                    external_service_name=m.external_service_name,
+                )
+
         return DeleteResult(success=True)

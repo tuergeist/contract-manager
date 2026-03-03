@@ -115,6 +115,78 @@ class ClockodoProvider(TimeTrackingProvider):
             )
         return result
 
+    def get_services(self) -> list[dict]:
+        """Fetch all services from Clockodo."""
+        try:
+            services = self._get_all_pages("services", "services")
+            return [{"id": str(s["id"]), "name": s.get("name", "")} for s in services]
+        except Exception as e:
+            logger.error("Failed to fetch Clockodo services: %s", e)
+            return []
+
+    def get_department_time_data(
+        self,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> list[dict]:
+        """Get time entries grouped by user AND service.
+
+        Uses entrygroups with double grouping (users_id, services_id)
+        for a single efficient API call.
+        """
+        # Fetch users for name lookup
+        users_by_id: dict[int, str] = {}
+        try:
+            users = self._get_all_pages("users", "users")
+            for u in users:
+                users_by_id[u["id"]] = u.get("name", "")
+        except Exception as e:
+            logger.warning("Failed to fetch Clockodo users: %s", e)
+
+        # Fetch services for name lookup
+        services_by_id: dict[int, str] = {}
+        try:
+            services = self._get_all_pages("services", "services")
+            for s in services:
+                services_by_id[s["id"]] = s.get("name", "")
+        except Exception as e:
+            logger.warning("Failed to fetch Clockodo services: %s", e)
+
+        time_since = f"{date_from.isoformat()}T00:00:00Z" if date_from else "2000-01-01T00:00:00Z"
+        time_until = f"{date_to.isoformat()}T23:59:59Z" if date_to else f"{date.today().isoformat()}T23:59:59Z"
+
+        try:
+            params = {
+                "time_since": time_since,
+                "time_until": time_until,
+                "grouping[]": ["users_id", "services_id"],
+            }
+            data = self._get("entrygroups", params)
+        except Exception as e:
+            logger.error("Failed to fetch entrygroups for department time data: %s", e)
+            return []
+
+        result = []
+        for user_group in data.get("groups", []):
+            user_id = user_group.get("group")
+            user_name = users_by_id.get(int(user_id) if user_id else 0, "")
+
+            for service_group in user_group.get("groups", []):
+                service_id = service_group.get("group")
+                service_name = services_by_id.get(int(service_id) if service_id else 0, "")
+                duration_seconds = service_group.get("duration", 0) or 0
+                hours = round(duration_seconds / 3600.0, 2)
+
+                result.append({
+                    "user_id": str(user_id),
+                    "user_name": user_name,
+                    "service_id": str(service_id),
+                    "service_name": service_name,
+                    "hours": hours,
+                })
+
+        return result
+
     def get_time_summary(
         self,
         project_ids: list[str],

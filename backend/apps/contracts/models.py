@@ -1584,3 +1584,35 @@ class ContractComment(TenantModel):
 
     def __str__(self):
         return f"Comment by {self.author} on {self.contract}"
+
+
+class Department(TenantModel):
+    """A department for grouping time tracking services."""
+
+    name = models.CharField(max_length=100)
+    sort_order = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ["tenant", "name"]
+        ordering = ["sort_order", "name"]
+
+    def __str__(self):
+        return self.name
+
+
+class DepartmentServiceMapping(TenantModel):
+    """Maps an external time tracking service to a department."""
+
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        related_name="service_mappings",
+    )
+    external_service_id = models.CharField(max_length=50)
+    external_service_name = models.CharField(max_length=255)
+
+    class Meta:
+        unique_together = ["tenant", "external_service_id"]
+
+    def __str__(self):
+        return f"{self.external_service_name} → {self.department.name}"
