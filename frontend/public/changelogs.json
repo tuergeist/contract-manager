@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.13.0",
+    "date": "2026-03-03",
+    "title": "Department Time Analysis",
+    "description": "Analyze time tracking hours by department with distribution charts and a sortable user breakdown matrix.",
+    "type": "feature",
+    "details": [
+      "Added department management in Settings with inline add, rename, and delete",
+      "Added service-to-department assignment table for mapping Clockodo services",
+      "Added department analysis page with distribution chart and stacked bar visualization",
+      "Added sortable user-by-department matrix with hours/percentage toggle",
+      "Added month shortcut buttons and YTD quick-select for date ranges",
+      "Added 1-hour Redis cache for Clockodo API responses",
+      "Fixed Clockodo entrygroups API parsing (sub_groups key)",
+      "Fixed dashboard not showing new business goals when no active won deals exist"
+    ]
+  },
+  {
     "version": "2.12.1",
     "date": "2026-03-02",
     "title": "Fix won deals counting draft contracts",
