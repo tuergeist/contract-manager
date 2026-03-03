@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.14.1",
+    "date": "2026-03-03",
+    "title": "Fix settings visibility for non-admin users",
+    "description": "Settings tabs are now properly gated by permissions, preventing non-admin users from accessing sensitive configuration.",
+    "type": "bugfix",
+    "details": [
+      "Gated General and Integrations tabs behind settings.read permission",
+      "Gated Banking tab behind banking.read permission"
+    ]
+  },
+  {
     "version": "2.14.0",
     "date": "2026-03-03",
     "title": "Department Cost Analysis & Absence Tracking",
