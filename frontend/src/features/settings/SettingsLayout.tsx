@@ -50,8 +50,10 @@ export function SettingsLayout() {
     }
   }
 
+  const canViewSettings = hasPermission('settings', 'read')
   const canViewUsers = hasPermission('users', 'read')
   const canViewInvoiceSettings = hasPermission('invoices', 'settings')
+  const canViewBanking = hasPermission('banking', 'read')
 
   return (
     <div>
@@ -60,28 +62,38 @@ export function SettingsLayout() {
       <Tabs value={activeTab} onValueChange={handleTabChange} className="mt-6">
         <TabsList className="mb-6">
           <TabsTrigger value="user"><User className="mr-1.5 h-4 w-4" />{t('settings.tabs.user')}</TabsTrigger>
-          <TabsTrigger value="general"><Settings className="mr-1.5 h-4 w-4" />{t('settings.tabs.general')}</TabsTrigger>
-          <TabsTrigger value="integrations"><Puzzle className="mr-1.5 h-4 w-4" />{t('settings.tabs.integrations')}</TabsTrigger>
+          {canViewSettings && (
+            <TabsTrigger value="general"><Settings className="mr-1.5 h-4 w-4" />{t('settings.tabs.general')}</TabsTrigger>
+          )}
+          {canViewSettings && (
+            <TabsTrigger value="integrations"><Puzzle className="mr-1.5 h-4 w-4" />{t('settings.tabs.integrations')}</TabsTrigger>
+          )}
           {canViewUsers && (
             <TabsTrigger value="team"><Users className="mr-1.5 h-4 w-4" />{t('settings.tabs.team')}</TabsTrigger>
           )}
           {canViewInvoiceSettings && (
             <TabsTrigger value="invoices"><FileUp className="mr-1.5 h-4 w-4" />{t('settings.tabs.invoices')}</TabsTrigger>
           )}
-          <TabsTrigger value="banking"><Landmark className="mr-1.5 h-4 w-4" />{t('settings.tabs.banking')}</TabsTrigger>
+          {canViewBanking && (
+            <TabsTrigger value="banking"><Landmark className="mr-1.5 h-4 w-4" />{t('settings.tabs.banking')}</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="user">
           <UserSettings />
         </TabsContent>
 
-        <TabsContent value="general">
-          <GeneralSettingsTabs />
-        </TabsContent>
+        {canViewSettings && (
+          <TabsContent value="general">
+            <GeneralSettingsTabs />
+          </TabsContent>
+        )}
 
-        <TabsContent value="integrations">
-          <IntegrationSettingsTabs />
-        </TabsContent>
+        {canViewSettings && (
+          <TabsContent value="integrations">
+            <IntegrationSettingsTabs />
+          </TabsContent>
+        )}
 
         {canViewUsers && (
           <TabsContent value="team">
@@ -95,9 +107,11 @@ export function SettingsLayout() {
           </TabsContent>
         )}
 
-        <TabsContent value="banking">
-          <BankingSettings />
-        </TabsContent>
+        {canViewBanking && (
+          <TabsContent value="banking">
+            <BankingSettings />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )
