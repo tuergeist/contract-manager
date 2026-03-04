@@ -13,6 +13,7 @@ import {
   Plus,
   Filter,
   FileSpreadsheet,
+  CheckCircle,
 } from 'lucide-react'
 import { usePersistedState } from '@/lib/usePersistedState'
 import { formatDate, formatCurrency } from '@/lib/utils'
@@ -48,6 +49,10 @@ const CONTRACTS_QUERY = gql`
         dealWonDate
         updatedAt
         arr
+        orderConfirmationSentAt
+        orderConfirmations {
+          id
+        }
         customer {
           id
           name
@@ -76,6 +81,8 @@ interface Contract {
   dealWonDate: string | null
   updatedAt: string
   arr: string
+  orderConfirmationSentAt: string | null
+  orderConfirmations: { id: string }[]
   customer: Customer
 }
 
@@ -338,6 +345,9 @@ export function ContractList() {
                       <SortIcon field="status" />
                     </div>
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    {t('orderConfirmation.detail.title')}
+                  </th>
                   <th
                     className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
                     onClick={() => handleSort('start_date')}
@@ -405,6 +415,20 @@ export function ContractList() {
                       >
                         {t(`contracts.status.${contract.status}`)}
                       </span>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                      {contract.orderConfirmationSentAt && contract.orderConfirmations?.[0] ? (
+                        <Link
+                          to={`/contracts/${contract.id}/order-confirmation/${contract.orderConfirmations[0].id}`}
+                          className="inline-flex items-center gap-1 text-green-600 hover:text-green-800"
+                          title={t('orderConfirmation.sentAt')}
+                        >
+                          <CheckCircle className="h-3.5 w-3.5" />
+                          <span className="text-xs">{formatDate(contract.orderConfirmationSentAt)}</span>
+                        </Link>
+                      ) : contract.status === 'active' ? (
+                        <span className="text-xs text-gray-400">—</span>
+                      ) : null}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {formatDate(contract.startDate)}

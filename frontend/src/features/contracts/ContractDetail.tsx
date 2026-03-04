@@ -35,6 +35,7 @@ import {
   Undo2,
   FileSignature,
   AlertTriangle,
+  Mail,
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear, formatCurrency, formatPercent } from '@/lib/utils'
 import { useDocumentTitle } from '@/lib/useDocumentTitle'
@@ -92,6 +93,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
+import { OrderConfirmationDialog } from './OrderConfirmationDialog'
 import { CommentsSection } from '@/components/CommentsSection'
 import { TimeTrackingTab } from './TimeTrackingTab'
 import { PdfAnalysisPanel } from './PdfAnalysisPanel'
@@ -225,6 +227,13 @@ const CONTRACT_DETAIL_QUERY = gql`
         contractItemId
         customerId
         commentCount
+      }
+      orderConfirmationSentAt
+      orderConfirmations {
+        id
+        orderConfirmationNumber
+        sentAt
+        createdAt
       }
       timeTrackingMappingsCount
       hasInvoices
@@ -649,6 +658,8 @@ interface Contract {
   attachments: Attachment[]
   links: ContractLink[]
   todos: TodoItem[]
+  orderConfirmationSentAt: string | null
+  orderConfirmations: { id: string; orderConfirmationNumber: string; sentAt: string | null; createdAt: string }[]
   timeTrackingMappingsCount: number
   hasInvoices: boolean
   invoicedItemIds: number[]
@@ -706,6 +717,7 @@ export function ContractDetail() {
   const [editedInvoiceText, setEditedInvoiceText] = useState('')
   const [todoModalOpen, setTodoModalOpen] = useState(false)
   const [todoContext, setTodoContext] = useState<TodoContext | undefined>()
+  const [abDialogOpen, setAbDialogOpen] = useState(false)
 
   const { data, loading, error, refetch } = useQuery(CONTRACT_DETAIL_QUERY, {
     variables: { id },
@@ -992,6 +1004,20 @@ export function ContractDetail() {
             <ListTodo className="mr-2 h-4 w-4" />
             {t('todos.addTodo')}
           </Button>
+          {contract.status === 'active' && !contract.orderConfirmationSentAt && (
+            <Button variant="outline" onClick={() => setAbDialogOpen(true)}>
+              <Mail className="mr-2 h-4 w-4" />
+              {t('orderConfirmation.sendAB')}
+            </Button>
+          )}
+          {contract.orderConfirmationSentAt && contract.orderConfirmations?.[0] && (
+            <Link to={`/contracts/${id}/order-confirmation/${contract.orderConfirmations[0].id}`}>
+              <Button variant="ghost" size="sm" className="text-green-600">
+                <CheckCircle2 className="mr-1 h-4 w-4" />
+                {t('orderConfirmation.sentAt')} {formatDate(contract.orderConfirmationSentAt)}
+              </Button>
+            </Link>
+          )}
           <Link to={`/contracts/${id}/edit`}>
             <Button variant="outline">
               {t('contracts.detail.details')}
@@ -999,6 +1025,18 @@ export function ContractDetail() {
           </Link>
         </div>
       </div>
+
+      {/* Order Confirmation Dialog */}
+      <OrderConfirmationDialog
+        open={abDialogOpen}
+        onOpenChange={setAbDialogOpen}
+        contractId={id!}
+        onSuccess={() => {
+          setAbDialogOpen(false)
+          // Refetch contract data
+          window.location.reload()
+        }}
+      />
 
       {/* Overview Cards */}
       <div className="mb-6 grid gap-4 md:grid-cols-5">

@@ -7,8 +7,8 @@ import strawberry_django
 from strawberry.types import Info
 
 from apps.core.context import Context
-from apps.core.permissions import check_perm
-from apps.contracts.order_confirmation_models import OrderConfirmation
+from apps.core.permissions import check_perm, require_perm, get_current_user
+from apps.contracts.order_confirmation_models import OrderConfirmation, OrderConfirmationNumberScheme
 
 
 @strawberry_django.type(OrderConfirmation)
@@ -61,6 +61,56 @@ class OrderConfirmationPreviewResult:
 
 
 @strawberry.type
+class OrderConfirmationNumberSchemeType:
+    pattern: str
+    next_counter: int
+    reset_period: str
+    preview: str
+
+
+@strawberry.type
+class OrderConfirmationNumberSchemeResult:
+    success: bool = False
+    error: str | None = None
+    data: OrderConfirmationNumberSchemeType | None = None
+
+
+@strawberry.input
+class OrderConfirmationNumberSchemeInput:
+    pattern: str
+    reset_period: str
+    next_counter: int | None = None
+
+
+@strawberry.type
+class ABEmailTemplate:
+    language: str
+    subject: str
+    body: str
+    is_custom: bool
+
+
+@strawberry.type
+class ABEmailTemplatesResult:
+    success: bool = False
+    error: str | None = None
+    templates: list[ABEmailTemplate] | None = None
+
+
+@strawberry.input
+class SetABEmailTemplateInput:
+    language: str
+    subject: str
+    body: str
+
+
+@strawberry.type
+class OperationResult:
+    success: bool = False
+    error: str | None = None
+
+
+@strawberry.type
 class OrderConfirmationQuery:
     @strawberry.field
     def order_confirmation(
@@ -72,6 +122,66 @@ class OrderConfirmationQuery:
         return OrderConfirmation.objects.filter(
             tenant=user.tenant, id=id
         ).first()
+
+    @strawberry.field
+    def order_confirmation_number_scheme(
+        self, info: Info[Context, None]
+    ) -> OrderConfirmationNumberSchemeType:
+        """Get the tenant's AB number scheme."""
+        user = require_perm(info, "settings", "read")
+        scheme, _ = OrderConfirmationNumberScheme.objects.get_or_create(
+            tenant=user.tenant,
+            defaults={"pattern": "AB-{YYYY}-{NNNN}", "reset_period": "yearly"},
+        )
+        # Generate preview
+        import re
+        from datetime import datetime as dt
+
+        now = dt.now()
+        preview = scheme.pattern
+        preview = preview.replace("{YYYY}", str(now.year))
+        preview = preview.replace("{YY}", str(now.year)[-2:])
+        preview = preview.replace("{MM}", f"{now.month:02d}")
+        # Replace counter placeholders
+        counter = scheme.next_counter
+        preview = re.sub(
+            r"\{N+\}",
+            lambda m: str(counter).zfill(len(m.group()) - 2),
+            preview,
+        )
+        return OrderConfirmationNumberSchemeType(
+            pattern=scheme.pattern,
+            next_counter=scheme.next_counter,
+            reset_period=scheme.reset_period,
+            preview=preview,
+        )
+
+    @strawberry.field
+    def ab_email_templates(
+        self, info: Info[Context, None]
+    ) -> ABEmailTemplatesResult:
+        """Get AB email templates (custom or defaults) for all languages."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return ABEmailTemplatesResult(success=False, error="No tenant assigned")
+
+        from apps.contracts.services.order_confirmation import AB_EMAIL_TEMPLATES as AB_EMAIL_DEFAULTS
+
+        custom = (user.tenant.settings or {}).get("ab_email_templates", {})
+        templates = []
+        for lang in ("de", "en"):
+            default = AB_EMAIL_DEFAULTS.get(lang, {})
+            custom_lang = custom.get(lang, {})
+            is_custom = bool(custom_lang.get("subject") and custom_lang.get("body"))
+            templates.append(
+                ABEmailTemplate(
+                    language=lang,
+                    subject=custom_lang.get("subject", "") if is_custom else default.get("subject", ""),
+                    body=custom_lang.get("body", "") if is_custom else default.get("body", ""),
+                    is_custom=is_custom,
+                )
+            )
+        return ABEmailTemplatesResult(success=True, templates=templates)
 
 
 @strawberry.type
@@ -179,3 +289,103 @@ class OrderConfirmationMutation:
             language=language,
         )
         return OrderConfirmationPreviewResult(html=html)
+
+    @strawberry.mutation
+    def save_order_confirmation_number_scheme(
+        self,
+        info: Info[Context, None],
+        input: OrderConfirmationNumberSchemeInput,
+    ) -> OrderConfirmationNumberSchemeResult:
+        """Save AB number scheme for the tenant."""
+        user = require_perm(info, "settings", "write")
+
+        import re
+        from datetime import datetime as dt
+
+        # Validate pattern has at least one counter placeholder
+        if not re.search(r"\{N+\}", input.pattern):
+            return OrderConfirmationNumberSchemeResult(
+                success=False, error="Pattern must contain a counter placeholder like {NNNN}"
+            )
+
+        valid_periods = [c[0] for c in OrderConfirmationNumberScheme.ResetPeriod.choices]
+        if input.reset_period not in valid_periods:
+            return OrderConfirmationNumberSchemeResult(
+                success=False,
+                error=f"Invalid reset period. Must be one of: {', '.join(valid_periods)}",
+            )
+
+        defaults = {
+            "pattern": input.pattern,
+            "reset_period": input.reset_period,
+        }
+        if input.next_counter is not None:
+            if input.next_counter < 1:
+                return OrderConfirmationNumberSchemeResult(
+                    success=False, error="Counter must be at least 1."
+                )
+            defaults["next_counter"] = input.next_counter
+
+        scheme, _ = OrderConfirmationNumberScheme.objects.update_or_create(
+            tenant=user.tenant,
+            defaults=defaults,
+        )
+
+        # Generate preview
+        now = dt.now()
+        preview = scheme.pattern
+        preview = preview.replace("{YYYY}", str(now.year))
+        preview = preview.replace("{YY}", str(now.year)[-2:])
+        preview = preview.replace("{MM}", f"{now.month:02d}")
+        counter = scheme.next_counter
+        preview = re.sub(
+            r"\{N+\}",
+            lambda m: str(counter).zfill(len(m.group()) - 2),
+            preview,
+        )
+
+        return OrderConfirmationNumberSchemeResult(
+            success=True,
+            data=OrderConfirmationNumberSchemeType(
+                pattern=scheme.pattern,
+                next_counter=scheme.next_counter,
+                reset_period=scheme.reset_period,
+                preview=preview,
+            ),
+        )
+
+    @strawberry.mutation
+    def set_ab_email_template(
+        self,
+        info: Info[Context, None],
+        input: SetABEmailTemplateInput,
+    ) -> OperationResult:
+        """Save or clear a custom AB email template for a language."""
+        user = require_perm(info, "settings", "write")
+        tenant = user.tenant
+        if not tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        if input.language not in ("de", "en"):
+            return OperationResult(success=False, error="Unsupported language")
+
+        if not tenant.settings:
+            tenant.settings = {}
+
+        templates = tenant.settings.get("ab_email_templates", {})
+
+        if input.subject.strip() and input.body.strip():
+            templates[input.language] = {
+                "subject": input.subject.strip(),
+                "body": input.body.strip(),
+            }
+        else:
+            templates.pop(input.language, None)
+
+        if templates:
+            tenant.settings["ab_email_templates"] = templates
+        else:
+            tenant.settings.pop("ab_email_templates", None)
+
+        tenant.save(update_fields=["settings"])
+        return OperationResult(success=True)

@@ -1847,5 +1847,49 @@
       "saved": "Angebotsnummernschema erfolgreich gespeichert",
       "saveFailed": "Angebotsnummernschema konnte nicht gespeichert werden"
     }
+  },
+  "orderConfirmation": {
+    "dialog": {
+      "title": "Auftragsbestätigung versenden"
+    },
+    "personalMessage": "Persönliche Nachricht",
+    "personalMessagePlaceholder": "Optionale persönliche Nachricht an den Kunden...",
+    "includeInPdf": "In PDF aufnehmen",
+    "includeInEmail": "In E-Mail aufnehmen",
+    "additionalEmails": "Zusätzliche E-Mail-Adressen",
+    "additionalEmailsPlaceholder": "email1@example.com, email2@example.com",
+    "additionalEmailsHint": "Kommagetrennt. Wird zusätzlich zum Rechnungskontakt versendet.",
+    "preview": "Vorschau",
+    "backToEdit": "Zurück",
+    "send": "AB versenden",
+    "sendAndActivate": "AB versenden & Aktivieren",
+    "skipAndActivate": "Überspringen & Aktivieren",
+    "sending": "Wird versendet...",
+    "sendAB": "AB versenden",
+    "sentAt": "AB versendet am",
+    "notSent": "AB nicht versendet",
+    "detail": {
+      "title": "Auftragsbestätigung",
+      "sentTo": "Versendet an",
+      "sentDate": "Versanddatum",
+      "number": "AB-Nr.",
+      "createdBy": "Erstellt von"
+    },
+    "numberScheme": {
+      "title": "AB-Nummernschema",
+      "pattern": "Muster",
+      "resetPeriod": "Zurücksetzung",
+      "nextNumber": "Nächste Nummer",
+      "saved": "AB-Nummernschema gespeichert",
+      "saveFailed": "AB-Nummernschema konnte nicht gespeichert werden"
+    },
+    "emailTemplate": {
+      "title": "AB E-Mail-Vorlage",
+      "subject": "Betreff",
+      "body": "Inhalt",
+      "placeholders": "Verfügbare Platzhalter",
+      "saved": "AB E-Mail-Vorlage gespeichert",
+      "saveFailed": "AB E-Mail-Vorlage konnte nicht gespeichert werden"
+    }
   }
 }

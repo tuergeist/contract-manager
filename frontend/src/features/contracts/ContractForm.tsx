@@ -47,6 +47,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { CustomerPickerDialog } from '@/components/CustomerPickerDialog'
+import { OrderConfirmationDialog } from './OrderConfirmationDialog'
 
 const CUSTOMERS_SEARCH_QUERY = gql`
   query CustomersSearch($search: String) {
@@ -1308,6 +1309,14 @@ const FIELD_KEY_MAP: Record<string, keyof Contract> = {
   netsuite_url: 'netsuiteUrl',
 }
 
+const M365_CHECK_QUERY = gql`
+  query M365Check {
+    m365Settings {
+      isConfigured
+    }
+  }
+`
+
 // Status Transition Modal Component
 function StatusTransitionModal({
   contractId,
@@ -1324,11 +1333,15 @@ function StatusTransitionModal({
 }) {
   const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
+  const [showABDialog, setShowABDialog] = useState(false)
 
   const isDraftToActive = transition.from === 'draft' && transition.to === 'active'
   const { data: checklistData } = useQuery(ACTIVATION_CHECKLIST_QUERY, { skip: !isDraftToActive })
+  const { data: m365Data } = useQuery(M365_CHECK_QUERY, { skip: !isDraftToActive })
 
   const [transitionStatus, { loading }] = useMutation(TRANSITION_CONTRACT_STATUS_MUTATION)
+
+  const m365Configured = m365Data?.m365Settings?.isConfigured === true
 
   // Determine missing required fields
   const missingFields: string[] = []
@@ -1342,25 +1355,50 @@ function StatusTransitionModal({
     }
   }
 
+  const doTransition = async () => {
+    const result = await transitionStatus({
+      variables: {
+        contractId,
+        newStatus: transition.to,
+      },
+    })
+    if (!result.data?.transitionContractStatus.success) {
+      throw new Error(result.data?.transitionContractStatus.error || 'Status change failed')
+    }
+  }
+
   const handleConfirm = async () => {
     setError(null)
 
-    try {
-      const result = await transitionStatus({
-        variables: {
-          contractId,
-          newStatus: transition.to,
-        },
-      })
+    // For draft→active with M365, show AB dialog instead of directly confirming
+    if (isDraftToActive && m365Configured && missingFields.length === 0) {
+      setShowABDialog(true)
+      return
+    }
 
-      if (result.data?.transitionContractStatus.success) {
-        onSuccess()
-      } else {
-        setError(result.data?.transitionContractStatus.error || 'Status change failed')
-      }
+    try {
+      await doTransition()
+      onSuccess()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     }
+  }
+
+  if (showABDialog) {
+    return (
+      <OrderConfirmationDialog
+        open={true}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowABDialog(false)
+          }
+        }}
+        contractId={contractId}
+        activationMode={true}
+        onActivate={doTransition}
+        onSuccess={onSuccess}
+      />
+    )
   }
 
   return (

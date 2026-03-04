@@ -53,7 +53,29 @@
     "signOut": "Sign out",
     "email": "Email",
     "password": "Password",
-    "loginFailed": "Login failed. Please try again."
+    "loginFailed": "Login failed. Please try again.",
+    "firstName": "First Name",
+    "lastName": "Last Name",
+    "confirmPassword": "Confirm Password",
+    "newPassword": "New Password",
+    "passwordMismatch": "Passwords do not match",
+    "passwordTooShort": "Password must be at least 8 characters",
+    "passwordHint": "Minimum 8 characters",
+    "setupAccount": "Set Up Your Account",
+    "settingUpFor": "Setting up account for",
+    "createAccount": "Create Account",
+    "invalidInvite": "Invalid Invitation",
+    "inviteExpired": "This invitation link is invalid or has expired.",
+    "goToLogin": "Go to Login",
+    "acceptFailed": "Failed to create account",
+    "accountCreated": "Account created successfully. Please sign in.",
+    "resetPasswordTitle": "Reset Your Password",
+    "resettingFor": "Resetting password for",
+    "setNewPassword": "Set New Password",
+    "invalidResetLink": "Invalid Reset Link",
+    "resetLinkExpired": "This reset link is invalid or has expired.",
+    "resetFailed": "Failed to reset password",
+    "passwordReset": "Password reset successfully. Please sign in."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1027,36 +1049,6 @@
     "accessDenied": "You don't have permission to access this page.",
     "resetLinkCreated": "Password reset link created"
   },
-  "auth": {
-    "signIn": "Sign in to your account",
-    "signInButton": "Sign in",
-    "signOut": "Sign out",
-    "email": "Email",
-    "password": "Password",
-    "loginFailed": "Login failed. Please try again.",
-    "firstName": "First Name",
-    "lastName": "Last Name",
-    "confirmPassword": "Confirm Password",
-    "newPassword": "New Password",
-    "passwordMismatch": "Passwords do not match",
-    "passwordTooShort": "Password must be at least 8 characters",
-    "passwordHint": "Minimum 8 characters",
-    "setupAccount": "Set Up Your Account",
-    "settingUpFor": "Setting up account for",
-    "createAccount": "Create Account",
-    "invalidInvite": "Invalid Invitation",
-    "inviteExpired": "This invitation link is invalid or has expired.",
-    "goToLogin": "Go to Login",
-    "acceptFailed": "Failed to create account",
-    "accountCreated": "Account created successfully. Please sign in.",
-    "resetPasswordTitle": "Reset Your Password",
-    "resettingFor": "Resetting password for",
-    "setNewPassword": "Set New Password",
-    "invalidResetLink": "Invalid Reset Link",
-    "resetLinkExpired": "This reset link is invalid or has expired.",
-    "resetFailed": "Failed to reset password",
-    "passwordReset": "Password reset successfully. Please sign in."
-  },
   "settings": {
     "tabs": {
       "user": "User",
@@ -1846,6 +1838,50 @@
       "nextNumber": "Next offer number will be:",
       "saved": "Offer number scheme saved successfully",
       "saveFailed": "Failed to save offer number scheme"
+    }
+  },
+  "orderConfirmation": {
+    "dialog": {
+      "title": "Send Order Confirmation"
+    },
+    "personalMessage": "Personal Message",
+    "personalMessagePlaceholder": "Optional personal message to the customer...",
+    "includeInPdf": "Include in PDF",
+    "includeInEmail": "Include in email",
+    "additionalEmails": "Additional Email Addresses",
+    "additionalEmailsPlaceholder": "email1@example.com, email2@example.com",
+    "additionalEmailsHint": "Comma-separated. Will be sent in addition to billing contacts.",
+    "preview": "Preview",
+    "backToEdit": "Back",
+    "send": "Send Order Confirmation",
+    "sendAndActivate": "Send & Activate",
+    "skipAndActivate": "Skip & Activate",
+    "sending": "Sending...",
+    "sendAB": "Send Order Confirmation",
+    "sentAt": "Order Confirmation sent on",
+    "notSent": "Order Confirmation not sent",
+    "detail": {
+      "title": "Order Confirmation",
+      "sentTo": "Sent to",
+      "sentDate": "Sent Date",
+      "number": "OC No.",
+      "createdBy": "Created by"
+    },
+    "numberScheme": {
+      "title": "OC Number Scheme",
+      "pattern": "Pattern",
+      "resetPeriod": "Reset Period",
+      "nextNumber": "Next Number",
+      "saved": "OC number scheme saved",
+      "saveFailed": "Failed to save OC number scheme"
+    },
+    "emailTemplate": {
+      "title": "OC Email Template",
+      "subject": "Subject",
+      "body": "Body",
+      "placeholders": "Available Placeholders",
+      "saved": "OC email template saved",
+      "saveFailed": "Failed to save OC email template"
     }
   }
 }

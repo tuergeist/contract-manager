@@ -8,6 +8,8 @@ import { StornoNumberSchemeSettings } from '@/features/invoices/StornoNumberSche
 import { TemplateSettings } from '@/features/invoices/TemplateSettings'
 import { ZugferdSettings } from '@/features/invoices/ZugferdSettings'
 import { OfferNumberSchemeSettings } from '@/features/offers/OfferNumberSchemeSettings'
+import { ABNumberSchemeSettings } from '@/features/contracts/ABNumberSchemeSettings'
+import { ABEmailTemplateSettings } from '@/features/contracts/ABEmailTemplateSettings'
 
 export function InvoiceSettingsTabs() {
   const { t } = useTranslation()
@@ -16,6 +18,8 @@ export function InvoiceSettingsTabs() {
 
   // Determine active sub-tab from URL
   const getActiveSubTab = () => {
+    if (location.pathname.includes('/ab-numbering')) return 'ab-numbering'
+    if (location.pathname.includes('/ab-email-template')) return 'ab-email-template'
     if (location.pathname.includes('/offer-numbering')) return 'offer-numbering'
     if (location.pathname.includes('/storno-numbering')) return 'storno-numbering'
     if (location.pathname.includes('/numbering')) return 'numbering'
@@ -41,6 +45,12 @@ export function InvoiceSettingsTabs() {
       case 'email-template':
         navigate('/settings/invoices/email-template')
         break
+      case 'ab-numbering':
+        navigate('/settings/invoices/ab-numbering')
+        break
+      case 'ab-email-template':
+        navigate('/settings/invoices/ab-email-template')
+        break
       case 'template':
         navigate('/settings/invoices/template')
         break
@@ -61,6 +71,8 @@ export function InvoiceSettingsTabs() {
         <TabsTrigger value="offer-numbering">{t('offers.numberScheme.title')}</TabsTrigger>
         <TabsTrigger value="template">{t('invoices.template.title')}</TabsTrigger>
         <TabsTrigger value="email-template">{t('settings.emailTemplate.tabTitle')}</TabsTrigger>
+        <TabsTrigger value="ab-numbering">{t('orderConfirmation.numberScheme.title')}</TabsTrigger>
+        <TabsTrigger value="ab-email-template">{t('orderConfirmation.emailTemplate.title')}</TabsTrigger>
         <TabsTrigger value="zugferd">{t('invoices.zugferd.title')}</TabsTrigger>
       </TabsList>
 
@@ -86,6 +98,14 @@ export function InvoiceSettingsTabs() {
 
       <TabsContent value="email-template">
         <EmailTemplateSettings showHeader={false} />
+      </TabsContent>
+
+      <TabsContent value="ab-numbering">
+        <ABNumberSchemeSettings showHeader={false} />
+      </TabsContent>
+
+      <TabsContent value="ab-email-template">
+        <ABEmailTemplateSettings showHeader={false} />
       </TabsContent>
 
       <TabsContent value="zugferd">

@@ -25,6 +25,7 @@ import { AboutPage } from './features/about/AboutPage'
 import { ProjectList } from './features/projects/ProjectList'
 import { OfferList } from './features/offers/OfferList'
 import { OfferDetail } from './features/offers/OfferDetail'
+import { OrderConfirmationDetail } from './features/contracts/OrderConfirmationDetail'
 
 function App() {
   return (
@@ -48,6 +49,7 @@ function App() {
         <Route path="contracts/new" element={<ContractForm />} />
         <Route path="contracts/:id" element={<ContractDetail />} />
         <Route path="contracts/:id/edit" element={<ContractForm />} />
+        <Route path="contracts/:id/order-confirmation/:abId" element={<OrderConfirmationDetail />} />
         <Route path="projects" element={<ProjectList />} />
         <Route path="forecasts" element={<ForecastsPage />} />
         <Route path="settings/*" element={<SettingsLayout />} />
