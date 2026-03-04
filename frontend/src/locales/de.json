@@ -79,7 +79,13 @@
       "wonDealCountExplanation": "Anzahl der gewonnenen HubSpot-Deals dieses Jahres."
     },
     "revenueGoals": {
-      "title": "Umsatzziele"
+      "title": "Umsatzziele",
+      "recurringExplanation": "Jahresprognose für wiederkehrende Umsätze, berechnet aus dem Realisierungsplan aller aktiven Verträge. Im Gegensatz zum ARR (heutiger Monatswert x 12) berücksichtigt dies Verträge, die unterjährig beginnen oder enden, Preisänderungen und anteilige Berechnung.",
+      "streamExplanation": "Jahresprognose für diese Umsatzart, berechnet aus dem Realisierungsplan aller aktiven Verträge dieser Kategorie."
+    },
+    "info": {
+      "title": "Dashboard-Kennzahlen erklärt",
+      "kpisSection": "Leistungskennzahlen"
     }
   },
   "customers": {

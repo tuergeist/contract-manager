@@ -79,7 +79,13 @@
       "wonDealCountExplanation": "Number of HubSpot deals won this year."
     },
     "revenueGoals": {
-      "title": "Revenue Goals"
+      "title": "Revenue Goals",
+      "recurringExplanation": "Full-year forecast for recurring revenue, calculated from the recognition schedule of all active contracts. Unlike ARR (which is today's monthly run rate x 12), this accounts for contracts starting or ending mid-year, price changes, and prorations.",
+      "streamExplanation": "Full-year forecast for this revenue stream, calculated from the recognition schedule of all active contracts classified under this stream."
+    },
+    "info": {
+      "title": "Dashboard Metrics Explained",
+      "kpisSection": "Key Performance Indicators"
     }
   },
   "customers": {

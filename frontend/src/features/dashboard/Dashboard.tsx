@@ -1,10 +1,23 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, gql } from '@apollo/client'
-import { Loader2, AlertCircle } from 'lucide-react'
+import { Loader2, AlertCircle, Info } from 'lucide-react'
 import { KPICard } from './KPICard'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { formatCurrency } from '@/lib/utils'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 const DASHBOARD_KPIS_QUERY = gql`
   query DashboardKPIs($year: Int!) {
@@ -96,6 +109,7 @@ interface DashboardKPIsData {
 export function Dashboard() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [showInfoModal, setShowInfoModal] = useState(false)
 
   const currentYear = new Date().getFullYear()
   const { data: kpisData, loading: kpisLoading, error: kpisError } = useQuery<DashboardKPIsData>(DASHBOARD_KPIS_QUERY, {
@@ -135,7 +149,7 @@ export function Dashboard() {
     streamDataMap[s.revenueType] = { ytdActual: parseFloat(s.ytdActual), forecast: parseFloat(s.fullYearForecast) }
   }
   const STANDARD_STREAMS = [
-    { key: 'recurring', i18nKey: 'products.revenueTypes.recurring' },
+    { key: 'recurring', i18nKey: 'products.revenueTypes.recurring', explanationKey: 'dashboard.revenueGoals.recurringExplanation' },
     { key: 'advanced_development', i18nKey: 'products.revenueTypes.advancedDevelopment' },
     { key: 'training_implementation', i18nKey: 'products.revenueTypes.trainingImplementation' },
   ] as const
@@ -162,7 +176,15 @@ export function Dashboard() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">{t('dashboard.title')}</h1>
-        <HelpVideoButton />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowInfoModal(true)}
+            className="text-muted-foreground hover:text-foreground transition-colors p-1"
+          >
+            <Info className="h-5 w-5" />
+          </button>
+          <HelpVideoButton />
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -271,7 +293,23 @@ export function Dashboard() {
 
               return (
                 <div key={stream.key} className="rounded-lg border bg-card p-4 hover:border-blue-300 hover:shadow-sm transition-all">
-                  <p className="text-sm font-medium text-muted-foreground">{t(stream.i18nKey)}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-muted-foreground">{t(stream.i18nKey)}</p>
+                    {'explanationKey' in stream && stream.explanationKey && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <button className="text-muted-foreground hover:text-foreground transition-colors">
+                              <Info className="h-3.5 w-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p>{t(stream.explanationKey)}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
                   <p className="mt-1 text-2xl font-semibold">
                     {formatCurrency(forecast.toString())}
                   </p>
@@ -306,6 +344,80 @@ export function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Info Modal */}
+      <Dialog open={showInfoModal} onOpenChange={setShowInfoModal}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('dashboard.info.title')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 text-sm">
+            <div>
+              <h3 className="font-semibold text-base mb-2">{t('dashboard.info.kpisSection')}</h3>
+              <dl className="space-y-3">
+                <div>
+                  <dt className="font-medium">{t('dashboard.kpis.totalActiveContracts')}</dt>
+                  <dd className="text-muted-foreground">{t('dashboard.kpis.totalActiveContractsExplanation')}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium">{t('dashboard.kpis.totalContractValue')}</dt>
+                  <dd className="text-muted-foreground">{t('dashboard.kpis.totalContractValueExplanation')}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium">{t('dashboard.kpis.annualRecurringRevenue')}</dt>
+                  <dd className="text-muted-foreground">{t('dashboard.kpis.annualRecurringRevenueExplanation')}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium">{t('dashboard.kpis.yearToDateRevenue')}</dt>
+                  <dd className="text-muted-foreground">{t('dashboard.kpis.yearToDateRevenueExplanation')}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium">{t('dashboard.kpis.currentYearForecast')}</dt>
+                  <dd className="text-muted-foreground">{t('dashboard.kpis.currentYearForecastExplanation')}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium">{t('dashboard.kpis.nextYearForecast')}</dt>
+                  <dd className="text-muted-foreground">{t('dashboard.kpis.nextYearForecastExplanation')}</dd>
+                </div>
+              </dl>
+            </div>
+            <div>
+              <h3 className="font-semibold text-base mb-2">{t('forecasts.newBusiness.title')}</h3>
+              <dl className="space-y-3">
+                <div>
+                  <dt className="font-medium">{t('forecasts.newBusiness.wonNewArr')}</dt>
+                  <dd className="text-muted-foreground">{t('dashboard.kpis.wonNewArrExplanation')}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium">{t('forecasts.newBusiness.wonDevelopment')}</dt>
+                  <dd className="text-muted-foreground">{t('dashboard.kpis.wonDevelopmentExplanation')}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium">{t('forecasts.newBusiness.wonDealCount')}</dt>
+                  <dd className="text-muted-foreground">{t('dashboard.kpis.wonDealCountExplanation')}</dd>
+                </div>
+              </dl>
+            </div>
+            <div>
+              <h3 className="font-semibold text-base mb-2">{t('dashboard.revenueGoals.title')}</h3>
+              <dl className="space-y-3">
+                <div>
+                  <dt className="font-medium">{t('products.revenueTypes.recurring')}</dt>
+                  <dd className="text-muted-foreground">{t('dashboard.revenueGoals.recurringExplanation')}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium">{t('products.revenueTypes.advancedDevelopment')}</dt>
+                  <dd className="text-muted-foreground">{t('dashboard.revenueGoals.streamExplanation')}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium">{t('products.revenueTypes.trainingImplementation')}</dt>
+                  <dd className="text-muted-foreground">{t('dashboard.revenueGoals.streamExplanation')}</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   )
