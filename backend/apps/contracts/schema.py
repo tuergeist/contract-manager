@@ -1277,6 +1277,7 @@ def calculate_contract_price_increases(tenant, year: int) -> list[ContractPriceI
         items = list(contract.items.all())
         contract_current_arr = Decimal("0")
         contract_previous_arr = Decimal("0")
+        increase_impact = Decimal("0")
         increase_item_count = 0
 
         for item in items:
@@ -1292,24 +1293,21 @@ def calculate_contract_price_increases(tenant, year: int) -> list[ContractPriceI
                 jan1_previous, price_periods_list, normalize_to_monthly=True
             )
 
-            item_current_arr = current_monthly * item.quantity * 12
-            item_previous_arr = previous_monthly * item.quantity * 12
-
-            contract_current_arr += item_current_arr
-            contract_previous_arr += item_previous_arr
+            contract_current_arr += current_monthly * item.quantity * 12
+            contract_previous_arr += previous_monthly * item.quantity * 12
 
             if current_monthly > previous_monthly:
                 increase_item_count += 1
+                increase_impact += (current_monthly - previous_monthly) * item.quantity * 12
 
-        arr_diff = contract_current_arr - contract_previous_arr
-        if arr_diff > 0:
+        if increase_item_count > 0:
             results.append(ContractPriceIncreaseDetailType(
                 contract_id=strawberry.ID(str(contract.id)),
                 contract_name=contract.name or "",
                 customer_name=contract.customer.name if contract.customer else "",
                 current_arr=contract_current_arr,
                 previous_arr=contract_previous_arr,
-                arr_diff=arr_diff,
+                arr_diff=increase_impact,
                 item_count=increase_item_count,
             ))
 

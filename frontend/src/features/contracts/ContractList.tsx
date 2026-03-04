@@ -136,6 +136,8 @@ export function ContractList() {
   const [sortBy, setSortBy] = usePersistedState<SortField>('contracts-sort-by', 'updated_at')
   const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('contracts-sort-order', 'desc')
   const [showDates, setShowDates] = usePersistedState<boolean>('contracts-show-dates', false)
+  const [piSortField, setPiSortField] = useState<'contractName' | 'customerName' | 'currentArr' | 'previousArr' | 'arrDiff'>('arrDiff')
+  const [piSortOrder, setPiSortOrder] = useState<SortOrder>('desc')
   const [exporting, setExporting] = useState(false)
   const [tableOverflows, setTableOverflows] = useState(false)
   const tableRef = useRef<HTMLDivElement>(null)
@@ -282,14 +284,22 @@ export function ContractList() {
   }
 
   const contractsData = data?.contracts
-  const allContracts = contractsData?.items || []
-  const contracts = isPriceIncreaseFilter && priceIncreaseMap.size > 0
-    ? allContracts.filter(c => priceIncreaseMap.has(c.id))
-    : allContracts
-  const totalCount = isPriceIncreaseFilter && priceIncreaseMap.size > 0
-    ? contracts.length
+  const contracts = contractsData?.items || []
+  const priceIncreaseContracts = [...(priceIncreaseData?.contractPriceIncreases ?? [])].sort((a, b) => {
+    const field = piSortField
+    let cmp: number
+    if (field === 'contractName' || field === 'customerName') {
+      cmp = a[field].localeCompare(b[field])
+    } else {
+      cmp = parseFloat(a[field]) - parseFloat(b[field])
+    }
+    return piSortOrder === 'asc' ? cmp : -cmp
+  })
+  const displayContracts = isPriceIncreaseFilter ? [] : contracts
+  const totalCount = isPriceIncreaseFilter
+    ? priceIncreaseContracts.length
     : contractsData?.totalCount || 0
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
+  const totalPages = isPriceIncreaseFilter ? 1 : Math.ceil(totalCount / PAGE_SIZE)
 
   return (
     <div>
@@ -393,7 +403,7 @@ export function ContractList() {
         <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
           <p className="text-red-600">{error.message}</p>
         </div>
-      ) : contracts.length === 0 ? (
+      ) : (isPriceIncreaseFilter ? priceIncreaseContracts.length : displayContracts.length) === 0 ? (
         <div className="mt-8 text-center">
           <p className="text-gray-600">{t('contracts.noContracts')}</p>
           <Link
@@ -409,153 +419,192 @@ export function ContractList() {
           <div ref={tableRef} className="mt-4 overflow-hidden rounded-lg border">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
-                    onClick={() => handleSort('name')}
-                  >
-                    <div className="flex items-center">
-                      {t('contracts.form.name')}
-                      <SortIcon field="name" />
-                    </div>
-                  </th>
-                  <th
-                    className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
-                    onClick={() => handleSort('customer_name')}
-                  >
-                    <div className="flex items-center">
-                      {t('contracts.customer')}
-                      <SortIcon field="customer_name" />
-                    </div>
-                  </th>
-                  <th
-                    className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
-                    onClick={() => handleSort('status')}
-                  >
-                    <div className="flex items-center">
-                      {t('contracts.statusLabel')}
-                      <SortIcon field="status" />
-                    </div>
-                  </th>
-                  {showDates && (
-                    <>
+                {isPriceIncreaseFilter ? (
+                  <tr>
+                    {([
+                      ['contractName', t('contracts.form.name')],
+                      ['customerName', t('contracts.customer')],
+                      ['currentArr', t('contracts.arr')],
+                      ['previousArr', t('contracts.previousArr')],
+                      ['arrDiff', t('contracts.arrDiff')],
+                    ] as const).map(([field, label]) => (
                       <th
+                        key={field}
                         className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
-                        onClick={() => handleSort('start_date')}
+                        onClick={() => {
+                          if (piSortField === field) {
+                            setPiSortOrder(piSortOrder === 'asc' ? 'desc' : 'asc')
+                          } else {
+                            setPiSortField(field)
+                            setPiSortOrder(field === 'contractName' || field === 'customerName' ? 'asc' : 'desc')
+                          }
+                        }}
                       >
                         <div className="flex items-center">
-                          {t('contracts.startDate')}
-                          <SortIcon field="start_date" />
+                          {label}
+                          {piSortField === field ? (
+                            piSortOrder === 'asc' ? <ArrowUp className="ml-1 h-4 w-4" /> : <ArrowDown className="ml-1 h-4 w-4" />
+                          ) : (
+                            <ArrowUpDown className="ml-1 h-4 w-4 text-gray-400" />
+                          )}
                         </div>
                       </th>
-                      <th
-                        className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
-                        onClick={() => handleSort('end_date')}
-                      >
-                        <div className="flex items-center">
-                          {t('contracts.endDate')}
-                          <SortIcon field="end_date" />
-                        </div>
-                      </th>
-                    </>
-                  )}
-                  <th
-                    className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
-                    onClick={() => handleSort('arr')}
-                  >
-                    <div className="flex items-center">
-                      {t('contracts.arr')}
-                      <SortIcon field="arr" />
-                    </div>
-                  </th>
-                  {isPriceIncreaseFilter && (
-                    <>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        {t('contracts.previousArr')}
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        {t('contracts.arrDiff')}
-                      </th>
-                    </>
-                  )}
-                  <th
-                    className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
-                    onClick={() => handleSort('updated_at')}
-                  >
-                    <div className="flex items-center">
-                      {t('contracts.updatedAt')}
-                      <SortIcon field="updated_at" />
-                    </div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white" data-testid="contracts-table-body">
-                {contracts.map((contract) => (
-                  <tr key={contract.id} className="hover:bg-gray-50" data-testid={`contract-row-${contract.id}`}>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <Link
-                        to={`/contracts/${contract.id}`}
-                        className="font-medium text-blue-600 hover:text-blue-800"
-                        data-testid={`contract-link-${contract.id}`}
-                      >
-                        {contract.name || '-'}
-                      </Link>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                      <Link
-                        to={`/customers/${contract.customer.id}`}
-                        className="text-blue-600 hover:text-blue-800"
-                        data-testid={`contract-customer-link-${contract.id}`}
-                      >
-                        {contract.customer.name}
-                      </Link>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <span
-                        className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusBadgeClass(
-                          contract.status
-                        )}`}
-                      >
-                        {t(`contracts.status.${contract.status}`)}
-                      </span>
-                    </td>
+                    ))}
+                  </tr>
+                ) : (
+                  <tr>
+                    <th
+                      className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                      onClick={() => handleSort('name')}
+                    >
+                      <div className="flex items-center">
+                        {t('contracts.form.name')}
+                        <SortIcon field="name" />
+                      </div>
+                    </th>
+                    <th
+                      className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                      onClick={() => handleSort('customer_name')}
+                    >
+                      <div className="flex items-center">
+                        {t('contracts.customer')}
+                        <SortIcon field="customer_name" />
+                      </div>
+                    </th>
+                    <th
+                      className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                      onClick={() => handleSort('status')}
+                    >
+                      <div className="flex items-center">
+                        {t('contracts.statusLabel')}
+                        <SortIcon field="status" />
+                      </div>
+                    </th>
                     {showDates && (
                       <>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                          {formatDate(contract.startDate)}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                          {formatDate(contract.endDate)}
-                        </td>
+                        <th
+                          className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                          onClick={() => handleSort('start_date')}
+                        >
+                          <div className="flex items-center">
+                            {t('contracts.startDate')}
+                            <SortIcon field="start_date" />
+                          </div>
+                        </th>
+                        <th
+                          className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                          onClick={() => handleSort('end_date')}
+                        >
+                          <div className="flex items-center">
+                            {t('contracts.endDate')}
+                            <SortIcon field="end_date" />
+                          </div>
+                        </th>
                       </>
                     )}
-                    <td className={`whitespace-nowrap px-6 py-4 text-sm font-medium ${contract.arr && parseFloat(contract.arr) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                      {formatCurrency(contract.arr)}
-                    </td>
-                    {isPriceIncreaseFilter && (() => {
-                      const pi = priceIncreaseMap.get(contract.id)
-                      return (
+                    <th
+                      className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                      onClick={() => handleSort('arr')}
+                    >
+                      <div className="flex items-center">
+                        {t('contracts.arr')}
+                        <SortIcon field="arr" />
+                      </div>
+                    </th>
+                    <th
+                      className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                      onClick={() => handleSort('updated_at')}
+                    >
+                      <div className="flex items-center">
+                        {t('contracts.updatedAt')}
+                        <SortIcon field="updated_at" />
+                      </div>
+                    </th>
+                  </tr>
+                )}
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white" data-testid="contracts-table-body">
+                {isPriceIncreaseFilter ? (
+                  priceIncreaseContracts.map((pi) => (
+                    <tr key={pi.contractId} className="hover:bg-gray-50" data-testid={`contract-row-${pi.contractId}`}>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <Link
+                          to={`/contracts/${pi.contractId}`}
+                          className="font-medium text-blue-600 hover:text-blue-800"
+                          data-testid={`contract-link-${pi.contractId}`}
+                        >
+                          {pi.contractName || '-'}
+                        </Link>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
+                        {pi.customerName}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                        {formatCurrency(pi.currentArr)}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                        {formatCurrency(pi.previousArr)}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-emerald-600">
+                        +{formatCurrency(pi.arrDiff)}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  displayContracts.map((contract) => (
+                    <tr key={contract.id} className="hover:bg-gray-50" data-testid={`contract-row-${contract.id}`}>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <Link
+                          to={`/contracts/${contract.id}`}
+                          className="font-medium text-blue-600 hover:text-blue-800"
+                          data-testid={`contract-link-${contract.id}`}
+                        >
+                          {contract.name || '-'}
+                        </Link>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
+                        <Link
+                          to={`/customers/${contract.customer.id}`}
+                          className="text-blue-600 hover:text-blue-800"
+                          data-testid={`contract-customer-link-${contract.id}`}
+                        >
+                          {contract.customer.name}
+                        </Link>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <span
+                          className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusBadgeClass(
+                            contract.status
+                          )}`}
+                        >
+                          {t(`contracts.status.${contract.status}`)}
+                        </span>
+                      </td>
+                      {showDates && (
                         <>
                           <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                            {pi ? formatCurrency(pi.previousArr) : '—'}
+                            {formatDate(contract.startDate)}
                           </td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-emerald-600">
-                            {pi ? `+${formatCurrency(pi.arrDiff)}` : '—'}
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                            {formatDate(contract.endDate)}
                           </td>
                         </>
-                      )
-                    })()}
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {formatDate(contract.updatedAt)}
-                    </td>
-                  </tr>
-                ))}
+                      )}
+                      <td className={`whitespace-nowrap px-6 py-4 text-sm font-medium ${contract.arr && parseFloat(contract.arr) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                        {formatCurrency(contract.arr)}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                        {formatDate(contract.updatedAt)}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {!isPriceIncreaseFilter && totalPages > 1 && (
             <div className="mt-4 flex items-center justify-between">
               <p className="text-sm text-gray-500">
                 {t('common.pagination.showing', {
