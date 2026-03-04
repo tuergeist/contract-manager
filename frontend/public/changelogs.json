@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.15.1",
+    "date": "2026-03-04",
+    "title": "Dashboard metrics explanation modal",
+    "description": "Added an info button to the dashboard header that opens a modal explaining all KPI, New Business, and Revenue Goals cards. Also added a tooltip on the Recurring Revenue card clarifying how it differs from ARR.",
+    "type": "feature",
+    "details": [
+      "Added info button in dashboard header opening a modal with explanations for all cards",
+      "Added tooltip on Recurring Revenue goal card explaining the difference to ARR"
+    ]
+  },
+  {
     "version": "2.15.0",
     "date": "2026-03-04",
     "title": "Revenue goals on dashboard",
