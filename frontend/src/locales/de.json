@@ -77,6 +77,9 @@
       "wonNewArrExplanation": "Jährlich wiederkehrender Umsatz aus gewonnenen HubSpot-Deals dieses Jahres.",
       "wonDevelopmentExplanation": "Entwicklungs- und Schulungsumsatz aus gewonnenen HubSpot-Deals dieses Jahres.",
       "wonDealCountExplanation": "Anzahl der gewonnenen HubSpot-Deals dieses Jahres."
+    },
+    "revenueGoals": {
+      "title": "Umsatzziele"
     }
   },
   "customers": {

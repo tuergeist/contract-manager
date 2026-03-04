@@ -77,6 +77,9 @@
       "wonNewArrExplanation": "Annualized recurring revenue from HubSpot deals won this year.",
       "wonDevelopmentExplanation": "Development and training revenue from HubSpot deals won this year.",
       "wonDealCountExplanation": "Number of HubSpot deals won this year."
+    },
+    "revenueGoals": {
+      "title": "Revenue Goals"
     }
   },
   "customers": {

@@ -31,6 +31,17 @@ const DASHBOARD_KPIS_QUERY = gql`
       goalType
       targetAmount
     }
+    revenueGoals(year: $year) {
+      id
+      year
+      revenueType
+      targetAmount
+    }
+    revenueByStream(year: $year) {
+      revenueType
+      ytdActual
+      fullYearForecast
+    }
   }
 `
 
@@ -61,10 +72,25 @@ interface NewBusinessGoal {
   targetAmount: string
 }
 
+interface RevenueGoal {
+  id: number
+  year: number
+  revenueType: string
+  targetAmount: string
+}
+
+interface RevenueStreamData {
+  revenueType: string
+  ytdActual: string
+  fullYearForecast: string
+}
+
 interface DashboardKPIsData {
   dashboardKpis: DashboardKPIs
   newBusinessMetrics: NewBusinessMetrics
   newBusinessGoals: NewBusinessGoal[]
+  revenueGoals: RevenueGoal[]
+  revenueByStream: RevenueStreamData[]
 }
 
 export function Dashboard() {
@@ -98,6 +124,22 @@ export function Dashboard() {
   for (const g of kpisData?.newBusinessGoals || []) {
     nbGoalMap[g.goalType] = parseFloat(g.targetAmount)
   }
+
+  // Revenue goals maps
+  const revenueGoalMap: Record<string, number> = {}
+  for (const g of kpisData?.revenueGoals || []) {
+    revenueGoalMap[g.revenueType] = parseFloat(g.targetAmount)
+  }
+  const streamDataMap: Record<string, { ytdActual: number; forecast: number }> = {}
+  for (const s of kpisData?.revenueByStream || []) {
+    streamDataMap[s.revenueType] = { ytdActual: parseFloat(s.ytdActual), forecast: parseFloat(s.fullYearForecast) }
+  }
+  const STANDARD_STREAMS = [
+    { key: 'recurring', i18nKey: 'products.revenueTypes.recurring' },
+    { key: 'advanced_development', i18nKey: 'products.revenueTypes.advancedDevelopment' },
+    { key: 'training_implementation', i18nKey: 'products.revenueTypes.trainingImplementation' },
+  ] as const
+  const hasRevenueGoalsData = Object.keys(revenueGoalMap).length > 0 || Object.values(streamDataMap).some(s => s.forecast > 0)
   const newBusinessCards = nb ? [
     { key: 'new_arr', label: t('forecasts.newBusiness.wonNewArr'), actual: parseFloat(nb.wonNewArr), target: nbGoalMap['new_arr'] || 0, isCurrency: true },
     { key: 'new_development', label: t('forecasts.newBusiness.wonDevelopment'), actual: parseFloat(nb.wonDevelopmentRevenue), target: nbGoalMap['new_development'] || 0, isCurrency: true },
@@ -203,6 +245,60 @@ export function Dashboard() {
                         {Math.round(progress!)}%
                       </p>
                     </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Revenue Goals */}
+      {hasRevenueGoalsData && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold mb-3">{t('dashboard.revenueGoals.title')}</h2>
+          <div
+            className="grid gap-4 md:grid-cols-3 cursor-pointer"
+            onClick={() => navigate('/forecasts?tab=goals')}
+          >
+            {STANDARD_STREAMS.map((stream) => {
+              const data = streamDataMap[stream.key]
+              const target = revenueGoalMap[stream.key] || 0
+              const forecast = data?.forecast ?? 0
+              const progress = target > 0 ? (forecast / target) * 100 : null
+              const diff = forecast - target
+              const overTarget = progress !== null && progress > 100
+
+              return (
+                <div key={stream.key} className="rounded-lg border bg-card p-4 hover:border-blue-300 hover:shadow-sm transition-all">
+                  <p className="text-sm font-medium text-muted-foreground">{t(stream.i18nKey)}</p>
+                  <p className="mt-1 text-2xl font-semibold">
+                    {formatCurrency(forecast.toString())}
+                  </p>
+                  {target > 0 ? (
+                    <>
+                      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{t('forecasts.goals.target')}: {formatCurrency(target.toString())}</span>
+                        <span className={diff >= 0 ? 'text-emerald-600 font-medium' : 'text-red-600 font-medium'}>
+                          {diff >= 0 ? '+' : ''}{formatCurrency(diff.toString())}
+                        </span>
+                      </div>
+                      <div className="mt-2 relative h-2 w-full rounded-full bg-gray-200">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            overTarget ? 'bg-emerald-500' : (progress ?? 0) >= 80 ? 'bg-blue-500' : 'bg-blue-400'
+                          }`}
+                          style={{ width: `${Math.min(progress ?? 0, 100)}%` }}
+                        />
+                      </div>
+                      <p className={`mt-1 text-xs font-medium ${overTarget ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                        {Math.round(progress!)}%
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      <span className="underline">{t('forecasts.goals.setGoals')}</span>
+                    </p>
                   )}
                 </div>
               )
