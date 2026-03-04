@@ -21,7 +21,8 @@ from apps.customers.models import Customer
 from apps.customers.schema import CustomerType
 from apps.products.models import Product
 from apps.products.schema import ProductType
-from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, RevenueGoal, NewBusinessGoal, TimeTrackingProjectMapping, AutoLinkRule, Department, DepartmentServiceMapping, UserCostProfile
+from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, RevenueGoal, NewBusinessGoal, TimeTrackingProjectMapping, AutoLinkRule, Department, DepartmentServiceMapping, UserCostProfile, OrderConfirmation
+from .order_confirmation_schema import OrderConfirmationType
 from .forecast_cache import (
     dict_to_forecast_result,
     forecast_result_to_dict,
@@ -273,6 +274,19 @@ class ContractType:
     po_number: auto
     order_confirmation_number: auto
     notes: auto
+
+    @strawberry.field(name="orderConfirmations")
+    def get_order_confirmations(self) -> list[OrderConfirmationType]:
+        """All order confirmations for this contract."""
+        return list(OrderConfirmation.objects.filter(contract=self))
+
+    @strawberry.field(name="orderConfirmationSentAt")
+    def get_order_confirmation_sent_at(self) -> datetime | None:
+        """The sent date of the latest sent order confirmation, if any."""
+        ab = OrderConfirmation.objects.filter(
+            contract=self, status=OrderConfirmation.Status.SENT
+        ).order_by("-sent_at").first()
+        return ab.sent_at if ab else None
     invoice_text: auto
     deal_won_date: auto
     customer: CustomerType

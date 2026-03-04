@@ -1,4 +1,4 @@
-"""Celery tasks for time tracking data sync."""
+"""Celery tasks for time tracking data sync and order confirmation sending."""
 
 import logging
 import time
@@ -166,3 +166,24 @@ def auto_link_time_tracking_projects() -> int:
 
     logger.info("Auto-link created %d new mappings", total_created)
     return total_created
+
+
+@shared_task(bind=True, acks_late=True)
+def send_order_confirmation_email_task(self, order_confirmation_id: int, user_id: int | None = None) -> bool:
+    """Send an order confirmation email via M365 Graph API.
+
+    No automatic retry to avoid duplicate sends.
+    """
+    from apps.contracts.order_confirmation_models import OrderConfirmation
+    from apps.contracts.services.order_confirmation import OrderConfirmationService
+
+    try:
+        ab = OrderConfirmation.objects.select_related(
+            "contract", "contract__customer", "tenant"
+        ).get(id=order_confirmation_id)
+    except OrderConfirmation.DoesNotExist:
+        logger.error("OrderConfirmation %s not found for email sending", order_confirmation_id)
+        return False
+
+    service = OrderConfirmationService(ab.tenant)
+    return service.send_order_confirmation(ab)
