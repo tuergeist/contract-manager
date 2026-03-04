@@ -830,6 +830,18 @@ class PriceIncreaseImpactType:
     item_count: int
 
 
+@strawberry.type
+class ContractPriceIncreaseDetailType:
+    """Per-contract price increase detail."""
+    contract_id: strawberry.ID
+    contract_name: str
+    customer_name: str
+    current_arr: Decimal
+    previous_arr: Decimal
+    arr_diff: Decimal
+    item_count: int
+
+
 # =============================================================================
 # Contract Attachment Types
 # =============================================================================
@@ -1239,6 +1251,69 @@ def calculate_price_increase_impact(tenant, year: int) -> PriceIncreaseImpactTyp
         untagged_arr_impact=untagged_arr_impact,
         item_count=item_count,
     )
+
+
+def calculate_contract_price_increases(tenant, year: int) -> list[ContractPriceIncreaseDetailType]:
+    """
+    Per-contract price increase details for a given year.
+
+    Same logic as calculate_price_increase_impact but returns per-contract
+    ARR breakdown instead of global aggregates.
+    """
+    jan1_current = date(year, 1, 1)
+    jan1_previous = date(year - 1, 1, 1)
+
+    contracts = Contract.objects.filter(
+        tenant=tenant,
+        status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
+        start_date__lt=jan1_current,
+    ).filter(
+        Q(end_date__isnull=True) | Q(end_date__gte=jan1_current)
+    ).prefetch_related("items", "items__product", "items__price_periods").select_related("customer")
+
+    results = []
+
+    for contract in contracts:
+        items = list(contract.items.all())
+        contract_current_arr = Decimal("0")
+        contract_previous_arr = Decimal("0")
+        increase_item_count = 0
+
+        for item in items:
+            if item.is_one_off:
+                continue
+
+            price_periods_list = list(item.price_periods.all())
+
+            current_monthly = item.get_price_at_cached(
+                jan1_current, price_periods_list, normalize_to_monthly=True
+            )
+            previous_monthly = item.get_price_at_cached(
+                jan1_previous, price_periods_list, normalize_to_monthly=True
+            )
+
+            item_current_arr = current_monthly * item.quantity * 12
+            item_previous_arr = previous_monthly * item.quantity * 12
+
+            contract_current_arr += item_current_arr
+            contract_previous_arr += item_previous_arr
+
+            if current_monthly > previous_monthly:
+                increase_item_count += 1
+
+        arr_diff = contract_current_arr - contract_previous_arr
+        if arr_diff > 0:
+            results.append(ContractPriceIncreaseDetailType(
+                contract_id=strawberry.ID(str(contract.id)),
+                contract_name=contract.name or "",
+                customer_name=contract.customer.name if contract.customer else "",
+                current_arr=contract_current_arr,
+                previous_arr=contract_previous_arr,
+                arr_diff=arr_diff,
+                item_count=increase_item_count,
+            ))
+
+    return results
 
 
 def calculate_revenue_by_stream(tenant, year: int) -> list[dict]:
@@ -2026,6 +2101,18 @@ class ContractQuery:
                 item_count=0,
             )
         return calculate_price_increase_impact(user.tenant, year)
+
+    @strawberry.field
+    def contract_price_increases(
+        self,
+        info: Info[Context, None],
+        year: int,
+    ) -> list[ContractPriceIncreaseDetailType]:
+        """Get per-contract price increase details for a given year."""
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+        return calculate_contract_price_increases(user.tenant, year)
 
     @strawberry.field
     def suggested_alignment_date(

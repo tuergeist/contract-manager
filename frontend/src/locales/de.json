@@ -180,6 +180,10 @@
     "remainingMonths": "Restlaufzeit",
     "exportExcel": "Excel exportieren",
     "exporting": "Exportieren...",
+    "showDates": "Datum",
+    "priceIncreaseBadge": "Preiserhöhung",
+    "previousArr": "Vorj. ARR",
+    "arrDiff": "ARR Diff",
     "status": {
       "draft": "Entwurf",
       "active": "Aktiv",

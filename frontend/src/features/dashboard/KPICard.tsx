@@ -14,15 +14,16 @@ interface KPICardProps {
   subtitle?: string
   explanation: string
   isCurrency?: boolean
+  className?: string
 }
 
-export function KPICard({ title, value, subtitle, explanation, isCurrency = false }: KPICardProps) {
+export function KPICard({ title, value, subtitle, explanation, isCurrency = false, className }: KPICardProps) {
   const displayValue = typeof value === 'number'
     ? (isCurrency ? formatCurrency(value, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : formatNumber(value))
     : value
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
         <TooltipProvider>

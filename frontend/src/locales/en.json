@@ -202,6 +202,10 @@
     "remainingMonths": "Remaining",
     "exportExcel": "Export Excel",
     "exporting": "Exporting...",
+    "showDates": "Dates",
+    "priceIncreaseBadge": "Price Increase",
+    "previousArr": "Prev. ARR",
+    "arrDiff": "ARR Diff",
     "status": {
       "draft": "Draft",
       "active": "Active",

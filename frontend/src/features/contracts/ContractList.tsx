@@ -13,11 +13,38 @@ import {
   Plus,
   Filter,
   FileSpreadsheet,
-  CheckCircle,
 } from 'lucide-react'
 import { usePersistedState } from '@/lib/usePersistedState'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
+
+const CONTRACT_PRICE_INCREASES_QUERY = gql`
+  query ContractPriceIncreases($year: Int!) {
+    contractPriceIncreases(year: $year) {
+      contractId
+      contractName
+      customerName
+      currentArr
+      previousArr
+      arrDiff
+      itemCount
+    }
+  }
+`
+
+interface PriceIncreaseDetail {
+  contractId: string
+  contractName: string
+  customerName: string
+  currentArr: string
+  previousArr: string
+  arrDiff: string
+  itemCount: number
+}
+
+interface PriceIncreaseData {
+  contractPriceIncreases: PriceIncreaseDetail[]
+}
 
 const CONTRACTS_QUERY = gql`
   query Contracts(
@@ -49,10 +76,6 @@ const CONTRACTS_QUERY = gql`
         dealWonDate
         updatedAt
         arr
-        orderConfirmationSentAt
-        orderConfirmations {
-          id
-        }
         customer {
           id
           name
@@ -81,8 +104,6 @@ interface Contract {
   dealWonDate: string | null
   updatedAt: string
   arr: string
-  orderConfirmationSentAt: string | null
-  orderConfirmations: { id: string }[]
   customer: Customer
 }
 
@@ -113,15 +134,26 @@ export function ContractList() {
   const [page, setPage] = useState(1)
   const [sortBy, setSortBy] = usePersistedState<SortField>('contracts-sort-by', 'updated_at')
   const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('contracts-sort-order', 'desc')
+  const [showDates, setShowDates] = usePersistedState<boolean>('contracts-show-dates', false)
   const [exporting, setExporting] = useState(false)
 
   const isNewBusinessFilter = searchParams.get('newBusiness') === 'true'
   const dealWonYearFilter = searchParams.get('wonYear') ? parseInt(searchParams.get('wonYear')!) : null
 
+  const isPriceIncreaseFilter = searchParams.get('priceIncrease') === 'true'
+  const priceIncreaseYear = searchParams.get('year') ? parseInt(searchParams.get('year')!) : null
+
   const clearNewBusinessFilter = () => {
     const next = new URLSearchParams(searchParams)
     next.delete('newBusiness')
     next.delete('wonYear')
+    setSearchParams(next)
+  }
+
+  const clearPriceIncreaseFilter = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('priceIncrease')
+    next.delete('year')
     setSearchParams(next)
   }
 
@@ -137,6 +169,18 @@ export function ContractList() {
       sortOrder,
     },
   })
+
+  const { data: priceIncreaseData } = useQuery<PriceIncreaseData>(CONTRACT_PRICE_INCREASES_QUERY, {
+    variables: { year: priceIncreaseYear! },
+    skip: !isPriceIncreaseFilter || !priceIncreaseYear,
+  })
+
+  const priceIncreaseMap = new Map<string, PriceIncreaseDetail>()
+  if (priceIncreaseData?.contractPriceIncreases) {
+    for (const pi of priceIncreaseData.contractPriceIncreases) {
+      priceIncreaseMap.set(pi.contractId, pi)
+    }
+  }
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
@@ -218,8 +262,13 @@ export function ContractList() {
   }
 
   const contractsData = data?.contracts
-  const contracts = contractsData?.items || []
-  const totalCount = contractsData?.totalCount || 0
+  const allContracts = contractsData?.items || []
+  const contracts = isPriceIncreaseFilter && priceIncreaseMap.size > 0
+    ? allContracts.filter(c => priceIncreaseMap.has(c.id))
+    : allContracts
+  const totalCount = isPriceIncreaseFilter && priceIncreaseMap.size > 0
+    ? contracts.length
+    : contractsData?.totalCount || 0
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
 
   return (
@@ -283,12 +332,29 @@ export function ContractList() {
               </option>
             ))}
           </select>
+          <button
+            onClick={() => setShowDates(!showDates)}
+            className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+              showDates
+                ? 'border-blue-300 bg-blue-50 text-blue-700'
+                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            {t('contracts.showDates')}
+          </button>
         </div>
 
         {isNewBusinessFilter && (
           <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
             {t('forecasts.newBusiness.title')} {dealWonYearFilter || ''}
             <button onClick={clearNewBusinessFilter} className="ml-1 hover:text-blue-600">&times;</button>
+          </span>
+        )}
+
+        {isPriceIncreaseFilter && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+            {t('contracts.priceIncreaseBadge')} {priceIncreaseYear || ''}
+            <button onClick={clearPriceIncreaseFilter} className="ml-1 hover:text-blue-600">&times;</button>
           </span>
         )}
       </div>
@@ -345,27 +411,28 @@ export function ContractList() {
                       <SortIcon field="status" />
                     </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    {t('orderConfirmation.detail.title')}
-                  </th>
-                  <th
-                    className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
-                    onClick={() => handleSort('start_date')}
-                  >
-                    <div className="flex items-center">
-                      {t('contracts.startDate')}
-                      <SortIcon field="start_date" />
-                    </div>
-                  </th>
-                  <th
-                    className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
-                    onClick={() => handleSort('end_date')}
-                  >
-                    <div className="flex items-center">
-                      {t('contracts.endDate')}
-                      <SortIcon field="end_date" />
-                    </div>
-                  </th>
+                  {showDates && (
+                    <>
+                      <th
+                        className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                        onClick={() => handleSort('start_date')}
+                      >
+                        <div className="flex items-center">
+                          {t('contracts.startDate')}
+                          <SortIcon field="start_date" />
+                        </div>
+                      </th>
+                      <th
+                        className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                        onClick={() => handleSort('end_date')}
+                      >
+                        <div className="flex items-center">
+                          {t('contracts.endDate')}
+                          <SortIcon field="end_date" />
+                        </div>
+                      </th>
+                    </>
+                  )}
                   <th
                     className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
                     onClick={() => handleSort('arr')}
@@ -375,6 +442,16 @@ export function ContractList() {
                       <SortIcon field="arr" />
                     </div>
                   </th>
+                  {isPriceIncreaseFilter && (
+                    <>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('contracts.previousArr')}
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('contracts.arrDiff')}
+                      </th>
+                    </>
+                  )}
                   <th
                     className="cursor-pointer px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
                     onClick={() => handleSort('updated_at')}
@@ -416,29 +493,32 @@ export function ContractList() {
                         {t(`contracts.status.${contract.status}`)}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {contract.orderConfirmationSentAt && contract.orderConfirmations?.[0] ? (
-                        <Link
-                          to={`/contracts/${contract.id}/order-confirmation/${contract.orderConfirmations[0].id}`}
-                          className="inline-flex items-center gap-1 text-green-600 hover:text-green-800"
-                          title={t('orderConfirmation.sentAt')}
-                        >
-                          <CheckCircle className="h-3.5 w-3.5" />
-                          <span className="text-xs">{formatDate(contract.orderConfirmationSentAt)}</span>
-                        </Link>
-                      ) : contract.status === 'active' ? (
-                        <span className="text-xs text-gray-400">—</span>
-                      ) : null}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {formatDate(contract.startDate)}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {formatDate(contract.endDate)}
-                    </td>
+                    {showDates && (
+                      <>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                          {formatDate(contract.startDate)}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                          {formatDate(contract.endDate)}
+                        </td>
+                      </>
+                    )}
                     <td className={`whitespace-nowrap px-6 py-4 text-sm font-medium ${contract.arr && parseFloat(contract.arr) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
                       {formatCurrency(contract.arr)}
                     </td>
+                    {isPriceIncreaseFilter && (() => {
+                      const pi = priceIncreaseMap.get(contract.id)
+                      return (
+                        <>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                            {pi ? formatCurrency(pi.previousArr) : '—'}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-emerald-600">
+                            {pi ? `+${formatCurrency(pi.arrDiff)}` : '—'}
+                          </td>
+                        </>
+                      )
+                    })()}
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {formatDate(contract.updatedAt)}
                     </td>

@@ -319,25 +319,31 @@ export function Dashboard() {
         return (
           <div className="mb-8">
             <h2 className="text-lg font-semibold mb-3">{t('dashboard.priceIncrease.title')}</h2>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div
+              className="grid gap-4 md:grid-cols-3 cursor-pointer"
+              onClick={() => navigate(`/contracts?priceIncrease=true&year=${currentYear}`)}
+            >
               <KPICard
                 title={t('dashboard.priceIncrease.totalImpact')}
                 value={totalImpact}
                 explanation={t('dashboard.priceIncrease.totalImpactExplanation')}
                 subtitle={t('dashboard.priceIncrease.itemCount', { count: pi.itemCount })}
                 isCurrency
+                className="hover:border-blue-300 hover:shadow-sm transition-all"
               />
               <KPICard
                 title={t('dashboard.priceIncrease.inflation')}
                 value={parseFloat(pi.inflationArrImpact)}
                 explanation={t('dashboard.priceIncrease.inflationExplanation')}
                 isCurrency
+                className="hover:border-blue-300 hover:shadow-sm transition-all"
               />
               <KPICard
                 title={t('dashboard.priceIncrease.negotiated')}
                 value={parseFloat(pi.negotiatedArrImpact)}
                 explanation={t('dashboard.priceIncrease.negotiatedExplanation')}
                 isCurrency
+                className="hover:border-blue-300 hover:shadow-sm transition-all"
               />
             </div>
           </div>
