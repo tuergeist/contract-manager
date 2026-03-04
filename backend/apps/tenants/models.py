@@ -103,6 +103,7 @@ class User(AbstractUser):
     )
     is_admin = models.BooleanField(default=False)
     notification_preferences = models.JSONField(default=dict, blank=True)
+    dashboard_preferences = models.JSONField(default=dict, blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []

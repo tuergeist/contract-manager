@@ -1205,6 +1205,18 @@
       "timeTrackingSyncCompleted": "Time tracking sync summary",
       "timeTrackingSyncCompletedDescription": "Get a summary email after each automatic time tracking sync."
     },
+    "dashboardPreferences": {
+      "title": "Dashboard",
+      "description": "Choose which sections to show on your dashboard.",
+      "showContracts": "Contract KPIs",
+      "showContractsDescription": "Active contracts, ARR, revenue and forecast cards.",
+      "showNewBusiness": "New Business",
+      "showNewBusinessDescription": "Won deals, new ARR and development revenue.",
+      "showPriceIncreaseImpact": "Price Increase Impact",
+      "showPriceIncreaseImpactDescription": "ARR impact from price increases.",
+      "showRevenueGoals": "Revenue Goals",
+      "showRevenueGoalsDescription": "Revenue targets and progress by stream."
+    },
     "team": {
       "users": "Users",
       "roles": "Roles & Permissions"

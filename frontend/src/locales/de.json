@@ -1205,6 +1205,18 @@
       "timeTrackingSyncCompleted": "Zeiterfassung-Sync Zusammenfassung",
       "timeTrackingSyncCompletedDescription": "Zusammenfassung per E-Mail nach jedem automatischen Zeiterfassungs-Sync."
     },
+    "dashboardPreferences": {
+      "title": "Dashboard",
+      "description": "Wählen Sie, welche Bereiche auf Ihrem Dashboard angezeigt werden.",
+      "showContracts": "Vertrags-KPIs",
+      "showContractsDescription": "Aktive Verträge, ARR, Umsatz und Prognosekarten.",
+      "showNewBusiness": "Neugeschäft",
+      "showNewBusinessDescription": "Gewonnene Deals, neuer ARR und Entwicklungsumsatz.",
+      "showPriceIncreaseImpact": "Preiserhöhungs-Auswirkung",
+      "showPriceIncreaseImpactDescription": "ARR-Auswirkung durch Preiserhöhungen.",
+      "showRevenueGoals": "Umsatzziele",
+      "showRevenueGoalsDescription": "Umsatzziele und Fortschritt nach Kategorie."
+    },
     "team": {
       "users": "Benutzer",
       "roles": "Rollen & Berechtigungen"
