@@ -3,7 +3,7 @@
 <html lang="{{ language }}">
 <head>
     <meta charset="UTF-8">
-    <title>{{ labels.title }} {{ ab_number|default:"" }} - {{ contract.customer_name }}</title>
+    <title>{{ labels.title }} {{ ab_number|default:"" }} - {{ contract.customer.name }}</title>
     <style>
         :root {
             --accent-color: {{ accent_color|default:"#2563eb" }};
@@ -191,7 +191,7 @@
 
     <!-- Recipient -->
     <div class="customer-section">
-        <div class="customer-name">{{ contract.customer_name }}</div>
+        <div class="customer-name">{{ contract.customer.name }}</div>
         <div class="customer-address">
             {% if customer_address.street %}{{ customer_address.street }}<br>{% endif %}
             {% if customer_address.zip %}{{ customer_address.zip }} {% endif %}{% if customer_address.city %}{{ customer_address.city }}{% endif %}

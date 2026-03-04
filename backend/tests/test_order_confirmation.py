@@ -248,7 +248,7 @@ class TestOrderConfirmationModel:
             contract=contract,
             order_confirmation_number="AB-2026-0001",
         )
-        assert str(ab) == "AB AB-2026-0001 for Test Contract"
+        assert str(ab) == "AB AB-2026-0001 for Test Contract (Test Customer)"
         assert ab.status == OrderConfirmation.Status.DRAFT
 
     def test_defaults(self, tenant, contract):
