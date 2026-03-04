@@ -685,10 +685,18 @@ class BankingQuery:
         self,
         info: Info[Context, None],
         id: strawberry.ID,
+        date_from: date | None = None,
+        date_to: date | None = None,
     ) -> CounterpartySummaryType | None:
         """Get a single counterparty by ID with summary stats."""
         user = require_perm(info, "banking", "read")
         from apps.banking.models import Counterparty
+
+        txn_date_filter = Q()
+        if date_from:
+            txn_date_filter &= Q(transactions__entry_date__gte=date_from)
+        if date_to:
+            txn_date_filter &= Q(transactions__entry_date__lte=date_to)
 
         try:
             cp = (
@@ -697,17 +705,17 @@ class BankingQuery:
                 .annotate(
                     total_debit=Sum(
                         "transactions__amount",
-                        filter=Q(transactions__amount__lt=0),
+                        filter=Q(transactions__amount__lt=0) & txn_date_filter,
                         default=Decimal("0"),
                     ),
                     total_credit=Sum(
                         "transactions__amount",
-                        filter=Q(transactions__amount__gt=0),
+                        filter=Q(transactions__amount__gt=0) & txn_date_filter,
                         default=Decimal("0"),
                     ),
-                    txn_count=Count("transactions"),
-                    first_date=Min("transactions__entry_date"),
-                    last_date=Max("transactions__entry_date"),
+                    txn_count=Count("transactions", filter=txn_date_filter),
+                    first_date=Min("transactions__entry_date", filter=txn_date_filter),
+                    last_date=Max("transactions__entry_date", filter=txn_date_filter),
                 )
                 .get()
             )
@@ -732,6 +740,8 @@ class BankingQuery:
         self,
         info: Info[Context, None],
         search: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
         sort_by: str | None = None,
         sort_order: str | None = None,
         page: int = 1,
@@ -741,23 +751,29 @@ class BankingQuery:
         user = require_perm(info, "banking", "read")
         from apps.banking.models import Counterparty
 
+        txn_date_filter = Q()
+        if date_from:
+            txn_date_filter &= Q(transactions__entry_date__gte=date_from)
+        if date_to:
+            txn_date_filter &= Q(transactions__entry_date__lte=date_to)
+
         qs = (
             Counterparty.objects.filter(tenant=user.tenant)
             .annotate(
                 total_debit=Sum(
                     "transactions__amount",
-                    filter=Q(transactions__amount__lt=0),
+                    filter=Q(transactions__amount__lt=0) & txn_date_filter,
                     default=Decimal("0"),
                 ),
                 total_credit=Sum(
                     "transactions__amount",
-                    filter=Q(transactions__amount__gt=0),
+                    filter=Q(transactions__amount__gt=0) & txn_date_filter,
                     default=Decimal("0"),
                 ),
-                txn_count=Count("transactions"),
-                first_date=Min("transactions__entry_date"),
-                last_date=Max("transactions__entry_date"),
-                abs_total=Abs(Sum("transactions__amount", default=Decimal("0"))),
+                txn_count=Count("transactions", filter=txn_date_filter),
+                first_date=Min("transactions__entry_date", filter=txn_date_filter),
+                last_date=Max("transactions__entry_date", filter=txn_date_filter),
+                abs_total=Abs(Sum("transactions__amount", filter=txn_date_filter, default=Decimal("0"))),
             )
         )
 

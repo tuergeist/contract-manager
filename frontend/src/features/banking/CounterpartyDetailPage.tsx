@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { usePersistedState } from '@/lib/usePersistedState'
 import { useTranslation } from 'react-i18next'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, gql } from '@apollo/client'
 import {
   ArrowLeft,
@@ -49,8 +49,8 @@ import { TransactionMatchSheet } from './TransactionMatchSheet'
 import { Link2, FileText } from 'lucide-react'
 
 const COUNTERPARTY_DETAIL = gql`
-  query CounterpartyDetail($id: ID!) {
-    counterparty(id: $id) {
+  query CounterpartyDetail($id: ID!, $dateFrom: Date, $dateTo: Date) {
+    counterparty(id: $id, dateFrom: $dateFrom, dateTo: $dateTo) {
       id
       name
       iban
@@ -262,6 +262,9 @@ export function CounterpartyDetailPage() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const cpDateFrom = searchParams.get('dateFrom') || null
+  const cpDateTo = searchParams.get('dateTo') || null
 
   // Expanded transaction row
   const [expandedTxId, setExpandedTxId] = useState<number | null>(null)
@@ -319,7 +322,7 @@ export function CounterpartyDetailPage() {
 
   // Counterparty detail query
   const { data: cpData, loading: cpLoading } = useQuery(COUNTERPARTY_DETAIL, {
-    variables: { id },
+    variables: { id, dateFrom: cpDateFrom, dateTo: cpDateTo },
     skip: !id,
   })
 

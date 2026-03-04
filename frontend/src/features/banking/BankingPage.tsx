@@ -220,6 +220,8 @@ const SEARCH_COUNTERPARTIES = gql`
 const BANK_COUNTERPARTIES = gql`
   query BankCounterparties(
     $search: String
+    $dateFrom: Date
+    $dateTo: Date
     $sortBy: String
     $sortOrder: String
     $page: Int
@@ -227,6 +229,8 @@ const BANK_COUNTERPARTIES = gql`
   ) {
     counterparties(
       search: $search
+      dateFrom: $dateFrom
+      dateTo: $dateTo
       sortBy: $sortBy
       sortOrder: $sortOrder
       page: $page
@@ -298,6 +302,8 @@ export function BankingPage() {
   // Counterparty list state
   const [cpSearch, setCpSearch] = useState('')
   const [cpDebouncedSearch, setCpDebouncedSearch] = useState('')
+  const [cpDateFrom, setCpDateFrom] = useState('')
+  const [cpDateTo, setCpDateTo] = useState('')
   const [cpSortBy, setCpSortBy] = usePersistedState<string>('cm:banking:cpSortBy', 'totalAmount')
   const [cpSortOrder, setCpSortOrder] = usePersistedState<string>('cm:banking:cpSortOrder', 'desc')
   const [cpPage, setCpPage] = useState(1)
@@ -455,6 +461,8 @@ export function BankingPage() {
   const { data: cpData, loading: cpLoading } = useQuery(BANK_COUNTERPARTIES, {
     variables: {
       search: cpDebouncedSearch || null,
+      dateFrom: cpDateFrom || null,
+      dateTo: cpDateTo || null,
       sortBy: cpSortBy,
       sortOrder: cpSortOrder,
       page: cpPage,
@@ -861,15 +869,37 @@ export function BankingPage() {
           {/* Counterparties Tab */}
           {activeTab === 'counterparties' && (
             <div className="space-y-4">
-              {/* Search */}
-              <div className="max-w-sm">
-                <input
-                  type="text"
-                  value={cpSearch}
-                  onChange={(e) => setCpSearch(e.target.value)}
-                  placeholder={t('common.search')}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
+              {/* Search & Date Filter */}
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="max-w-sm flex-1">
+                  <input
+                    type="text"
+                    value={cpSearch}
+                    onChange={(e) => setCpSearch(e.target.value)}
+                    placeholder={t('common.search')}
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-end gap-2">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">{t('banking.dateFrom')}</label>
+                    <input
+                      type="date"
+                      value={cpDateFrom}
+                      onChange={(e) => { setCpDateFrom(e.target.value); setCpPage(1) }}
+                      className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">{t('banking.dateTo')}</label>
+                    <input
+                      type="date"
+                      value={cpDateTo}
+                      onChange={(e) => { setCpDateTo(e.target.value); setCpPage(1) }}
+                      className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Table */}
@@ -937,7 +967,13 @@ export function BankingPage() {
                           <tr
                             key={cp.id}
                             className="cursor-pointer hover:bg-gray-50"
-                            onClick={() => navigate(`/banking/counterparty/${cp.id}`)}
+                            onClick={() => {
+                              const params = new URLSearchParams()
+                              if (cpDateFrom) params.set('dateFrom', cpDateFrom)
+                              if (cpDateTo) params.set('dateTo', cpDateTo)
+                              const qs = params.toString()
+                              navigate(`/banking/counterparty/${cp.id}${qs ? `?${qs}` : ''}`)
+                            }}
                           >
                             <td className="px-4 py-2.5 font-medium text-gray-900">
                               {cp.name}
