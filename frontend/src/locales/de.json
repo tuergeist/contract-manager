@@ -209,6 +209,7 @@
     "remainingMonths": "Restlaufzeit",
     "exportExcel": "Excel exportieren",
     "exporting": "Exportieren...",
+    "tableOverflowWarning": "Einige Spalten sind möglicherweise nicht sichtbar. Zoomen Sie heraus oder verbreitern Sie Ihr Browserfenster.",
     "showDates": "Datum",
     "priceIncreaseBadge": "Preiserhöhung",
     "previousArr": "Vorj. ARR",
