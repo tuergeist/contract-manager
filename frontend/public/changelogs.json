@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.15.0",
+    "date": "2026-03-04",
+    "title": "Revenue goals on dashboard",
+    "description": "Revenue stream goal progress cards are now shown directly on the dashboard for quick visibility.",
+    "type": "feature",
+    "details": [
+      "Added Revenue Goals section to dashboard with per-stream cards (Recurring, Advanced Development, Training & Implementation)",
+      "Each card shows full-year forecast, target, difference, and progress bar",
+      "Cards without a target show a link to set goals in settings",
+      "Clicking cards navigates to the forecasts goals tab"
+    ]
+  },
+  {
     "version": "2.14.1",
     "date": "2026-03-03",
     "title": "Fix settings visibility for non-admin users",
