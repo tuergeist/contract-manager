@@ -63,6 +63,12 @@ const DASHBOARD_KPIS_QUERY = gql`
       ytdActual
       fullYearForecast
     }
+    dashboardPreferences {
+      showContracts
+      showRevenueGoals
+      showNewBusiness
+      showPriceIncreaseImpact
+    }
   }
 `
 
@@ -115,6 +121,13 @@ interface RevenueStreamData {
   fullYearForecast: string
 }
 
+interface DashboardPreferences {
+  showContracts: boolean
+  showRevenueGoals: boolean
+  showNewBusiness: boolean
+  showPriceIncreaseImpact: boolean
+}
+
 interface DashboardKPIsData {
   dashboardKpis: DashboardKPIs
   priceIncreaseImpact: PriceIncreaseImpact
@@ -122,6 +135,7 @@ interface DashboardKPIsData {
   newBusinessGoals: NewBusinessGoal[]
   revenueGoals: RevenueGoal[]
   revenueByStream: RevenueStreamData[]
+  dashboardPreferences: DashboardPreferences
 }
 
 export function Dashboard() {
@@ -151,6 +165,7 @@ export function Dashboard() {
   }
 
   const kpis = kpisData?.dashboardKpis
+  const dashPrefs = kpisData?.dashboardPreferences
   const nb = kpisData?.newBusinessMetrics
   const nbGoalMap: Record<string, number> = {}
   for (const g of kpisData?.newBusinessGoals || []) {
@@ -206,6 +221,7 @@ export function Dashboard() {
       </div>
 
       {/* KPI Cards */}
+      {(dashPrefs?.showContracts !== false) && (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
         <KPICard
           title={t('dashboard.kpis.totalActiveContracts')}
@@ -245,9 +261,10 @@ export function Dashboard() {
           isCurrency
         />
       </div>
+      )}
 
       {/* New Business KPIs */}
-      {nb && (nb.wonDealCount > 0 || parseFloat(nb.wonNewArr) > 0 || Object.keys(nbGoalMap).length > 0) && (
+      {(dashPrefs?.showNewBusiness !== false) && nb && (nb.wonDealCount > 0 || parseFloat(nb.wonNewArr) > 0 || Object.keys(nbGoalMap).length > 0) && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-3">{t('forecasts.newBusiness.title')}</h2>
           <div
@@ -295,6 +312,7 @@ export function Dashboard() {
 
       {/* Price Increase Impact */}
       {(() => {
+        if (dashPrefs?.showPriceIncreaseImpact === false) return null
         const pi = kpisData?.priceIncreaseImpact
         const totalImpact = parseFloat(pi?.totalArrImpact ?? '0')
         if (!pi || totalImpact <= 0) return null
@@ -327,7 +345,7 @@ export function Dashboard() {
       })()}
 
       {/* Revenue Goals */}
-      {hasRevenueGoalsData && (
+      {(dashPrefs?.showRevenueGoals !== false) && hasRevenueGoalsData && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-3">{t('dashboard.revenueGoals.title')}</h2>
           <div

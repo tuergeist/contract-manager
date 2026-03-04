@@ -360,6 +360,15 @@ class NotificationPreferencesType:
 
 
 @strawberry.type
+class DashboardPreferencesType:
+    """Per-user dashboard section visibility preferences."""
+    show_contracts: bool = True
+    show_revenue_goals: bool = True
+    show_new_business: bool = True
+    show_price_increase_impact: bool = True
+
+
+@strawberry.type
 class TimeTrackingSettings:
     """Time tracking integration settings."""
     provider: str | None
@@ -738,6 +747,18 @@ class TenantQuery:
             hubspot_new_contract=prefs.get("hubspot_new_contract", True) is not False,
             hubspot_sync_completed=prefs.get("hubspot_sync_completed", True) is not False,
             time_tracking_sync_completed=prefs.get("time_tracking_sync_completed", True) is not False,
+        )
+
+    @strawberry.field
+    def dashboard_preferences(self, info: Info[Context, None]) -> DashboardPreferencesType:
+        """Get the current user's dashboard section visibility preferences."""
+        user = get_current_user(info)
+        prefs = user.dashboard_preferences or {}
+        return DashboardPreferencesType(
+            show_contracts=prefs.get("show_contracts", True) is not False,
+            show_revenue_goals=prefs.get("show_revenue_goals", True) is not False,
+            show_new_business=prefs.get("show_new_business", True) is not False,
+            show_price_increase_impact=prefs.get("show_price_increase_impact", True) is not False,
         )
 
     @strawberry.field
@@ -1812,6 +1833,32 @@ class TenantMutation:
 
         user.notification_preferences = prefs
         user.save(update_fields=["notification_preferences"])
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def update_dashboard_preferences(
+        self,
+        info: Info[Context, None],
+        show_contracts: bool | None = None,
+        show_revenue_goals: bool | None = None,
+        show_new_business: bool | None = None,
+        show_price_increase_impact: bool | None = None,
+    ) -> OperationResult:
+        """Update the current user's dashboard section visibility preferences."""
+        user = get_current_user(info)
+        prefs = user.dashboard_preferences or {}
+
+        if show_contracts is not None:
+            prefs["show_contracts"] = show_contracts
+        if show_revenue_goals is not None:
+            prefs["show_revenue_goals"] = show_revenue_goals
+        if show_new_business is not None:
+            prefs["show_new_business"] = show_new_business
+        if show_price_increase_impact is not None:
+            prefs["show_price_increase_impact"] = show_price_increase_impact
+
+        user.dashboard_preferences = prefs
+        user.save(update_fields=["dashboard_preferences"])
         return OperationResult(success=True)
 
     @strawberry.mutation
