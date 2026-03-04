@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.16.1",
+    "date": "2026-03-04",
+    "title": "Price increase drill-down and contract list improvements",
+    "description": "Dashboard and forecasts price increase cards now link to a filtered contract list showing per-contract ARR impact. The contract list table also gained optional date columns and a viewport overflow warning.",
+    "type": "feature",
+    "details": [
+      "Added clickable price increase cards on dashboard and forecasts that navigate to filtered contract list",
+      "Added per-contract price increase detail table on forecasts price increases tab",
+      "Added new contractPriceIncreases GraphQL query returning per-contract ARR breakdown",
+      "Contract list shows Prev. ARR and ARR Diff columns when price increase filter is active",
+      "Made Start Date and End Date columns optional with a persisted toggle (default off)",
+      "Removed Order Confirmation column from contract list",
+      "Added amber warning banner when table columns overflow the viewport",
+      "Fixed edit item modal crash caused by empty string SelectItem value"
+    ]
+  },
+  {
     "version": "2.16.0",
     "date": "2026-03-04",
     "title": "Per-user dashboard section visibility",
