@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -13,6 +13,7 @@ import {
   Plus,
   Filter,
   FileSpreadsheet,
+  AlertTriangle,
 } from 'lucide-react'
 import { usePersistedState } from '@/lib/usePersistedState'
 import { formatDate, formatCurrency } from '@/lib/utils'
@@ -136,6 +137,8 @@ export function ContractList() {
   const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('contracts-sort-order', 'desc')
   const [showDates, setShowDates] = usePersistedState<boolean>('contracts-show-dates', false)
   const [exporting, setExporting] = useState(false)
+  const [tableOverflows, setTableOverflows] = useState(false)
+  const tableRef = useRef<HTMLDivElement>(null)
 
   const isNewBusinessFilter = searchParams.get('newBusiness') === 'true'
   const dealWonYearFilter = searchParams.get('wonYear') ? parseInt(searchParams.get('wonYear')!) : null
@@ -181,6 +184,23 @@ export function ContractList() {
       priceIncreaseMap.set(pi.contractId, pi)
     }
   }
+
+  const checkOverflow = useCallback(() => {
+    const el = tableRef.current
+    if (el) {
+      setTableOverflows(el.scrollWidth > el.clientWidth)
+    }
+  }, [])
+
+  useEffect(() => {
+    checkOverflow()
+    window.addEventListener('resize', checkOverflow)
+    return () => window.removeEventListener('resize', checkOverflow)
+  }, [checkOverflow])
+
+  useEffect(() => {
+    checkOverflow()
+  }, [showDates, isPriceIncreaseFilter, loading, checkOverflow])
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
@@ -273,6 +293,12 @@ export function ContractList() {
 
   return (
     <div>
+      {tableOverflows && (
+        <div className="mb-4 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+          {t('contracts.tableOverflowWarning')}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t('contracts.title')}</h1>
         <div className="flex items-center gap-4">
@@ -380,7 +406,7 @@ export function ContractList() {
         </div>
       ) : (
         <>
-          <div className="mt-4 overflow-hidden rounded-lg border">
+          <div ref={tableRef} className="mt-4 overflow-hidden rounded-lg border">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
