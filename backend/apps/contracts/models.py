@@ -6,6 +6,12 @@ from django.db import models
 
 from apps.core.models import RevenueType, TenantModel
 
+# Re-export order confirmation models so they're discovered by Django
+from apps.contracts.order_confirmation_models import (  # noqa: F401
+    OrderConfirmation,
+    OrderConfirmationNumberScheme,
+)
+
 
 class ContractGroup(TenantModel):
     """A group for organizing contracts within a customer."""

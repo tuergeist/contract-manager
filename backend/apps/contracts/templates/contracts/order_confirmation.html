@@ -1,0 +1,352 @@
+{% load invoice_filters %}
+<!DOCTYPE html>
+<html lang="{{ language }}">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ labels.title }} {{ ab_number|default:"" }} - {{ contract.customer_name }}</title>
+    <style>
+        :root {
+            --accent-color: {{ accent_color|default:"#2563eb" }};
+        }
+
+        @page {
+            size: A4;
+            margin: 2cm 2cm 3cm 2cm;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-size: 9pt;
+            line-height: 1.4;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+
+        .invoice-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+        }
+
+        .header-left { display: flex; align-items: flex-start; }
+        .company-logo { max-width: 180px; max-height: 50px; }
+        .company-info { text-align: right; }
+        .company-name { font-size: 12pt; font-weight: bold; color: var(--accent-color); }
+        .company-address { font-size: 8pt; color: #555; margin-top: 2px; }
+        .header-text { font-size: 8pt; color: #555; margin-top: 2px; }
+
+        .sender-line {
+            font-size: 7pt;
+            color: #999;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 2px;
+            margin-bottom: 6px;
+        }
+
+        .customer-section { margin-bottom: 20px; }
+        .customer-name { font-size: 10pt; }
+        .customer-address { color: #555; font-size: 9pt; }
+
+        .invoice-title-section { margin-bottom: 16px; }
+        .invoice-title {
+            font-size: 16pt;
+            font-weight: bold;
+            display: inline-block;
+            padding-bottom: 4px;
+            border-bottom: 3px solid var(--accent-color);
+        }
+
+        .invoice-details { margin-bottom: 20px; }
+        .invoice-details table {
+            margin-left: auto;
+            margin-right: 0;
+            border-collapse: collapse;
+            width: auto;
+        }
+        .invoice-details td {
+            padding: 2px 0;
+            border: none;
+            font-size: 9pt;
+            text-align: left;
+        }
+        .invoice-details td:first-child {
+            color: #666;
+            padding-right: 12px;
+            white-space: nowrap;
+        }
+        .invoice-details td:last-child {
+            text-align: right;
+        }
+
+        table.line-items { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+        table.line-items th {
+            background: var(--accent-color);
+            color: white;
+            padding: 6px 8px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 8pt;
+            text-transform: uppercase;
+        }
+        table.line-items th.pos { width: 30px; text-align: center; }
+        table.line-items th.quantity { text-align: center; }
+        table.line-items th.unit-price { text-align: right; }
+        table.line-items th:last-child { text-align: right; }
+        table.line-items td { padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-size: 9pt; }
+        table.line-items td.pos { text-align: center; color: #666; }
+        table.line-items td:last-child { text-align: right; }
+        table.line-items .quantity { text-align: center; }
+        table.line-items .unit-price { text-align: right; }
+
+        .totals { float: right; width: 260px; }
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid #e5e7eb;
+            gap: 16px;
+            font-size: 9pt;
+        }
+        .total-row.subtotal { padding-top: 6px; }
+        .total-row.tax-row { font-size: 8pt; color: #555; }
+        .total-row.grand-total {
+            font-size: 10pt;
+            font-weight: bold;
+            border-top: 2px solid var(--accent-color);
+            border-bottom: none;
+            padding-top: 6px;
+        }
+        .total-row span:last-child { white-space: nowrap; }
+
+        .personal-message {
+            margin-top: 20px;
+            font-size: 9pt;
+            color: #333;
+            line-height: 1.5;
+            padding: 10px;
+            background: #f9fafb;
+            border-left: 3px solid var(--accent-color);
+        }
+
+        .contract-info {
+            margin-top: 30px;
+            padding-top: 12px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 8pt;
+            color: #666;
+        }
+
+        .footer-text {
+            margin-top: 12px;
+            font-size: 8pt;
+            color: #555;
+            padding: 8px 0;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .legal-footer {
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 2px solid var(--accent-color);
+            font-size: 7pt;
+            color: #666;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .legal-footer-col { flex: 1; }
+        .legal-footer-col strong { display: block; margin-bottom: 1px; color: #444; }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="invoice-header">
+        <div class="header-left">
+            {% if logo_url %}
+            <img src="{{ logo_url }}" alt="{{ company.company_name }}" class="company-logo">
+            {% endif %}
+        </div>
+        <div class="company-info">
+            <div class="company-name">{{ company.company_name }}</div>
+            <div class="company-address">
+                {{ company.street }}<br>
+                {{ company.zip_code }} {{ company.city }}
+                {% if company.country %}<br>{{ company.country }}{% endif %}
+            </div>
+            {% if header_text %}
+            <div class="header-text">{{ header_text }}</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Sender line (DIN 5008) -->
+    <div class="sender-line">
+        {{ company.company_name }}{% if company.street %} | {{ company.street }}{% endif %}{% if company.zip_code or company.city %} | {{ company.zip_code }} {{ company.city }}{% endif %}
+    </div>
+
+    <!-- Recipient -->
+    <div class="customer-section">
+        <div class="customer-name">{{ contract.customer_name }}</div>
+        <div class="customer-address">
+            {% if customer_address.street %}{{ customer_address.street }}<br>{% endif %}
+            {% if customer_address.zip %}{{ customer_address.zip }} {% endif %}{% if customer_address.city %}{{ customer_address.city }}{% endif %}
+            {% if customer_address.country %}<br>{{ customer_address.country }}{% endif %}
+            {% if customer_vat_id %}<br>{{ labels.customer_vat_id }}: {{ customer_vat_id }}{% endif %}
+        </div>
+    </div>
+
+    <!-- Title -->
+    <div class="invoice-title-section">
+        <span class="invoice-title">{{ labels.title }}{% if ab_number %} # {{ ab_number }}{% endif %}</span>
+    </div>
+
+    <!-- Metadata -->
+    <div class="invoice-details">
+        <table>
+            <tr>
+                <td>{{ labels.date_label }}:</td>
+                <td>{{ confirmation_date|date:"d.m.Y" }}</td>
+            </tr>
+            {% if ab_number %}
+            <tr>
+                <td>{{ labels.ab_number }}:</td>
+                <td>{{ ab_number }}</td>
+            </tr>
+            {% endif %}
+            <tr>
+                <td>{{ labels.contract }}:</td>
+                <td>{{ contract.name }}</td>
+            </tr>
+            {% if contract.start_date %}
+            <tr>
+                <td>{{ labels.contract_start }}:</td>
+                <td>{{ contract.start_date|date:"d.m.Y" }}</td>
+            </tr>
+            {% endif %}
+            {% if contract.end_date %}
+            <tr>
+                <td>{{ labels.contract_end }}:</td>
+                <td>{{ contract.end_date|date:"d.m.Y" }}</td>
+            </tr>
+            {% endif %}
+            {% if contract.po_number %}
+            <tr>
+                <td>{{ labels.po_number }}:</td>
+                <td>{{ contract.po_number }}</td>
+            </tr>
+            {% endif %}
+            {% if contract.order_confirmation_number %}
+            <tr>
+                <td>{{ labels.order_confirmation }}:</td>
+                <td>{{ contract.order_confirmation_number }}</td>
+            </tr>
+            {% endif %}
+        </table>
+    </div>
+
+    <!-- Line items -->
+    <table class="line-items">
+        <thead>
+            <tr>
+                <th class="pos">{{ labels.pos }}</th>
+                <th>{{ labels.description }}</th>
+                <th class="quantity">{{ labels.quantity }}</th>
+                <th class="unit-price">{{ labels.unit_price }}</th>
+                <th>{{ labels.amount }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in line_items %}
+            <tr>
+                <td class="pos">{{ forloop.counter }}</td>
+                <td>
+                    {% if item.product_name %}
+                        {{ item.product_name }}
+                        {% if item.description %}<br><span style="font-size:7.5pt;color:#666;font-style:italic;">{{ item.description|linebreaksbr }}</span>{% endif %}
+                    {% else %}
+                        {{ item.description|linebreaksbr }}
+                    {% endif %}
+                </td>
+                <td class="quantity">{{ item.quantity }}</td>
+                <td class="unit-price">{{ currency_symbol }}{{ item.unit_price|money:language }}{% if item.billing_interval %}<span style="font-size:7.5pt;color:#666;"> {{ labels.per_month }}</span>{% endif %}</td>
+                <td>{{ currency_symbol }}{{ item.amount|money:language }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Totals -->
+    <div class="totals">
+        <div class="total-row subtotal">
+            <span>{{ labels.net_total }}</span>
+            <span>{{ currency_symbol }}{{ totals.net|money:language }}</span>
+        </div>
+        {% if totals.tax_amount %}
+        <div class="total-row tax-row">
+            <span>{{ labels.tax }} ({{ totals.tax_rate|money:language }}%)</span>
+            <span>{{ currency_symbol }}{{ totals.tax_amount|money:language }}</span>
+        </div>
+        {% endif %}
+        <div class="total-row grand-total">
+            <span>{{ labels.total }}</span>
+            <span>{{ currency_symbol }}{{ totals.gross|money:language }}</span>
+        </div>
+    </div>
+
+    <div style="clear: both;"></div>
+
+    {% if personal_message and include_message_in_pdf %}
+    <div class="personal-message">
+        {{ personal_message|linebreaksbr }}
+    </div>
+    {% endif %}
+
+    {% if footer_text %}
+    <div class="footer-text">
+        {{ footer_text|linebreaksbr }}
+    </div>
+    {% endif %}
+
+    {% if company.commercial_register_court or company.managing_directors or company.bank_name %}
+    <div class="legal-footer">
+        <div class="legal-footer-col">
+            <strong>{{ company.company_name }}</strong>
+            {{ company.street }}<br>
+            {{ company.zip_code }} {{ company.city }}
+            {% if company.phone %}<br>{{ labels.phone }}: {{ company.phone }}{% endif %}
+            {% if company.email %}<br>{{ company.email }}{% endif %}
+            {% if company.website %}<br>{{ company.website }}{% endif %}
+        </div>
+        <div class="legal-footer-col">
+            {% if company.managing_directors %}
+            <strong>{{ labels.managing_directors }}</strong>
+            {% for director in company.managing_directors %}{{ director }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+            {% endif %}
+        </div>
+        <div class="legal-footer-col">
+            {% if company.commercial_register_court %}
+            <strong>{{ labels.register }}</strong>
+            {{ company.commercial_register_court }}<br>
+            {{ company.commercial_register_number }}
+            {% endif %}
+            {% if company.vat_id %}
+            <br>{{ labels.vat_id }}: {{ company.vat_id }}
+            {% endif %}
+        </div>
+        <div class="legal-footer-col">
+            {% if company.bank_name %}
+            <strong>{{ labels.bank_details }}</strong>
+            {{ company.bank_name }}<br>
+            IBAN: {{ company.iban }}
+            {% if company.bic %}<br>BIC: {{ company.bic }}{% endif %}
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</body>
+</html>
