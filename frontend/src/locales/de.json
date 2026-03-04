@@ -83,6 +83,18 @@
       "recurringExplanation": "Jahresprognose für wiederkehrende Umsätze, berechnet aus dem Realisierungsplan aller aktiven Verträge. Im Gegensatz zum ARR (heutiger Monatswert x 12) berücksichtigt dies Verträge, die unterjährig beginnen oder enden, Preisänderungen und anteilige Berechnung.",
       "streamExplanation": "Jahresprognose für diese Umsatzart, berechnet aus dem Realisierungsplan aller aktiven Verträge dieser Kategorie."
     },
+    "priceIncrease": {
+      "title": "Preiserhöhungen Auswirkung",
+      "totalImpact": "Gesamt-ARR-Auswirkung",
+      "totalImpactExplanation": "Zusätzlicher ARR durch Preiserhöhungen im Vergleich zum Vorjahr",
+      "inflation": "Inflationsanpassungen",
+      "inflationExplanation": "ARR-Auswirkung durch standardmäßige jährliche Inflationsanpassungen",
+      "negotiated": "Verhandelte Erhöhungen",
+      "negotiatedExplanation": "ARR-Auswirkung durch individuell verhandelte Preisänderungen",
+      "untagged": "Nicht kategorisiert",
+      "untaggedExplanation": "ARR-Auswirkung von Preiserhöhungen ohne zugewiesenen Typ",
+      "itemCount": "{{count}} Positionen betroffen"
+    },
     "info": {
       "title": "Dashboard-Kennzahlen erklärt",
       "kpisSection": "Leistungskennzahlen"
@@ -272,7 +284,12 @@
       "priceIncreasePartial": "Preiserhöhung auf {{changed}} Positionen angewendet, {{skipped}} übersprungen",
       "priceIncreaseApply": "Erhöhung anwenden",
       "priceIncreaseWarningTitle": "Achtung:",
-      "priceIncreaseWarning": "Dies ändert die Preise aller wiederkehrenden Positionen. Diese Aktion kann nicht rückgängig gemacht werden."
+      "priceIncreaseWarning": "Dies ändert die Preise aller wiederkehrenden Positionen. Diese Aktion kann nicht rückgängig gemacht werden.",
+      "increaseType": "Art der Erhöhung",
+      "increaseTypeInflation": "Inflation",
+      "increaseTypeInflationDescription": "Standardmäßige jährliche Preisanpassung",
+      "increaseTypeNegotiated": "Verhandelt",
+      "increaseTypeNegotiatedDescription": "Individuell vereinbarte Preisänderung"
     },
     "item": {
       "oneOff": "einmalig",
@@ -436,6 +453,7 @@
     "revenueTab": "Umsatz",
     "liquidityTab": "Liquidit\u00e4t",
     "goalsTab": "Ziele",
+    "priceIncreasesTab": "Preiserhöhungen",
     "goals": {
       "title": "Umsatzziele",
       "year": "Jahr",

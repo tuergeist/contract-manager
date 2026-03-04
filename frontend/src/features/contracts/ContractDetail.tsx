@@ -177,6 +177,7 @@ const CONTRACT_DETAIL_QUERY = gql`
           unitPrice
           pricePeriod
           source
+          increaseType
         }
         product {
           id
@@ -364,6 +365,7 @@ const ADD_CONTRACT_ITEM_PRICE_MUTATION = gql`
         unitPrice
         pricePeriod
         source
+        increaseType
       }
     }
   }
@@ -390,6 +392,7 @@ const UPDATE_CONTRACT_ITEM_PRICE_MUTATION = gql`
         unitPrice
         pricePeriod
         source
+        increaseType
       }
     }
   }
@@ -542,6 +545,7 @@ interface PricePeriod {
   unitPrice: string
   pricePeriod: string
   source: string
+  increaseType: string | null
 }
 
 interface ContractItem {
@@ -2007,6 +2011,7 @@ function PriceIncreaseModal({
   const [percentage, setPercentage] = useState('3.5')
   const [effectiveDate, setEffectiveDate] = useState(nextJan1)
   const [mode, setMode] = useState<'period_specific' | 'direct'>('period_specific')
+  const [increaseType, setIncreaseType] = useState<'inflation' | 'negotiated'>('inflation')
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{
     itemsChanged: number
@@ -2041,6 +2046,7 @@ function PriceIncreaseModal({
             percentage,
             effectiveDate,
             mode,
+            increaseType,
           },
         },
       })
@@ -2175,6 +2181,48 @@ function PriceIncreaseModal({
                     <div>
                       <div className="font-medium text-sm">{t('contracts.detail.modeDirect')}</div>
                       <div className="text-xs text-gray-500">{t('contracts.detail.modeDirectDescription')}</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <Label>{t('contracts.detail.increaseType')}</Label>
+                <div className="mt-1 space-y-2">
+                  <label
+                    className={cn(
+                      'flex cursor-pointer items-start gap-3 rounded-md border p-3',
+                      increaseType === 'inflation' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="increaseType"
+                      checked={increaseType === 'inflation'}
+                      onChange={() => setIncreaseType('inflation')}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="font-medium text-sm">{t('contracts.detail.increaseTypeInflation')}</div>
+                      <div className="text-xs text-gray-500">{t('contracts.detail.increaseTypeInflationDescription')}</div>
+                    </div>
+                  </label>
+                  <label
+                    className={cn(
+                      'flex cursor-pointer items-start gap-3 rounded-md border p-3',
+                      increaseType === 'negotiated' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="increaseType"
+                      checked={increaseType === 'negotiated'}
+                      onChange={() => setIncreaseType('negotiated')}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="font-medium text-sm">{t('contracts.detail.increaseTypeNegotiated')}</div>
+                      <div className="text-xs text-gray-500">{t('contracts.detail.increaseTypeNegotiatedDescription')}</div>
                     </div>
                   </label>
                 </div>
@@ -2708,6 +2756,7 @@ function EditItemModal({
   const [newPeriodPrice, setNewPeriodPrice] = useState('')
   const [newPeriodPricePeriod, setNewPeriodPricePeriod] = useState('monthly')
   const [newPeriodSource, setNewPeriodSource] = useState('fixed')
+  const [newPeriodIncreaseType, setNewPeriodIncreaseType] = useState('')
   const [deliveryTracking, setDeliveryTracking] = useState(!!item.deliveryStatus)
   const [dependsOnItemId, setDependsOnItemId] = useState(item.dependsOn?.id || 'none')
   const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState(item.estimatedDeliveryDate || '')
@@ -2747,6 +2796,7 @@ function EditItemModal({
   const [editPeriodPrice, setEditPeriodPrice] = useState('')
   const [editPeriodPricePeriod, setEditPeriodPricePeriod] = useState('monthly')
   const [editPeriodSource, setEditPeriodSource] = useState('fixed')
+  const [editPeriodIncreaseType, setEditPeriodIncreaseType] = useState('')
 
   const handleAddPricePeriod = async () => {
     if (!newPeriodFrom || !newPeriodPrice) return
@@ -2761,6 +2811,7 @@ function EditItemModal({
             unitPrice: newPeriodPrice,
             pricePeriod: newPeriodPricePeriod,
             source: newPeriodSource,
+            increaseType: newPeriodIncreaseType || null,
           },
         },
       })
@@ -2773,6 +2824,7 @@ function EditItemModal({
         setNewPeriodPrice('')
         setNewPeriodPricePeriod('monthly')
         setNewPeriodSource('fixed')
+        setNewPeriodIncreaseType('')
       } else {
         setError(result.data?.addContractItemPrice.error || 'Failed to add price period')
       }
@@ -2804,6 +2856,7 @@ function EditItemModal({
     setEditPeriodPrice(period.unitPrice)
     setEditPeriodPricePeriod(period.pricePeriod)
     setEditPeriodSource(period.source)
+    setEditPeriodIncreaseType(period.increaseType || '')
   }
 
   const cancelEditingPeriod = () => {
@@ -2813,6 +2866,7 @@ function EditItemModal({
     setEditPeriodPrice('')
     setEditPeriodPricePeriod('monthly')
     setEditPeriodSource('fixed')
+    setEditPeriodIncreaseType('')
   }
 
   const handleUpdatePricePeriod = async () => {
@@ -2828,6 +2882,7 @@ function EditItemModal({
             unitPrice: editPeriodPrice,
             pricePeriod: editPeriodPricePeriod,
             source: editPeriodSource,
+            increaseType: editPeriodIncreaseType || null,
           },
         },
       })
@@ -3158,6 +3213,19 @@ function EditItemModal({
                                   </SelectContent>
                                 </Select>
                               </div>
+                              <div>
+                                <label className="text-xs text-gray-500">{t('contracts.detail.increaseType')}</label>
+                                <Select value={editPeriodIncreaseType} onValueChange={setEditPeriodIncreaseType}>
+                                  <SelectTrigger className="h-8 text-sm">
+                                    <SelectValue placeholder="—" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="">&mdash;</SelectItem>
+                                    <SelectItem value="inflation">{t('contracts.detail.increaseTypeInflation')}</SelectItem>
+                                    <SelectItem value="negotiated">{t('contracts.detail.increaseTypeNegotiated')}</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
                             </div>
                             <div className="flex justify-end gap-2">
                               <Button
@@ -3275,6 +3343,19 @@ function EditItemModal({
                         <SelectItem value="fixed">{t('contracts.item.sourceFixed')}</SelectItem>
                         <SelectItem value="list">{t('contracts.item.sourceList')}</SelectItem>
                         <SelectItem value="negotiated">{t('contracts.item.sourceNegotiated')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500">{t('contracts.detail.increaseType')}</label>
+                    <Select value={newPeriodIncreaseType} onValueChange={setNewPeriodIncreaseType}>
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue placeholder="—" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">&mdash;</SelectItem>
+                        <SelectItem value="inflation">{t('contracts.detail.increaseTypeInflation')}</SelectItem>
+                        <SelectItem value="negotiated">{t('contracts.detail.increaseTypeNegotiated')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

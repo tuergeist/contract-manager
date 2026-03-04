@@ -83,6 +83,18 @@
       "recurringExplanation": "Full-year forecast for recurring revenue, calculated from the recognition schedule of all active contracts. Unlike ARR (which is today's monthly run rate x 12), this accounts for contracts starting or ending mid-year, price changes, and prorations.",
       "streamExplanation": "Full-year forecast for this revenue stream, calculated from the recognition schedule of all active contracts classified under this stream."
     },
+    "priceIncrease": {
+      "title": "Price Increase Impact",
+      "totalImpact": "Total ARR Impact",
+      "totalImpactExplanation": "Additional ARR from price increases compared to the previous year",
+      "inflation": "Inflation Increases",
+      "inflationExplanation": "ARR impact from standard annual inflation adjustments",
+      "negotiated": "Negotiated Increases",
+      "negotiatedExplanation": "ARR impact from individually negotiated price changes",
+      "untagged": "Untagged Increases",
+      "untaggedExplanation": "ARR impact from price increases without a tagged increase type",
+      "itemCount": "{{count}} items affected"
+    },
     "info": {
       "title": "Dashboard Metrics Explained",
       "kpisSection": "Key Performance Indicators"
@@ -272,7 +284,12 @@
       "priceIncreasePartial": "Price increase applied to {{changed}} items, {{skipped}} skipped",
       "priceIncreaseApply": "Apply Increase",
       "priceIncreaseWarningTitle": "Caution:",
-      "priceIncreaseWarning": "This will change the prices of all recurring line items. This action cannot be undone."
+      "priceIncreaseWarning": "This will change the prices of all recurring line items. This action cannot be undone.",
+      "increaseType": "Increase Type",
+      "increaseTypeInflation": "Inflation",
+      "increaseTypeInflationDescription": "Standard annual price adjustment",
+      "increaseTypeNegotiated": "Negotiated",
+      "increaseTypeNegotiatedDescription": "Individually agreed price change"
     },
     "item": {
       "oneOff": "one-off",
@@ -436,6 +453,7 @@
     "revenueTab": "Revenue",
     "liquidityTab": "Liquidity",
     "goalsTab": "Goals",
+    "priceIncreasesTab": "Price Increases",
     "goals": {
       "title": "Revenue Goals",
       "year": "Year",

@@ -38,6 +38,14 @@ const DASHBOARD_KPIS_QUERY = gql`
       wonDevelopmentRevenue
       wonDealCount
     }
+    priceIncreaseImpact(year: $year) {
+      year
+      totalArrImpact
+      inflationArrImpact
+      negotiatedArrImpact
+      untaggedArrImpact
+      itemCount
+    }
     newBusinessGoals(year: $year) {
       id
       year
@@ -72,6 +80,15 @@ interface DashboardKPIs {
   nextYearDiscounts: string
 }
 
+interface PriceIncreaseImpact {
+  year: number
+  totalArrImpact: string
+  inflationArrImpact: string
+  negotiatedArrImpact: string
+  untaggedArrImpact: string
+  itemCount: number
+}
+
 interface NewBusinessMetrics {
   wonNewArr: string
   wonDevelopmentRevenue: string
@@ -100,6 +117,7 @@ interface RevenueStreamData {
 
 interface DashboardKPIsData {
   dashboardKpis: DashboardKPIs
+  priceIncreaseImpact: PriceIncreaseImpact
   newBusinessMetrics: NewBusinessMetrics
   newBusinessGoals: NewBusinessGoal[]
   revenueGoals: RevenueGoal[]
@@ -274,6 +292,39 @@ export function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Price Increase Impact */}
+      {(() => {
+        const pi = kpisData?.priceIncreaseImpact
+        const totalImpact = parseFloat(pi?.totalArrImpact ?? '0')
+        if (!pi || totalImpact <= 0) return null
+        return (
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold mb-3">{t('dashboard.priceIncrease.title')}</h2>
+            <div className="grid gap-4 md:grid-cols-3">
+              <KPICard
+                title={t('dashboard.priceIncrease.totalImpact')}
+                value={totalImpact}
+                explanation={t('dashboard.priceIncrease.totalImpactExplanation')}
+                subtitle={t('dashboard.priceIncrease.itemCount', { count: pi.itemCount })}
+                isCurrency
+              />
+              <KPICard
+                title={t('dashboard.priceIncrease.inflation')}
+                value={parseFloat(pi.inflationArrImpact)}
+                explanation={t('dashboard.priceIncrease.inflationExplanation')}
+                isCurrency
+              />
+              <KPICard
+                title={t('dashboard.priceIncrease.negotiated')}
+                value={parseFloat(pi.negotiatedArrImpact)}
+                explanation={t('dashboard.priceIncrease.negotiatedExplanation')}
+                isCurrency
+              />
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Revenue Goals */}
       {hasRevenueGoalsData && (

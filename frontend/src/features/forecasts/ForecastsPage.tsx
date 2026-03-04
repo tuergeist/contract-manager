@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/auth'
 import { RevenueForecast } from '@/features/forecast/RevenueForecast'
 import { LiquidityForecast } from '@/features/liquidity'
 import { RevenueGoalsDashboard } from './RevenueGoalsDashboard'
+import { PriceIncreaseAnalytics } from './PriceIncreaseAnalytics'
 
 export function ForecastsPage() {
   const { t } = useTranslation()
@@ -34,9 +35,13 @@ export function ForecastsPage() {
           <button onClick={() => handleTabChange('goals')} className={tabClass('goals')}>
             {t('forecasts.goalsTab')}
           </button>
+          <button onClick={() => handleTabChange('priceIncreases')} className={tabClass('priceIncreases')}>
+            {t('forecasts.priceIncreasesTab')}
+          </button>
         </div>
         {activeTab === 'revenue' && <RevenueForecast />}
         {activeTab === 'goals' && <RevenueGoalsDashboard />}
+        {activeTab === 'priceIncreases' && <PriceIncreaseAnalytics />}
       </div>
     )
   }
@@ -53,10 +58,14 @@ export function ForecastsPage() {
         <button onClick={() => handleTabChange('goals')} className={tabClass('goals')}>
           {t('forecasts.goalsTab')}
         </button>
+        <button onClick={() => handleTabChange('priceIncreases')} className={tabClass('priceIncreases')}>
+          {t('forecasts.priceIncreasesTab')}
+        </button>
       </div>
       {activeTab === 'revenue' && <RevenueForecast />}
       {activeTab === 'liquidity' && <LiquidityForecast />}
       {activeTab === 'goals' && <RevenueGoalsDashboard />}
+      {activeTab === 'priceIncreases' && <PriceIncreaseAnalytics />}
     </div>
   )
 }

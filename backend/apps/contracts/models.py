@@ -1316,6 +1316,10 @@ class ContractItemPrice(TenantModel):
         LIST = "list", "List Price"
         NEGOTIATED = "negotiated", "To Be Negotiated"
 
+    class IncreaseType(models.TextChoices):
+        INFLATION = "inflation", "Inflation"
+        NEGOTIATED = "negotiated", "Negotiated"
+
     # Reuse PricePeriod from ContractItem
     PricePeriod = ContractItem.PricePeriod
 
@@ -1347,6 +1351,13 @@ class ContractItemPrice(TenantModel):
         max_length=20,
         choices=PriceSource.choices,
         default=PriceSource.FIXED,
+    )
+    increase_type = models.CharField(
+        max_length=20,
+        choices=IncreaseType.choices,
+        null=True,
+        blank=True,
+        help_text="Reason for price change (inflation or negotiated)",
     )
 
     class Meta:

@@ -201,6 +201,7 @@ class ContractItemPriceType:
     unit_price: Decimal
     price_period: str
     source: str
+    increase_type: str | None = None
 
 
 @strawberry.type
@@ -366,6 +367,7 @@ class ContractType:
                     unit_price=pp.unit_price,
                     price_period=pp.price_period,
                     source=pp.source,
+                    increase_type=pp.increase_type,
                 )
                 for pp in item.price_periods.all()
             ]
@@ -695,6 +697,7 @@ class ContractItemPriceInput:
     unit_price: Decimal
     price_period: str = "monthly"  # Period the price refers to (monthly, quarterly, annual, etc.)
     source: str = "fixed"
+    increase_type: str | None = None
 
 
 @strawberry.input
@@ -706,6 +709,7 @@ class UpdateContractItemPriceInput:
     unit_price: Decimal | None = None
     price_period: str | None = None  # Period the price refers to (monthly, quarterly, annual, etc.)
     source: str | None = None
+    increase_type: str | None = None
 
 
 # Result types for mutations
@@ -744,6 +748,7 @@ class BulkPriceIncreaseInput:
     percentage: Decimal
     effective_date: date
     mode: str = "period_specific"  # "direct" or "period_specific"
+    increase_type: str = "inflation"
 
 
 @strawberry.type
@@ -798,6 +803,17 @@ class DeliverableItemType:
     customer_name: str
     customer_id: int
     dependent_items_count: int
+
+
+@strawberry.type
+class PriceIncreaseImpactType:
+    """YoY ARR impact from price increases."""
+    year: int
+    total_arr_impact: Decimal
+    inflation_arr_impact: Decimal
+    negotiated_arr_impact: Decimal
+    untagged_arr_impact: Decimal
+    item_count: int
 
 
 # =============================================================================
@@ -1134,6 +1150,81 @@ def calculate_dashboard_kpis(tenant) -> dict:
         "next_year_one_off": next_year_one_off,
         "next_year_discounts": next_year_discounts,
     }
+
+
+def calculate_price_increase_impact(tenant, year: int) -> PriceIncreaseImpactType:
+    """
+    Calculate YoY ARR delta from price increases for a given year.
+
+    Compares price of recurring items at Jan 1 of `year` vs Jan 1 of `year-1`.
+    Only considers contracts that existed before Jan 1 of `year` (not new business).
+    """
+    jan1_current = date(year, 1, 1)
+    jan1_previous = date(year - 1, 1, 1)
+
+    # Active contracts that existed before the target year
+    contracts = Contract.objects.filter(
+        tenant=tenant,
+        status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
+        start_date__lt=jan1_current,  # Must have started before target year
+    ).filter(
+        Q(end_date__isnull=True) | Q(end_date__gte=jan1_current)
+    ).prefetch_related("items", "items__product", "items__price_periods")
+
+    total_arr_impact = Decimal("0")
+    inflation_arr_impact = Decimal("0")
+    negotiated_arr_impact = Decimal("0")
+    untagged_arr_impact = Decimal("0")
+    item_count = 0
+
+    for contract in contracts:
+        items = list(contract.items.all())
+        for item in items:
+            if item.is_one_off:
+                continue
+
+            price_periods_list = list(item.price_periods.all())
+
+            # Get monthly price at Jan 1 current year vs Jan 1 previous year
+            current_monthly = item.get_price_at_cached(
+                jan1_current, price_periods_list, normalize_to_monthly=True
+            )
+            previous_monthly = item.get_price_at_cached(
+                jan1_previous, price_periods_list, normalize_to_monthly=True
+            )
+
+            if current_monthly <= previous_monthly:
+                continue
+
+            delta_arr = (current_monthly - previous_monthly) * item.quantity * 12
+            total_arr_impact += delta_arr
+            item_count += 1
+
+            # Determine increase_type from the price period active on Jan 1 current year
+            matching = None
+            for pp in price_periods_list:
+                if pp.valid_from <= jan1_current:
+                    if pp.valid_to is None or pp.valid_to >= jan1_current:
+                        if matching is None or pp.valid_from > matching.valid_from:
+                            matching = pp
+
+            increase_type = matching.increase_type if matching else None
+
+            if increase_type == "inflation":
+                inflation_arr_impact += delta_arr
+            elif increase_type == "negotiated":
+                negotiated_arr_impact += delta_arr
+            else:
+                untagged_arr_impact += delta_arr
+
+    return PriceIncreaseImpactType(
+        year=year,
+        total_arr_impact=total_arr_impact,
+        inflation_arr_impact=inflation_arr_impact,
+        negotiated_arr_impact=negotiated_arr_impact,
+        untagged_arr_impact=untagged_arr_impact,
+        item_count=item_count,
+    )
 
 
 def calculate_revenue_by_stream(tenant, year: int) -> list[dict]:
@@ -1902,6 +1993,25 @@ class ContractQuery:
             next_year_one_off=kpis["next_year_one_off"],
             next_year_discounts=kpis["next_year_discounts"],
         )
+
+    @strawberry.field
+    def price_increase_impact(
+        self,
+        info: Info[Context, None],
+        year: int,
+    ) -> PriceIncreaseImpactType:
+        """Get YoY ARR impact from price increases for a given year."""
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return PriceIncreaseImpactType(
+                year=year,
+                total_arr_impact=Decimal("0"),
+                inflation_arr_impact=Decimal("0"),
+                negotiated_arr_impact=Decimal("0"),
+                untagged_arr_impact=Decimal("0"),
+                item_count=0,
+            )
+        return calculate_price_increase_impact(user.tenant, year)
 
     @strawberry.field
     def suggested_alignment_date(
@@ -4052,6 +4162,7 @@ class ContractMutation:
                     unit_price=pp.unit_price,
                     price_period=pp.price_period,
                     source=pp.source,
+                    increase_type=pp.increase_type,
                 )
                 for pp in item.price_periods.all()
             ]
@@ -4434,6 +4545,7 @@ class ContractMutation:
                 unit_price=input.unit_price,
                 price_period=input.price_period,
                 source=input.source,
+                increase_type=input.increase_type,
             )
             return ContractItemPriceResult(
                 price_period=ContractItemPriceType(
@@ -4443,6 +4555,7 @@ class ContractMutation:
                     unit_price=price_period_record.unit_price,
                     price_period=price_period_record.price_period,
                     source=price_period_record.source,
+                    increase_type=price_period_record.increase_type,
                 ),
                 success=True,
             )
@@ -4498,6 +4611,8 @@ class ContractMutation:
                 price_period.price_period = input.price_period
             if input.source is not None:
                 price_period.source = input.source
+            if input.increase_type is not None:
+                price_period.increase_type = input.increase_type
             price_period.save()
 
             return ContractItemPriceResult(
@@ -4508,6 +4623,7 @@ class ContractMutation:
                     unit_price=price_period.unit_price,
                     price_period=price_period.price_period,
                     source=price_period.source,
+                    increase_type=price_period.increase_type,
                 ),
                 success=True,
             )
@@ -5732,6 +5848,7 @@ class ContractImportMutation:
                             unit_price=new_price,
                             price_period=item.price_period,
                             source=ContractItemPrice.PriceSource.FIXED,
+                            increase_type=input.increase_type,
                         )
 
                     details.append(BulkPriceIncreaseItemResult(
@@ -5759,6 +5876,7 @@ class ContractImportMutation:
                             "percentage": str(input.percentage),
                             "effective_date": input.effective_date.isoformat(),
                             "mode": input.mode,
+                            "increase_type": input.increase_type,
                             "items_changed": [
                                 {
                                     "item_id": d.item_id,
