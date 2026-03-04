@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.16.2",
+    "date": "2026-03-04",
+    "title": "Fix price increase list showing all contracts",
+    "description": "The price increase filtered contract list now displays all contracts with price increases instead of only those on the first page. All columns are sortable.",
+    "type": "bugfix",
+    "details": [
+      "Fixed price increase view to render directly from the dedicated query instead of filtering paginated results",
+      "ARR Diff now shows gross item-level increase impact matching the dashboard total",
+      "All columns in the price increase view are sortable (default: ARR Diff descending)"
+    ]
+  },
+  {
     "version": "2.16.1",
     "date": "2026-03-04",
     "title": "Price increase drill-down and contract list improvements",
