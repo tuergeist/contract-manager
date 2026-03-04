@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.16.0",
+    "date": "2026-03-04",
+    "title": "Per-user dashboard section visibility",
+    "description": "Users can now choose which dashboard sections to display via toggle switches in User Settings. Preferences are stored per user and persist across sessions.",
+    "type": "feature",
+    "details": [
+      "Added Dashboard preferences section in User Settings with toggles for Contract KPIs, New Business, Price Increase Impact, and Revenue Goals",
+      "Dashboard conditionally renders sections based on user preferences",
+      "Fixed order confirmation template to display customer name correctly"
+    ]
+  },
+  {
     "version": "2.15.2",
     "date": "2026-03-04",
     "title": "Date range filter for counterparty balances",
