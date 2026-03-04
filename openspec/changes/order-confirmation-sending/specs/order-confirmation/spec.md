@@ -30,13 +30,37 @@ The system SHALL display a rendered HTML preview of the order confirmation befor
 - **WHEN** the user reviews the preview and notices incorrect data
 - **THEN** the user can close the dialog, edit the contract, and retry activation
 
-### Requirement: Personal message and additional recipients
-The user SHALL be able to enter an optional personal message and additional email addresses before sending the AB. These are stored on the OrderConfirmation record.
+### Requirement: AB numbering scheme
+The system SHALL provide a configurable order confirmation number scheme in tenant settings, following the same pattern as InvoiceNumberScheme (pattern with placeholders like `{YYYY}`, `{NNNN}`, reset period). Each AB receives an auto-generated number on creation.
 
-#### Scenario: AB with personal message and extra emails
+#### Scenario: Admin configures AB number pattern
+- **WHEN** a tenant admin sets the AB number pattern to "AB-{YYYY}-{NNNN}" with yearly reset
+- **THEN** the next order confirmation receives number "AB-2026-0001"
+
+#### Scenario: AB number auto-increments
+- **GIVEN** the last AB number was "AB-2026-0003"
+- **WHEN** a new AB is created
+- **THEN** it receives number "AB-2026-0004"
+
+#### Scenario: Default AB number pattern
+- **WHEN** no AB number scheme is configured for a tenant
+- **THEN** the system uses default pattern "AB-{YYYY}-{NNNN}" with yearly reset
+
+### Requirement: Personal message and additional recipients
+The user SHALL be able to enter an optional personal message and additional email addresses before sending the AB. The personal message SHALL optionally be included in the PDF document and/or the email body, controlled by checkboxes. These are stored on the OrderConfirmation record.
+
+#### Scenario: AB with personal message in both PDF and email
 - **GIVEN** a customer with billing_emails ["billing@acme.com"]
-- **WHEN** user enters personal message "Welcome aboard" and additional emails ["cfo@acme.com"]
-- **THEN** the AB is sent to billing@acme.com and cfo@acme.com with the personal message included
+- **WHEN** user enters personal message "Welcome aboard", checks "Include in PDF" and "Include in email", and adds additional emails ["cfo@acme.com"]
+- **THEN** the AB PDF contains the personal message, the email body contains the personal message, and it is sent to billing@acme.com and cfo@acme.com
+
+#### Scenario: AB with personal message in email only
+- **WHEN** user enters a personal message and checks only "Include in email"
+- **THEN** the AB PDF does not contain the personal message, but the email body does
+
+#### Scenario: AB with personal message in PDF only
+- **WHEN** user enters a personal message and checks only "Include in PDF"
+- **THEN** the AB PDF contains the personal message, but the email body does not
 
 #### Scenario: AB without optional fields
 - **WHEN** user sends AB without personal message or additional emails
@@ -93,8 +117,27 @@ The order confirmation SHALL include: company header with logo, customer billing
 - **GIVEN** a customer with no invoice_language
 - **THEN** AB defaults to German ("Auftragsbestätigung")
 
+### Requirement: AB email template settings
+The system SHALL allow tenant administrators to configure custom email subject and body templates for order confirmations per language (DE, EN), stored in `tenant.settings.ab_email_templates`. Templates SHALL support `{placeholder}` syntax with placeholders like `{order_confirmation_number}`, `{customer_name}`, `{contract_reference}`, `{personal_message}`. If no custom template is configured, a sensible default SHALL be used.
+
+#### Scenario: Admin configures German AB email template
+- **WHEN** admin saves a German AB email template with subject "Auftragsbestätigung {order_confirmation_number}" and a custom body
+- **THEN** system stores it under `tenant.settings.ab_email_templates.de`
+
+#### Scenario: Admin configures English AB email template
+- **WHEN** admin saves an English AB email template
+- **THEN** system stores it under `tenant.settings.ab_email_templates.en`
+
+#### Scenario: Default template used when none configured
+- **WHEN** no custom AB email template exists for the customer's language
+- **THEN** the system uses a built-in default template
+
+#### Scenario: Template editor in settings
+- **WHEN** admin opens the Email settings page
+- **THEN** an AB email template editor is displayed alongside the invoice email template editor, with subject field, body textarea, placeholder reference, and live preview
+
 ### Requirement: AB email sending via M365
-The system SHALL send the AB email via the existing M365 Graph API integration with the PDF attached. Recipients are the customer's billing_emails plus any additional_emails.
+The system SHALL send the AB email via the existing M365 Graph API integration with the PDF attached, using the configured AB email template. Recipients are the customer's billing_emails plus any additional_emails.
 
 #### Scenario: Successful AB email send
 - **WHEN** sendOrderConfirmation is called with a valid OrderConfirmation
