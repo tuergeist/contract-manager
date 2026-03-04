@@ -2794,7 +2794,7 @@ function EditItemModal({
   const [newPeriodPrice, setNewPeriodPrice] = useState('')
   const [newPeriodPricePeriod, setNewPeriodPricePeriod] = useState('monthly')
   const [newPeriodSource, setNewPeriodSource] = useState('fixed')
-  const [newPeriodIncreaseType, setNewPeriodIncreaseType] = useState('')
+  const [newPeriodIncreaseType, setNewPeriodIncreaseType] = useState('__none__')
   const [deliveryTracking, setDeliveryTracking] = useState(!!item.deliveryStatus)
   const [dependsOnItemId, setDependsOnItemId] = useState(item.dependsOn?.id || 'none')
   const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState(item.estimatedDeliveryDate || '')
@@ -2834,7 +2834,7 @@ function EditItemModal({
   const [editPeriodPrice, setEditPeriodPrice] = useState('')
   const [editPeriodPricePeriod, setEditPeriodPricePeriod] = useState('monthly')
   const [editPeriodSource, setEditPeriodSource] = useState('fixed')
-  const [editPeriodIncreaseType, setEditPeriodIncreaseType] = useState('')
+  const [editPeriodIncreaseType, setEditPeriodIncreaseType] = useState('__none__')
 
   const handleAddPricePeriod = async () => {
     if (!newPeriodFrom || !newPeriodPrice) return
@@ -2849,7 +2849,7 @@ function EditItemModal({
             unitPrice: newPeriodPrice,
             pricePeriod: newPeriodPricePeriod,
             source: newPeriodSource,
-            increaseType: newPeriodIncreaseType || null,
+            increaseType: newPeriodIncreaseType && newPeriodIncreaseType !== '__none__' ? newPeriodIncreaseType : null,
           },
         },
       })
@@ -2862,7 +2862,7 @@ function EditItemModal({
         setNewPeriodPrice('')
         setNewPeriodPricePeriod('monthly')
         setNewPeriodSource('fixed')
-        setNewPeriodIncreaseType('')
+        setNewPeriodIncreaseType('__none__')
       } else {
         setError(result.data?.addContractItemPrice.error || 'Failed to add price period')
       }
@@ -2894,7 +2894,7 @@ function EditItemModal({
     setEditPeriodPrice(period.unitPrice)
     setEditPeriodPricePeriod(period.pricePeriod)
     setEditPeriodSource(period.source)
-    setEditPeriodIncreaseType(period.increaseType || '')
+    setEditPeriodIncreaseType(period.increaseType || '__none__')
   }
 
   const cancelEditingPeriod = () => {
@@ -2904,7 +2904,7 @@ function EditItemModal({
     setEditPeriodPrice('')
     setEditPeriodPricePeriod('monthly')
     setEditPeriodSource('fixed')
-    setEditPeriodIncreaseType('')
+    setEditPeriodIncreaseType('__none__')
   }
 
   const handleUpdatePricePeriod = async () => {
@@ -2920,7 +2920,7 @@ function EditItemModal({
             unitPrice: editPeriodPrice,
             pricePeriod: editPeriodPricePeriod,
             source: editPeriodSource,
-            increaseType: editPeriodIncreaseType || null,
+            increaseType: editPeriodIncreaseType && editPeriodIncreaseType !== '__none__' ? editPeriodIncreaseType : null,
           },
         },
       })
@@ -3258,7 +3258,7 @@ function EditItemModal({
                                     <SelectValue placeholder="—" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="">&mdash;</SelectItem>
+                                    <SelectItem value="__none__">&mdash;</SelectItem>
                                     <SelectItem value="inflation">{t('contracts.detail.increaseTypeInflation')}</SelectItem>
                                     <SelectItem value="negotiated">{t('contracts.detail.increaseTypeNegotiated')}</SelectItem>
                                   </SelectContent>
@@ -3391,7 +3391,7 @@ function EditItemModal({
                         <SelectValue placeholder="—" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">&mdash;</SelectItem>
+                        <SelectItem value="__none__">&mdash;</SelectItem>
                         <SelectItem value="inflation">{t('contracts.detail.increaseTypeInflation')}</SelectItem>
                         <SelectItem value="negotiated">{t('contracts.detail.increaseTypeNegotiated')}</SelectItem>
                       </SelectContent>
