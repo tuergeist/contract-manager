@@ -75,7 +75,14 @@
     "invalidResetLink": "Invalid Reset Link",
     "resetLinkExpired": "This reset link is invalid or has expired.",
     "resetFailed": "Failed to reset password",
-    "passwordReset": "Password reset successfully. Please sign in."
+    "passwordReset": "Password reset successfully. Please sign in.",
+    "forgotPassword": "Forgot Password?",
+    "forgotPasswordTitle": "Reset your password",
+    "forgotPasswordDesc": "Enter your email address and we'll send you a link to reset your password.",
+    "sendResetLink": "Send Reset Link",
+    "resetEmailSent": "Check your email",
+    "resetEmailSentDesc": "If an account exists with that email, we've sent a password reset link. Check your inbox.",
+    "backToLogin": "Back to Login"
   },
   "dashboard": {
     "title": "Dashboard",
