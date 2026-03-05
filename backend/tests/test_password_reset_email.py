@@ -60,7 +60,7 @@ def other_user(db, tenant):
 
 
 class TestRequestPasswordReset:
-    @patch("apps.tenants.schema.send_password_reset_email")
+    @patch("apps.tenants.tasks.send_password_reset_email")
     def test_registered_email_creates_token_and_dispatches(self, mock_task, user):
         mock_task.delay = MagicMock()
         ctx = make_context()
@@ -73,7 +73,7 @@ class TestRequestPasswordReset:
         mock_task.delay.assert_called_once()
         assert mock_task.delay.call_args[0][0] == user.id
 
-    @patch("apps.tenants.schema.send_password_reset_email")
+    @patch("apps.tenants.tasks.send_password_reset_email")
     def test_unregistered_email_returns_success_no_token(self, mock_task, db):
         mock_task.delay = MagicMock()
         ctx = make_context()
@@ -85,7 +85,7 @@ class TestRequestPasswordReset:
         assert PasswordResetToken.objects.count() == 0
         mock_task.delay.assert_not_called()
 
-    @patch("apps.tenants.schema.send_password_reset_email")
+    @patch("apps.tenants.tasks.send_password_reset_email")
     def test_rate_limiting(self, mock_task, user):
         mock_task.delay = MagicMock()
         ctx = make_context()
@@ -104,7 +104,7 @@ class TestRequestPasswordReset:
 
 
 class TestAdminResetSendsEmail:
-    @patch("apps.tenants.schema.send_password_reset_email")
+    @patch("apps.tenants.tasks.send_password_reset_email")
     def test_admin_reset_dispatches_email(self, mock_task, user, other_user):
         mock_task.delay = MagicMock()
         ctx = make_context(user=user)
@@ -121,7 +121,7 @@ class TestAdminResetSendsEmail:
         mock_task.delay.assert_called_once()
         assert mock_task.delay.call_args[0][0] == other_user.id
 
-    @patch("apps.tenants.schema.send_password_reset_email")
+    @patch("apps.tenants.tasks.send_password_reset_email")
     def test_admin_reset_works_if_email_fails(self, mock_task, user, other_user):
         mock_task.delay = MagicMock(side_effect=Exception("Celery down"))
         ctx = make_context(user=user)
