@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { Login } from './features/auth/Login'
 import { AcceptInvitation } from './features/auth/AcceptInvitation'
 import { ResetPassword } from './features/auth/ResetPassword'
+import { ForgotPassword } from './features/auth/ForgotPassword'
 import { Dashboard } from './features/dashboard/Dashboard'
 import { CustomerList } from './features/customers/CustomerList'
 import { CustomerDetail } from './features/customers/CustomerDetail'
@@ -34,6 +35,7 @@ function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/invite/:token" element={<AcceptInvitation />} />
       <Route path="/reset-password/:token" element={<ResetPassword />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route
         path="/"
         element={

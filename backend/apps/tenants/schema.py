@@ -1399,7 +1399,42 @@ class TenantMutation:
         url_base = base_url or origin or getattr(settings, "FRONTEND_URL", "http://localhost:5173")
         reset_url = f"{url_base}/reset-password/{reset_token.token}"
 
+        # Also send email if SMTP is configured (non-blocking)
+        try:
+            from apps.tenants.tasks import send_password_reset_email
+            send_password_reset_email.delay(target_user.id, reset_url)
+        except Exception:
+            pass  # Admin still gets the copyable link
+
         return ResetLinkResult(success=True, reset_url=reset_url)
+
+    @strawberry.mutation
+    def request_password_reset(self, info: Info[Context, None], email: str) -> OperationResult:
+        """Request a password reset email. Public (no auth required)."""
+        from django.core.cache import cache
+        from apps.tenants.tasks import send_password_reset_email
+
+        # Rate limiting: max 5 requests per email per 15 minutes
+        cache_key = f"password_reset:{email.lower()}"
+        request_count = cache.get(cache_key, 0)
+        if request_count >= 5:
+            return OperationResult(success=True)  # Silent discard
+
+        cache.set(cache_key, request_count + 1, timeout=900)  # 15 min TTL
+
+        try:
+            user = User.objects.select_related("tenant").get(email__iexact=email, is_active=True)
+        except User.DoesNotExist:
+            return OperationResult(success=True)  # Prevent enumeration
+
+        reset_token = PasswordResetToken.create_token(user)
+        request = info.context.request
+        origin = request.headers.get("Origin") or request.headers.get("Referer", "").rstrip("/")
+        url_base = origin or getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+        reset_url = f"{url_base}/reset-password/{reset_token.token}"
+
+        send_password_reset_email.delay(user.id, reset_url)
+        return OperationResult(success=True)
 
     @strawberry.mutation
     def reset_password(self, token: str, new_password: str) -> OperationResult:
