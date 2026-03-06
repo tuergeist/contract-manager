@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.16.4",
+    "date": "2026-03-06",
+    "title": "Price increase drill-down and dashboard settings",
+    "description": "Dashboard and forecasts price increase cards now link to a detailed per-contract view. Users can toggle dashboard sections and contract list date columns. Frontend caching improved for faster deploys.",
+    "type": "feature",
+    "details": [
+      "Added clickable price increase cards on dashboard and forecasts linking to filtered contract list",
+      "Added per-contract price increase detail table on forecasts tab with sortable columns",
+      "Added per-user dashboard section visibility settings (toggle Contract KPIs, New Business, etc.)",
+      "Made Start/End Date columns optional in contract list with a persisted toggle (default off)",
+      "Removed Order Confirmation column from contract list",
+      "Added amber warning banner when table columns overflow the viewport",
+      "Added no-cache header on index.html to ensure browsers pick up new deploys immediately",
+      "Fixed edit item modal crash caused by empty string SelectItem value"
+    ]
+  },
+  {
     "version": "2.16.2",
     "date": "2026-03-04",
     "title": "Fix price increase list showing all contracts",
