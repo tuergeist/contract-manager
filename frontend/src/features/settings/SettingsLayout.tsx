@@ -1,11 +1,13 @@
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { User, Settings, Puzzle, Users, FileUp, Landmark } from 'lucide-react'
+import { User, Settings, Puzzle, Users, FileText, Landmark, Hash, Mail } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { UserSettings } from './UserSettings'
 import { TeamSettingsTabs } from './TeamSettingsTabs'
-import { InvoiceSettingsTabs } from './InvoiceSettingsTabs'
+import { DocumentSettingsTabs } from './DocumentSettingsTabs'
+import { NumberingSettingsTabs } from './NumberingSettingsTabs'
+import { EmailTemplateSettingsTabs } from './EmailTemplateSettingsTabs'
 import { GeneralSettingsTabs } from './GeneralSettingsTabs'
 import { IntegrationSettingsTabs } from './IntegrationSettingsTabs'
 import { BankingSettings } from './BankingSettings'
@@ -19,7 +21,10 @@ export function SettingsLayout() {
   // Determine active tab from URL
   const getActiveTab = () => {
     if (location.pathname.startsWith('/settings/team')) return 'team'
-    if (location.pathname.startsWith('/settings/invoices')) return 'invoices'
+    if (location.pathname.startsWith('/settings/documents')) return 'documents'
+    if (location.pathname.startsWith('/settings/invoices')) return 'documents' // backward compat
+    if (location.pathname.startsWith('/settings/numbering')) return 'numbering'
+    if (location.pathname.startsWith('/settings/email-templates')) return 'email-templates'
     if (location.pathname.startsWith('/settings/banking')) return 'banking'
     if (location.pathname.startsWith('/settings/integrations')) return 'integrations'
     if (location.pathname.startsWith('/settings/general')) return 'general'
@@ -39,8 +44,14 @@ export function SettingsLayout() {
       case 'team':
         navigate('/settings/team')
         break
-      case 'invoices':
-        navigate('/settings/invoices')
+      case 'documents':
+        navigate('/settings/documents')
+        break
+      case 'numbering':
+        navigate('/settings/numbering')
+        break
+      case 'email-templates':
+        navigate('/settings/email-templates')
         break
       case 'banking':
         navigate('/settings/banking')
@@ -72,7 +83,13 @@ export function SettingsLayout() {
             <TabsTrigger value="team"><Users className="mr-1.5 h-4 w-4" />{t('settings.tabs.team')}</TabsTrigger>
           )}
           {canViewInvoiceSettings && (
-            <TabsTrigger value="invoices"><FileUp className="mr-1.5 h-4 w-4" />{t('settings.tabs.invoices')}</TabsTrigger>
+            <TabsTrigger value="documents"><FileText className="mr-1.5 h-4 w-4" />{t('settings.tabs.documents')}</TabsTrigger>
+          )}
+          {canViewInvoiceSettings && (
+            <TabsTrigger value="numbering"><Hash className="mr-1.5 h-4 w-4" />{t('settings.tabs.numbering')}</TabsTrigger>
+          )}
+          {canViewInvoiceSettings && (
+            <TabsTrigger value="email-templates"><Mail className="mr-1.5 h-4 w-4" />{t('settings.tabs.emailTemplates')}</TabsTrigger>
           )}
           {canViewBanking && (
             <TabsTrigger value="banking"><Landmark className="mr-1.5 h-4 w-4" />{t('settings.tabs.banking')}</TabsTrigger>
@@ -102,8 +119,20 @@ export function SettingsLayout() {
         )}
 
         {canViewInvoiceSettings && (
-          <TabsContent value="invoices">
-            <InvoiceSettingsTabs />
+          <TabsContent value="documents">
+            <DocumentSettingsTabs />
+          </TabsContent>
+        )}
+
+        {canViewInvoiceSettings && (
+          <TabsContent value="numbering">
+            <NumberingSettingsTabs />
+          </TabsContent>
+        )}
+
+        {canViewInvoiceSettings && (
+          <TabsContent value="email-templates">
+            <EmailTemplateSettingsTabs />
           </TabsContent>
         )}
 

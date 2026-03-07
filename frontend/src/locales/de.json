@@ -1109,7 +1109,10 @@
       "integrations": "Integrationen",
       "team": "Team",
       "invoices": "Rechnungen",
-      "banking": "Banking"
+      "banking": "Banking",
+      "documents": "Dokumente",
+      "numbering": "Nummernkreise",
+      "emailTemplates": "E-Mail-Vorlagen"
     },
     "integrationTabs": {
       "hubspot": "HubSpot",
@@ -1513,6 +1516,22 @@
       "tenantDescription": "Konfigurieren Sie die Sicherheitseinstellungen für Ihre Organisation.",
       "require2fa": "Zwei-Faktor-Authentifizierung erforderlich",
       "require2faDesc": "Alle Benutzer müssen 2FA einrichten, um auf die Anwendung zuzugreifen."
+    },
+    "numbering": {
+      "invoices": "Rechnungen",
+      "creditNotes": "Stornos",
+      "offers": "Angebote",
+      "orderConfirmations": "Auftragsbestätigungen"
+    },
+    "emailTemplates": {
+      "invoice": "Rechnungs-E-Mail",
+      "orderConfirmation": "AB-E-Mail"
+    },
+    "crossLink": {
+      "numberingHint": "Nummernkreise werden konfiguriert unter",
+      "numbering": "Nummernkreise",
+      "emailTemplatesHint": "E-Mail-Vorlagen werden konfiguriert unter",
+      "emailTemplates": "E-Mail-Vorlagen"
     }
   },
   "timeTracking": {
