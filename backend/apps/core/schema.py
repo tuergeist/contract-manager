@@ -6,7 +6,14 @@ from django.contrib.auth import authenticate
 from django.db.models import Q
 from strawberry.types import Info
 
-from apps.core.auth import create_access_token, create_refresh_token, get_user_from_token
+from apps.core.auth import (
+    create_access_token,
+    create_refresh_token,
+    create_2fa_challenge_token,
+    create_2fa_setup_token,
+    decode_2fa_challenge,
+    get_user_from_token,
+)
 from apps.core.context import Context
 
 
@@ -22,13 +29,22 @@ class AuthPayload:
 
 
 @strawberry.type
+class TwoFactorChallenge:
+    """Response when 2FA is required."""
+
+    requires_two_factor: bool = True
+    challenge_token: str = ""
+    method: str = ""  # "totp" or "email"
+
+
+@strawberry.type
 class AuthError:
     """Authentication error."""
 
     message: str
 
 
-AuthResult = Annotated[Union[AuthPayload, AuthError], strawberry.union("AuthResult")]
+AuthResult = Annotated[Union[AuthPayload, TwoFactorChallenge, AuthError], strawberry.union("AuthResult")]
 
 
 @strawberry.type
@@ -315,12 +331,109 @@ class AuthMutation:
         user.last_login = timezone.now()
         user.save(update_fields=["last_login"])
 
+        # Check if user has 2FA enabled
+        try:
+            tfa = user.two_factor_config
+            if tfa.is_active:
+                challenge_token = create_2fa_challenge_token(user, tfa.method)
+
+                # Send email code if method is email
+                if tfa.method == "email":
+                    from apps.tenants.tasks import send_2fa_email_code
+                    send_2fa_email_code.delay(user.id)
+
+                return TwoFactorChallenge(
+                    challenge_token=challenge_token,
+                    method=tfa.method,
+                )
+        except Exception:
+            pass  # No 2FA config — proceed normally
+
+        # Check if tenant enforces 2FA and user doesn't have it
+        if user.tenant and (user.tenant.settings or {}).get("two_factor_enforced"):
+            access_token = create_2fa_setup_token(user)
+            return AuthPayload(
+                access_token=access_token,
+                refresh_token="",
+                user_id=user.id,
+                email=user.email,
+                tenant_id=user.tenant_id,
+            )
+
         access_token = create_access_token(user)
         refresh_token = create_refresh_token(user)
 
         return AuthPayload(
             access_token=access_token,
             refresh_token=refresh_token,
+            user_id=user.id,
+            email=user.email,
+            tenant_id=user.tenant_id,
+        )
+
+    @strawberry.mutation
+    def verify_2fa(self, challenge_token: str, code: str) -> AuthResult:
+        """Verify 2FA code and return full tokens."""
+        from django.core.cache import cache
+        from apps.tenants.models import User
+
+        payload = decode_2fa_challenge(challenge_token)
+        if payload is None:
+            return AuthError(message="Invalid or expired verification session")
+
+        user_id = int(payload["sub"])
+        method = payload.get("method")
+
+        # Rate limiting
+        rate_key = f"2fa_attempts:{user_id}"
+        attempts = cache.get(rate_key, 0)
+        if attempts >= 5:
+            return AuthError(message="Too many attempts. Please log in again.")
+
+        try:
+            user = User.objects.select_related("tenant", "role").prefetch_related("roles").get(
+                id=user_id, is_active=True
+            )
+        except User.DoesNotExist:
+            return AuthError(message="User not found")
+
+        try:
+            tfa = user.two_factor_config
+        except Exception:
+            return AuthError(message="2FA not configured")
+
+        # Verify code
+        verified = False
+        code_clean = code.strip()
+
+        if method == "totp":
+            import pyotp
+            totp = pyotp.TOTP(tfa.get_totp_secret())
+            if totp.verify(code_clean, valid_window=1):
+                verified = True
+            elif tfa.verify_recovery_code(code_clean):
+                verified = True
+        elif method == "email":
+            cached_code = cache.get(f"2fa_code:{user_id}")
+            if cached_code and cached_code == code_clean:
+                cache.delete(f"2fa_code:{user_id}")  # Single-use
+                verified = True
+            elif tfa.verify_recovery_code(code_clean):
+                verified = True
+
+        if not verified:
+            cache.set(rate_key, attempts + 1, timeout=900)
+            return AuthError(message="Invalid verification code")
+
+        # Clear rate limit on success
+        cache.delete(rate_key)
+
+        access_token = create_access_token(user)
+        refresh_token_val = create_refresh_token(user)
+
+        return AuthPayload(
+            access_token=access_token,
+            refresh_token=refresh_token_val,
             user_id=user.id,
             email=user.email,
             tenant_id=user.tenant_id,

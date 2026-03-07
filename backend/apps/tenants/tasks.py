@@ -1,8 +1,10 @@
 """Celery tasks for tenant operations."""
 
 import logging
+import secrets
 
 from celery import shared_task
+from django.core.cache import cache
 
 from apps.core.smtp import SmtpError, send_notification
 
@@ -86,4 +88,76 @@ def send_password_reset_email(self, user_id: int, reset_url: str) -> bool:
         return True
     except SmtpError as e:
         logger.error("Failed to send password reset email to %s: %s", user.email, e)
+        return False
+
+
+TWO_FA_CODE_TEMPLATES = {
+    "en": {
+        "subject": "Your verification code",
+        "body": """
+<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h2 style="color: #1a1a1a;">Your verification code</h2>
+  <p>Use the following code to sign in to your account at <strong>{tenant_name}</strong>:</p>
+  <p style="margin: 24px 0; text-align: center;">
+    <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; background: #f3f4f6; padding: 12px 24px; border-radius: 8px;">{code}</span>
+  </p>
+  <p style="color: #666; font-size: 14px;">This code expires in 5 minutes. If you didn't request this, please change your password immediately.</p>
+</div>
+""",
+    },
+    "de": {
+        "subject": "Ihr Bestätigungscode",
+        "body": """
+<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h2 style="color: #1a1a1a;">Ihr Bestätigungscode</h2>
+  <p>Verwenden Sie den folgenden Code, um sich bei <strong>{tenant_name}</strong> anzumelden:</p>
+  <p style="margin: 24px 0; text-align: center;">
+    <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; background: #f3f4f6; padding: 12px 24px; border-radius: 8px;">{code}</span>
+  </p>
+  <p style="color: #666; font-size: 14px;">Dieser Code ist 5 Minuten gültig. Falls Sie dies nicht angefordert haben, ändern Sie bitte sofort Ihr Passwort.</p>
+</div>
+""",
+    },
+}
+
+
+@shared_task(bind=True, max_retries=0)
+def send_2fa_email_code(self, user_id: int) -> bool:
+    """Generate and send a 2FA email code.
+
+    Stores the code in cache with 5-minute TTL.
+
+    Returns:
+        True if sent successfully, False otherwise
+    """
+    from apps.tenants.models import User
+
+    try:
+        user = User.objects.select_related("tenant").get(id=user_id)
+    except User.DoesNotExist:
+        logger.error("2FA email code: user %s not found", user_id)
+        return False
+
+    tenant = user.tenant
+    if not tenant:
+        logger.error("2FA email code: user %s has no tenant", user_id)
+        return False
+
+    # Generate 6-digit code
+    code = f"{secrets.randbelow(1000000):06d}"
+    cache.set(f"2fa_code:{user_id}", code, timeout=300)  # 5 min
+
+    lang = (tenant.settings or {}).get("language", "de")
+    template = TWO_FA_CODE_TEMPLATES.get(lang, TWO_FA_CODE_TEMPLATES["de"])
+    tenant_name = tenant.name or "Contract Manager"
+
+    subject = template["subject"]
+    body_html = template["body"].format(code=code, tenant_name=tenant_name)
+
+    try:
+        send_notification(tenant, to=[user.email], subject=subject, body_html=body_html)
+        logger.info("2FA code sent to %s", user.email)
+        return True
+    except SmtpError as e:
+        logger.error("Failed to send 2FA code to %s: %s", user.email, e)
         return False

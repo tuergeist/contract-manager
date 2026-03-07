@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { ProfileEdit } from './ProfileEdit'
 import { PasswordChange } from './PasswordChange'
+import { SecuritySettings } from './SecuritySettings'
 import { NotificationPreferences } from './NotificationPreferences'
 import { DashboardPreferences } from './DashboardPreferences'
 
@@ -18,6 +19,11 @@ export function UserSettings() {
 
       {/* Password Change */}
       <PasswordChange />
+
+      {/* Two-Factor Authentication */}
+      <div className="rounded-lg border bg-white p-6">
+        <SecuritySettings />
+      </div>
 
       {/* Notification Preferences */}
       <NotificationPreferences />

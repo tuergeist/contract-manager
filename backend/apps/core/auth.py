@@ -50,6 +50,42 @@ def decode_token(token: str) -> dict | None:
         return None
 
 
+def create_2fa_challenge_token(user: User, method: str) -> str:
+    """Create a short-lived JWT for 2FA challenge."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=5)
+    payload = {
+        "sub": str(user.id),
+        "exp": expire,
+        "iat": datetime.now(timezone.utc),
+        "type": "2fa_challenge",
+        "method": method,
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+
+
+def create_2fa_setup_token(user: User) -> str:
+    """Create a restricted JWT that only allows 2FA setup."""
+    expire = datetime.now(timezone.utc) + timedelta(hours=1)
+    payload = {
+        "sub": str(user.id),
+        "exp": expire,
+        "iat": datetime.now(timezone.utc),
+        "type": "access",
+        "scope": "2fa_setup",
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+
+
+def decode_2fa_challenge(token: str) -> dict | None:
+    """Decode a 2FA challenge token. Returns payload or None."""
+    payload = decode_token(token)
+    if payload is None:
+        return None
+    if payload.get("type") != "2fa_challenge":
+        return None
+    return payload
+
+
 def get_user_from_token(token: str) -> User | None:
     """Get user from a valid JWT token."""
     payload = decode_token(token)

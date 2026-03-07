@@ -1,13 +1,24 @@
 """Tenant and User models for multi-tenant support."""
+import hashlib
 import secrets
+import string
 from datetime import timedelta
 from functools import cached_property
 
+from cryptography.fernet import Fernet
+from django.conf import settings as django_settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.utils import timezone
 
 from apps.core.models import TimestampedModel
+
+
+def _get_fernet():
+    """Get Fernet instance using SECRET_KEY."""
+    import base64
+    key = hashlib.sha256(django_settings.SECRET_KEY.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(key))
 
 
 class Tenant(TimestampedModel):
@@ -235,3 +246,54 @@ class PasswordResetToken(TimestampedModel):
     def is_expired(self) -> bool:
         """Check if token has expired."""
         return self.expires_at <= timezone.now()
+
+
+class TwoFactorConfig(TimestampedModel):
+    """Two-factor authentication configuration for a user."""
+
+    class Method(models.TextChoices):
+        TOTP = "totp", "Authenticator App"
+        EMAIL = "email", "Email Code"
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="two_factor_config",
+    )
+    method = models.CharField(max_length=10, choices=Method.choices)
+    totp_secret_encrypted = models.TextField(blank=True, default="")
+    recovery_codes_hashed = models.JSONField(default=list, blank=True)
+    is_active = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"2FA ({self.method}) for {self.user.email}"
+
+    def set_totp_secret(self, secret: str):
+        """Encrypt and store TOTP secret."""
+        f = _get_fernet()
+        self.totp_secret_encrypted = f.encrypt(secret.encode()).decode()
+
+    def get_totp_secret(self) -> str:
+        """Decrypt and return TOTP secret."""
+        f = _get_fernet()
+        return f.decrypt(self.totp_secret_encrypted.encode()).decode()
+
+    @staticmethod
+    def generate_recovery_codes() -> tuple[list[str], list[str]]:
+        """Generate recovery codes. Returns (plaintext_codes, hashed_codes)."""
+        chars = string.ascii_lowercase + string.digits
+        codes = ["".join(secrets.choice(chars) for _ in range(8)) for _ in range(10)]
+        hashed = [hashlib.sha256(c.encode()).hexdigest() for c in codes]
+        return codes, hashed
+
+    def verify_recovery_code(self, code: str) -> bool:
+        """Verify and consume a recovery code. Returns True if valid."""
+        code_hash = hashlib.sha256(code.strip().lower().encode()).hexdigest()
+        if code_hash in self.recovery_codes_hashed:
+            self.recovery_codes_hashed.remove(code_hash)
+            self.save(update_fields=["recovery_codes_hashed"])
+            return True
+        return False

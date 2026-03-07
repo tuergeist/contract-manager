@@ -20,7 +20,8 @@ interface AuthContextType {
   token: string | null
   isAuthenticated: boolean
   isLoading: boolean
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; twoFactor?: { challengeToken: string; method: string } }>
+  loginWithTokens: (accessToken: string, refreshToken: string) => Promise<boolean>
   logout: () => void
   refetchUser: () => Promise<void>
   hasPermission: (resource: string, action: string) => boolean
@@ -37,6 +38,11 @@ const LOGIN_MUTATION = gql`
         userId
         email
         tenantId
+      }
+      ... on TwoFactorChallenge {
+        requiresTwoFactor
+        challengeToken
+        method
       }
       ... on AuthError {
         message
@@ -113,34 +119,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth()
   }, [client])
 
-  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  const loginWithTokens = async (accessToken: string, refreshToken: string): Promise<boolean> => {
+    localStorage.setItem(TOKEN_KEY, accessToken)
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+    setToken(accessToken)
+
+    try {
+      const { data: userData } = await client.query({
+        query: ME_QUERY,
+        context: { headers: { Authorization: `Bearer ${accessToken}` } },
+        fetchPolicy: 'network-only',
+      })
+      if (userData.me) {
+        setUser(userData.me)
+        return true
+      }
+    } catch {
+      // ignore
+    }
+    return false
+  }
+
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string; twoFactor?: { challengeToken: string; method: string } }> => {
     try {
       const { data } = await client.mutate({
         mutation: LOGIN_MUTATION,
         variables: { email, password },
       })
 
-      if (data.login.accessToken) {
-        const { accessToken, refreshToken } = data.login
-        localStorage.setItem(TOKEN_KEY, accessToken)
-        localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
-        setToken(accessToken)
-
-        // Fetch user data
-        const { data: userData } = await client.query({
-          query: ME_QUERY,
-          context: {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
+      if (data.login.requiresTwoFactor) {
+        return {
+          success: false,
+          twoFactor: {
+            challengeToken: data.login.challengeToken,
+            method: data.login.method,
           },
-          fetchPolicy: 'network-only',
-        })
-
-        if (userData.me) {
-          setUser(userData.me)
         }
+      }
 
+      if (data.login.accessToken) {
+        await loginWithTokens(data.login.accessToken, data.login.refreshToken)
         return { success: true }
       } else {
         return { success: false, error: data.login.message }
@@ -194,6 +212,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         isLoading,
         login,
+        loginWithTokens,
         logout,
         refetchUser,
         hasPermission,

@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Settings } from './Settings'
 import { ForecastCacheSettings } from './ForecastCacheSettings'
 import { RevenueGoalSettings } from './RevenueGoalSettings'
+import { TenantSecuritySettings } from './TenantSecuritySettings'
 
 export function GeneralSettingsTabs() {
   const { t } = useTranslation()
@@ -14,6 +15,7 @@ export function GeneralSettingsTabs() {
     if (location.pathname.includes('/general/help-videos')) return 'helpVideos'
     if (location.pathname.includes('/general/performance')) return 'performance'
     if (location.pathname.includes('/general/revenue-goals')) return 'revenueGoals'
+    if (location.pathname.includes('/general/security')) return 'security'
     return 'contracts'
   }
 
@@ -30,6 +32,9 @@ export function GeneralSettingsTabs() {
       case 'revenueGoals':
         navigate('/settings/general/revenue-goals')
         break
+      case 'security':
+        navigate('/settings/general/security')
+        break
       default:
         navigate('/settings/general')
     }
@@ -42,6 +47,7 @@ export function GeneralSettingsTabs() {
         <TabsTrigger value="helpVideos">{t('settings.generalTabs.helpVideos')}</TabsTrigger>
         <TabsTrigger value="performance">{t('settings.generalTabs.performance')}</TabsTrigger>
         <TabsTrigger value="revenueGoals">{t('settings.generalTabs.revenueGoals')}</TabsTrigger>
+        <TabsTrigger value="security">{t('settings.generalTabs.security')}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="contracts">
@@ -58,6 +64,10 @@ export function GeneralSettingsTabs() {
 
       <TabsContent value="revenueGoals">
         <RevenueGoalSettings />
+      </TabsContent>
+
+      <TabsContent value="security">
+        <TenantSecuritySettings />
       </TabsContent>
     </Tabs>
   )

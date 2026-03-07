@@ -32,6 +32,8 @@ dependencies = [
     "msal~=1.34.0",
     "django-oauth-toolkit~=3.0.1",
     "django-mcp-server~=0.5.7",
+    "pyotp~=2.9.0",
+    "cryptography~=44.0.2",
 ]
 
 [project.optional-dependencies]

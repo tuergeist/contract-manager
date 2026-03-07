@@ -39,7 +39,10 @@
       "searchPlaceholder": "Search customers...",
       "searchResults": "Search Results",
       "noResults": "No customers found"
-    }
+    },
+    "copy": "Copy",
+    "copied": "Copied",
+    "done": "Done"
   },
   "search": {
     "customer": "Customers",
@@ -83,7 +86,17 @@
     "sendResetLink": "Send Reset Link",
     "resetEmailSent": "Check your email",
     "resetEmailSentDesc": "If an account exists with that email, we've sent a password reset link. Check your inbox.",
-    "backToLogin": "Back to Login"
+    "backToLogin": "Back to Login",
+    "twoFactorTitle": "Two-factor authentication",
+    "twoFactorEmailDesc": "Enter the 6-digit code we sent to your email.",
+    "twoFactorTotpDesc": "Enter the 6-digit code from your authenticator app.",
+    "twoFactorRecoveryDesc": "Enter one of your recovery codes.",
+    "verificationCode": "Verification code",
+    "recoveryCode": "Recovery code",
+    "verify": "Verify",
+    "verificationFailed": "Verification failed. Please try again.",
+    "useAuthenticator": "Use authenticator app",
+    "useRecoveryCode": "Use a recovery code"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1135,7 +1148,8 @@
       "contracts": "Contracts",
       "helpVideos": "Help Videos",
       "performance": "Performance",
-      "revenueGoals": "Revenue Goals"
+      "revenueGoals": "Revenue Goals",
+      "security": "Security"
     },
     "revenueGoals": {
       "title": "Revenue Goals",
@@ -1475,6 +1489,30 @@
       },
       "missingFieldsTitle": "Missing required fields",
       "missingFieldsDescription": "The following fields must be filled before this contract can be activated:"
+    },
+    "security": {
+      "title": "Two-Factor Authentication",
+      "description": "Add an extra layer of security to your account.",
+      "enabled": "Two-factor authentication is enabled",
+      "disabled": "Two-factor authentication is not enabled",
+      "disabledDesc": "Protect your account with a second verification step.",
+      "methodTotp": "Using authenticator app",
+      "methodEmail": "Using email code",
+      "setupTotp": "Authenticator App",
+      "setupTotpDesc": "Use an app like Google Authenticator",
+      "setupEmail": "Email Code",
+      "setupEmailDesc": "Receive a code via email on each login",
+      "scanQr": "Scan this QR code with your authenticator app, then enter the 6-digit code below.",
+      "disable2fa": "Disable 2FA",
+      "confirmDisable": "Enter your password to disable two-factor authentication.",
+      "regenerateCodes": "Regenerate Recovery Codes",
+      "confirmRegenerate": "Enter your password to generate new recovery codes. This will invalidate all existing codes.",
+      "saveRecoveryCodes": "Save your recovery codes",
+      "recoveryCodesWarning": "Store these codes in a safe place. Each code can only be used once. You won't be able to see them again.",
+      "tenantTitle": "Security",
+      "tenantDescription": "Configure security settings for your organization.",
+      "require2fa": "Require two-factor authentication",
+      "require2faDesc": "All users must set up 2FA to access the application."
     }
   },
   "timeTracking": {

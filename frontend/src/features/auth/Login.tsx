@@ -2,17 +2,19 @@ import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../lib/auth'
+import { TwoFactorVerify } from './TwoFactorVerify'
 
 export function Login() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
-  const { login, isLoading: authLoading } = useAuth()
+  const { login, loginWithTokens, isLoading: authLoading } = useAuth()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [twoFactor, setTwoFactor] = useState<{ challengeToken: string; method: string } | null>(null)
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/'
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -26,6 +28,8 @@ export function Login() {
 
     if (result.success) {
       navigate(from, { replace: true })
+    } else if (result.twoFactor) {
+      setTwoFactor(result.twoFactor)
     } else {
       setError(result.error || t('auth.loginFailed'))
     }
@@ -39,10 +43,28 @@ export function Login() {
     const result = await login('admin@test.local', 'admin123')
     if (result.success) {
       navigate(from, { replace: true })
+    } else if (result.twoFactor) {
+      setTwoFactor(result.twoFactor)
     } else {
       setError(result.error || t('auth.loginFailed'))
     }
     setIsSubmitting(false)
+  }
+
+  const handle2faSuccess = async (accessToken: string, refreshToken: string) => {
+    await loginWithTokens(accessToken, refreshToken)
+    navigate(from, { replace: true })
+  }
+
+  if (twoFactor) {
+    return (
+      <TwoFactorVerify
+        challengeToken={twoFactor.challengeToken}
+        method={twoFactor.method}
+        onSuccess={handle2faSuccess}
+        onCancel={() => setTwoFactor(null)}
+      />
+    )
   }
 
   if (authLoading) {

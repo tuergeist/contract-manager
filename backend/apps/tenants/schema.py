@@ -21,7 +21,7 @@ from apps.core.permissions import (
     require_perm,
 )
 from apps.customers.hubspot import HubSpotService
-from .models import PasswordResetToken, Role, Tenant, User, UserInvitation
+from .models import PasswordResetToken, Role, Tenant, TwoFactorConfig, User, UserInvitation
 
 
 @strawberry_django.type(Tenant)
@@ -53,6 +53,23 @@ class UserType:
     def role_names(self) -> list[str]:
         """Return list of assigned role names."""
         return [r.name for r in self.roles.all()]
+
+    @strawberry.field
+    def two_factor_enabled(self) -> bool:
+        """Whether 2FA is active for this user."""
+        try:
+            return self.two_factor_config.is_active
+        except Exception:
+            return False
+
+    @strawberry.field
+    def two_factor_method(self) -> str | None:
+        """The 2FA method if enabled."""
+        try:
+            cfg = self.two_factor_config
+            return cfg.method if cfg.is_active else None
+        except Exception:
+            return None
 
 
 @strawberry_django.type(UserInvitation)
@@ -96,6 +113,23 @@ class InvitationResult:
     error: str | None = None
     invitation: InvitationType | None = None
     invite_url: str | None = None
+
+
+@strawberry.type
+class TotpSetupResult:
+    """Result of TOTP setup initiation."""
+    success: bool
+    error: str | None = None
+    secret: str | None = None
+    provisioning_uri: str | None = None
+
+
+@strawberry.type
+class TwoFactorConfirmResult:
+    """Result of 2FA confirmation with recovery codes."""
+    success: bool
+    error: str | None = None
+    recovery_codes: list[str] | None = None
 
 
 @strawberry.type
@@ -435,7 +469,23 @@ class HelpVideoLinksEntryInput:
 
 
 @strawberry.type
+@strawberry.type
+class TenantSettingsType:
+    two_factor_enforced: bool = False
+
+
 class TenantQuery:
+    @strawberry.field
+    def tenant_settings(self, info: Info[Context, None]) -> TenantSettingsType | None:
+        """Get tenant settings for the current user."""
+        user = get_current_user(info)
+        if not user or not user.tenant:
+            return None
+        s = user.tenant.settings or {}
+        return TenantSettingsType(
+            two_factor_enforced=s.get("two_factor_enforced", False),
+        )
+
     @strawberry.field
     def current_user(self, info: Info[Context, None]) -> UserType | None:
         if info.context.is_authenticated:
@@ -1477,6 +1527,183 @@ class TenantMutation:
 
         reset_token.used = True
         reset_token.save(update_fields=["used"])
+
+        return OperationResult(success=True)
+
+    # Two-Factor Authentication Mutations
+
+    @strawberry.mutation
+    def setup_totp(self, info: Info[Context, None]) -> TotpSetupResult:
+        """Initiate TOTP 2FA setup. Returns secret and provisioning URI."""
+        import pyotp
+        user = get_current_user(info)
+        if not user:
+            return TotpSetupResult(success=False, error="Not authenticated")
+
+        secret = pyotp.random_base32()
+        totp = pyotp.TOTP(secret)
+        provisioning_uri = totp.provisioning_uri(
+            name=user.email,
+            issuer_name=user.tenant.name if user.tenant else "Contract Manager",
+        )
+
+        # Store pending config (not yet active)
+        config, _ = TwoFactorConfig.objects.get_or_create(
+            user=user, defaults={"method": "totp"}
+        )
+        config.method = "totp"
+        config.set_totp_secret(secret)
+        config.is_active = False
+        config.save()
+
+        return TotpSetupResult(
+            success=True,
+            secret=secret,
+            provisioning_uri=provisioning_uri,
+        )
+
+    @strawberry.mutation
+    def confirm_totp(self, info: Info[Context, None], code: str) -> TwoFactorConfirmResult:
+        """Confirm TOTP setup with a verification code. Activates 2FA and returns recovery codes."""
+        import pyotp
+        user = get_current_user(info)
+        if not user:
+            return TwoFactorConfirmResult(success=False, error="Not authenticated")
+
+        try:
+            config = user.two_factor_config
+        except TwoFactorConfig.DoesNotExist:
+            return TwoFactorConfirmResult(success=False, error="No TOTP setup in progress")
+
+        if config.is_active:
+            return TwoFactorConfirmResult(success=False, error="2FA is already active")
+
+        if not config.totp_secret_encrypted:
+            return TwoFactorConfirmResult(success=False, error="No TOTP setup in progress")
+
+        secret = config.get_totp_secret()
+        totp = pyotp.TOTP(secret)
+        if not totp.verify(code.strip(), valid_window=1):
+            return TwoFactorConfirmResult(success=False, error="Invalid verification code")
+
+        # Activate and generate recovery codes
+        plaintext_codes, hashed_codes = TwoFactorConfig.generate_recovery_codes()
+        config.is_active = True
+        config.recovery_codes_hashed = hashed_codes
+        config.save()
+
+        return TwoFactorConfirmResult(success=True, recovery_codes=plaintext_codes)
+
+    @strawberry.mutation
+    def enable_email_2fa(self, info: Info[Context, None]) -> TwoFactorConfirmResult:
+        """Enable email-based 2FA."""
+        from apps.core.smtp import SmtpError, _get_config
+        user = get_current_user(info)
+        if not user:
+            return TwoFactorConfirmResult(success=False, error="Not authenticated")
+        if not user.tenant:
+            return TwoFactorConfirmResult(success=False, error="No tenant assigned")
+
+        # Check SMTP is configured
+        try:
+            _get_config(user.tenant)
+        except SmtpError:
+            return TwoFactorConfirmResult(success=False, error="Email 2FA not available — SMTP not configured")
+
+        config, _ = TwoFactorConfig.objects.get_or_create(
+            user=user, defaults={"method": "email"}
+        )
+        config.method = "email"
+        config.totp_secret_encrypted = ""
+        config.is_active = True
+
+        # Generate recovery codes
+        plaintext_codes, hashed_codes = TwoFactorConfig.generate_recovery_codes()
+        config.recovery_codes_hashed = hashed_codes
+        config.save()
+
+        return TwoFactorConfirmResult(success=True, recovery_codes=plaintext_codes)
+
+    @strawberry.mutation
+    def disable_2fa(self, info: Info[Context, None], password: str) -> OperationResult:
+        """Disable 2FA for the current user. Requires password confirmation."""
+        user = get_current_user(info)
+        if not user:
+            return OperationResult(success=False, error="Not authenticated")
+
+        if not check_password(password, user.password):
+            return OperationResult(success=False, error="Incorrect password")
+
+        # Check enforcement
+        if user.tenant and (user.tenant.settings or {}).get("two_factor_enforced"):
+            return OperationResult(success=False, error="2FA is required by your organization")
+
+        try:
+            user.two_factor_config.delete()
+        except TwoFactorConfig.DoesNotExist:
+            pass
+
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def regenerate_recovery_codes(self, info: Info[Context, None], password: str) -> TwoFactorConfirmResult:
+        """Regenerate recovery codes. Requires password confirmation."""
+        user = get_current_user(info)
+        if not user:
+            return TwoFactorConfirmResult(success=False, error="Not authenticated")
+
+        if not check_password(password, user.password):
+            return TwoFactorConfirmResult(success=False, error="Incorrect password")
+
+        try:
+            config = user.two_factor_config
+        except TwoFactorConfig.DoesNotExist:
+            return TwoFactorConfirmResult(success=False, error="2FA not enabled")
+
+        if not config.is_active:
+            return TwoFactorConfirmResult(success=False, error="2FA not active")
+
+        plaintext_codes, hashed_codes = TwoFactorConfig.generate_recovery_codes()
+        config.recovery_codes_hashed = hashed_codes
+        config.save(update_fields=["recovery_codes_hashed"])
+
+        return TwoFactorConfirmResult(success=True, recovery_codes=plaintext_codes)
+
+    @strawberry.mutation
+    def set_tenant_2fa_enforcement(self, info: Info[Context, None], enforced: bool) -> OperationResult:
+        """Enable or disable 2FA enforcement for the tenant. Requires settings.write."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return OperationResult(success=False, error=err)
+        if not user.tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        tenant = user.tenant
+        s = tenant.settings or {}
+        s["two_factor_enforced"] = enforced
+        tenant.settings = s
+        tenant.save(update_fields=["settings"])
+
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def reset_user_2fa(self, info: Info[Context, None], user_id: strawberry.ID) -> OperationResult:
+        """Reset 2FA for a user. Requires users.write."""
+        admin, err = check_perm(info, "users", "write")
+        if err:
+            return OperationResult(success=False, error=err)
+        if not admin.tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        try:
+            target_user = User.objects.get(id=user_id, tenant=admin.tenant)
+        except User.DoesNotExist:
+            return OperationResult(success=False, error="User not found")
+
+        try:
+            target_user.two_factor_config.delete()
+        except TwoFactorConfig.DoesNotExist:
+            pass
 
         return OperationResult(success=True)
 
