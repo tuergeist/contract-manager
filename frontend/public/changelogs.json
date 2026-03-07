@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.17.1",
+    "date": "2026-03-07",
+    "title": "Settings restructured: Documents, Numbering, Email Templates",
+    "description": "The overloaded Invoice Settings tab (9 sub-tabs) has been split into three focused top-level tabs for better navigation.",
+    "type": "improvement",
+    "details": [
+      "New 'Documents' tab: Company Data, PDF Template, Zugferd",
+      "New 'Numbering' tab: Invoice, Credit Note, Offer, and Order Confirmation numbering schemes in one place",
+      "New 'Email Templates' tab: Invoice Email and Order Confirmation Email templates in one place",
+      "Cross-link banners between Numbering and Email Templates for quick navigation",
+      "Old /settings/invoices URLs redirect to /settings/documents for backward compatibility"
+    ]
+  },
+  {
     "version": "2.16.3",
     "date": "2026-03-05",
     "title": "Self-service password reset via email",
