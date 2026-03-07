@@ -140,7 +140,7 @@ class TestEmailSetup:
         assert data["success"] is False
         assert "SMTP" in data["error"]
 
-    @patch("apps.tenants.schema._get_config")
+    @patch("apps.core.smtp._get_config")
     def test_enable_email_2fa_with_smtp(self, mock_config, user):
         mock_config.return_value = {"host": "smtp.test.com", "port": 587}
         ctx = make_context(user=user)

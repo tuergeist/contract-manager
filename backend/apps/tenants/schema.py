@@ -474,6 +474,7 @@ class TenantSettingsType:
     two_factor_enforced: bool = False
 
 
+@strawberry.type
 class TenantQuery:
     @strawberry.field
     def tenant_settings(self, info: Info[Context, None]) -> TenantSettingsType | None:
