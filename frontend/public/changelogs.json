@@ -1,5 +1,44 @@
 [
   {
+    "version": "2.16.3",
+    "date": "2026-03-05",
+    "title": "Self-service password reset via email",
+    "description": "Users can now reset their password via email from the login page. Admins triggering a password reset also send the link by email when SMTP is configured.",
+    "type": "feature",
+    "details": [
+      "Added 'Forgot Password?' link on the login page",
+      "New self-service password reset form that sends a reset link via tenant SMTP",
+      "Public requestPasswordReset mutation — same response for known/unknown emails (no enumeration)",
+      "Rate limiting: max 5 reset requests per email per 15 minutes",
+      "Admin-triggered password reset now also emails the link when SMTP is configured",
+      "DE/EN email templates for password reset",
+      "OpenSpec change: password-reset-email (proposal, specs, design, tasks)"
+    ]
+  },
+  {
+    "version": "2.17.0",
+    "date": "2026-03-07",
+    "title": "Two-factor authentication (TOTP & Email)",
+    "description": "Full two-factor authentication support with authenticator app (TOTP) and email code methods. Tenant admins can enforce 2FA for all users.",
+    "type": "feature",
+    "details": [
+      "Two 2FA methods: Authenticator App (TOTP) and Email Code",
+      "Two-step login flow: credentials → verification code → JWT tokens",
+      "TOTP setup with QR code, provisioning URI, and 10 single-use recovery codes",
+      "Email 2FA sends 6-digit codes via tenant SMTP (5-minute expiry)",
+      "Rate limiting on verification attempts (5 per 15 minutes)",
+      "Tenant-level 2FA enforcement — users without 2FA are redirected to setup",
+      "Admin can reset any user's 2FA configuration",
+      "Security settings section in user profile for 2FA management",
+      "Security sub-tab in tenant settings for enforcement toggle",
+      "2FA status badges on user administration list",
+      "Encrypted TOTP secret storage (Fernet + SECRET_KEY)",
+      "Hashed recovery codes (SHA-256)",
+      "Full DE/EN localization for all 2FA UI strings",
+      "OpenSpec change: two-factor-authentication (proposal, specs, design, tasks)"
+    ]
+  },
+  {
     "version": "2.16.4",
     "date": "2026-03-06",
     "title": "Price increase drill-down and dashboard settings",
