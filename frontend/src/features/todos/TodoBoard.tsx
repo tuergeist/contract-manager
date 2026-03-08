@@ -487,8 +487,8 @@ export function TodoBoard() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b bg-white">
-        <h1 className="text-2xl font-semibold">{t('todos.board')}</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold">{t('todos.board')}</h1>
 
         <div className="flex items-center gap-4">
           {/* Search */}
