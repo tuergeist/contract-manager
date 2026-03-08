@@ -94,6 +94,8 @@
     "verificationCode": "Bestätigungscode",
     "recoveryCode": "Wiederherstellungscode",
     "verify": "Bestätigen",
+    "twoFactorSetupTitle": "Zwei-Faktor-Authentifizierung erforderlich",
+    "twoFactorSetupDescription": "Ihre Organisation erfordert Zwei-Faktor-Authentifizierung. Bitte richten Sie eine Methode ein, um fortzufahren.",
     "verificationFailed": "Verifizierung fehlgeschlagen. Bitte versuchen Sie es erneut.",
     "useAuthenticator": "Authenticator-App verwenden",
     "useRecoveryCode": "Wiederherstellungscode verwenden"

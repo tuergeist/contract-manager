@@ -20,7 +20,7 @@ interface AuthContextType {
   token: string | null
   isAuthenticated: boolean
   isLoading: boolean
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; twoFactor?: { challengeToken: string; method: string } }>
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; twoFactor?: { challengeToken: string; method: string }; setupRequired?: boolean }>
   loginWithTokens: (accessToken: string, refreshToken: string) => Promise<boolean>
   logout: () => void
   refetchUser: () => Promise<void>
@@ -140,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return false
   }
 
-  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string; twoFactor?: { challengeToken: string; method: string } }> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string; twoFactor?: { challengeToken: string; method: string }; setupRequired?: boolean }> => {
     try {
       const { data } = await client.mutate({
         mutation: LOGIN_MUTATION,
@@ -158,6 +158,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (data.login.accessToken) {
+        // Empty refreshToken signals 2FA setup is required (tenant enforcement)
+        if (data.login.refreshToken === '') {
+          // Store restricted token so user can access 2FA setup mutations
+          localStorage.setItem(TOKEN_KEY, data.login.accessToken)
+          setToken(data.login.accessToken)
+          return { success: false, setupRequired: true }
+        }
         await loginWithTokens(data.login.accessToken, data.login.refreshToken)
         return { success: true }
       } else {

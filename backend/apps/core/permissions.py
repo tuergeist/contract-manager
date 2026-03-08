@@ -118,10 +118,16 @@ def is_authenticated(info: Info[Context, None]) -> bool:
     return info.context.is_authenticated
 
 
-def get_current_user(info: Info[Context, None]):
-    """Get the current authenticated user or raise error."""
+def get_current_user(info: Info[Context, None], *, allow_2fa_setup: bool = False):
+    """Get the current authenticated user or raise error.
+
+    If the token has scope='2fa_setup', only mutations that pass
+    allow_2fa_setup=True are permitted. All other calls raise PermissionError.
+    """
     if not info.context.is_authenticated:
         raise PermissionError("Authentication required")
+    if info.context.is_2fa_setup_restricted and not allow_2fa_setup:
+        raise PermissionError("Two-factor authentication setup required")
     return info.context.user
 
 

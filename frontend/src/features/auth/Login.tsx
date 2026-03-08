@@ -28,6 +28,8 @@ export function Login() {
 
     if (result.success) {
       navigate(from, { replace: true })
+    } else if (result.setupRequired) {
+      navigate('/setup-2fa', { replace: true })
     } else if (result.twoFactor) {
       setTwoFactor(result.twoFactor)
     } else {
@@ -43,6 +45,8 @@ export function Login() {
     const result = await login('admin@test.local', 'admin123')
     if (result.success) {
       navigate(from, { replace: true })
+    } else if (result.setupRequired) {
+      navigate('/setup-2fa', { replace: true })
     } else if (result.twoFactor) {
       setTwoFactor(result.twoFactor)
     } else {
