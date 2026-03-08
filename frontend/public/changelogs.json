@@ -1,5 +1,21 @@
 [
   {
+    "version": "2.18.2",
+    "date": "2026-03-08",
+    "title": "Global search finds pages and settings tabs",
+    "description": "The sidebar search now finds all navigable pages, settings tabs, and sub-tabs with keyboard navigation support.",
+    "type": "feature",
+    "details": [
+      "Added client-side page search matching all nav pages and settings sub-tabs by label and keywords (EN/DE)",
+      "Added keyboard navigation: arrow keys to select, Enter to open, Escape to close",
+      "Search links directly to sub-tabs (e.g., Notifications, Roles, Order Confirmation Email)",
+      "Fixed double scrollbar on dashboard",
+      "Fixed 2FA status display on user settings page",
+      "Renamed German Audit Log translation to Auditlog",
+      "Fixed TodoBoard heading style consistency"
+    ]
+  },
+  {
     "version": "2.18.1",
     "date": "2026-03-08",
     "title": "2FA tenant enforcement flow",
