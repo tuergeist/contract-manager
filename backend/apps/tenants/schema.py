@@ -99,11 +99,7 @@ class InvitationType:
         return f"{base_url}/invite/{self.token}"
 
 
-@strawberry.type
-class OperationResult:
-    """Generic result for mutations."""
-    success: bool
-    error: str | None = None
+from apps.core.schema import OperationResult  # noqa: E402 - re-exported for backward compat
 
 
 @strawberry.type

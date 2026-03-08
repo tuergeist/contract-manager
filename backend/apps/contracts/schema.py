@@ -16,7 +16,7 @@ from django.db.models import Sum, F, Q
 
 from apps.core.context import Context
 from apps.core.permissions import check_perm, get_current_user, require_perm
-from apps.core.schema import DeleteResult
+from apps.core.schema import DeleteResult, OperationResult
 from apps.customers.models import Customer
 from apps.customers.schema import CustomerType
 from apps.products.models import Product

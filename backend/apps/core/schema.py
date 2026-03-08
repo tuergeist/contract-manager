@@ -48,6 +48,13 @@ AuthResult = Annotated[Union[AuthPayload, TwoFactorChallenge, AuthError], strawb
 
 
 @strawberry.type
+class OperationResult:
+    """Simple success/error result."""
+    success: bool
+    error: str | None = None
+
+
+@strawberry.type
 class DeleteResult:
     """Result of delete operations."""
 
