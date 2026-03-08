@@ -9,7 +9,7 @@
     "invoices": "Rechnungen",
     "offers": "Angebote",
     "forecasts": "Vorschauen",
-    "auditLog": "Änderungsprotokoll",
+    "auditLog": "Auditlog",
     "banking": "Bankkonten",
     "about": "Info",
     "departmentAnalysis": "Abt.-Analyse",
@@ -981,7 +981,7 @@
     "receiverEmails": "Empfänger-E-Mails"
   },
   "audit": {
-    "title": "Änderungsprotokoll",
+    "title": "Auditlog",
     "entries": "Einträge",
     "noEntries": "Keine Protokolleinträge",
     "timestamp": "Zeitstempel",
@@ -1856,7 +1856,7 @@
     "packageVersion": "Version",
     "packageLicense": "Lizenz",
     "changelog": {
-      "tab": "Änderungsprotokoll",
+      "tab": "Auditlog",
       "aboutTab": "Info",
       "noEntries": "Noch keine Einträge",
       "feature": "Neues Feature",
