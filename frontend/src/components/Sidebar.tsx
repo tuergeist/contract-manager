@@ -279,7 +279,7 @@ export function Sidebar() {
             />
             {loading ? (
               <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-400" />
-            ) : searchQuery && (
+            ) : searchQuery ? (
               <button
                 type="button"
                 onClick={() => {
@@ -290,6 +290,8 @@ export function Sidebar() {
               >
                 <X className="h-4 w-4" />
               </button>
+            ) : (
+              <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-xs text-gray-400">/</kbd>
             )}
           </div>
 
