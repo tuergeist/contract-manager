@@ -1856,7 +1856,7 @@
     "packageVersion": "Version",
     "packageLicense": "Lizenz",
     "changelog": {
-      "tab": "Auditlog",
+      "tab": "Neuerungen",
       "aboutTab": "Info",
       "noEntries": "Noch keine Einträge",
       "feature": "Neues Feature",
