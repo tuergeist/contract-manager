@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/dialog'
 import { CustomerPickerDialog } from '@/components/CustomerPickerDialog'
 import { OrderConfirmationDialog } from './OrderConfirmationDialog'
+import { ClockodoActivationDialog } from './ClockodoActivationDialog'
 
 const CUSTOMERS_SEARCH_QUERY = gql`
   query CustomersSearch($search: String) {
@@ -1355,6 +1356,8 @@ function StatusTransitionModal({
     }
   }
 
+  const [showClockodoDialog, setShowClockodoDialog] = useState(false)
+
   const doTransition = async () => {
     const result = await transitionStatus({
       variables: {
@@ -1367,11 +1370,11 @@ function StatusTransitionModal({
     }
   }
 
-  const handleConfirm = async () => {
-    setError(null)
+  const proceedAfterClockodo = async () => {
+    setShowClockodoDialog(false)
 
-    // For draft→active with M365, show AB dialog instead of directly confirming
-    if (isDraftToActive && m365Configured && missingFields.length === 0) {
+    // After Clockodo provisioning, check if AB dialog is needed
+    if (isDraftToActive && m365Configured) {
       setShowABDialog(true)
       return
     }
@@ -1382,6 +1385,34 @@ function StatusTransitionModal({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     }
+  }
+
+  const handleConfirm = async () => {
+    setError(null)
+
+    // For draft→active, show Clockodo dialog first (if applicable)
+    if (isDraftToActive && missingFields.length === 0) {
+      setShowClockodoDialog(true)
+      return
+    }
+
+    try {
+      await doTransition()
+      onSuccess()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    }
+  }
+
+  if (showClockodoDialog) {
+    return (
+      <ClockodoActivationDialog
+        contractId={contractId}
+        open={true}
+        onClose={() => setShowClockodoDialog(false)}
+        onComplete={proceedAfterClockodo}
+      />
+    )
   }
 
   if (showABDialog) {

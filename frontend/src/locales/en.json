@@ -2056,5 +2056,23 @@
       "saved": "OC email template saved",
       "saveFailed": "Failed to save OC email template"
     }
+  },
+  "clockodo": {
+    "activation": {
+      "title": "Clockodo Project Setup",
+      "customerLinked": "{name} is linked to Clockodo",
+      "customerNotLinked": "{name} is not linked to Clockodo",
+      "linkCustomerFirst": "Link this customer to a Clockodo customer first to create projects automatically.",
+      "maintenanceProject": "Maintenance project (recurring items)",
+      "maintenanceExists": "Will link to existing project: {name}",
+      "maintenanceCreate": "Will create new project: {name}",
+      "oneOffProjects": "One-off item projects",
+      "oneOffCombined": "One project for all one-off items",
+      "oneOffPerItem": "One project per item",
+      "oneOffSkip": "Skip (no projects for one-off items)",
+      "skip": "Skip",
+      "createAndActivate": "Create Projects",
+      "continue": "Continue with Activation"
+    }
   }
 }

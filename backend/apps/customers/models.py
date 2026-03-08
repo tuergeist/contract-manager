@@ -54,6 +54,12 @@ class Customer(TenantModel):
         default="",
         help_text="Customer VAT registration number (e.g., DE123456789)",
     )
+    clockodo_customer_id = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Linked Clockodo customer ID",
+    )
 
     class Meta:
         ordering = ["name"]

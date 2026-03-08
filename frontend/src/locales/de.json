@@ -2056,5 +2056,23 @@
       "saved": "AB E-Mail-Vorlage gespeichert",
       "saveFailed": "AB E-Mail-Vorlage konnte nicht gespeichert werden"
     }
+  },
+  "clockodo": {
+    "activation": {
+      "title": "Clockodo Projekt-Setup",
+      "customerLinked": "{name} ist mit Clockodo verknüpft",
+      "customerNotLinked": "{name} ist nicht mit Clockodo verknüpft",
+      "linkCustomerFirst": "Verknüpfen Sie diesen Kunden zuerst mit einem Clockodo-Kunden, um Projekte automatisch zu erstellen.",
+      "maintenanceProject": "Wartungsprojekt (wiederkehrende Positionen)",
+      "maintenanceExists": "Wird mit bestehendem Projekt verknüpft: {name}",
+      "maintenanceCreate": "Neues Projekt wird erstellt: {name}",
+      "oneOffProjects": "Einmal-Positionen Projekte",
+      "oneOffCombined": "Ein Projekt für alle Einmal-Positionen",
+      "oneOffPerItem": "Ein Projekt pro Position",
+      "oneOffSkip": "Überspringen (keine Projekte für Einmal-Positionen)",
+      "skip": "Überspringen",
+      "createAndActivate": "Projekte erstellen",
+      "continue": "Weiter mit Aktivierung"
+    }
   }
 }

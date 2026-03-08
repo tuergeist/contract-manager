@@ -65,6 +65,7 @@ class CustomerType:
     billing_emails: auto
     invoice_language: auto
     vat_id: auto
+    clockodo_customer_id: auto
 
     @strawberry.field
     def hubspot_url(self, info: Info[Context, None]) -> str | None:
@@ -342,6 +343,70 @@ def _build_customer_comment(note: CustomerNote, user) -> CustomerCommentType:
 @strawberry.type
 class CustomerQuery:
     @strawberry.field
+    def auto_match_clockodo_customers(
+        self, info: Info[Context, None]
+    ) -> list[ClockodoCustomerMatch]:
+        """Auto-match CM customers to Clockodo customers by name."""
+        from apps.contracts.services.time_tracking import get_provider
+
+        user = require_perm(info, "customers", "read")
+        if not user.tenant:
+            return []
+
+        provider = get_provider(user.tenant)
+        if not provider:
+            return []
+
+        try:
+            clockodo_customers = provider.get_customers()
+        except Exception:
+            return []
+
+        # Build name lookup (case-insensitive)
+        clockodo_by_name: dict[str, dict] = {}
+        for c in clockodo_customers:
+            clockodo_by_name[c["name"].lower()] = c
+
+        # Match unlinked CM customers
+        unlinked = Customer.objects.filter(
+            tenant=user.tenant,
+            clockodo_customer_id__isnull=True,
+            is_active=True,
+        )
+
+        matches = []
+        for customer in unlinked:
+            match = clockodo_by_name.get(customer.name.lower())
+            if match:
+                matches.append(ClockodoCustomerMatch(
+                    customer_id=customer.id,
+                    customer_name=customer.name,
+                    clockodo_customer_id=match["id"],
+                    clockodo_customer_name=match["name"],
+                ))
+
+        return matches
+
+    @strawberry.field
+    def clockodo_customers(self, info: Info[Context, None]) -> list[str]:
+        """Fetch Clockodo customers as 'id:name' strings for linking UI."""
+        from apps.contracts.services.time_tracking import get_provider
+
+        user = require_perm(info, "customers", "read")
+        if not user.tenant:
+            return []
+
+        provider = get_provider(user.tenant)
+        if not provider:
+            return []
+
+        try:
+            customers = provider.get_customers()
+            return [f"{c['id']}:{c['name']}" for c in customers]
+        except Exception:
+            return []
+
+    @strawberry.field
     def customers(
         self,
         info: Info[Context, None],
@@ -428,7 +493,109 @@ class CustomerQuery:
 
 
 @strawberry.type
+class ClockodoCustomerMatch:
+    """A proposed match between a CM customer and a Clockodo customer."""
+    customer_id: int
+    customer_name: str
+    clockodo_customer_id: str
+    clockodo_customer_name: str
+
+
+@strawberry.type
 class CustomerMutation:
+    # =========================================================================
+    # Clockodo Customer Linking
+    # =========================================================================
+
+    @strawberry.mutation
+    def link_customer_to_clockodo(
+        self, info: Info[Context, None], customer_id: strawberry.ID, clockodo_customer_id: str
+    ) -> OperationResult:
+        """Link a CM customer to a Clockodo customer."""
+        user, err = check_perm(info, "customers", "write")
+        if err:
+            return OperationResult(success=False, error=err)
+
+        try:
+            customer = Customer.objects.get(id=customer_id, tenant=user.tenant)
+        except Customer.DoesNotExist:
+            return OperationResult(success=False, error="Customer not found")
+
+        customer.clockodo_customer_id = clockodo_customer_id
+        customer.save(update_fields=["clockodo_customer_id"])
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def unlink_customer_from_clockodo(
+        self, info: Info[Context, None], customer_id: strawberry.ID
+    ) -> OperationResult:
+        """Remove the Clockodo customer link."""
+        user, err = check_perm(info, "customers", "write")
+        if err:
+            return OperationResult(success=False, error=err)
+
+        try:
+            customer = Customer.objects.get(id=customer_id, tenant=user.tenant)
+        except Customer.DoesNotExist:
+            return OperationResult(success=False, error="Customer not found")
+
+        customer.clockodo_customer_id = None
+        customer.save(update_fields=["clockodo_customer_id"])
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def create_clockodo_customer(
+        self, info: Info[Context, None], customer_id: strawberry.ID
+    ) -> OperationResult:
+        """Create a Clockodo customer from a CM customer and link them."""
+        from apps.contracts.services.time_tracking import get_provider
+
+        user, err = check_perm(info, "customers", "write")
+        if err:
+            return OperationResult(success=False, error=err)
+
+        try:
+            customer = Customer.objects.get(id=customer_id, tenant=user.tenant)
+        except Customer.DoesNotExist:
+            return OperationResult(success=False, error="Customer not found")
+
+        provider = get_provider(user.tenant)
+        if not provider:
+            return OperationResult(success=False, error="No time tracking provider configured")
+
+        try:
+            result = provider.create_customer(customer.name)
+            customer.clockodo_customer_id = result["id"]
+            customer.save(update_fields=["clockodo_customer_id"])
+            return OperationResult(success=True)
+        except Exception as e:
+            return OperationResult(success=False, error=f"Failed to create Clockodo customer: {e}")
+
+    @strawberry.mutation
+    def bulk_link_clockodo_customers(
+        self, info: Info[Context, None], mappings: list[str]
+    ) -> OperationResult:
+        """Bulk link customers. Format: 'customerId:clockodoCustomerId' per entry."""
+        user, err = check_perm(info, "customers", "write")
+        if err:
+            return OperationResult(success=False, error=err)
+
+        count = 0
+        for mapping in mappings:
+            parts = mapping.split(":")
+            if len(parts) != 2:
+                continue
+            cm_id, clockodo_id = parts
+            try:
+                customer = Customer.objects.get(id=cm_id, tenant=user.tenant)
+                customer.clockodo_customer_id = clockodo_id
+                customer.save(update_fields=["clockodo_customer_id"])
+                count += 1
+            except Customer.DoesNotExist:
+                continue
+
+        return OperationResult(success=True)
+
     # =========================================================================
     # Customer Attachment Mutations
     # =========================================================================

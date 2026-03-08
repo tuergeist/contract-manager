@@ -32,6 +32,36 @@ class ClockodoProvider(TimeTrackingProvider):
             "Accept": "application/json",
         }
 
+    def _post(self, endpoint: str, data: dict) -> dict:
+        """Make a POST request to the Clockodo API with retry on 429."""
+        url = f"{self.API_BASE}/{endpoint}"
+        for attempt in range(3):
+            response = httpx.post(url, headers=self._get_headers(), json=data, timeout=30)
+            if response.status_code == 429:
+                wait = 2**attempt
+                logger.warning("Clockodo 429 rate limit on POST %s, retrying in %ss", endpoint, wait)
+                time.sleep(wait)
+                continue
+            response.raise_for_status()
+            return response.json()
+        response.raise_for_status()
+        return response.json()
+
+    def _put(self, endpoint: str, data: dict) -> dict:
+        """Make a PUT request to the Clockodo API with retry on 429."""
+        url = f"{self.API_BASE}/{endpoint}"
+        for attempt in range(3):
+            response = httpx.put(url, headers=self._get_headers(), json=data, timeout=30)
+            if response.status_code == 429:
+                wait = 2**attempt
+                logger.warning("Clockodo 429 rate limit on PUT %s, retrying in %ss", endpoint, wait)
+                time.sleep(wait)
+                continue
+            response.raise_for_status()
+            return response.json()
+        response.raise_for_status()
+        return response.json()
+
     def _get(self, endpoint: str, params: dict | None = None) -> dict:
         """Make a GET request to the Clockodo API with retry on 429."""
         url = f"{self.API_BASE}/{endpoint}"
@@ -329,3 +359,66 @@ class ClockodoProvider(TimeTrackingProvider):
             by_service=by_service,
             by_month=by_month,
         )
+
+    # --- Write operations ---
+
+    def create_customer(self, name: str) -> dict:
+        """Create a customer in Clockodo.
+
+        Returns:
+            dict with 'id' (int) and 'name' (str)
+        """
+        data = self._post("customers", {"name": name})
+        customer = data.get("customer", data)
+        return {"id": str(customer["id"]), "name": customer.get("name", name)}
+
+    def create_project(self, customer_id: str, name: str, active: bool = True) -> dict:
+        """Create a project in Clockodo under a specific customer.
+
+        Returns:
+            dict with 'id' (int) and 'name' (str)
+        """
+        data = self._post("projects", {
+            "name": name,
+            "customers_id": int(customer_id),
+            "active": active,
+        })
+        project = data.get("project", data)
+        return {"id": str(project["id"]), "name": project.get("name", name)}
+
+    def get_customer_projects(self, customer_id: str) -> list[TimeTrackingProject]:
+        """Fetch all projects for a specific Clockodo customer."""
+        try:
+            projects = self._get_all_pages("projects", "projects", {
+                "filter[customers_id]": customer_id,
+            })
+            return [
+                TimeTrackingProject(
+                    id=str(p["id"]),
+                    name=p.get("name", ""),
+                    customer_name="",
+                    active=p.get("active", True),
+                )
+                for p in projects
+            ]
+        except Exception as e:
+            logger.error("Failed to fetch projects for customer %s: %s", customer_id, e)
+            return []
+
+    def get_customers(self) -> list[dict]:
+        """Fetch all customers from Clockodo."""
+        try:
+            customers = self._get_all_pages("customers", "customers")
+            return [{"id": str(c["id"]), "name": c.get("name", "")} for c in customers]
+        except Exception as e:
+            logger.error("Failed to fetch Clockodo customers: %s", e)
+            return []
+
+    def deactivate_project(self, project_id: str) -> bool:
+        """Deactivate (close) a project in Clockodo."""
+        try:
+            self._put(f"projects/{project_id}", {"active": False})
+            return True
+        except Exception as e:
+            logger.error("Failed to deactivate project %s: %s", project_id, e)
+            return False

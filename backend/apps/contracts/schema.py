@@ -1506,6 +1506,41 @@ class DashboardKPIsType:
 
 
 @strawberry.type
+class ActivationPreviewOneOffItem:
+    """A one-off item that may need a Clockodo project."""
+    id: int
+    description: str
+
+
+@strawberry.type
+class ActivationPreviewResult:
+    """Preview of what Clockodo projects would be created on activation."""
+    clockodo_configured: bool
+    customer_linked: bool
+    customer_name: str
+    clockodo_customer_id: str | None
+    maintenance_needed: bool
+    maintenance_project_exists: bool
+    maintenance_project_name: str
+    one_off_items: list[ActivationPreviewOneOffItem]
+
+
+@strawberry.type
+class ProvisioningProjectResult:
+    """A project that was created or linked during provisioning."""
+    name: str
+    action: str  # "created" or "linked"
+
+
+@strawberry.type
+class ProvisioningResult:
+    """Result of Clockodo project provisioning."""
+    success: bool
+    created_projects: list[ProvisioningProjectResult]
+    errors: list[str]
+
+
+@strawberry.type
 class TimeTrackingExternalProject:
     """A project from the external time tracking system."""
     id: str
@@ -2035,6 +2070,41 @@ class UnclassifiedItemType:
 
 @strawberry.type
 class ContractQuery:
+    @strawberry.field
+    def preview_contract_activation(
+        self,
+        info: Info[Context, None],
+        contract_id: strawberry.ID,
+    ) -> ActivationPreviewResult | None:
+        """Preview Clockodo project creation for contract activation."""
+        from apps.contracts.services.clockodo_provisioning import preview_activation
+
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return None
+
+        try:
+            contract = Contract.objects.select_related("customer", "tenant").prefetch_related("items").get(
+                id=contract_id, tenant=user.tenant
+            )
+        except Contract.DoesNotExist:
+            return None
+
+        result = preview_activation(contract)
+        return ActivationPreviewResult(
+            clockodo_configured=result["clockodo_configured"],
+            customer_linked=result["customer_linked"],
+            customer_name=result["customer_name"],
+            clockodo_customer_id=result.get("clockodo_customer_id"),
+            maintenance_needed=result["maintenance_needed"],
+            maintenance_project_exists=result["maintenance_project_exists"],
+            maintenance_project_name=result["maintenance_project_name"],
+            one_off_items=[
+                ActivationPreviewOneOffItem(id=i["id"], description=i["description"])
+                for i in result["one_off_items"]
+            ],
+        )
+
     @strawberry.field
     def dashboard_kpis(
         self,
@@ -3842,6 +3912,69 @@ def _build_pdf_analysis_result(result):
 
 @strawberry.type
 class ContractMutation:
+    @strawberry.mutation
+    def provision_clockodo_projects(
+        self,
+        info: Info[Context, None],
+        contract_id: strawberry.ID,
+        create_maintenance: bool = True,
+        oneoff_strategy: str = "combined",
+        selected_oneoff_item_ids: list[int] | None = None,
+    ) -> ProvisioningResult:
+        """Create Clockodo projects for a contract."""
+        from apps.contracts.services.clockodo_provisioning import provision_projects
+
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return ProvisioningResult(success=False, created_projects=[], errors=[err])
+
+        try:
+            contract = Contract.objects.select_related("customer", "tenant").prefetch_related("items").get(
+                id=contract_id, tenant=user.tenant
+            )
+        except Contract.DoesNotExist:
+            return ProvisioningResult(success=False, created_projects=[], errors=["Contract not found"])
+
+        result = provision_projects(
+            contract,
+            create_maintenance=create_maintenance,
+            oneoff_strategy=oneoff_strategy,
+            selected_oneoff_item_ids=selected_oneoff_item_ids,
+        )
+
+        return ProvisioningResult(
+            success=result["success"],
+            created_projects=[
+                ProvisioningProjectResult(name=p["name"], action=p["action"])
+                for p in result["created_projects"]
+            ],
+            errors=result["errors"],
+        )
+
+    @strawberry.mutation
+    def save_time_tracking_project_templates(
+        self,
+        info: Info[Context, None],
+        maintenance_template: str | None = None,
+        oneoff_template: str | None = None,
+    ) -> OperationResult:
+        """Save Clockodo project naming templates."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return OperationResult(success=False, error=err)
+        if not user.tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        config = user.tenant.time_tracking_config or {}
+        if maintenance_template is not None:
+            config["maintenance_project_template"] = maintenance_template
+        if oneoff_template is not None:
+            config["oneoff_project_template"] = oneoff_template
+        user.tenant.time_tracking_config = config
+        user.tenant.save(update_fields=["time_tracking_config"])
+
+        return OperationResult(success=True)
+
     @strawberry.mutation
     def create_contract(
         self, info: Info[Context, None], input: CreateContractInput
