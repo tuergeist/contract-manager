@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.18.1",
+    "date": "2026-03-08",
+    "title": "2FA tenant enforcement flow",
+    "description": "When a tenant enforces two-factor authentication, users are now properly redirected to a setup page on login.",
+    "type": "feature",
+    "details": [
+      "Added /setup-2fa page for users required to enable 2FA by their organization",
+      "Backend scope validation restricts 2FA-setup tokens to only setup mutations",
+      "Login detects enforcement and redirects to setup before granting app access"
+    ]
+  },
+  {
     "version": "2.17.1",
     "date": "2026-03-07",
     "title": "Settings restructured: Documents, Numbering, Email Templates",
