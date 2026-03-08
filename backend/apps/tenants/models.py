@@ -248,6 +248,54 @@ class PasswordResetToken(TimestampedModel):
         return self.expires_at <= timezone.now()
 
 
+class SignupVerification(TimestampedModel):
+    """Token for verifying a new tenant signup."""
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="signup_verifications",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="signup_verifications",
+    )
+    token = models.CharField(max_length=64, unique=True)
+    email = models.EmailField()
+    expires_at = models.DateTimeField()
+    used = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Signup verification for {self.email}"
+
+    @classmethod
+    def create_token(cls, tenant, user):
+        """Create a new signup verification token."""
+        token = secrets.token_urlsafe(32)
+        expires_at = timezone.now() + timedelta(hours=24)
+        return cls.objects.create(
+            tenant=tenant,
+            user=user,
+            token=token,
+            email=user.email,
+            expires_at=expires_at,
+        )
+
+    @property
+    def is_valid(self) -> bool:
+        """Check if token is still valid."""
+        return not self.used and self.expires_at > timezone.now()
+
+    @property
+    def is_expired(self) -> bool:
+        """Check if token has expired."""
+        return self.expires_at <= timezone.now()
+
+
 class TwoFactorConfig(TimestampedModel):
     """Two-factor authentication configuration for a user."""
 

@@ -99,7 +99,22 @@
     "twoFactorSetupDescription": "Your organization requires two-factor authentication. Please set up a method below to continue.",
     "verificationFailed": "Verification failed. Please try again.",
     "useAuthenticator": "Use authenticator app",
-    "useRecoveryCode": "Use a recovery code"
+    "useRecoveryCode": "Use a recovery code",
+    "signUpTitle": "Create your account",
+    "signUpButton": "Sign Up",
+    "signUpSuccess": "Check your email",
+    "signUpSuccessDesc": "We've sent a verification link to your email address. Click the link to activate your account.",
+    "companyName": "Company Name",
+    "noAccount": "Don't have an account?",
+    "signUp": "Sign up",
+    "hasAccount": "Already have an account?",
+    "signInLink": "Sign in",
+    "verifyingAccount": "Verifying your account...",
+    "verifySuccess": "Account verified!",
+    "verifySuccessDesc": "Your account has been activated. Redirecting to dashboard...",
+    "verifyFailed": "Verification failed",
+    "verifyFailedDesc": "The verification link is invalid or has expired.",
+    "signUpFailed": "Sign up failed. Please try again."
   },
   "dashboard": {
     "title": "Dashboard",

@@ -6,6 +6,8 @@ import { AcceptInvitation } from './features/auth/AcceptInvitation'
 import { ResetPassword } from './features/auth/ResetPassword'
 import { ForgotPassword } from './features/auth/ForgotPassword'
 import { TwoFactorSetup } from './features/auth/TwoFactorSetup'
+import { SignupPage } from './features/auth/SignupPage'
+import { VerifySignup } from './features/auth/VerifySignup'
 import { Dashboard } from './features/dashboard/Dashboard'
 import { CustomerList } from './features/customers/CustomerList'
 import { CustomerDetail } from './features/customers/CustomerDetail'
@@ -38,6 +40,8 @@ function App() {
       <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/setup-2fa" element={<TwoFactorSetup />} />
+      <Route path="/signup" element={<SignupPage />} />
+      <Route path="/verify-signup" element={<VerifySignup />} />
       <Route
         path="/"
         element={

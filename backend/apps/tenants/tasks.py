@@ -6,7 +6,7 @@ import secrets
 from celery import shared_task
 from django.core.cache import cache
 
-from apps.core.smtp import SmtpError, send_notification
+from apps.core.smtp import SmtpError, send_notification, send_system_notification
 
 logger = logging.getLogger(__name__)
 
@@ -160,4 +160,76 @@ def send_2fa_email_code(self, user_id: int) -> bool:
         return True
     except SmtpError as e:
         logger.error("Failed to send 2FA code to %s: %s", user.email, e)
+        return False
+
+
+SIGNUP_VERIFICATION_TEMPLATES = {
+    "en": {
+        "subject": "Verify your account",
+        "body": """
+<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h2 style="color: #1a1a1a;">Verify your account</h2>
+  <p>Thank you for signing up! Please verify your email address to activate your account.</p>
+  <p style="margin: 24px 0;">
+    <a href="{verify_url}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+      Verify Email
+    </a>
+  </p>
+  <p style="color: #666; font-size: 14px;">This link is valid for 24 hours.</p>
+  <p style="color: #999; font-size: 12px;">Or copy this link: {verify_url}</p>
+</div>
+""",
+    },
+    "de": {
+        "subject": "Bestätige dein Konto",
+        "body": """
+<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h2 style="color: #1a1a1a;">Bestätige dein Konto</h2>
+  <p>Vielen Dank für die Registrierung! Bitte bestätige deine E-Mail-Adresse, um dein Konto zu aktivieren.</p>
+  <p style="margin: 24px 0;">
+    <a href="{verify_url}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+      E-Mail bestätigen
+    </a>
+  </p>
+  <p style="color: #666; font-size: 14px;">Dieser Link ist 24 Stunden gültig.</p>
+  <p style="color: #999; font-size: 12px;">Oder kopiere diesen Link: {verify_url}</p>
+</div>
+""",
+    },
+}
+
+
+@shared_task(bind=True, max_retries=0)
+def send_signup_verification_email(self, verification_id: int, base_url: str) -> bool:
+    """Send signup verification email.
+
+    Args:
+        verification_id: ID of the SignupVerification record
+        base_url: Frontend base URL for building the verification link
+
+    Returns:
+        True if sent successfully, False otherwise
+    """
+    from apps.tenants.models import SignupVerification
+
+    try:
+        verification = SignupVerification.objects.get(id=verification_id)
+    except SignupVerification.DoesNotExist:
+        logger.error("Signup verification %s not found", verification_id)
+        return False
+
+    verify_url = f"{base_url}/verify-signup?token={verification.token}"
+
+    # Default to German
+    template = SIGNUP_VERIFICATION_TEMPLATES["de"]
+
+    subject = template["subject"]
+    body_html = template["body"].format(verify_url=verify_url)
+
+    try:
+        send_system_notification(to=[verification.email], subject=subject, body_html=body_html)
+        logger.info("Signup verification email sent to %s", verification.email)
+        return True
+    except SmtpError as e:
+        logger.error("Failed to send signup verification to %s: %s", verification.email, e)
         return False

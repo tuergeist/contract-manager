@@ -169,6 +169,12 @@ class CoreQuery:
         return get_feedback_service().is_configured()
 
     @strawberry.field
+    def signup_enabled(self) -> bool:
+        """Check if public tenant signup is enabled."""
+        from django.conf import settings
+        return settings.SIGNUP_ENABLED
+
+    @strawberry.field
     def me(self, info: Info[Context, None]) -> CurrentUser | None:
         """Get current authenticated user."""
         user = info.context.user

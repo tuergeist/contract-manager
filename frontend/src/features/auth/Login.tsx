@@ -1,14 +1,23 @@
 import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useQuery, gql } from '@apollo/client'
 import { useAuth } from '../../lib/auth'
 import { TwoFactorVerify } from './TwoFactorVerify'
+
+const SIGNUP_ENABLED = gql`
+  query SignupEnabled {
+    signupEnabled
+  }
+`
 
 export function Login() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const { login, loginWithTokens, isLoading: authLoading } = useAuth()
+  const { data: signupData } = useQuery(SIGNUP_ENABLED)
+  const signupEnabled = signupData?.signupEnabled ?? false
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -165,6 +174,15 @@ export function Login() {
             </div>
           )}
         </form>
+
+        {signupEnabled && (
+          <p className="text-center text-sm text-gray-600">
+            {t('auth.noAccount')}{' '}
+            <Link to="/signup" className="font-medium text-blue-600 hover:text-blue-500">
+              {t('auth.signUp')}
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   )
