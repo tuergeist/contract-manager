@@ -126,6 +126,7 @@ export function Sidebar() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showResults, setShowResults] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(-1)
   const searchRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -191,10 +192,45 @@ export function Sidebar() {
     }).slice(0, 5)
   }, [searchQuery, t, hasPermission])
 
+  // Flat list of all visible result URLs for keyboard navigation
+  const allResultUrls = useMemo(() => {
+    const urls: string[] = []
+    filteredPages.forEach((page) => urls.push(page.url))
+    data?.globalSearch?.groups?.forEach((group: { items: { url: string }[] }) => {
+      group.items.forEach((item) => urls.push(item.url))
+    })
+    return urls
+  }, [filteredPages, data])
+
+  // Reset selection when results change
+  useEffect(() => {
+    setSelectedIndex(-1)
+  }, [allResultUrls])
+
   const handleResultClick = (url: string) => {
     navigate(url)
     setSearchQuery('')
     setShowResults(false)
+    setSelectedIndex(-1)
+  }
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (!showResults || allResultUrls.length === 0) return
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedIndex((prev) => (prev < allResultUrls.length - 1 ? prev + 1 : 0))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : allResultUrls.length - 1))
+    } else if (e.key === 'Enter' && selectedIndex >= 0) {
+      e.preventDefault()
+      handleResultClick(allResultUrls[selectedIndex])
+    } else if (e.key === 'Escape') {
+      setShowResults(false)
+      setSelectedIndex(-1)
+      inputRef.current?.blur()
+    }
   }
 
   const getTypeIcon = (type: string) => {
@@ -229,6 +265,7 @@ export function Sidebar() {
                 setShowResults(true)
               }}
               onFocus={() => setShowResults(true)}
+              onKeyDown={handleSearchKeyDown}
               placeholder={t('common.search')}
               className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-8 text-sm placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
@@ -249,7 +286,9 @@ export function Sidebar() {
           </div>
 
           {/* Search Results Dropdown */}
-          {showResults && searchQuery.length >= 2 && (
+          {showResults && searchQuery.length >= 2 && (() => {
+            let flatIndex = 0
+            return (
             <div className="absolute left-0 top-full z-50 mt-1 w-[340px] max-h-80 overflow-y-auto rounded-lg border bg-white shadow-lg">
               {/* Pages (client-side) */}
               {filteredPages.length > 0 && (
@@ -257,18 +296,24 @@ export function Sidebar() {
                   <div className="sticky top-0 bg-gray-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
                     {t('search.pages', 'Pages')}
                   </div>
-                  {filteredPages.map((page) => (
-                    <button
-                      key={page.url}
-                      onClick={() => handleResultClick(page.url)}
-                      className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-gray-50"
-                    >
-                      <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
-                      <div className="truncate text-sm font-medium text-gray-900">
-                        {t(page.labelKey)}
-                      </div>
-                    </button>
-                  ))}
+                  {filteredPages.map((page) => {
+                    const idx = flatIndex++
+                    return (
+                      <button
+                        key={page.url}
+                        onClick={() => handleResultClick(page.url)}
+                        className={cn(
+                          'flex w-full items-start gap-3 px-3 py-2 text-left',
+                          idx === selectedIndex ? 'bg-blue-50' : 'hover:bg-gray-50'
+                        )}
+                      >
+                        <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+                        <div className="truncate text-sm font-medium text-gray-900">
+                          {t(page.labelKey)}
+                        </div>
+                      </button>
+                    )
+                  })}
                 </div>
               )}
               {/* Data results (API) */}
@@ -279,11 +324,15 @@ export function Sidebar() {
                   </div>
                   {group.items.map((item) => {
                     const Icon = getTypeIcon(group.type)
+                    const idx = flatIndex++
                     return (
                       <button
                         key={`${group.type}-${item.id}`}
                         onClick={() => handleResultClick(item.url)}
-                        className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-gray-50"
+                        className={cn(
+                          'flex w-full items-start gap-3 px-3 py-2 text-left',
+                          idx === selectedIndex ? 'bg-blue-50' : 'hover:bg-gray-50'
+                        )}
                       >
                         <Icon className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
                         <div className="min-w-0 flex-1">
@@ -313,7 +362,8 @@ export function Sidebar() {
                 </div>
               )}
             </div>
-          )}
+            )
+          })()}
         </div>
 
         {navItems
