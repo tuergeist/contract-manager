@@ -45,6 +45,7 @@
     "done": "Done"
   },
   "search": {
+    "pages": "Pages",
     "customer": "Customers",
     "contract": "Contracts",
     "invoice": "Invoices",
