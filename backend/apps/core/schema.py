@@ -111,6 +111,8 @@ class CurrentUser:
     is_admin: bool
     roles: list[str] | None = None
     permissions: list[str] | None = None
+    two_factor_enabled: bool = False
+    two_factor_method: str | None = None
 
 
 @strawberry.type
@@ -139,6 +141,21 @@ class GlobalSearchResult:
 
     groups: list[SearchResultGroup]
     total_count: int
+
+
+def _get_2fa_enabled(user) -> bool:
+    try:
+        return user.two_factor_config.is_active
+    except Exception:
+        return False
+
+
+def _get_2fa_method(user) -> str | None:
+    try:
+        cfg = user.two_factor_config
+        return cfg.method if cfg.is_active else None
+    except Exception:
+        return None
 
 
 @strawberry.type
@@ -180,6 +197,8 @@ class CoreQuery:
             is_admin=user.is_admin or user.is_super_admin,
             roles=role_names,
             permissions=permissions,
+            two_factor_enabled=_get_2fa_enabled(user),
+            two_factor_method=_get_2fa_method(user),
         )
 
     @strawberry.field
