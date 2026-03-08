@@ -158,7 +158,7 @@ export function Sidebar() {
       <div className="flex h-16 items-center border-b px-6">
         <img src="/vsx-logo.jpg" alt="VSX Vogel Software" className="h-10" />
       </div>
-      <nav className="flex-1 space-y-1 p-4">
+      <nav className="flex-1 overflow-y-auto space-y-1 p-4">
         {/* Search Bar */}
         <div ref={searchRef} className="relative mb-3">
           <div className="relative">
