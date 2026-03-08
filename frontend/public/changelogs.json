@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.19.0",
+    "date": "2026-03-08",
+    "title": "Tenant self-signup",
+    "description": "New tenants can now sign up publicly with email verification and automatic login.",
+    "type": "feature",
+    "details": [
+      "Added public signup page with company name, name, email, and password",
+      "Added email verification flow that activates the tenant and auto-logs in",
+      "Added SignupVerification model with rate limiting (5 per email per hour)",
+      "Added system SMTP configuration for pre-tenant transactional emails",
+      "Added SIGNUP_ENABLED setting to control public signup availability",
+      "Added conditional signup link on login page"
+    ]
+  },
+  {
     "version": "2.18.3",
     "date": "2026-03-08",
     "title": "Search dropdown improvements",
