@@ -94,6 +94,8 @@
     "verificationCode": "Verification code",
     "recoveryCode": "Recovery code",
     "verify": "Verify",
+    "twoFactorSetupTitle": "Two-Factor Authentication Required",
+    "twoFactorSetupDescription": "Your organization requires two-factor authentication. Please set up a method below to continue.",
     "verificationFailed": "Verification failed. Please try again.",
     "useAuthenticator": "Use authenticator app",
     "useRecoveryCode": "Use a recovery code"

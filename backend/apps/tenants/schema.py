@@ -1533,7 +1533,7 @@ class TenantMutation:
     def setup_totp(self, info: Info[Context, None]) -> TotpSetupResult:
         """Initiate TOTP 2FA setup. Returns secret and provisioning URI."""
         import pyotp
-        user = get_current_user(info)
+        user = get_current_user(info, allow_2fa_setup=True)
         if not user:
             return TotpSetupResult(success=False, error="Not authenticated")
 
@@ -1563,7 +1563,7 @@ class TenantMutation:
     def confirm_totp(self, info: Info[Context, None], code: str) -> TwoFactorConfirmResult:
         """Confirm TOTP setup with a verification code. Activates 2FA and returns recovery codes."""
         import pyotp
-        user = get_current_user(info)
+        user = get_current_user(info, allow_2fa_setup=True)
         if not user:
             return TwoFactorConfirmResult(success=False, error="Not authenticated")
 
@@ -1595,7 +1595,7 @@ class TenantMutation:
     def enable_email_2fa(self, info: Info[Context, None]) -> TwoFactorConfirmResult:
         """Enable email-based 2FA."""
         from apps.core.smtp import SmtpError, _get_config
-        user = get_current_user(info)
+        user = get_current_user(info, allow_2fa_setup=True)
         if not user:
             return TwoFactorConfirmResult(success=False, error="Not authenticated")
         if not user.tenant:
