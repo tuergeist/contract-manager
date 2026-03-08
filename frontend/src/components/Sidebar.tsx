@@ -297,7 +297,7 @@ export function Sidebar() {
           {showResults && searchQuery.length >= 2 && (() => {
             let flatIndex = 0
             return (
-            <div className="absolute left-0 top-full z-50 mt-1 w-[340px] max-h-80 overflow-y-auto rounded-lg border bg-white shadow-lg">
+            <div className="absolute left-0 top-full z-50 mt-1 w-[480px] max-h-80 overflow-y-auto rounded-lg border bg-white shadow-lg">
               {/* Pages (client-side) */}
               {filteredPages.length > 0 && (
                 <div>
