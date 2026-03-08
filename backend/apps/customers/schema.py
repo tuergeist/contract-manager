@@ -341,6 +341,15 @@ def _build_customer_comment(note: CustomerNote, user) -> CustomerCommentType:
 
 
 @strawberry.type
+class ClockodoCustomerMatch:
+    """A proposed match between a CM customer and a Clockodo customer."""
+    customer_id: int
+    customer_name: str
+    clockodo_customer_id: str
+    clockodo_customer_name: str
+
+
+@strawberry.type
 class CustomerQuery:
     @strawberry.field
     def auto_match_clockodo_customers(
@@ -490,15 +499,6 @@ class CustomerQuery:
 # =============================================================================
 # Mutations
 # =============================================================================
-
-
-@strawberry.type
-class ClockodoCustomerMatch:
-    """A proposed match between a CM customer and a Clockodo customer."""
-    customer_id: int
-    customer_name: str
-    clockodo_customer_id: str
-    clockodo_customer_name: str
 
 
 @strawberry.type
