@@ -125,6 +125,8 @@ const searchablePages: SearchablePage[] = [
   { labelKey: 'settings.tabs.emailTemplates', keywords: ['email template', 'e-mail vorlage', 'email vorlage', 'mail template', 'invoice email', 'rechnungs-email'], url: '/settings/email-templates', permission: 'invoices.settings' },
   { labelKey: 'settings.emailTemplates.orderConfirmation', keywords: ['order confirmation', 'auftragsbestätigung', 'ab email', 'order email'], url: '/settings/email-templates/order-confirmation', permission: 'invoices.settings' },
   { labelKey: 'settings.tabs.banking', keywords: ['banking settings', 'bankeinstellungen', 'bank account', 'bankkonto', 'iban'], url: '/settings/banking', permission: 'banking.read' },
+  { labelKey: 'auth.signUp', keywords: ['signup', 'sign up', 'registrieren', 'register', 'anmelden'], url: '/signup' },
+  { labelKey: 'auth.verifySuccess', keywords: ['verify', 'verifizieren', 'bestätigen', 'verification'], url: '/verify-signup' },
 ]
 
 export function Sidebar() {

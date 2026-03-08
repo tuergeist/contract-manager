@@ -21,7 +21,7 @@ from apps.core.permissions import (
     require_perm,
 )
 from apps.customers.hubspot import HubSpotService
-from .models import PasswordResetToken, Role, Tenant, TwoFactorConfig, User, UserInvitation
+from .models import PasswordResetToken, Role, SignupVerification, Tenant, TwoFactorConfig, User, UserInvitation
 
 
 @strawberry_django.type(Tenant)
@@ -109,6 +109,15 @@ class InvitationResult:
     error: str | None = None
     invitation: InvitationType | None = None
     invite_url: str | None = None
+
+
+@strawberry.type
+class SignupVerifyResult:
+    """Result of signup verification."""
+    success: bool
+    error: str | None = None
+    access_token: str | None = None
+    refresh_token: str | None = None
 
 
 @strawberry.type
@@ -2155,3 +2164,123 @@ class TenantMutation:
 
         tenant.save(update_fields=["settings"])
         return OperationResult(success=True)
+
+    @strawberry.mutation
+    def sign_up(
+        self,
+        company_name: str,
+        email: str,
+        first_name: str,
+        last_name: str,
+        password: str,
+        base_url: str = "",
+    ) -> OperationResult:
+        """Create a new tenant and user, send verification email."""
+        from django.conf import settings as django_settings
+        from django.core.cache import cache
+        from django.core.validators import validate_email
+        from django.core.exceptions import ValidationError
+        from django.db import transaction
+
+        if not django_settings.SIGNUP_ENABLED:
+            return OperationResult(success=False, error="Signup is currently disabled")
+
+        # Validate inputs
+        company_name = company_name.strip()
+        email = email.strip().lower()
+        first_name = first_name.strip()
+        last_name = last_name.strip()
+
+        if not company_name:
+            return OperationResult(success=False, error="Company name is required")
+
+        try:
+            validate_email(email)
+        except ValidationError:
+            return OperationResult(success=False, error="Invalid email address")
+
+        if len(password) < 8:
+            return OperationResult(success=False, error="Password must be at least 8 characters")
+
+        # Rate limit: 5 per email per hour
+        rate_key = f"signup_rate:{email}"
+        attempts = cache.get(rate_key, 0)
+        if attempts >= 5:
+            return OperationResult(success=False, error="Too many signup attempts. Please try again later.")
+        cache.set(rate_key, attempts + 1, timeout=3600)
+
+        # Check email uniqueness (generic error to avoid leaking info)
+        if User.objects.filter(email=email).exists():
+            return OperationResult(success=False, error="Unable to create account. Please try again or sign in.")
+
+        try:
+            with transaction.atomic():
+                # Create inactive tenant (roles seeded by post_save signal)
+                tenant = Tenant.objects.create(
+                    name=company_name,
+                    is_active=False,
+                )
+
+                # Create inactive user
+                user = User.objects.create_user(
+                    email=email,
+                    password=password,
+                    first_name=first_name,
+                    last_name=last_name,
+                    tenant=tenant,
+                    is_active=False,
+                )
+
+                # Assign Admin role
+                admin_role = Role.objects.filter(tenant=tenant, name="Admin").first()
+                if admin_role:
+                    user.roles.add(admin_role)
+
+                # Create verification token
+                verification = SignupVerification.create_token(tenant=tenant, user=user)
+
+            # Send verification email (outside transaction)
+            from apps.tenants.tasks import send_signup_verification_email
+            send_signup_verification_email.delay(verification.id, base_url or "")
+
+            return OperationResult(success=True)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("Signup failed: %s", e)
+            return OperationResult(success=False, error="Unable to create account. Please try again.")
+
+    @strawberry.mutation
+    def verify_signup(self, token: str) -> "SignupVerifyResult":
+        """Verify a signup token and activate tenant + user."""
+        from apps.core.auth import create_access_token, create_refresh_token
+
+        try:
+            verification = SignupVerification.objects.select_related("tenant", "user").get(token=token)
+        except SignupVerification.DoesNotExist:
+            return SignupVerifyResult(success=False, error="Invalid verification link")
+
+        if verification.used:
+            return SignupVerifyResult(success=False, error="This link has already been used. Please sign in.")
+
+        if verification.is_expired:
+            return SignupVerifyResult(success=False, error="This verification link has expired. Please sign up again.")
+
+        # Activate tenant and user
+        verification.tenant.is_active = True
+        verification.tenant.save(update_fields=["is_active"])
+
+        verification.user.is_active = True
+        verification.user.save(update_fields=["is_active"])
+
+        verification.used = True
+        verification.save(update_fields=["used"])
+
+        # Auto-login: return tokens
+        access_token = create_access_token(verification.user)
+        refresh_token = create_refresh_token(verification.user)
+
+        return SignupVerifyResult(
+            success=True,
+            access_token=access_token,
+            refresh_token=refresh_token,
+        )

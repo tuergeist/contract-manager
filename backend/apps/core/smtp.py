@@ -49,6 +49,47 @@ def test_connection(tenant) -> dict:
     return {"success": True}
 
 
+def send_system_notification(*, to: list[str], subject: str, body_html: str) -> None:
+    """Send a notification email via system-level SMTP (not tenant-scoped).
+
+    Used for transactional emails that aren't tied to a tenant,
+    e.g. signup verification.
+
+    Raises:
+        SmtpError: On configuration or delivery failure
+    """
+    from django.conf import settings
+
+    config = {
+        "host": settings.SYSTEM_SMTP_HOST,
+        "port": settings.SYSTEM_SMTP_PORT,
+        "username": settings.SYSTEM_SMTP_USERNAME,
+        "password": settings.SYSTEM_SMTP_PASSWORD,
+        "from_address": settings.SYSTEM_SMTP_FROM_ADDRESS,
+        "from_name": settings.SYSTEM_SMTP_FROM_NAME,
+        "use_tls": settings.SYSTEM_SMTP_USE_TLS,
+    }
+    if not all(config.get(k) for k in ("host", "port", "username", "password", "from_address")):
+        raise SmtpError("System SMTP not configured")
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    from_name = config.get("from_name", "")
+    msg["From"] = formataddr((from_name, config["from_address"])) if from_name else config["from_address"]
+    msg["To"] = ", ".join(to)
+    msg.attach(MIMEText(body_html, "html"))
+
+    try:
+        server = _connect(config)
+        server.sendmail(config["from_address"], to, msg.as_string())
+        server.quit()
+        logger.info("System notification sent via SMTP: to=%s, subject=%s", to, subject)
+    except SmtpError:
+        raise
+    except smtplib.SMTPException as e:
+        raise SmtpError(f"Failed to send email: {e}") from e
+
+
 def send_notification(tenant, *, to: list[str], subject: str, body_html: str) -> None:
     """Send a notification email via SMTP.
 

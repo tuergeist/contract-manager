@@ -210,6 +210,18 @@ TODOIST_PROJECT_ID = env("TODOIST_PROJECT_ID", default="")
 GITHUB_FEEDBACK_REPO = env("GITHUB_FEEDBACK_REPO", default="")  # "owner/repo"
 GITHUB_FEEDBACK_TOKEN = env("GITHUB_FEEDBACK_TOKEN", default="")
 
+# Public signup
+SIGNUP_ENABLED = env.bool("SIGNUP_ENABLED", default=True)
+
+# System SMTP (for transactional emails not tied to a tenant, e.g. signup verification)
+SYSTEM_SMTP_HOST = env("SYSTEM_SMTP_HOST", default="")
+SYSTEM_SMTP_PORT = env.int("SYSTEM_SMTP_PORT", default=587)
+SYSTEM_SMTP_USERNAME = env("SYSTEM_SMTP_USERNAME", default="")
+SYSTEM_SMTP_PASSWORD = env("SYSTEM_SMTP_PASSWORD", default="")
+SYSTEM_SMTP_FROM_ADDRESS = env("SYSTEM_SMTP_FROM_ADDRESS", default="")
+SYSTEM_SMTP_FROM_NAME = env("SYSTEM_SMTP_FROM_NAME", default="Contract Manager")
+SYSTEM_SMTP_USE_TLS = env.bool("SYSTEM_SMTP_USE_TLS", default=True)
+
 # Strawberry GraphQL
 STRAWBERRY_DJANGO = {
     "FIELD_DESCRIPTION_FROM_HELP_TEXT": True,

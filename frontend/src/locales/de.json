@@ -99,7 +99,22 @@
     "twoFactorSetupDescription": "Ihre Organisation erfordert Zwei-Faktor-Authentifizierung. Bitte richten Sie eine Methode ein, um fortzufahren.",
     "verificationFailed": "Verifizierung fehlgeschlagen. Bitte versuchen Sie es erneut.",
     "useAuthenticator": "Authenticator-App verwenden",
-    "useRecoveryCode": "Wiederherstellungscode verwenden"
+    "useRecoveryCode": "Wiederherstellungscode verwenden",
+    "signUpTitle": "Konto erstellen",
+    "signUpButton": "Registrieren",
+    "signUpSuccess": "E-Mail prüfen",
+    "signUpSuccessDesc": "Wir haben Ihnen einen Bestätigungslink per E-Mail gesendet. Klicken Sie auf den Link, um Ihr Konto zu aktivieren.",
+    "companyName": "Firmenname",
+    "noAccount": "Noch kein Konto?",
+    "signUp": "Registrieren",
+    "hasAccount": "Bereits ein Konto?",
+    "signInLink": "Anmelden",
+    "verifyingAccount": "Konto wird verifiziert...",
+    "verifySuccess": "Konto verifiziert!",
+    "verifySuccessDesc": "Ihr Konto wurde aktiviert. Weiterleitung zum Dashboard...",
+    "verifyFailed": "Verifizierung fehlgeschlagen",
+    "verifyFailedDesc": "Der Bestätigungslink ist ungültig oder abgelaufen.",
+    "signUpFailed": "Registrierung fehlgeschlagen. Bitte versuchen Sie es erneut."
   },
   "dashboard": {
     "title": "Dashboard",
