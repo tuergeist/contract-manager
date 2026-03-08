@@ -115,7 +115,8 @@ const searchablePages: SearchablePage[] = [
   { labelKey: 'invoices.template.title', keywords: ['invoice template', 'rechnungsvorlage', 'pdf', 'template', 'vorlage', 'logo'], url: '/settings/documents', permission: 'invoices.settings' },
   { labelKey: 'invoices.zugferd.title', keywords: ['zugferd', 'xrechnung', 'electronic', 'elektronisch', 'en16931'], url: '/settings/documents', permission: 'invoices.settings' },
   { labelKey: 'settings.tabs.numbering', keywords: ['numbering', 'nummerierung', 'nummernkreis', 'invoice number', 'rechnungsnummer', 'credit note', 'gutschrift'], url: '/settings/numbering', permission: 'invoices.settings' },
-  { labelKey: 'settings.tabs.emailTemplates', keywords: ['email template', 'e-mail vorlage', 'email vorlage', 'mail template'], url: '/settings/email-templates', permission: 'invoices.settings' },
+  { labelKey: 'settings.tabs.emailTemplates', keywords: ['email template', 'e-mail vorlage', 'email vorlage', 'mail template', 'invoice email', 'rechnungs-email'], url: '/settings/email-templates', permission: 'invoices.settings' },
+  { labelKey: 'settings.emailTemplates.orderConfirmation', keywords: ['order confirmation', 'auftragsbestätigung', 'ab email', 'order email'], url: '/settings/email-templates/order-confirmation', permission: 'invoices.settings' },
   { labelKey: 'settings.tabs.banking', keywords: ['banking settings', 'bankeinstellungen', 'bank account', 'bankkonto', 'iban'], url: '/settings/banking', permission: 'banking.read' },
 ]
 
