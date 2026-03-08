@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.18.3",
+    "date": "2026-03-08",
+    "title": "Search dropdown improvements",
+    "description": "Wider search results, no longer clipped by sidebar, and a keyboard shortcut hint.",
+    "type": "bugfix",
+    "details": [
+      "Widened search results dropdown to 480px to show full names",
+      "Fixed dropdown being clipped at the sidebar boundary",
+      "Added / keyboard hint badge in the search input"
+    ]
+  },
+  {
     "version": "2.18.2",
     "date": "2026-03-08",
     "title": "Global search finds pages and settings tabs",
