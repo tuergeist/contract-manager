@@ -259,9 +259,9 @@ export function Sidebar() {
       <div className="flex h-16 items-center border-b px-6">
         <img src="/vsx-logo.jpg" alt="VSX Vogel Software" className="h-10" />
       </div>
-      <nav className="flex-1 overflow-y-auto space-y-1 p-4">
-        {/* Search Bar */}
-        <div ref={searchRef} className="relative mb-3">
+      {/* Search Bar - outside nav to avoid overflow clipping */}
+      <div className="relative px-4 pt-4 pb-1">
+        <div ref={searchRef} className="relative">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
@@ -373,7 +373,8 @@ export function Sidebar() {
             )
           })()}
         </div>
-
+      </div>
+      <nav className="flex-1 overflow-y-auto space-y-1 px-4 pb-4">
         {navItems
           .filter((item) => {
             if (!item.permission) return true
