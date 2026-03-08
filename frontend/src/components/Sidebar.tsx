@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useLazyQuery, useQuery, gql } from '@apollo/client'
@@ -24,6 +24,7 @@ import {
   Info,
   FolderKanban,
   PieChart,
+  ArrowRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
@@ -77,6 +78,41 @@ const navItems: NavItem[] = [
   { to: '/audit-log', icon: History, labelKey: 'nav.auditLog' },
   { to: '/about', icon: Info, labelKey: 'nav.about' },
   { to: '/settings', icon: Settings, labelKey: 'nav.settings', end: true },
+]
+
+interface SearchablePage {
+  labelKey: string
+  keywords: string[]  // extra terms to match against (always lowercase)
+  url: string
+  permission?: string
+}
+
+const searchablePages: SearchablePage[] = [
+  // Main pages
+  { labelKey: 'nav.dashboard', keywords: ['dashboard', 'home', 'start'], url: '/' },
+  { labelKey: 'nav.todos', keywords: ['todos', 'aufgaben', 'tasks', 'board'], url: '/todos' },
+  { labelKey: 'nav.customers', keywords: ['customers', 'kunden'], url: '/customers' },
+  { labelKey: 'nav.products', keywords: ['products', 'produkte'], url: '/products' },
+  { labelKey: 'nav.contracts', keywords: ['contracts', 'verträge'], url: '/contracts' },
+  { labelKey: 'nav.projects', keywords: ['projects', 'projekte'], url: '/projects' },
+  { labelKey: 'nav.invoices', keywords: ['invoices', 'rechnungen'], url: '/invoices', permission: 'invoices.read' },
+  { labelKey: 'nav.offers', keywords: ['offers', 'angebote'], url: '/offers', permission: 'offers.read' },
+  { labelKey: 'nav.banking', keywords: ['banking', 'bankkonten', 'bank'], url: '/banking', permission: 'banking.read' },
+  { labelKey: 'nav.forecasts', keywords: ['forecasts', 'vorschauen', 'prognose'], url: '/forecasts' },
+  { labelKey: 'nav.departmentAnalysis', keywords: ['department', 'abteilung', 'analyse', 'analysis'], url: '/department-analysis' },
+  { labelKey: 'nav.auditLog', keywords: ['audit', 'auditlog', 'log', 'history'], url: '/audit-log' },
+  // Settings pages
+  { labelKey: 'settings.tabs.user', keywords: ['user', 'benutzer', 'profile', 'profil', 'security', 'sicherheit', '2fa'], url: '/settings' },
+  { labelKey: 'settings.tabs.general', keywords: ['general', 'allgemein', 'settings', 'einstellungen'], url: '/settings/general', permission: 'settings.read' },
+  { labelKey: 'settings.tabs.integrations', keywords: ['integrations', 'integrationen', 'hubspot', 'api', 'mcp', 'clockodo', 'time tracking', 'zeiterfassung', 'email', 'm365', 'smtp', 'notifications', 'benachrichtigungen'], url: '/settings/integrations', permission: 'settings.read' },
+  { labelKey: 'settings.team.users', keywords: ['users', 'benutzer', 'team', 'mitarbeiter', 'invite', 'einladen'], url: '/settings/team', permission: 'users.read' },
+  { labelKey: 'settings.team.roles', keywords: ['roles', 'rollen', 'permissions', 'berechtigungen', 'rbac'], url: '/settings/team', permission: 'users.read' },
+  { labelKey: 'invoices.companyData.title', keywords: ['company', 'firma', 'firmendaten', 'legal', 'address', 'adresse', 'ust', 'vat', 'steuernummer'], url: '/settings/documents', permission: 'invoices.settings' },
+  { labelKey: 'invoices.template.title', keywords: ['invoice template', 'rechnungsvorlage', 'pdf', 'template', 'vorlage', 'logo'], url: '/settings/documents', permission: 'invoices.settings' },
+  { labelKey: 'invoices.zugferd.title', keywords: ['zugferd', 'xrechnung', 'electronic', 'elektronisch', 'en16931'], url: '/settings/documents', permission: 'invoices.settings' },
+  { labelKey: 'settings.tabs.numbering', keywords: ['numbering', 'nummerierung', 'nummernkreis', 'invoice number', 'rechnungsnummer', 'credit note', 'gutschrift'], url: '/settings/numbering', permission: 'invoices.settings' },
+  { labelKey: 'settings.tabs.emailTemplates', keywords: ['email template', 'e-mail vorlage', 'email vorlage', 'mail template'], url: '/settings/email-templates', permission: 'invoices.settings' },
+  { labelKey: 'settings.tabs.banking', keywords: ['banking settings', 'bankeinstellungen', 'bank account', 'bankkonto', 'iban'], url: '/settings/banking', permission: 'banking.read' },
 ]
 
 export function Sidebar() {
@@ -133,6 +169,23 @@ export function Sidebar() {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [])
+
+  // Client-side page search
+  const filteredPages = useMemo(() => {
+    if (searchQuery.length < 2) return []
+    const q = searchQuery.toLowerCase()
+    return searchablePages.filter((page) => {
+      // Permission check
+      if (page.permission) {
+        const [resource, action] = page.permission.split('.')
+        if (!hasPermission(resource, action)) return false
+      }
+      // Match against translated label or keywords
+      const label = t(page.labelKey).toLowerCase()
+      if (label.includes(q)) return true
+      return page.keywords.some((kw) => kw.includes(q))
+    }).slice(0, 5)
+  }, [searchQuery, t, hasPermission])
 
   const handleResultClick = (url: string) => {
     navigate(url)
@@ -194,46 +247,67 @@ export function Sidebar() {
           {/* Search Results Dropdown */}
           {showResults && searchQuery.length >= 2 && (
             <div className="absolute left-0 top-full z-50 mt-1 w-[340px] max-h-80 overflow-y-auto rounded-lg border bg-white shadow-lg">
-              {data?.globalSearch?.groups?.length > 0 ? (
-                data.globalSearch.groups.map((group: { type: string; label: string; hasMore: boolean; items: { id: number; title: string; subtitle?: string; url: string }[] }) => (
-                  <div key={group.type}>
-                    <div className="sticky top-0 bg-gray-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      {t(`search.${group.type}`, group.label)}
-                    </div>
-                    {group.items.map((item) => {
-                      const Icon = getTypeIcon(group.type)
-                      return (
-                        <button
-                          key={`${group.type}-${item.id}`}
-                          onClick={() => handleResultClick(item.url)}
-                          className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-gray-50"
-                        >
-                          <Icon className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium text-gray-900">
-                              {item.title}
-                            </div>
-                            {item.subtitle && (
-                              <div className="truncate text-xs text-gray-500">
-                                {item.subtitle}
-                              </div>
-                            )}
-                          </div>
-                        </button>
-                      )
-                    })}
-                    {group.hasMore && (
-                      <div className="px-3 py-2 text-xs text-gray-400 italic">
-                        {t('search.moreResults', '+ more results...')}
-                      </div>
-                    )}
+              {/* Pages (client-side) */}
+              {filteredPages.length > 0 && (
+                <div>
+                  <div className="sticky top-0 bg-gray-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    {t('search.pages', 'Pages')}
                   </div>
-                ))
-              ) : !loading ? (
+                  {filteredPages.map((page) => (
+                    <button
+                      key={page.url}
+                      onClick={() => handleResultClick(page.url)}
+                      className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-gray-50"
+                    >
+                      <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+                      <div className="truncate text-sm font-medium text-gray-900">
+                        {t(page.labelKey)}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* Data results (API) */}
+              {data?.globalSearch?.groups?.map((group: { type: string; label: string; hasMore: boolean; items: { id: number; title: string; subtitle?: string; url: string }[] }) => (
+                <div key={group.type}>
+                  <div className="sticky top-0 bg-gray-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    {t(`search.${group.type}`, group.label)}
+                  </div>
+                  {group.items.map((item) => {
+                    const Icon = getTypeIcon(group.type)
+                    return (
+                      <button
+                        key={`${group.type}-${item.id}`}
+                        onClick={() => handleResultClick(item.url)}
+                        className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-gray-50"
+                      >
+                        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-gray-900">
+                            {item.title}
+                          </div>
+                          {item.subtitle && (
+                            <div className="truncate text-xs text-gray-500">
+                              {item.subtitle}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                  {group.hasMore && (
+                    <div className="px-3 py-2 text-xs text-gray-400 italic">
+                      {t('search.moreResults', '+ more results...')}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {/* No results */}
+              {filteredPages.length === 0 && !data?.globalSearch?.groups?.length && !loading && (
                 <div className="px-3 py-4 text-center text-sm text-gray-500">
                   {t('search.noResults')}
                 </div>
-              ) : null}
+              )}
             </div>
           )}
         </div>
