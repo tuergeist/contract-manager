@@ -761,6 +761,65 @@ class TestBankCounterparties:
         assert result.data["counterparties"]["totalCount"] == 0
         assert result.data["counterparties"]["items"] == []
 
+    def test_counterparties_date_filter(self, user, account, tenant):
+        """Date filter should restrict aggregated stats to matching transactions."""
+        MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+        # SAMPLE_MT940 has txns on 2025-11-12 and 2025-11-13
+
+        ctx = make_context(user)
+        # Filter to only 2025-11-12 — should exclude the 2025-11-13 Piepenbrock txn
+        result = run_graphql(
+            """
+            query($dateFrom: Date, $dateTo: Date) {
+              counterparties(dateFrom: $dateFrom, dateTo: $dateTo, sortBy: "name", sortOrder: "asc") {
+                totalCount
+                items { name transactionCount totalDebit totalCredit }
+              }
+            }
+            """,
+            {"dateFrom": "2025-11-12", "dateTo": "2025-11-12"},
+            ctx,
+        )
+        assert result.errors is None
+        items = result.data["counterparties"]["items"]
+        # All 3 counterparties still listed, but Piepenbrock should have 0 txns in range
+        piepen = next((i for i in items if i["name"] == "Piepenbrock GmbH"), None)
+        assert piepen is not None
+        assert piepen["transactionCount"] == 0
+
+        # BMW and Acme should have their 2025-11-12 txns
+        bmw = next(i for i in items if i["name"] == "BMW Bank GmbH")
+        assert bmw["transactionCount"] == 1
+        acme = next(i for i in items if i["name"] == "Acme Corp GmbH")
+        assert acme["transactionCount"] == 1
+
+    def test_counterparty_detail_date_filter(self, user, account, tenant):
+        """Single counterparty query should respect date filter."""
+        from apps.banking.models import Counterparty
+
+        MT940Service(tenant).parse_and_import(account, SAMPLE_MT940)
+        piepen = Counterparty.objects.get(tenant=tenant, name="Piepenbrock GmbH")
+
+        ctx = make_context(user)
+        # Piepenbrock txn is on 2025-11-13 — filtering to 2025-11-12 should show 0
+        result = run_graphql(
+            """
+            query($id: ID!, $dateFrom: Date, $dateTo: Date) {
+              counterparty(id: $id, dateFrom: $dateFrom, dateTo: $dateTo) {
+                name
+                transactionCount
+                totalDebit
+              }
+            }
+            """,
+            {"id": str(piepen.id), "dateFrom": "2025-11-12", "dateTo": "2025-11-12"},
+            ctx,
+        )
+        assert result.errors is None
+        data = result.data["counterparty"]
+        assert data["transactionCount"] == 0
+        assert float(data["totalDebit"]) == 0
+
 
 # ============================================================
 # Counterparty CRUD & Merge Tests
