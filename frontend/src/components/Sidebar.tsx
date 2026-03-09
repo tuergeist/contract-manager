@@ -24,6 +24,7 @@ import {
   Info,
   FolderKanban,
   PieChart,
+  Inbox,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
@@ -71,6 +72,7 @@ const navItems: NavItem[] = [
   { to: '/projects', icon: FolderKanban, labelKey: 'nav.projects' },
   { to: '/invoices', icon: FileUp, labelKey: 'nav.invoices', permission: 'invoices.read' },
   { to: '/offers', icon: FileSignature, labelKey: 'nav.offers', permission: 'offers.read' },
+  { to: '/incoming-invoices', icon: Inbox, labelKey: 'nav.incomingInvoices', permission: 'incoming_invoices.read' },
   { to: '/banking', icon: Landmark, labelKey: 'nav.banking', permission: 'banking.read' },
   { to: '/forecasts', icon: TrendingUp, labelKey: 'nav.forecasts' },
   { to: '/department-analysis', icon: PieChart, labelKey: 'nav.departmentAnalysis' },

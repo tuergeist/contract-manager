@@ -27,6 +27,7 @@ import { ProjectList } from './features/projects/ProjectList'
 import { OfferList } from './features/offers/OfferList'
 import { OfferDetail } from './features/offers/OfferDetail'
 import { DepartmentAnalysis } from './features/contracts/DepartmentAnalysis'
+import { IncomingInvoicesPage } from './features/incoming-invoices/IncomingInvoicesPage'
 import { OrderConfirmationDetail } from './features/contracts/OrderConfirmationDetail'
 
 function App() {
@@ -63,6 +64,7 @@ function App() {
         <Route path="invoices" element={<InvoiceList />} />
         <Route path="offers/:id" element={<OfferDetail />} />
         <Route path="offers" element={<OfferList />} />
+        <Route path="incoming-invoices" element={<IncomingInvoicesPage />} />
         <Route path="banking" element={<BankingPage />} />
         <Route path="banking/counterparty/:id" element={<CounterpartyDetailPage />} />
         <Route path="audit-log" element={<AuditLogPage />} />
