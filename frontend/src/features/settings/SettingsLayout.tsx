@@ -13,6 +13,7 @@ import { IntegrationSettingsTabs } from './IntegrationSettingsTabs'
 import { BankingSettings } from './BankingSettings'
 import { InvoiceInboxSettings } from './InvoiceInboxSettings'
 import { CostCenterSettings } from './CostCenterSettings'
+import { SplitRuleSettings } from './SplitRuleSettings'
 
 export function SettingsLayout() {
   const { t } = useTranslation()
@@ -151,6 +152,7 @@ export function SettingsLayout() {
             <div className="space-y-6">
               <BankingSettings />
               <CostCenterSettings />
+              <SplitRuleSettings />
             </div>
           </TabsContent>
         )}

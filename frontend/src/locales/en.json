@@ -2234,5 +2234,47 @@
       "deleteConfirmTitle": "Delete Inbox",
       "deleteConfirmDescription": "Are you sure? Already imported invoices won't be deleted."
     }
+  },
+  "splitRules": {
+    "title": "Split Rules",
+    "description": "Define rules to automatically split transactions across multiple cost centers.",
+    "create": "Create Split Rule",
+    "edit": "Edit Split Rule",
+    "delete": "Delete Split Rule",
+    "deleteConfirm": "Are you sure you want to delete this split rule?",
+    "counterparty": "Counterparty",
+    "noCounterparty": "— No counterparty (use pattern) —",
+    "bookingPattern": "Booking Text Pattern",
+    "bookingPatternPlaceholder": "e.g. rent|office",
+    "priority": "Priority",
+    "allocations": "Allocations",
+    "selectCostCenter": "Select cost center…",
+    "addAllocation": "Add allocation",
+    "totalPercentage": "Total",
+    "noRules": "No split rules defined yet.",
+    "errorNeedMatcher": "Either a counterparty or a booking text pattern is required.",
+    "errorIncompleteAllocation": "All allocations must have a cost center and percentage.",
+    "errorMustTotal100": "Allocation percentages must total 100%.",
+    "saved": "Split rule saved.",
+    "deleted": "Split rule deleted."
+  },
+  "splitEditor": {
+    "title": "Cost Center Split",
+    "addSplit": "Split across cost centers",
+    "editSplits": "Edit splits",
+    "amount": "Amount",
+    "remaining": "Remaining",
+    "errorMustMatchTotal": "Split amounts must equal {{amount}} €."
+  },
+  "costCenterReport": {
+    "title": "Cost Center Report",
+    "dateFrom": "From",
+    "dateTo": "To",
+    "costCenter": "Cost Center",
+    "totalAmount": "Total Amount",
+    "transactionCount": "Transactions",
+    "total": "Total",
+    "noData": "No data for the selected period.",
+    "unassigned": "Unassigned"
   }
 }

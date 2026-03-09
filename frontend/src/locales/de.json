@@ -2234,5 +2234,47 @@
       "deleteConfirmTitle": "Postfach löschen",
       "deleteConfirmDescription": "Bereits importierte Rechnungen werden nicht gelöscht."
     }
+  },
+  "splitRules": {
+    "title": "Aufteilungsregeln",
+    "description": "Regeln definieren, um Transaktionen automatisch auf mehrere Kostenstellen aufzuteilen.",
+    "create": "Aufteilungsregel erstellen",
+    "edit": "Aufteilungsregel bearbeiten",
+    "delete": "Aufteilungsregel löschen",
+    "deleteConfirm": "Möchten Sie diese Aufteilungsregel wirklich löschen?",
+    "counterparty": "Geschäftspartner",
+    "noCounterparty": "— Kein Geschäftspartner (Muster verwenden) —",
+    "bookingPattern": "Buchungstext-Muster",
+    "bookingPatternPlaceholder": "z.B. Miete|Büro",
+    "priority": "Priorität",
+    "allocations": "Aufteilungen",
+    "selectCostCenter": "Kostenstelle wählen…",
+    "addAllocation": "Aufteilung hinzufügen",
+    "totalPercentage": "Gesamt",
+    "noRules": "Noch keine Aufteilungsregeln definiert.",
+    "errorNeedMatcher": "Entweder ein Geschäftspartner oder ein Buchungstext-Muster ist erforderlich.",
+    "errorIncompleteAllocation": "Alle Aufteilungen müssen eine Kostenstelle und einen Prozentsatz haben.",
+    "errorMustTotal100": "Die Prozentsätze müssen zusammen 100% ergeben.",
+    "saved": "Aufteilungsregel gespeichert.",
+    "deleted": "Aufteilungsregel gelöscht."
+  },
+  "splitEditor": {
+    "title": "Kostenstellenaufteilung",
+    "addSplit": "Auf Kostenstellen aufteilen",
+    "editSplits": "Aufteilungen bearbeiten",
+    "amount": "Betrag",
+    "remaining": "Verbleibend",
+    "errorMustMatchTotal": "Die Aufteilungsbeträge müssen {{amount}} € ergeben."
+  },
+  "costCenterReport": {
+    "title": "Kostenstellenbericht",
+    "dateFrom": "Von",
+    "dateTo": "Bis",
+    "costCenter": "Kostenstelle",
+    "totalAmount": "Gesamtbetrag",
+    "transactionCount": "Transaktionen",
+    "total": "Gesamt",
+    "noData": "Keine Daten für den gewählten Zeitraum.",
+    "unassigned": "Nicht zugeordnet"
   }
 }

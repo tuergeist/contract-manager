@@ -184,6 +184,116 @@ class BankTransaction(TenantModel):
         return hashlib.sha256(raw.encode()).hexdigest()
 
 
+class CostCenterSplitRule(TenantModel):
+    """A rule for automatically splitting transactions across cost centers."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    counterparty = models.ForeignKey(
+        Counterparty,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="split_rules",
+        help_text="Match transactions with this counterparty",
+    )
+    booking_text_pattern = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Regex or substring pattern to match booking text",
+    )
+    priority = models.IntegerField(
+        default=0,
+        help_text="Higher priority rules are evaluated first",
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-priority", "id"]
+        constraints = [
+            models.CheckConstraint(
+                check=~models.Q(counterparty__isnull=True, booking_text_pattern__isnull=True)
+                & ~models.Q(counterparty__isnull=True, booking_text_pattern=""),
+                name="split_rule_must_have_matcher",
+            ),
+        ]
+
+    def __str__(self):
+        if self.counterparty:
+            return f"Split rule: {self.counterparty.name} (priority {self.priority})"
+        return f"Split rule: pattern '{self.booking_text_pattern}' (priority {self.priority})"
+
+
+class CostCenterSplitAllocation(models.Model):
+    """An allocation line within a split rule."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    rule = models.ForeignKey(
+        CostCenterSplitRule,
+        on_delete=models.CASCADE,
+        related_name="allocations",
+    )
+    cost_center = models.ForeignKey(
+        CostCenter,
+        on_delete=models.CASCADE,
+        related_name="split_allocations",
+    )
+    percentage = models.DecimalField(
+        max_digits=7,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="Percentage of transaction amount (0-100)",
+    )
+    fixed_amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Fixed amount to allocate",
+    )
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        if self.percentage is not None:
+            return f"{self.cost_center.code}: {self.percentage}%"
+        return f"{self.cost_center.code}: {self.fixed_amount} fixed"
+
+
+class TransactionCostCenterSplit(models.Model):
+    """An actual cost center split applied to a transaction."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    transaction = models.ForeignKey(
+        "BankTransaction",
+        on_delete=models.CASCADE,
+        related_name="cost_center_splits",
+    )
+    cost_center = models.ForeignKey(
+        CostCenter,
+        on_delete=models.CASCADE,
+        related_name="transaction_splits",
+    )
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    is_manual = models.BooleanField(default=False)
+    rule = models.ForeignKey(
+        CostCenterSplitRule,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="applied_splits",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.transaction} → {self.cost_center.code}: {self.amount}"
+
+
 class RecurringPattern(TenantModel):
     """A detected recurring payment pattern from bank transactions."""
 

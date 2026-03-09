@@ -23,6 +23,7 @@ import { InvoiceDetail } from './features/invoices/InvoiceDetail'
 import { InvoiceList } from './features/invoices/InvoiceList'
 import { AuditLogPage } from './features/audit/AuditLogPage'
 import { BankingPage } from './features/banking/BankingPage'
+import { CostCenterReportPage } from './features/banking/CostCenterReportPage'
 import { CounterpartyDetailPage } from './features/banking/CounterpartyDetailPage'
 import { TodoBoard } from './features/todos/TodoBoard'
 import { AboutPage } from './features/about/AboutPage'
@@ -73,6 +74,7 @@ function App() {
         <Route path="incoming-invoices" element={<IncomingInvoicesPage />} />
         <Route path="banking" element={<BankingPage />} />
         <Route path="banking/counterparty/:id" element={<CounterpartyDetailPage />} />
+        <Route path="banking/cost-center-report" element={<CostCenterReportPage />} />
         <Route path="audit-log" element={<AuditLogPage />} />
         <Route path="todos" element={<TodoBoard />} />
         <Route path="about" element={<AboutPage />} />
