@@ -1,7 +1,22 @@
 ## ADDED Requirements
 
+### Requirement: Permissions for cost centers
+The system SHALL define a new permission resource `cost_centers` with actions: `read`, `write`, `config`. Viewing cost center assignments requires `cost_centers.read`. Assigning cost centers to transactions/invoices requires `cost_centers.write`. Managing cost center definitions (CRUD) requires `cost_centers.config`.
+
+#### Scenario: Viewer can see cost center assignments
+- **WHEN** a user has `cost_centers.read`
+- **THEN** they can see cost center columns on transactions and counterparties but cannot change assignments
+
+#### Scenario: Writer can assign cost centers
+- **WHEN** a user has `cost_centers.write`
+- **THEN** they can assign/change cost centers on transactions, invoices, and set defaults on counterparties
+
+#### Scenario: Config required for cost center management
+- **WHEN** a user without `cost_centers.config` tries to create or delete a cost center
+- **THEN** the system returns a permission error
+
 ### Requirement: Manage cost centers
-The system SHALL allow users with `settings.write` permission to create, edit, and delete cost centers. Cost centers are flat (no hierarchy), defined per tenant, with a unique code and a name.
+The system SHALL allow users with `cost_centers.config` permission to create, edit, and delete cost centers. Cost centers are flat (no hierarchy), defined per tenant, with a unique code and a name.
 
 #### Scenario: Create cost center
 - **WHEN** user creates a cost center with code "100" and name "Entwicklung"

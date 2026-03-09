@@ -1,7 +1,22 @@
 ## ADDED Requirements
 
+### Requirement: Permissions for incoming invoices
+The system SHALL define a new permission resource `incoming_invoices` with actions: `read`, `write`, `config`. Reading incoming invoices requires `incoming_invoices.read`. Creating, editing, assigning counterparties requires `incoming_invoices.write`. Configuring inboxes requires `incoming_invoices.config`.
+
+#### Scenario: Viewer can only read incoming invoices
+- **WHEN** a user has `incoming_invoices.read` but not `write` or `config`
+- **THEN** they can view the incoming invoices list and details but cannot edit, assign, or configure inboxes
+
+#### Scenario: Editor can assign and edit
+- **WHEN** a user has `incoming_invoices.write`
+- **THEN** they can edit extracted fields, assign counterparties, and confirm invoices
+
+#### Scenario: Config permission required for inbox setup
+- **WHEN** a user without `incoming_invoices.config` tries to create or edit an inbox
+- **THEN** the system returns a permission error
+
 ### Requirement: Configure invoice inbox per tenant
-The system SHALL allow users with `settings.write` permission to configure one or more invoice inboxes. Each inbox is either an IMAP connection or an M365 mailbox. Credentials are stored encrypted in tenant settings.
+The system SHALL allow users with `incoming_invoices.config` permission to configure one or more invoice inboxes. Each inbox is either an IMAP connection or an M365 mailbox. Credentials are stored encrypted in tenant settings.
 
 #### Scenario: Configure IMAP inbox
 - **WHEN** user provides IMAP host, port, username, password, and folder name (e.g., "INBOX")

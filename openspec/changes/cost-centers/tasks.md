@@ -1,5 +1,13 @@
 ## Tasks
 
+### 0. Backend: Permissions
+- [ ] 0.1 Add `cost_centers` to `PERMISSION_REGISTRY` with actions `["read", "write", "config"]`
+- [ ] 0.2 Add `cost_centers.read` and `cost_centers.write` to Manager default role
+- [ ] 0.3 Add `cost_centers.read` to Viewer default role
+- [ ] 0.4 Use `require_perm(info, "cost_centers", "config")` for cost center CRUD mutations
+- [ ] 0.5 Use `require_perm(info, "cost_centers", "read")` for list queries
+- [ ] 0.6 Use `require_perm(info, "cost_centers", "write")` for assignment mutations
+
 ### 1. Backend: Cost center model
 - [ ] 1.1 Create `CostCenter` model: tenant FK, code (CharField, max 20), name (CharField), is_active (bool, default True)
 - [ ] 1.2 Add migration for `CostCenter`
@@ -52,3 +60,4 @@
 - [ ] 10.3 Test auto-assignment on transaction import
 - [ ] 10.4 Test manual assignment on transaction and incoming invoice
 - [ ] 10.5 Test tenant isolation
+- [ ] 10.6 Test permissions: read-only sees KSt but can't assign, write can assign, config required for CRUD

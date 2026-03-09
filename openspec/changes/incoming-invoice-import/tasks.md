@@ -1,5 +1,13 @@
 ## Tasks
 
+### 0. Backend: Permissions
+- [ ] 0.1 Add `incoming_invoices` to `PERMISSION_REGISTRY` with actions `["read", "write", "config"]`
+- [ ] 0.2 Add `incoming_invoices.read` and `incoming_invoices.write` to Manager default role
+- [ ] 0.3 Add `incoming_invoices.read` to Viewer default role
+- [ ] 0.4 Use `require_perm(info, "incoming_invoices", "config")` for inbox CRUD mutations
+- [ ] 0.5 Use `require_perm(info, "incoming_invoices", "read")` for list/detail queries
+- [ ] 0.6 Use `require_perm(info, "incoming_invoices", "write")` for update/assign/confirm mutations
+
 ### 1. Backend: Inbox configuration model & API
 - [ ] 1.1 Create `InvoiceInbox` model: tenant FK, type (imap/m365), host, port, username, encrypted password, folder, m365_mailbox, is_active, poll_interval_minutes, last_polled_at
 - [ ] 1.2 Add migration for `InvoiceInbox`
@@ -81,3 +89,4 @@
 - [ ] 13.5 Test GraphQL queries: list with filters, detail, update, delete
 - [ ] 13.6 Test inbox CRUD mutations
 - [ ] 13.7 Test tenant isolation on all queries
+- [ ] 13.8 Test permissions: read-only user can list but not edit, config required for inbox CRUD, write required for assign/confirm
