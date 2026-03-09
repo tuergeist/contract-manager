@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.20.2",
+    "date": "2026-03-09",
+    "title": "Fix HubSpot deal sync for custom pipelines",
+    "description": "Fixed deal sync that missed closed-won deals in custom pipelines, and added a debug sync UI for diagnosing and manually triggering syncs.",
+    "type": "bugfix",
+    "details": [
+      "Fixed closed-won stage detection to use HubSpot pipeline API instead of hard-coded 'closedwon' stage ID",
+      "Added Debug Sync section in Settings > HubSpot with deal lookup and date-range resync",
+      "Deal check shows pipeline, stage, associated company, and explains why a deal was or wasn't synced",
+      "Date-range resync supports filtered sync for customers, products, and deals without updating last-sync timestamps"
+    ]
+  },
+  {
     "version": "2.20.1",
     "date": "2026-03-09",
     "title": "Clockodo activation dialog improvements",
