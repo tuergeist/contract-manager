@@ -14,6 +14,7 @@ from apps.core.permissions import check_perm, require_perm
 from apps.core.schema import DeleteResult
 from apps.banking.services.forecast import (
     get_current_balance,
+    get_liquidity_analysis,
     get_liquidity_forecast,
     get_pattern_next_date,
 )
@@ -214,6 +215,28 @@ class LiquidityForecastType:
     current_balance: Decimal
     balance_as_of: date | None
     months: List[MonthlyForecastType]
+
+
+@strawberry.type
+class LiquidityMonthType:
+    month: date
+    actual_costs: Decimal
+    actual_income: Decimal
+    projected_costs: Decimal
+    projected_income: Decimal
+    total_costs: Decimal
+    total_income: Decimal
+    net: Decimal
+    cumulative_balance: Decimal
+    is_past: bool
+
+
+@strawberry.type
+class LiquidityAnalysisType:
+    year: int
+    current_balance: Decimal
+    balance_as_of: date | None
+    months: List[LiquidityMonthType]
 
 
 @strawberry.type
@@ -905,6 +928,42 @@ class BankingQuery:
                 )
                 for m in forecast
             ],
+        )
+
+    @strawberry.field
+    def liquidity_analysis(
+        self,
+        info: Info[Context, None],
+        year: int,
+    ) -> LiquidityAnalysisType:
+        user = require_perm(info, "banking", "read")
+        analysis = get_liquidity_analysis(user.tenant, year)
+
+        # Compute cumulative balance
+        running = analysis.current_balance
+        month_types = []
+        for m in analysis.months:
+            running += m.net
+            month_types.append(
+                LiquidityMonthType(
+                    month=m.month,
+                    actual_costs=m.actual_costs,
+                    actual_income=m.actual_income,
+                    projected_costs=m.projected_costs,
+                    projected_income=m.projected_income,
+                    total_costs=m.total_costs,
+                    total_income=m.total_income,
+                    net=m.net,
+                    cumulative_balance=running,
+                    is_past=m.is_past,
+                )
+            )
+
+        return LiquidityAnalysisType(
+            year=analysis.year,
+            current_balance=analysis.current_balance,
+            balance_as_of=analysis.balance_as_of,
+            months=month_types,
         )
 
 

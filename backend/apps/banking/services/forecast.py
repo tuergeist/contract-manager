@@ -1,11 +1,12 @@
 """Service for generating liquidity forecasts from recurring patterns."""
+from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
 from dateutil.relativedelta import relativedelta
-from django.db.models import Sum
+from django.db.models import Q, Sum
 
 from apps.banking.models import BankAccount, BankTransaction, RecurringPattern
 from apps.tenants.models import Tenant
@@ -186,6 +187,197 @@ def get_liquidity_forecast(tenant: Tenant, months: int = 12) -> list[MonthlyFore
         running_balance = running_balance + net
 
     return forecasts
+
+
+@dataclass
+class LiquidityMonth:
+    """Liquidity analysis data for a single month."""
+
+    month: date  # First day of month
+    actual_costs: Decimal
+    actual_income: Decimal
+    projected_costs: Decimal
+    projected_income: Decimal
+    is_past: bool
+
+    @property
+    def total_costs(self) -> Decimal:
+        return self.actual_costs + self.projected_costs
+
+    @property
+    def total_income(self) -> Decimal:
+        return self.actual_income + self.projected_income
+
+    @property
+    def net(self) -> Decimal:
+        return self.total_income + self.total_costs  # costs are negative
+
+
+@dataclass
+class LiquidityAnalysis:
+    """Full liquidity analysis for a year."""
+
+    year: int
+    current_balance: Decimal
+    balance_as_of: Optional[date]
+    months: list[LiquidityMonth]
+
+
+def get_liquidity_analysis(
+    tenant: Tenant, year: int, payment_delay_days: int = 60
+) -> LiquidityAnalysis:
+    """
+    Generate a liquidity analysis for a given year.
+
+    Combines:
+    - Actual costs/income from bank transactions (past months)
+    - Projected costs from recurring patterns (future months)
+    - Projected income from revenue forecast with payment delay (future months)
+
+    Args:
+        tenant: The tenant to analyze
+        year: The year to analyze
+        payment_delay_days: Days between invoice date and expected payment (default 60)
+    """
+    from apps.contracts.models import Contract
+    from apps.invoices.models import InvoicePaymentMatch, InvoiceRecord
+
+    today = date.today()
+    current_balance, balance_as_of = get_current_balance(tenant)
+
+    year_start = date(year, 1, 1)
+    year_end = date(year, 12, 31)
+
+    # 1. Actual bank transactions for the year (up to today)
+    actual_cutoff = min(today, year_end)
+    actual_txns = (
+        BankTransaction.objects.filter(
+            tenant=tenant,
+            entry_date__gte=year_start,
+            entry_date__lte=actual_cutoff,
+        )
+        .values("entry_date__month")
+        .annotate(
+            total_debits=Sum("amount", filter=Q(amount__lt=0)),
+            total_credits=Sum("amount", filter=Q(amount__gt=0)),
+        )
+    )
+    actual_by_month: dict[int, dict] = {}
+    for row in actual_txns:
+        actual_by_month[row["entry_date__month"]] = {
+            "costs": row["total_debits"] or Decimal("0.00"),
+            "income": row["total_credits"] or Decimal("0.00"),
+        }
+
+    # 2. Projected costs from recurring patterns (debit patterns only, future dates)
+    debit_patterns = RecurringPattern.objects.filter(
+        tenant=tenant,
+        is_ignored=False,
+        is_paused=False,
+        average_amount__lt=0,
+    ).filter(
+        Q(is_confirmed=True) | Q(confidence_score__gte=0.7)
+    ).select_related("counterparty")
+
+    projected_costs_by_month: dict[int, Decimal] = defaultdict(Decimal)
+    for pattern in debit_patterns:
+        projections = project_pattern(pattern, months=12)
+        for p in projections:
+            if year_start <= p.projected_date <= year_end and p.projected_date > today:
+                projected_costs_by_month[p.projected_date.month] += p.amount
+
+    # 3. Projected income from revenue forecast with payment delay
+    # Get billing schedule for all active contracts
+    contracts = (
+        Contract.objects.filter(
+            tenant=tenant,
+            status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
+        )
+        .exclude(end_date__lt=year_start)
+        .prefetch_related("items__product", "items__price_periods", "items__depends_on")
+    )
+
+    # Billing events need to start early enough that delayed payments fall in our year
+    billing_start = year_start - timedelta(days=payment_delay_days)
+    billing_end = year_end - timedelta(days=payment_delay_days)
+
+    # Collect all expected payments (billing_date + delay)
+    expected_payments_by_month: dict[int, Decimal] = defaultdict(Decimal)
+    for contract in contracts:
+        schedule = contract.get_billing_schedule(
+            from_date=billing_start,
+            to_date=billing_end,
+            include_history=True,
+        )
+        for event in schedule:
+            payment_date = event["date"] + timedelta(days=payment_delay_days)
+            if year_start <= payment_date <= year_end and payment_date > today:
+                expected_payments_by_month[payment_date.month] += event["total"]
+
+    # 4. Subtract already-paid invoices from projected income
+    # Find paid InvoiceRecords for this tenant in the year
+    paid_invoice_amounts_by_month: dict[int, Decimal] = defaultdict(Decimal)
+    paid_matches = (
+        InvoicePaymentMatch.objects.filter(
+            tenant=tenant,
+            invoice_record__isnull=False,
+        )
+        .select_related("invoice_record", "transaction")
+        .filter(
+            transaction__entry_date__gte=year_start,
+            transaction__entry_date__lte=year_end,
+        )
+    )
+    for match in paid_matches:
+        if match.invoice_record and match.invoice_record.total_gross:
+            # The payment was already counted in actual_income from bank transactions
+            # We need to subtract this from projected_income to avoid double-counting
+            inv = match.invoice_record
+            payment_month_expected = inv.invoice_date + timedelta(days=payment_delay_days)
+            if year_start <= payment_month_expected <= year_end:
+                paid_invoice_amounts_by_month[payment_month_expected.month] += inv.total_gross
+
+    # Subtract paid amounts from projected income
+    for month_num in expected_payments_by_month:
+        expected_payments_by_month[month_num] -= paid_invoice_amounts_by_month.get(
+            month_num, Decimal("0.00")
+        )
+        if expected_payments_by_month[month_num] < 0:
+            expected_payments_by_month[month_num] = Decimal("0.00")
+
+    # 5. Build monthly results
+    months_data: list[LiquidityMonth] = []
+    for m in range(1, 13):
+        month_start = date(year, m, 1)
+        month_is_past = month_start + relativedelta(months=1) <= today
+
+        actuals = actual_by_month.get(m, {"costs": Decimal("0.00"), "income": Decimal("0.00")})
+
+        # For past months, no projections. For current/future months, use projections.
+        if month_is_past:
+            proj_costs = Decimal("0.00")
+            proj_income = Decimal("0.00")
+        else:
+            proj_costs = projected_costs_by_month.get(m, Decimal("0.00"))
+            proj_income = expected_payments_by_month.get(m, Decimal("0.00"))
+
+        months_data.append(
+            LiquidityMonth(
+                month=month_start,
+                actual_costs=actuals["costs"],
+                actual_income=actuals["income"],
+                projected_costs=proj_costs,
+                projected_income=proj_income,
+                is_past=month_is_past,
+            )
+        )
+
+    return LiquidityAnalysis(
+        year=year,
+        current_balance=current_balance,
+        balance_as_of=balance_as_of,
+        months=months_data,
+    )
 
 
 def get_pattern_next_date(pattern: RecurringPattern) -> Optional[date]:

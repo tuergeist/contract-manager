@@ -544,6 +544,20 @@
       "wonDevelopment": "Won Development Revenue",
       "wonDealCount": "Won Deal Count",
       "wonDeals": "Won Deals"
+    },
+    "liquidity": {
+      "title": "Liquidity Analysis {{year}}",
+      "balance": "Current Balance",
+      "month": "Month",
+      "actualCosts": "Actual Costs",
+      "projectedCosts": "Projected Costs",
+      "totalCosts": "Total Costs",
+      "actualIncome": "Actual Income",
+      "projectedIncome": "Projected Income",
+      "totalIncome": "Total Income",
+      "net": "Net",
+      "cumulative": "Cumulative Balance",
+      "total": "Total"
     }
   },
   "forecast": {

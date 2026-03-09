@@ -2,7 +2,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/lib/auth'
 import { RevenueForecast } from '@/features/forecast/RevenueForecast'
-import { LiquidityForecast } from '@/features/liquidity'
+import { LiquidityAnalysis } from '@/features/liquidity'
 import { RevenueGoalsDashboard } from './RevenueGoalsDashboard'
 import { PriceIncreaseAnalytics } from './PriceIncreaseAnalytics'
 
@@ -63,7 +63,7 @@ export function ForecastsPage() {
         </button>
       </div>
       {activeTab === 'revenue' && <RevenueForecast />}
-      {activeTab === 'liquidity' && <LiquidityForecast />}
+      {activeTab === 'liquidity' && <LiquidityAnalysis />}
       {activeTab === 'goals' && <RevenueGoalsDashboard />}
       {activeTab === 'priceIncreases' && <PriceIncreaseAnalytics />}
     </div>
