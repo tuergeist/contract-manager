@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.20.0",
+    "date": "2026-03-09",
+    "title": "Liquidity analysis",
+    "description": "New liquidity analysis on the Forecasts page combining actual bank data with projected costs and income.",
+    "type": "feature",
+    "details": [
+      "Added liquidity analysis service combining actual bank transactions with projected costs (recurring patterns) and projected income (revenue forecast with 60-day payment delay)",
+      "Added stacked bar chart with cumulative balance line on the Liquidity tab",
+      "Added monthly summary table with actual, projected, and total columns for costs and income",
+      "Paid invoices are automatically subtracted from projected income to avoid double-counting"
+    ]
+  },
+  {
     "version": "2.19.0",
     "date": "2026-03-08",
     "title": "Tenant self-signup",
