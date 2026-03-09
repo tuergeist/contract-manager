@@ -8,6 +8,27 @@ from django.db import models
 from apps.core.models import TenantModel
 
 
+class CostCenter(TenantModel):
+    """A cost center (Kostenstelle) for categorizing transactions."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.CharField(max_length=20, help_text="Short code, e.g. 100, IT, MKTG")
+    name = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "code"],
+                name="unique_cost_center_code_per_tenant",
+            ),
+        ]
+        ordering = ["code"]
+
+    def __str__(self):
+        return f"{self.code} – {self.name}"
+
+
 class Counterparty(TenantModel):
     """A counterparty (business partner) that appears in bank transactions."""
 
@@ -22,6 +43,14 @@ class Counterparty(TenantModel):
         blank=True,
         related_name="counterparties",
         help_text="Linked customer for payment matching",
+    )
+    default_cost_center = models.ForeignKey(
+        CostCenter,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="counterparties",
+        help_text="Default cost center for new transactions with this counterparty",
     )
 
     class Meta:
@@ -93,6 +122,14 @@ class BankTransaction(TenantModel):
         on_delete=models.PROTECT,
         related_name="transactions",
         help_text="Reference to counterparty entity",
+    )
+    cost_center = models.ForeignKey(
+        CostCenter,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="transactions",
+        help_text="Cost center assignment",
     )
     booking_text = models.TextField(
         blank=True, help_text="Verwendungszweck from :86: ?20-?29 subfields"

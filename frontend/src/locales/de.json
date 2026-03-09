@@ -2074,5 +2074,30 @@
       "createAndActivate": "Projekte erstellen",
       "continue": "Weiter mit Aktivierung"
     }
+  },
+  "costCenters": {
+    "title": "Kostenstellen",
+    "code": "Code",
+    "name": "Name",
+    "active": "Aktiv",
+    "inactive": "Inaktiv",
+    "status": "Status",
+    "create": "Kostenstelle erstellen",
+    "edit": "Kostenstelle bearbeiten",
+    "delete": "Kostenstelle löschen",
+    "deleteConfirm": "Möchten Sie diese Kostenstelle wirklich löschen?",
+    "deleteInUse": "Diese Kostenstelle wird von {{count}} Elementen verwendet. Trotzdem löschen?",
+    "codePlaceholder": "z.B. 100, IT, MKTG",
+    "namePlaceholder": "z.B. Marketing, IT-Abteilung",
+    "duplicateCode": "Eine Kostenstelle mit diesem Code existiert bereits.",
+    "saved": "Kostenstelle gespeichert.",
+    "deleted": "Kostenstelle gelöscht.",
+    "noCostCenters": "Noch keine Kostenstellen.",
+    "defaultCostCenter": "Standard-Kostenstelle",
+    "costCenter": "Kostenstelle",
+    "allCostCenters": "Alle Kostenstellen",
+    "noCostCenter": "Keine Kostenstelle",
+    "assignCostCenter": "Kostenstelle zuweisen",
+    "settingsDescription": "Kostenstellen für die Kategorisierung von Transaktionen verwalten."
   }
 }

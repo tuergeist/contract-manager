@@ -11,6 +11,7 @@ import { EmailTemplateSettingsTabs } from './EmailTemplateSettingsTabs'
 import { GeneralSettingsTabs } from './GeneralSettingsTabs'
 import { IntegrationSettingsTabs } from './IntegrationSettingsTabs'
 import { BankingSettings } from './BankingSettings'
+import { CostCenterSettings } from './CostCenterSettings'
 
 export function SettingsLayout() {
   const { t } = useTranslation()
@@ -138,7 +139,10 @@ export function SettingsLayout() {
 
         {canViewBanking && (
           <TabsContent value="banking">
-            <BankingSettings />
+            <div className="space-y-6">
+              <BankingSettings />
+              <CostCenterSettings />
+            </div>
           </TabsContent>
         )}
       </Tabs>

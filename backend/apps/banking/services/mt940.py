@@ -213,6 +213,7 @@ class MT940Service:
                         currency=currency,
                         transaction_type=tx_type,
                         counterparty=counterparty,
+                        cost_center=getattr(counterparty, "default_cost_center", None),
                         booking_text=booking_text,
                         reference=reference,
                         raw_data=raw_data,
