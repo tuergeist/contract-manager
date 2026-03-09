@@ -498,7 +498,8 @@
       "confirmEnd": "Do you want to end this contract?",
       "confirmResetToDraft": "Do you want to reset this contract to draft? All amendments will be deleted.",
       "warningIrreversible": "This action cannot be undone.",
-      "warningReversible": "The contract can be reactivated later."
+      "warningReversible": "The contract can be reactivated later.",
+      "activationNextSteps": "After confirming, you will be guided through time tracking setup and order confirmation."
     },
     "forecast": {
       "title": "Revenue Forecast",
@@ -1313,7 +1314,18 @@
       "connectionSuccess": "Connection successful",
       "connectionFailed": "Connection failed",
       "notConfigured": "Not configured",
-      "showRevenue": "Show revenue in time tracking"
+      "showRevenue": "Show revenue in time tracking",
+      "tabProjects": "Projects",
+      "projectTemplates": "Project Naming Templates",
+      "projectTemplatesDescription": "Define how Clockodo projects are named when contracts are activated.",
+      "maintenanceTemplate": "Maintenance project template",
+      "oneoffTemplate": "One-off project template",
+      "maintenanceTemplateDefault": "Wartung {customer_name}",
+      "oneoffTemplateDefault": "{customer_name} - {contract_name}",
+      "templatePlaceholders": "Available placeholders",
+      "templateSave": "Save Templates",
+      "templateSaved": "Project templates saved",
+      "templateSaveFailed": "Failed to save project templates"
     },
     "departments": {
       "title": "Departments",
@@ -2092,12 +2104,20 @@
   "clockodo": {
     "activation": {
       "title": "Clockodo Project Setup",
-      "customerLinked": "{name} is linked to Clockodo",
-      "customerNotLinked": "{name} is not linked to Clockodo",
+      "customerLinked": "{{name}} is linked to Clockodo",
+      "customerNotLinked": "{{name}} is not linked to Clockodo",
       "linkCustomerFirst": "Link this customer to a Clockodo customer first to create projects automatically.",
+      "createInClockodo": "Create in Clockodo",
+      "linkExisting": "Link to existing",
+      "confirmCreate": "Confirm — Create now",
+      "creatingCustomer": "Creating...",
+      "linkingCustomer": "Linking...",
+      "selectClockodoCustomer": "Select Clockodo customer...",
+      "customerCreateSuccess": "Customer created in Clockodo",
+      "customerLinkSuccess": "Customer linked to Clockodo",
       "maintenanceProject": "Maintenance project (recurring items)",
-      "maintenanceExists": "Will link to existing project: {name}",
-      "maintenanceCreate": "Will create new project: {name}",
+      "maintenanceExists": "Will link to existing project: {{name}}",
+      "maintenanceCreate": "Will create new project: {{name}}",
       "oneOffProjects": "One-off item projects",
       "oneOffCombined": "One project for all one-off items",
       "oneOffPerItem": "One project per item",

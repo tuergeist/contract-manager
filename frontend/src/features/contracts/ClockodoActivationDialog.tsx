@@ -1,8 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery, useMutation, gql } from '@apollo/client'
+import { useQuery, useLazyQuery, useMutation, gql } from '@apollo/client'
 import { Loader2, CheckCircle2, AlertCircle, Link2, Plus } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 
 const PREVIEW_ACTIVATION = gql`
   query PreviewContractActivation($contractId: ID!) {
@@ -10,6 +18,7 @@ const PREVIEW_ACTIVATION = gql`
       clockodoConfigured
       customerLinked
       customerName
+      customerId
       clockodoCustomerId
       maintenanceNeeded
       maintenanceProjectExists
@@ -45,11 +54,48 @@ const PROVISION_PROJECTS = gql`
   }
 `
 
+const CLOCKODO_CUSTOMERS = gql`
+  query ClockodoCustomers {
+    clockodoCustomers
+  }
+`
+
+const CREATE_CLOCKODO_CUSTOMER = gql`
+  mutation CreateClockodoCustomer($customerId: ID!) {
+    createClockodoCustomer(customerId: $customerId) {
+      success
+      error
+    }
+  }
+`
+
+const LINK_CUSTOMER_TO_CLOCKODO = gql`
+  mutation LinkCustomerToClockodo($customerId: ID!, $clockodoCustomerId: String!) {
+    linkCustomerToClockodo(customerId: $customerId, clockodoCustomerId: $clockodoCustomerId) {
+      success
+      error
+    }
+  }
+`
+
+/** Extract the first word (split by space or dash) as a search seed, stripping legal suffixes. */
+function getSearchSeed(customerName: string): string {
+  return customerName.split(/[\s\-]+/)[0] || ''
+}
+
+/** Parse "id:name" strings from backend into structured objects. */
+function parseClockodoCustomers(raw: string[]): { id: string; name: string }[] {
+  return raw.map((c) => {
+    const idx = c.indexOf(':')
+    return { id: c.slice(0, idx), name: c.slice(idx + 1) }
+  })
+}
+
 interface ClockodoActivationDialogProps {
   contractId: string
   open: boolean
   onClose: () => void
-  onComplete: () => void // called after provisioning, so parent can proceed with activation
+  onComplete: () => void
 }
 
 export function ClockodoActivationDialog({ contractId, open, onClose, onComplete }: ClockodoActivationDialogProps) {
@@ -59,15 +105,29 @@ export function ClockodoActivationDialog({ contractId, open, onClose, onComplete
   const [provisioned, setProvisioned] = useState(false)
   const [results, setResults] = useState<{ name: string; action: string }[]>([])
   const [errors, setErrors] = useState<string[]>([])
+  const [confirmCreate, setConfirmCreate] = useState(false)
+  const [customerSearch, setCustomerSearch] = useState('')
 
-  const { data, loading } = useQuery(PREVIEW_ACTIVATION, {
+
+  const { data, loading, refetch } = useQuery(PREVIEW_ACTIVATION, {
     variables: { contractId },
     skip: !open,
   })
 
   const [provision, { loading: provisioning }] = useMutation(PROVISION_PROJECTS)
+  const [fetchClockodoCustomers, { data: clockodoData, loading: loadingClockodoCustomers }] = useLazyQuery(CLOCKODO_CUSTOMERS)
+  const [createClockodoCustomer, { loading: creatingCustomer }] = useMutation(CREATE_CLOCKODO_CUSTOMER)
+  const [linkCustomer, { loading: linkingCustomer }] = useMutation(LINK_CUSTOMER_TO_CLOCKODO)
 
   const preview = data?.previewContractActivation
+
+  // Pre-populate search and fetch Clockodo customers when customer is not linked
+  useEffect(() => {
+    if (preview && !preview.customerLinked && preview.clockodoConfigured) {
+      setCustomerSearch(getSearchSeed(preview.customerName))
+      fetchClockodoCustomers()
+    }
+  }, [preview, fetchClockodoCustomers])
 
   const handleProvision = async () => {
     const result = await provision({
@@ -90,6 +150,29 @@ export function ClockodoActivationDialog({ contractId, open, onClose, onComplete
     onComplete()
   }
 
+  const handleCreateInClockodo = async () => {
+    if (!preview) return
+    const result = await createClockodoCustomer({
+      variables: { customerId: String(preview.customerId) },
+    })
+    if (result.data?.createClockodoCustomer?.success) {
+      await refetch()
+    }
+  }
+
+  const handleSelectAndLink = async (clockodoCustomerId: string) => {
+    if (!preview) return
+    const result = await linkCustomer({
+      variables: {
+        customerId: String(preview.customerId),
+        clockodoCustomerId,
+      },
+    })
+    if (result.data?.linkCustomerToClockodo?.success) {
+      await refetch()
+    }
+  }
+
   if (loading) {
     return (
       <Dialog open={open} onOpenChange={onClose}>
@@ -106,10 +189,14 @@ export function ClockodoActivationDialog({ contractId, open, onClose, onComplete
 
   // If Clockodo isn't configured, skip entirely
   if (!preview.clockodoConfigured) {
-    // Auto-complete — no dialog needed
     onComplete()
     return null
   }
+
+  const allClockodoCustomers = parseClockodoCustomers((clockodoData?.clockodoCustomers || []) as string[])
+  const filteredCustomers = customerSearch
+    ? allClockodoCustomers.filter((c) => c.name.toLowerCase().includes(customerSearch.toLowerCase()))
+    : allClockodoCustomers
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -127,7 +214,7 @@ export function ClockodoActivationDialog({ contractId, open, onClose, onComplete
               ) : (
                 <AlertCircle className="h-5 w-5 text-amber-500 mt-0.5" />
               )}
-              <div>
+              <div className="flex-1">
                 <p className="text-sm font-medium">
                   {preview.customerLinked
                     ? t('clockodo.activation.customerLinked', { name: preview.customerName })
@@ -135,7 +222,62 @@ export function ClockodoActivationDialog({ contractId, open, onClose, onComplete
                   }
                 </p>
                 {!preview.customerLinked && (
-                  <p className="text-xs text-gray-500 mt-1">{t('clockodo.activation.linkCustomerFirst')}</p>
+                  <div className="mt-2 space-y-3">
+                    <div>
+                      {linkingCustomer ? (
+                        <div className="flex items-center gap-2 py-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                          <span className="text-xs text-gray-500">{t('clockodo.activation.linkingCustomer')}</span>
+                        </div>
+                      ) : loadingClockodoCustomers ? (
+                        <div className="flex items-center gap-2 py-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                        </div>
+                      ) : (
+                        <Command shouldFilter={false} className="rounded-md border">
+                          <CommandInput
+                            placeholder={t('clockodo.activation.selectClockodoCustomer')}
+                            value={customerSearch}
+                            onValueChange={setCustomerSearch}
+                          />
+                          <CommandList className="max-h-[150px]">
+                            <CommandEmpty>{t('common.noResults')}</CommandEmpty>
+                            <CommandGroup>
+                              {filteredCustomers.map((c) => (
+                                <CommandItem
+                                  key={c.id}
+                                  value={c.id}
+                                  onSelect={() => handleSelectAndLink(c.id)}
+                                >
+                                  {c.name}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      )}
+                    </div>
+                    <div>
+                      {!confirmCreate ? (
+                        <button
+                          onClick={() => setConfirmCreate(true)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700"
+                        >
+                          <Plus className="h-3 w-3" />
+                          {t('clockodo.activation.createInClockodo')}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleCreateInClockodo}
+                          disabled={creatingCustomer}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                        >
+                          {creatingCustomer ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                          {creatingCustomer ? t('clockodo.activation.creatingCustomer') : t('clockodo.activation.confirmCreate')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

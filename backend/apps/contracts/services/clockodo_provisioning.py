@@ -47,6 +47,7 @@ def preview_activation(contract: Contract) -> dict:
         "clockodo_configured": provider is not None,
         "customer_linked": bool(customer.clockodo_customer_id),
         "customer_name": customer.name,
+        "customer_id": customer.id,
         "clockodo_customer_id": customer.clockodo_customer_id,
         "maintenance_needed": False,
         "maintenance_project_exists": False,
@@ -73,7 +74,9 @@ def preview_activation(contract: Contract) -> dict:
 
     if has_recurring:
         maintenance_name = render_template(
-            templates["maintenance"], customer_name=customer.name
+            templates["maintenance"],
+            customer_name=customer.name,
+            ab_number=contract.order_confirmation_number or "",
         )
         result["maintenance_project_name"] = maintenance_name
 
@@ -131,7 +134,9 @@ def provision_projects(
         has_recurring = contract.items.filter(is_one_off=False).exists()
         if has_recurring:
             maintenance_name = render_template(
-                templates["maintenance"], customer_name=customer.name
+                templates["maintenance"],
+                customer_name=customer.name,
+                ab_number=contract.order_confirmation_number or "",
             )
 
             # Check if already exists
@@ -175,6 +180,7 @@ def provision_projects(
                 templates["oneoff"],
                 customer_name=customer.name,
                 contract_name=contract.name,
+                ab_number=contract.order_confirmation_number or "",
             )
             try:
                 result = provider.create_project(customer.clockodo_customer_id, project_name)
@@ -192,6 +198,7 @@ def provision_projects(
                     customer_name=customer.name,
                     contract_name=contract.name,
                     item_name=item.description,
+                    ab_number=contract.order_confirmation_number or "",
                 )
                 try:
                     result = provider.create_project(customer.clockodo_customer_id, project_name)

@@ -42,6 +42,8 @@ const TIME_TRACKING_SETTINGS_QUERY = gql`
       provider
       isConfigured
       showRevenue
+      maintenanceProjectTemplate
+      oneoffProjectTemplate
     }
   }
 `
@@ -58,6 +60,12 @@ const SAVE_TIME_TRACKING_SETTINGS = gql`
 const UPDATE_TIME_TRACKING_DISPLAY = gql`
   mutation UpdateTimeTrackingDisplay($showRevenue: Boolean!) {
     updateTimeTrackingDisplay(showRevenue: $showRevenue)
+  }
+`
+
+const SAVE_PROJECT_TEMPLATES = gql`
+  mutation SaveTimeTrackingProjectTemplates($maintenanceTemplate: String!, $oneoffTemplate: String!) {
+    saveTimeTrackingProjectTemplates(maintenanceTemplate: $maintenanceTemplate, oneoffTemplate: $oneoffTemplate)
   }
 `
 
@@ -342,9 +350,13 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
   const { data: ttSettingsData, refetch: refetchTtSettings } = useQuery(TIME_TRACKING_SETTINGS_QUERY)
   const [saveTtSettings, { loading: savingTt }] = useMutation(SAVE_TIME_TRACKING_SETTINGS)
   const [updateTtDisplay] = useMutation(UPDATE_TIME_TRACKING_DISPLAY)
+  const [saveProjectTemplates, { loading: savingTemplates }] = useMutation(SAVE_PROJECT_TEMPLATES)
+  const [maintenanceTemplate, setMaintenanceTemplate] = useState('')
+  const [oneoffTemplate, setOneoffTemplate] = useState('')
+  const [templateMessage, setTemplateMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   // Time tracking sub-tab state
-  const [ttSubTab, setTtSubTab] = useState<'connection' | 'departments' | 'costs'>('connection')
+  const [ttSubTab, setTtSubTab] = useState<'connection' | 'departments' | 'costs' | 'projects'>('connection')
 
   // Department state
   const [newDeptName, setNewDeptName] = useState('')
@@ -406,6 +418,13 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
       setTtShowRevenue(ttSettingsData.timeTrackingSettings.showRevenue)
     }
   }, [ttSettingsData?.timeTrackingSettings?.showRevenue])
+
+  useEffect(() => {
+    if (ttSettingsData?.timeTrackingSettings) {
+      setMaintenanceTemplate(ttSettingsData.timeTrackingSettings.maintenanceProjectTemplate || '')
+      setOneoffTemplate(ttSettingsData.timeTrackingSettings.oneoffProjectTemplate || '')
+    }
+  }, [ttSettingsData?.timeTrackingSettings])
 
   // Initialize service assignments from existing mappings
   useEffect(() => {
@@ -1415,8 +1434,8 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
 
           {/* Sub-tab menu */}
           <div className="mt-4 flex border-b">
-            {(['connection', 'departments', 'costs'] as const).map((tab) => {
-              const labelKey = tab === 'connection' ? 'tabConnection' : tab === 'departments' ? 'tabDepartments' : 'tabUserCosts'
+            {(['connection', 'departments', 'costs', 'projects'] as const).map((tab) => {
+              const labelKey = tab === 'connection' ? 'tabConnection' : tab === 'departments' ? 'tabDepartments' : tab === 'projects' ? 'tabProjects' : 'tabUserCosts'
               const disabled = tab !== 'connection' && !isTimeTrackingConfigured
               return (
                 <button
@@ -1763,6 +1782,81 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Projects tab */}
+          {ttSubTab === 'projects' && isTimeTrackingConfigured && (
+            <div className="mt-4 space-y-4">
+              <div>
+                <h3 className="text-sm font-medium text-gray-900">{t('settings.timeTracking.projectTemplates')}</h3>
+                <p className="mt-1 text-xs text-gray-500">{t('settings.timeTracking.projectTemplatesDescription')}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  {t('settings.timeTracking.maintenanceTemplate')}
+                </label>
+                <input
+                  type="text"
+                  value={maintenanceTemplate}
+                  onChange={(e) => setMaintenanceTemplate(e.target.value)}
+                  placeholder={t('settings.timeTracking.maintenanceTemplateDefault')}
+                  className="mt-1 block w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  {t('settings.timeTracking.oneoffTemplate')}
+                </label>
+                <input
+                  type="text"
+                  value={oneoffTemplate}
+                  onChange={(e) => setOneoffTemplate(e.target.value)}
+                  placeholder={t('settings.timeTracking.oneoffTemplateDefault')}
+                  className="mt-1 block w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-2">{t('settings.timeTracking.templatePlaceholders')}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {['{customer_name}', '{contract_name}', '{item_name}', '{year}', '{ab_number}'].map((ph) => (
+                    <span key={ph} className="inline-flex items-center rounded-md bg-gray-100 px-2 py-1 text-xs font-mono text-gray-600">
+                      {ph}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={async () => {
+                    try {
+                      await saveProjectTemplates({
+                        variables: {
+                          maintenanceTemplate,
+                          oneoffTemplate,
+                        },
+                      })
+                      setTemplateMessage({ type: 'success', text: t('settings.timeTracking.templateSaved') })
+                    } catch {
+                      setTemplateMessage({ type: 'error', text: t('settings.timeTracking.templateSaveFailed') })
+                    }
+                  }}
+                  disabled={savingTemplates}
+                  className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingTemplates ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {t('settings.timeTracking.templateSave')}
+                </button>
+                {templateMessage && (
+                  <span className={`text-sm ${templateMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                    {templateMessage.text}
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>}
