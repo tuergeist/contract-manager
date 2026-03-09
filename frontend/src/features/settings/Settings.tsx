@@ -172,8 +172,8 @@ const SAVE_HUBSPOT_SETTINGS = gql`
 `
 
 const SYNC_HUBSPOT_CUSTOMERS = gql`
-  mutation SyncHubSpotCustomers {
-    syncHubspotCustomers {
+  mutation SyncHubSpotCustomers($dateRange: HubSpotDateRangeInput) {
+    syncHubspotCustomers(dateRange: $dateRange) {
       success
       error
       created
@@ -184,8 +184,8 @@ const SYNC_HUBSPOT_CUSTOMERS = gql`
 `
 
 const SYNC_HUBSPOT_PRODUCTS = gql`
-  mutation SyncHubSpotProducts {
-    syncHubspotProducts {
+  mutation SyncHubSpotProducts($dateRange: HubSpotDateRangeInput) {
+    syncHubspotProducts(dateRange: $dateRange) {
       success
       error
       created
@@ -196,13 +196,36 @@ const SYNC_HUBSPOT_PRODUCTS = gql`
 `
 
 const SYNC_HUBSPOT_DEALS = gql`
-  mutation SyncHubSpotDeals {
-    syncHubspotDeals {
+  mutation SyncHubSpotDeals($dateRange: HubSpotDateRangeInput) {
+    syncHubspotDeals(dateRange: $dateRange) {
       success
       error
       created
       skipped
       warnings
+    }
+  }
+`
+
+const CHECK_HUBSPOT_DEAL = gql`
+  query CheckHubSpotDeal($dealId: String!) {
+    checkHubspotDeal(dealId: $dealId) {
+      success
+      error
+      dealName
+      dealStage
+      dealStageId
+      pipeline
+      pipelineId
+      isClosedWon
+      associatedCompany {
+        hubspotId
+        name
+        synced
+      }
+      existingContractId
+      wouldSync
+      reasons
     }
   }
 `
@@ -337,6 +360,14 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
   const [customerSyncMessage, setCustomerSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [productSyncMessage, setProductSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [dealSyncMessage, setDealSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Debug sync state
+  const [debugSyncOpen, setDebugSyncOpen] = useState(false)
+  const [checkDealId, setCheckDealId] = useState('')
+  const [debugDateFrom, setDebugDateFrom] = useState('')
+  const [debugDateTo, setDebugDateTo] = useState('')
+  const [debugSyncMessage, setDebugSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
   const [companyFilters, setCompanyFilters] = useState<CompanyFilter[]>([])
   const [filterMessage, setFilterMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [propertySearch, setPropertySearch] = useState('')
@@ -387,6 +418,7 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
   const [syncCustomers, { loading: syncingCustomers }] = useMutation(SYNC_HUBSPOT_CUSTOMERS)
   const [syncProducts, { loading: syncingProducts }] = useMutation(SYNC_HUBSPOT_PRODUCTS)
   const [syncDeals, { loading: syncingDeals }] = useMutation(SYNC_HUBSPOT_DEALS)
+  const [checkDeal, { data: checkDealData, loading: checkingDeal }] = useLazyQuery(CHECK_HUBSPOT_DEAL, { fetchPolicy: 'network-only' })
   const [saveFilters, { loading: savingFilters }] = useMutation(SAVE_COMPANY_FILTERS)
   const [setAutoSync] = useMutation(SET_HUBSPOT_AUTO_SYNC)
   const { data: contactLabelsData } = useQuery(HUBSPOT_CONTACT_LABELS_QUERY)
@@ -1424,6 +1456,232 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
                 </div>
               </div>
             )}
+          {/* Debug Sync */}
+          {hubspotSettings?.isConfigured && (
+            <div className="mt-6 border-t pt-4">
+              <button
+                type="button"
+                onClick={() => setDebugSyncOpen(!debugSyncOpen)}
+                className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+              >
+                <span className={`transform transition-transform ${debugSyncOpen ? 'rotate-90' : ''}`}>&#9654;</span>
+                {t('settings.hubspot.debugSync')}
+              </button>
+              {debugSyncOpen && (
+                <div className="mt-3 space-y-4">
+                  <p className="text-xs text-gray-500">{t('settings.hubspot.debugSyncDescription')}</p>
+
+                  {/* Check Deal */}
+                  <div className="rounded border p-3 bg-gray-50">
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">{t('settings.hubspot.checkDeal')}</h4>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={checkDealId}
+                        onChange={e => setCheckDealId(e.target.value)}
+                        placeholder={t('settings.hubspot.checkDealPlaceholder')}
+                        className="flex-1 rounded border px-3 py-1.5 text-sm"
+                      />
+                      <button
+                        type="button"
+                        disabled={!checkDealId.trim() || checkingDeal}
+                        onClick={() => {
+                          // Extract deal ID from URL if pasted
+                          let id = checkDealId.trim()
+                          const urlMatch = id.match(/\/deal\/(\d+)/)
+                          if (urlMatch) id = urlMatch[1]
+                          checkDeal({ variables: { dealId: id } })
+                        }}
+                        className="rounded bg-gray-700 px-3 py-1.5 text-sm text-white hover:bg-gray-800 disabled:opacity-50"
+                      >
+                        {checkingDeal ? <Loader2 className="h-4 w-4 animate-spin" /> : t('settings.hubspot.checkDealButton')}
+                      </button>
+                    </div>
+
+                    {checkDealData?.checkHubspotDeal && (
+                      <div className="mt-3">
+                        {!checkDealData.checkHubspotDeal.success ? (
+                          <p className="text-sm text-red-600">{checkDealData.checkHubspotDeal.error}</p>
+                        ) : (
+                          <div className="rounded border bg-white p-3 text-sm space-y-1.5">
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">{t('settings.hubspot.dealName')}</span>
+                              <span className="font-medium">{checkDealData.checkHubspotDeal.dealName}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">{t('settings.hubspot.dealPipeline')}</span>
+                              <span>{checkDealData.checkHubspotDeal.pipeline}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">{t('settings.hubspot.dealStage')}</span>
+                              <span>
+                                {checkDealData.checkHubspotDeal.dealStage}
+                                {checkDealData.checkHubspotDeal.isClosedWon && (
+                                  <CheckCircle className="inline h-3.5 w-3.5 ml-1 text-green-600" />
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">{t('settings.hubspot.dealStatus')}</span>
+                              <span className={checkDealData.checkHubspotDeal.wouldSync ? 'text-green-600' : checkDealData.checkHubspotDeal.existingContractId ? 'text-blue-600' : 'text-amber-600'}>
+                                {checkDealData.checkHubspotDeal.existingContractId
+                                  ? t('settings.hubspot.dealAlreadySynced')
+                                  : checkDealData.checkHubspotDeal.wouldSync
+                                    ? t('settings.hubspot.dealWouldSync')
+                                    : t('settings.hubspot.dealWouldNotSync')}
+                              </span>
+                            </div>
+                            {checkDealData.checkHubspotDeal.associatedCompany && (
+                              <div className="flex justify-between">
+                                <span className="text-gray-500">Company</span>
+                                <span>
+                                  {checkDealData.checkHubspotDeal.associatedCompany.name || checkDealData.checkHubspotDeal.associatedCompany.hubspotId}
+                                  {checkDealData.checkHubspotDeal.associatedCompany.synced
+                                    ? <CheckCircle className="inline h-3.5 w-3.5 ml-1 text-green-600" />
+                                    : <XCircle className="inline h-3.5 w-3.5 ml-1 text-red-500" />}
+                                </span>
+                              </div>
+                            )}
+                            <div className="pt-1 border-t">
+                              <span className="text-gray-500">{t('settings.hubspot.dealReason')}</span>
+                              <ul className="mt-0.5 text-xs text-gray-600 list-disc list-inside">
+                                {checkDealData.checkHubspotDeal.reasons?.map((r: string, i: number) => (
+                                  <li key={i}>{r}</li>
+                                ))}
+                              </ul>
+                            </div>
+                            {checkDealData.checkHubspotDeal.wouldSync && (
+                              <button
+                                type="button"
+                                disabled={syncingDeals}
+                                onClick={async () => {
+                                  // Single deal sync: use deals sync with narrow date range
+                                  // For now just trigger a full deal sync
+                                  try {
+                                    await syncDeals()
+                                    setDebugSyncMessage({ type: 'success', text: 'Deal sync triggered' })
+                                  } catch {
+                                    setDebugSyncMessage({ type: 'error', text: t('settings.hubspot.syncFailed') })
+                                  }
+                                }}
+                                className="mt-2 rounded bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-50"
+                              >
+                                {syncingDeals ? <Loader2 className="h-3 w-3 animate-spin" /> : t('settings.hubspot.syncThisDeal')}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Date Range Resync */}
+                  <div className="rounded border p-3 bg-gray-50">
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Date Range Resync</h4>
+                    <div className="flex gap-3 items-end flex-wrap">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">{t('settings.hubspot.debugSyncFrom')}</label>
+                        <input
+                          type="date"
+                          value={debugDateFrom}
+                          onChange={e => setDebugDateFrom(e.target.value)}
+                          className="rounded border px-2 py-1.5 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">{t('settings.hubspot.debugSyncUntil')}</label>
+                        <input
+                          type="date"
+                          value={debugDateTo}
+                          onChange={e => setDebugDateTo(e.target.value)}
+                          className="rounded border px-2 py-1.5 text-sm"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={syncingCustomers}
+                          onClick={async () => {
+                            try {
+                              const dateRange = (debugDateFrom || debugDateTo)
+                                ? { modifiedSince: debugDateFrom || null, modifiedUntil: debugDateTo || null }
+                                : null
+                              const result = await syncCustomers({ variables: { dateRange } })
+                              const d = result.data?.syncHubspotCustomers
+                              if (d?.success) {
+                                setDebugSyncMessage({ type: 'success', text: t('settings.hubspot.debugSyncResult', { created: d.created, updated: d.updated }) })
+                              } else {
+                                setDebugSyncMessage({ type: 'error', text: d?.error || t('settings.hubspot.syncFailed') })
+                              }
+                            } catch {
+                              setDebugSyncMessage({ type: 'error', text: t('settings.hubspot.syncFailed') })
+                            }
+                          }}
+                          className="rounded bg-gray-700 px-3 py-1.5 text-xs text-white hover:bg-gray-800 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {syncingCustomers && <Loader2 className="h-3 w-3 animate-spin" />}
+                          {t('settings.hubspot.debugSyncCustomers')}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={syncingProducts}
+                          onClick={async () => {
+                            try {
+                              const dateRange = (debugDateFrom || debugDateTo)
+                                ? { modifiedSince: debugDateFrom || null, modifiedUntil: debugDateTo || null }
+                                : null
+                              const result = await syncProducts({ variables: { dateRange } })
+                              const d = result.data?.syncHubspotProducts
+                              if (d?.success) {
+                                setDebugSyncMessage({ type: 'success', text: t('settings.hubspot.debugSyncResult', { created: d.created, updated: d.updated }) })
+                              } else {
+                                setDebugSyncMessage({ type: 'error', text: d?.error || t('settings.hubspot.syncFailed') })
+                              }
+                            } catch {
+                              setDebugSyncMessage({ type: 'error', text: t('settings.hubspot.syncFailed') })
+                            }
+                          }}
+                          className="rounded bg-gray-700 px-3 py-1.5 text-xs text-white hover:bg-gray-800 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {syncingProducts && <Loader2 className="h-3 w-3 animate-spin" />}
+                          {t('settings.hubspot.debugSyncProducts')}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={syncingDeals}
+                          onClick={async () => {
+                            try {
+                              const dateRange = (debugDateFrom || debugDateTo)
+                                ? { modifiedSince: debugDateFrom || null, modifiedUntil: debugDateTo || null }
+                                : null
+                              const result = await syncDeals({ variables: { dateRange } })
+                              const d = result.data?.syncHubspotDeals
+                              if (d?.success) {
+                                setDebugSyncMessage({ type: 'success', text: `${d.created} created, ${d.skipped} skipped` })
+                              } else {
+                                setDebugSyncMessage({ type: 'error', text: d?.error || t('settings.hubspot.syncFailed') })
+                              }
+                            } catch {
+                              setDebugSyncMessage({ type: 'error', text: t('settings.hubspot.syncFailed') })
+                            }
+                          }}
+                          className="rounded bg-gray-700 px-3 py-1.5 text-xs text-white hover:bg-gray-800 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {syncingDeals && <Loader2 className="h-3 w-3 animate-spin" />}
+                          {t('settings.hubspot.debugSyncDeals')}
+                        </button>
+                      </div>
+                    </div>
+                    {debugSyncMessage && (
+                      <p className={`mt-2 text-sm ${debugSyncMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                        {debugSyncMessage.text}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           </div>
         </div>}
 
