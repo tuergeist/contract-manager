@@ -13,7 +13,8 @@
     "banking": "Bankkonten",
     "about": "Info",
     "departmentAnalysis": "Abt.-Analyse",
-    "settings": "Einstellungen"
+    "settings": "Einstellungen",
+    "incomingInvoices": "Eingangsrechnungen"
   },
   "common": {
     "search": "Suchen...",
@@ -1149,7 +1150,8 @@
       "banking": "Banking",
       "documents": "Dokumente",
       "numbering": "Nummernkreise",
-      "emailTemplates": "E-Mail-Vorlagen"
+      "emailTemplates": "E-Mail-Vorlagen",
+      "invoiceInboxes": "Rechnungspostfächer"
     },
     "integrationTabs": {
       "hubspot": "HubSpot",
@@ -2157,6 +2159,80 @@
       "skip": "Überspringen",
       "createAndActivate": "Projekte erstellen",
       "continue": "Weiter mit Aktivierung"
+    }
+  },
+  "costCenters": {
+    "title": "Kostenstellen",
+    "code": "Code",
+    "name": "Name",
+    "active": "Aktiv",
+    "inactive": "Inaktiv",
+    "status": "Status",
+    "create": "Kostenstelle erstellen",
+    "edit": "Kostenstelle bearbeiten",
+    "delete": "Kostenstelle löschen",
+    "deleteConfirm": "Möchten Sie diese Kostenstelle wirklich löschen?",
+    "deleteInUse": "Diese Kostenstelle wird von {{count}} Elementen verwendet. Trotzdem löschen?",
+    "codePlaceholder": "z.B. 100, IT, MKTG",
+    "namePlaceholder": "z.B. Marketing, IT-Abteilung",
+    "duplicateCode": "Eine Kostenstelle mit diesem Code existiert bereits.",
+    "saved": "Kostenstelle gespeichert.",
+    "deleted": "Kostenstelle gelöscht.",
+    "noCostCenters": "Noch keine Kostenstellen.",
+    "defaultCostCenter": "Standard-Kostenstelle",
+    "costCenter": "Kostenstelle",
+    "allCostCenters": "Alle Kostenstellen",
+    "noCostCenter": "Keine Kostenstelle",
+    "assignCostCenter": "Kostenstelle zuweisen",
+    "settingsDescription": "Kostenstellen für die Kategorisierung von Transaktionen verwalten."
+  },
+  "incomingInvoices": {
+    "title": "Eingangsrechnungen",
+    "searchPlaceholder": "Rechnungen suchen...",
+    "allStatuses": "Alle Status",
+    "empty": "Keine Eingangsrechnungen",
+    "emptyDescription": "Konfigurieren Sie ein E-Mail-Postfach in den Einstellungen.",
+    "supplier": "Lieferant",
+    "invoiceNumber": "Rechnungsnummer",
+    "date": "Datum",
+    "dueDate": "Fälligkeitsdatum",
+    "grossAmount": "Bruttobetrag",
+    "netAmount": "Nettobetrag",
+    "vatAmount": "MwSt.",
+    "currency": "Währung",
+    "statusLabel": "Status",
+    "counterparty": "Geschäftspartner",
+    "status": {
+      "pending": "Ausstehend",
+      "extracting": "Wird analysiert",
+      "extracted": "Analysiert",
+      "extractionFailed": "Fehlgeschlagen",
+      "confirmed": "Bestätigt",
+      "matched": "Zugeordnet"
+    },
+    "detail": {
+      "title": "Eingangsrechnung",
+      "emailSubject": "E-Mail-Betreff",
+      "confirm": "Bestätigen"
+    },
+    "inboxes": {
+      "title": "Rechnungspostfächer",
+      "description": "E-Mail-Postfächer für automatischen Import konfigurieren.",
+      "add": "Postfach hinzufügen",
+      "edit": "Postfach bearbeiten",
+      "empty": "Noch keine Postfächer konfiguriert.",
+      "type": "Typ",
+      "host": "Host",
+      "port": "Port",
+      "username": "Benutzername",
+      "password": "Passwort",
+      "passwordUnchanged": "Leer lassen für aktuelles Passwort",
+      "folder": "Ordner",
+      "m365Mailbox": "Postfach-E-Mail",
+      "pollInterval": "Abfrageintervall (Min.)",
+      "lastPolled": "Zuletzt abgefragt",
+      "deleteConfirmTitle": "Postfach löschen",
+      "deleteConfirmDescription": "Bereits importierte Rechnungen werden nicht gelöscht."
     }
   }
 }

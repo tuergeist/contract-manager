@@ -218,3 +218,80 @@ class RecurringPattern(TenantModel):
 
     def __str__(self):
         return f"{self.counterparty.name} ({self.frequency}) {self.average_amount}"
+
+
+def incoming_invoice_upload_path(instance, filename):
+    unique_filename = f"{uuid.uuid4().hex}.pdf"
+    return f"uploads/{instance.tenant_id}/incoming_invoices/{unique_filename}"
+
+
+class InvoiceInbox(TenantModel):
+    class InboxType(models.TextChoices):
+        IMAP = "imap", "IMAP"
+        M365 = "m365", "Microsoft 365"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    inbox_type = models.CharField(max_length=10, choices=InboxType.choices, default=InboxType.IMAP)
+    host = models.CharField(max_length=255, blank=True)
+    port = models.PositiveIntegerField(default=993)
+    username = models.CharField(max_length=255, blank=True)
+    password = models.CharField(max_length=500, blank=True)
+    folder = models.CharField(max_length=255, default="INBOX")
+    use_ssl = models.BooleanField(default=True)
+    m365_mailbox = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=True)
+    poll_interval_minutes = models.PositiveIntegerField(default=15)
+    last_polled_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_inbox_type_display()})"
+
+
+class IncomingInvoice(TenantModel):
+    class ExtractionStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        EXTRACTING = "extracting", "Extracting"
+        EXTRACTED = "extracted", "Extracted"
+        EXTRACTION_FAILED = "extraction_failed", "Extraction Failed"
+        CONFIRMED = "confirmed", "Confirmed"
+        MATCHED = "matched", "Matched"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    inbox = models.ForeignKey(InvoiceInbox, on_delete=models.SET_NULL, null=True, blank=True, related_name="incoming_invoices")
+    counterparty = models.ForeignKey(Counterparty, on_delete=models.SET_NULL, null=True, blank=True, related_name="incoming_invoices")
+    supplier_name = models.CharField(max_length=255, blank=True)
+    invoice_number = models.CharField(max_length=100, blank=True)
+    invoice_date = models.DateField(null=True, blank=True)
+    due_date = models.DateField(null=True, blank=True)
+    net_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    vat_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    gross_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=3, default="EUR")
+    pdf_file = models.FileField(upload_to=incoming_invoice_upload_path)
+    original_filename = models.CharField(max_length=255)
+    file_size = models.PositiveIntegerField(default=0)
+    extraction_status = models.CharField(max_length=20, choices=ExtractionStatus.choices, default=ExtractionStatus.PENDING)
+    extraction_error = models.TextField(blank=True)
+    email_message_id = models.CharField(max_length=500, blank=True)
+    source_email_subject = models.CharField(max_length=500, blank=True)
+    source_email_date = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "email_message_id", "original_filename"],
+                name="unique_incoming_invoice_per_tenant_email",
+                condition=models.Q(email_message_id__gt=""),
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["tenant", "extraction_status"], name="idx_incoming_inv_tenant_status"),
+        ]
+
+    def __str__(self):
+        return f"{self.supplier_name or 'Unknown'} - {self.invoice_number or self.original_filename}"

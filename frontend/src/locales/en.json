@@ -13,7 +13,8 @@
     "banking": "Banking",
     "about": "About",
     "departmentAnalysis": "Dept. Analysis",
-    "settings": "Settings"
+    "settings": "Settings",
+    "incomingInvoices": "Incoming Invoices"
   },
   "common": {
     "search": "Search...",
@@ -1149,7 +1150,8 @@
       "banking": "Banking",
       "documents": "Documents",
       "numbering": "Numbering",
-      "emailTemplates": "Email Templates"
+      "emailTemplates": "Email Templates",
+      "invoiceInboxes": "Invoice Inboxes"
     },
     "integrationTabs": {
       "hubspot": "HubSpot",
@@ -2157,6 +2159,80 @@
       "skip": "Skip",
       "createAndActivate": "Create Projects",
       "continue": "Continue with Activation"
+    }
+  },
+  "costCenters": {
+    "title": "Cost Centers",
+    "code": "Code",
+    "name": "Name",
+    "active": "Active",
+    "inactive": "Inactive",
+    "status": "Status",
+    "create": "Create Cost Center",
+    "edit": "Edit Cost Center",
+    "delete": "Delete Cost Center",
+    "deleteConfirm": "Are you sure you want to delete this cost center?",
+    "deleteInUse": "This cost center is in use by {{count}} items. Delete anyway?",
+    "codePlaceholder": "e.g. 100, IT, MKTG",
+    "namePlaceholder": "e.g. Marketing, IT Department",
+    "duplicateCode": "A cost center with this code already exists.",
+    "saved": "Cost center saved.",
+    "deleted": "Cost center deleted.",
+    "noCostCenters": "No cost centers yet.",
+    "defaultCostCenter": "Default Cost Center",
+    "costCenter": "Cost Center",
+    "allCostCenters": "All Cost Centers",
+    "noCostCenter": "No cost center",
+    "assignCostCenter": "Assign Cost Center",
+    "settingsDescription": "Manage cost centers (Kostenstellen) for categorizing transactions."
+  },
+  "incomingInvoices": {
+    "title": "Incoming Invoices",
+    "searchPlaceholder": "Search invoices...",
+    "allStatuses": "All Statuses",
+    "empty": "No incoming invoices",
+    "emptyDescription": "Configure an email inbox in Settings to start importing invoices automatically.",
+    "supplier": "Supplier",
+    "invoiceNumber": "Invoice Number",
+    "date": "Date",
+    "dueDate": "Due Date",
+    "grossAmount": "Gross Amount",
+    "netAmount": "Net Amount",
+    "vatAmount": "VAT Amount",
+    "currency": "Currency",
+    "statusLabel": "Status",
+    "counterparty": "Counterparty",
+    "status": {
+      "pending": "Pending",
+      "extracting": "Extracting",
+      "extracted": "Extracted",
+      "extractionFailed": "Failed",
+      "confirmed": "Confirmed",
+      "matched": "Matched"
+    },
+    "detail": {
+      "title": "Incoming Invoice",
+      "emailSubject": "Email Subject",
+      "confirm": "Confirm"
+    },
+    "inboxes": {
+      "title": "Invoice Inboxes",
+      "description": "Configure email inboxes to automatically import incoming invoices.",
+      "add": "Add Inbox",
+      "edit": "Edit Inbox",
+      "empty": "No inboxes configured yet.",
+      "type": "Type",
+      "host": "Host",
+      "port": "Port",
+      "username": "Username",
+      "password": "Password",
+      "passwordUnchanged": "Leave empty to keep current password",
+      "folder": "Folder",
+      "m365Mailbox": "Mailbox Email",
+      "pollInterval": "Poll Interval (minutes)",
+      "lastPolled": "Last polled",
+      "deleteConfirmTitle": "Delete Inbox",
+      "deleteConfirmDescription": "Are you sure? Already imported invoices won't be deleted."
     }
   }
 }

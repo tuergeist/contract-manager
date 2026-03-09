@@ -1,5 +1,5 @@
 """GraphQL schema for banking (bank accounts and transactions)."""
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
@@ -397,6 +397,169 @@ class SuggestedMatchesResultType:
     items: List[SuggestedMatchType]
     customer_name: str
     customer_id: int
+
+
+
+# --- Incoming Invoice Types ---
+
+
+@strawberry.type
+class InvoiceInboxType:
+    id: strawberry.ID
+    name: str
+    inbox_type: str
+    host: str
+    port: int
+    username: str
+    folder: str
+    m365_mailbox: str
+    is_active: bool
+    poll_interval_minutes: int
+    last_polled_at: str | None = None
+    use_ssl: bool = True
+
+
+@strawberry.type
+class InvoiceInboxResult:
+    success: bool
+    error: str | None = None
+    inbox: InvoiceInboxType | None = None
+
+
+@strawberry.type
+class TestConnectionResult:
+    success: bool
+    message: str
+
+
+@strawberry.input
+class CreateInvoiceInboxInput:
+    name: str
+    inbox_type: str = "imap"
+    host: str = ""
+    port: int = 993
+    username: str = ""
+    password: str = ""
+    folder: str = "INBOX"
+    use_ssl: bool = True
+    m365_mailbox: str = ""
+    is_active: bool = True
+    poll_interval_minutes: int = 15
+
+
+@strawberry.input
+class UpdateInvoiceInboxInput:
+    id: strawberry.ID
+    name: str | None = None
+    inbox_type: str | None = None
+    host: str | None = None
+    port: int | None = None
+    username: str | None = None
+    password: str | None = None
+    folder: str | None = None
+    use_ssl: bool | None = None
+    m365_mailbox: str | None = None
+    is_active: bool | None = None
+    poll_interval_minutes: int | None = None
+
+
+@strawberry.type
+class IncomingInvoiceType:
+    id: strawberry.ID
+    supplier_name: str
+    invoice_number: str
+    invoice_date: date | None
+    due_date: date | None
+    net_amount: Decimal | None
+    vat_amount: Decimal | None
+    gross_amount: Decimal | None
+    currency: str
+    original_filename: str
+    file_size: int
+    extraction_status: str
+    extraction_error: str
+    email_message_id: str
+    source_email_subject: str
+    source_email_date: str | None
+    counterparty_id: strawberry.ID | None = None
+    counterparty_name: str | None = None
+    inbox_name: str | None = None
+    pdf_url: str | None = None
+    created_at: str = ""
+
+
+@strawberry.type
+class IncomingInvoicePage:
+    items: List[IncomingInvoiceType]
+    total_count: int
+    page: int
+    page_size: int
+    has_next_page: bool
+
+
+@strawberry.type
+class IncomingInvoiceResult:
+    success: bool
+    error: str | None = None
+    invoice: IncomingInvoiceType | None = None
+
+
+@strawberry.input
+class UpdateIncomingInvoiceInput:
+    id: strawberry.ID
+    supplier_name: str | None = None
+    invoice_number: str | None = None
+    invoice_date: date | None = strawberry.UNSET
+    due_date: date | None = strawberry.UNSET
+    net_amount: Decimal | None = strawberry.UNSET
+    vat_amount: Decimal | None = strawberry.UNSET
+    gross_amount: Decimal | None = strawberry.UNSET
+    currency: str | None = None
+    counterparty_id: strawberry.ID | None = strawberry.UNSET
+    extraction_status: str | None = None
+
+
+def _make_inbox_type(inbox) -> InvoiceInboxType:
+    return InvoiceInboxType(
+        id=strawberry.ID(str(inbox.id)),
+        name=inbox.name,
+        inbox_type=inbox.inbox_type,
+        host=inbox.host,
+        port=inbox.port,
+        username=inbox.username,
+        folder=inbox.folder,
+        m365_mailbox=inbox.m365_mailbox,
+        is_active=inbox.is_active,
+        poll_interval_minutes=inbox.poll_interval_minutes,
+        last_polled_at=inbox.last_polled_at.isoformat() if inbox.last_polled_at else None,
+        use_ssl=inbox.use_ssl,
+    )
+
+
+def _make_incoming_invoice_type(inv) -> IncomingInvoiceType:
+    return IncomingInvoiceType(
+        id=strawberry.ID(str(inv.id)),
+        supplier_name=inv.supplier_name,
+        invoice_number=inv.invoice_number,
+        invoice_date=inv.invoice_date,
+        due_date=inv.due_date,
+        net_amount=inv.net_amount,
+        vat_amount=inv.vat_amount,
+        gross_amount=inv.gross_amount,
+        currency=inv.currency,
+        original_filename=inv.original_filename,
+        file_size=inv.file_size,
+        extraction_status=inv.extraction_status,
+        extraction_error=inv.extraction_error,
+        email_message_id=inv.email_message_id,
+        source_email_subject=inv.source_email_subject,
+        source_email_date=inv.source_email_date.isoformat() if inv.source_email_date else None,
+        counterparty_id=strawberry.ID(str(inv.counterparty_id)) if inv.counterparty_id else None,
+        counterparty_name=inv.counterparty.name if inv.counterparty_id and inv.counterparty else None,
+        inbox_name=inv.inbox.name if inv.inbox_id and inv.inbox else None,
+        pdf_url=inv.pdf_file.url if inv.pdf_file else None,
+        created_at=inv.created_at.isoformat() if inv.created_at else "",
+    )
 
 
 # --- Queries ---
@@ -967,6 +1130,41 @@ class BankingQuery:
         )
 
 
+
+    # --- Incoming Invoice Queries ---
+
+    @strawberry.field
+    def invoice_inboxes(self, info: Info[Context, None]) -> List[InvoiceInboxType]:
+        user = require_perm(info, "incoming_invoices", "config")
+        from apps.banking.models import InvoiceInbox
+        return [_make_inbox_type(i) for i in InvoiceInbox.objects.filter(tenant=user.tenant).order_by("name")]
+
+    @strawberry.field
+    def incoming_invoices(self, info: Info[Context, None], status: str | None = None, counterparty_id: strawberry.ID | None = None, date_from: date | None = None, date_to: date | None = None, search: str | None = None, page: int = 1, page_size: int = 50) -> IncomingInvoicePage:
+        user = require_perm(info, "incoming_invoices", "read")
+        from apps.banking.models import IncomingInvoice
+        qs = IncomingInvoice.objects.filter(tenant=user.tenant).select_related("counterparty", "inbox")
+        if status: qs = qs.filter(extraction_status=status)
+        if counterparty_id is not None: qs = qs.filter(counterparty_id=str(counterparty_id))
+        if date_from: qs = qs.filter(invoice_date__gte=date_from)
+        if date_to: qs = qs.filter(invoice_date__lte=date_to)
+        if search: qs = qs.filter(Q(supplier_name__icontains=search) | Q(invoice_number__icontains=search) | Q(source_email_subject__icontains=search))
+        total_count = qs.count()
+        offset = (page - 1) * page_size
+        items = list(qs[offset:offset + page_size])
+        return IncomingInvoicePage(items=[_make_incoming_invoice_type(inv) for inv in items], total_count=total_count, page=page, page_size=page_size, has_next_page=(offset + page_size) < total_count)
+
+    @strawberry.field
+    def incoming_invoice(self, info: Info[Context, None], id: strawberry.ID) -> IncomingInvoiceType | None:
+        user = require_perm(info, "incoming_invoices", "read")
+        from apps.banking.models import IncomingInvoice
+        try:
+            inv = IncomingInvoice.objects.filter(tenant=user.tenant).select_related("counterparty", "inbox").get(id=str(id))
+        except IncomingInvoice.DoesNotExist:
+            return None
+        return _make_incoming_invoice_type(inv)
+
+
 # --- Mutations ---
 
 
@@ -1426,3 +1624,104 @@ class BankingMutation:
             success=True,
             counterparty=_make_counterparty_type(cp),
         )
+
+    # --- Invoice Inbox Mutations ---
+
+    @strawberry.mutation
+    def create_invoice_inbox(self, info: Info[Context, None], input: CreateInvoiceInboxInput) -> InvoiceInboxResult:
+        user, err = check_perm(info, "incoming_invoices", "config")
+        if err: return InvoiceInboxResult(success=False, error=err)
+        from apps.banking.models import InvoiceInbox
+        inbox = InvoiceInbox.objects.create(tenant=user.tenant, name=input.name, inbox_type=input.inbox_type, host=input.host, port=input.port, username=input.username, password=input.password, folder=input.folder, use_ssl=input.use_ssl, m365_mailbox=input.m365_mailbox, is_active=input.is_active, poll_interval_minutes=input.poll_interval_minutes)
+        return InvoiceInboxResult(success=True, inbox=_make_inbox_type(inbox))
+
+    @strawberry.mutation
+    def update_invoice_inbox(self, info: Info[Context, None], input: UpdateInvoiceInboxInput) -> InvoiceInboxResult:
+        user, err = check_perm(info, "incoming_invoices", "config")
+        if err: return InvoiceInboxResult(success=False, error=err)
+        from apps.banking.models import InvoiceInbox
+        try:
+            inbox = InvoiceInbox.objects.get(id=str(input.id), tenant=user.tenant)
+        except InvoiceInbox.DoesNotExist:
+            return InvoiceInboxResult(success=False, error="Inbox not found.")
+        fields = ["updated_at"]
+        for field in ["name", "inbox_type", "host", "port", "username", "password", "folder", "use_ssl", "m365_mailbox", "is_active", "poll_interval_minutes"]:
+            val = getattr(input, field)
+            if val is not None:
+                setattr(inbox, field, val)
+                fields.append(field)
+        inbox.save(update_fields=fields)
+        return InvoiceInboxResult(success=True, inbox=_make_inbox_type(inbox))
+
+    @strawberry.mutation
+    def delete_invoice_inbox(self, info: Info[Context, None], id: strawberry.ID) -> DeleteResult:
+        user, err = check_perm(info, "incoming_invoices", "config")
+        if err: return DeleteResult(success=False, error=err)
+        from apps.banking.models import InvoiceInbox
+        try:
+            inbox = InvoiceInbox.objects.get(id=str(id), tenant=user.tenant)
+        except InvoiceInbox.DoesNotExist:
+            return DeleteResult(success=False, error="Inbox not found.")
+        inbox.delete()
+        return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def test_invoice_inbox_connection(self, info: Info[Context, None], id: strawberry.ID) -> TestConnectionResult:
+        user, err = check_perm(info, "incoming_invoices", "config")
+        if err: return TestConnectionResult(success=False, message=err)
+        from apps.banking.models import InvoiceInbox
+        from apps.banking.services.inbox_polling import InboxPollingService
+        try:
+            inbox = InvoiceInbox.objects.get(id=str(id), tenant=user.tenant)
+        except InvoiceInbox.DoesNotExist:
+            return TestConnectionResult(success=False, message="Inbox not found.")
+        success, message = InboxPollingService().test_connection(inbox)
+        return TestConnectionResult(success=success, message=message)
+
+    # --- Incoming Invoice Mutations ---
+
+    @strawberry.mutation
+    def update_incoming_invoice(self, info: Info[Context, None], input: UpdateIncomingInvoiceInput) -> IncomingInvoiceResult:
+        user, err = check_perm(info, "incoming_invoices", "write")
+        if err: return IncomingInvoiceResult(success=False, error=err)
+        from apps.banking.models import IncomingInvoice, Counterparty
+        try:
+            inv = IncomingInvoice.objects.filter(tenant=user.tenant).select_related("counterparty", "inbox").get(id=str(input.id))
+        except IncomingInvoice.DoesNotExist:
+            return IncomingInvoiceResult(success=False, error="Invoice not found.")
+        fields = ["updated_at"]
+        for field in ["supplier_name", "invoice_number", "currency", "extraction_status"]:
+            val = getattr(input, field)
+            if val is not None:
+                setattr(inv, field, val)
+                fields.append(field)
+        for field in ["invoice_date", "due_date", "net_amount", "vat_amount", "gross_amount"]:
+            val = getattr(input, field)
+            if val is not strawberry.UNSET:
+                setattr(inv, field, val)
+                fields.append(field)
+        if input.counterparty_id is not strawberry.UNSET:
+            if input.counterparty_id is None:
+                inv.counterparty = None
+            else:
+                try:
+                    inv.counterparty = Counterparty.objects.get(id=str(input.counterparty_id), tenant=user.tenant)
+                except Counterparty.DoesNotExist:
+                    return IncomingInvoiceResult(success=False, error="Counterparty not found.")
+            fields.append("counterparty")
+        inv.save(update_fields=fields)
+        return IncomingInvoiceResult(success=True, invoice=_make_incoming_invoice_type(inv))
+
+    @strawberry.mutation
+    def delete_incoming_invoice(self, info: Info[Context, None], id: strawberry.ID) -> DeleteResult:
+        user, err = check_perm(info, "incoming_invoices", "write")
+        if err: return DeleteResult(success=False, error=err)
+        from apps.banking.models import IncomingInvoice
+        try:
+            inv = IncomingInvoice.objects.get(id=str(id), tenant=user.tenant)
+        except IncomingInvoice.DoesNotExist:
+            return DeleteResult(success=False, error="Invoice not found.")
+        if inv.pdf_file:
+            inv.pdf_file.delete(save=False)
+        inv.delete()
+        return DeleteResult(success=True)
