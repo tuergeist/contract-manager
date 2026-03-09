@@ -386,7 +386,90 @@ class HubSpotService:
             raise HubSpotError(self._api_error_message(response.status_code, "Fetch deal"))
         return response.json()
 
-    def sync_companies(self) -> dict[str, Any]:
+    def _search_objects(
+        self,
+        client: httpx.Client,
+        object_type: str,
+        properties: list[str],
+        modified_since: date | None = None,
+        modified_until: date | None = None,
+    ) -> list[dict]:
+        """Search HubSpot objects with optional date filters using the search API."""
+        filters = []
+        if modified_since:
+            filters.append({
+                "propertyName": "hs_lastmodifieddate",
+                "operator": "GTE",
+                "value": datetime.combine(modified_since, datetime.min.time(), tzinfo=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            })
+        if modified_until:
+            filters.append({
+                "propertyName": "hs_lastmodifieddate",
+                "operator": "LTE",
+                "value": datetime.combine(modified_until, datetime.max.time().replace(microsecond=0), tzinfo=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.999Z"),
+            })
+
+        results = []
+        after = 0
+        has_more = True
+
+        while has_more:
+            body: dict[str, Any] = {
+                "limit": 100,
+                "properties": properties,
+                "filterGroups": [{"filters": filters}] if filters else [],
+            }
+            if after:
+                body["after"] = str(after)
+
+            response = client.post(
+                f"{HUBSPOT_API_BASE}/crm/v3/objects/{object_type}/search",
+                headers=self._get_headers(),
+                json=body,
+                timeout=30.0,
+            )
+
+            if response.status_code != 200:
+                raise HubSpotError(self._api_error_message(response.status_code, f"Search {object_type}"))
+
+            data = response.json()
+            results.extend(data.get("results", []))
+
+            paging = data.get("paging", {})
+            next_page = paging.get("next", {})
+            after = next_page.get("after")
+            has_more = bool(after)
+
+        return results
+
+    def _get_closed_won_stages(self, client: httpx.Client) -> set[str]:
+        """Fetch all pipeline stages that represent closed-won deals.
+
+        HubSpot stages have metadata.isClosed="true" for both won and lost.
+        We distinguish won from lost by probability: 1.0 = won, 0.0 = lost.
+        """
+        response = client.get(
+            f"{HUBSPOT_API_BASE}/crm/v3/pipelines/deals",
+            headers=self._get_headers(),
+            timeout=30.0,
+        )
+        if response.status_code != 200:
+            logger.warning("Failed to fetch deal pipelines: %s, falling back to 'closedwon'", response.status_code)
+            return {"closedwon"}
+
+        won_stages: set[str] = set()
+        for pipeline in response.json().get("results", []):
+            for stage in pipeline.get("stages", []):
+                metadata = stage.get("metadata", {})
+                if metadata.get("isClosed") == "true" and metadata.get("probability") == "1.0":
+                    won_stages.add(stage["id"])
+
+        if not won_stages:
+            won_stages.add("closedwon")
+        logger.info("Resolved closed-won stages: %s", won_stages)
+        return won_stages
+
+    def sync_companies(self, modified_since: date | None = None, modified_until: date | None = None) -> dict[str, Any]:
         """Sync companies from HubSpot to local customers.
 
         Imports ALL companies but only marks those matching the configured
@@ -403,44 +486,22 @@ class HubSpotService:
         created = 0
         updated = 0
         errors = []
+        is_partial = modified_since is not None or modified_until is not None
 
         try:
             with httpx.Client() as client:
-                after = None
-                has_more = True
-
-                while has_more:
-                    params = {
-                        "limit": 100,
-                        "properties": self._get_company_properties(),
-                    }
-                    if after:
-                        params["after"] = after
-
-                    response = client.get(
-                        f"{HUBSPOT_API_BASE}/crm/v3/objects/companies",
-                        headers=self._get_headers(),
-                        params=params,
-                        timeout=30.0,
+                if is_partial:
+                    # Use search API for date-filtered syncs
+                    companies = self._search_objects(
+                        client, "companies",
+                        properties=self._get_company_properties().split(","),
+                        modified_since=modified_since,
+                        modified_until=modified_until,
                     )
-
-                    if response.status_code != 200:
-                        return {
-                            "success": False,
-                            "error": self._api_error_message(response.status_code),
-                            "created": created,
-                            "updated": updated,
-                        }
-
-                    data = response.json()
-                    companies = data.get("results", [])
-
                     for company in companies:
                         try:
-                            properties = company.get("properties", {})
-                            # Determine if company should be active based on filters
-                            is_active = self._company_matches_filters(properties)
-
+                            props = company.get("properties", {})
+                            is_active = self._company_matches_filters(props)
                             result = self._sync_company(company, is_active=is_active)
                             if result == "created":
                                 created += 1
@@ -449,21 +510,64 @@ class HubSpotService:
                         except Exception as e:
                             errors.append(f"Company {company.get('id')}: {str(e)}")
                             logger.exception(f"Failed to sync company {company.get('id')}")
+                else:
+                    after = None
+                    has_more = True
 
-                    # Check for pagination
-                    paging = data.get("paging", {})
-                    next_page = paging.get("next", {})
-                    after = next_page.get("after")
-                    has_more = bool(after)
+                    while has_more:
+                        params = {
+                            "limit": 100,
+                            "properties": self._get_company_properties(),
+                        }
+                        if after:
+                            params["after"] = after
+
+                        response = client.get(
+                            f"{HUBSPOT_API_BASE}/crm/v3/objects/companies",
+                            headers=self._get_headers(),
+                            params=params,
+                            timeout=30.0,
+                        )
+
+                        if response.status_code != 200:
+                            return {
+                                "success": False,
+                                "error": self._api_error_message(response.status_code),
+                                "created": created,
+                                "updated": updated,
+                            }
+
+                        data = response.json()
+                        companies = data.get("results", [])
+
+                        for company in companies:
+                            try:
+                                properties = company.get("properties", {})
+                                is_active = self._company_matches_filters(properties)
+
+                                result = self._sync_company(company, is_active=is_active)
+                                if result == "created":
+                                    created += 1
+                                elif result == "updated":
+                                    updated += 1
+                            except Exception as e:
+                                errors.append(f"Company {company.get('id')}: {str(e)}")
+                                logger.exception(f"Failed to sync company {company.get('id')}")
+
+                        paging = data.get("paging", {})
+                        next_page = paging.get("next", {})
+                        after = next_page.get("after")
+                        has_more = bool(after)
 
                 # Sync billing contacts (after all companies are synced)
                 billing_label = self.config.get("billing_contact_label")
                 if billing_label:
                     self._sync_all_billing_contacts(client, billing_label, errors)
 
-            # Update last sync time
-            self.tenant.hubspot_config["last_sync"] = datetime.now(timezone.utc).isoformat()
-            self.tenant.save(update_fields=["hubspot_config"])
+            # Don't update last_sync for partial syncs
+            if not is_partial:
+                self.tenant.hubspot_config["last_sync"] = datetime.now(timezone.utc).isoformat()
+                self.tenant.save(update_fields=["hubspot_config"])
 
             return {
                 "success": True,
@@ -720,7 +824,7 @@ class HubSpotService:
                 customer.name, customer.hubspot_id, emails,
             )
 
-    def sync_products(self) -> dict[str, Any]:
+    def sync_products(self, modified_since: date | None = None, modified_until: date | None = None) -> dict[str, Any]:
         """Sync products from HubSpot to local products."""
         if not self.is_configured:
             return {
@@ -733,39 +837,19 @@ class HubSpotService:
         created = 0
         updated = 0
         errors = []
+        is_partial = modified_since is not None or modified_until is not None
+        product_props = ["name", "description", "price", "hs_sku", "hs_recurring_billing_period", "hs_status", "createdate"]
 
         try:
             with httpx.Client() as client:
-                # Step 1: Sync non-archived products
-                after = None
-                has_more = True
-
-                while has_more:
-                    params = {
-                        "limit": 100,
-                        "properties": "name,description,price,hs_sku,hs_recurring_billing_period,hs_status,createdate",
-                    }
-                    if after:
-                        params["after"] = after
-
-                    response = client.get(
-                        f"{HUBSPOT_API_BASE}/crm/v3/objects/products",
-                        headers=self._get_headers(),
-                        params=params,
-                        timeout=30.0,
+                if is_partial:
+                    # Use search API for date-filtered syncs
+                    products = self._search_objects(
+                        client, "products",
+                        properties=product_props,
+                        modified_since=modified_since,
+                        modified_until=modified_until,
                     )
-
-                    if response.status_code != 200:
-                        return {
-                            "success": False,
-                            "error": self._api_error_message(response.status_code),
-                            "created": created,
-                            "updated": updated,
-                        }
-
-                    data = response.json()
-                    products = data.get("results", [])
-
                     for product in products:
                         try:
                             result = self._sync_product(product)
@@ -776,61 +860,100 @@ class HubSpotService:
                         except Exception as e:
                             errors.append(f"Product {product.get('id')}: {str(e)}")
                             logger.exception(f"Failed to sync product {product.get('id')}")
+                else:
+                    # Step 1: Sync non-archived products
+                    after = None
+                    has_more = True
 
-                    # Check for pagination
-                    paging = data.get("paging", {})
-                    next_page = paging.get("next", {})
-                    after = next_page.get("after")
-                    has_more = bool(after)
+                    while has_more:
+                        params = {
+                            "limit": 100,
+                            "properties": ",".join(product_props),
+                        }
+                        if after:
+                            params["after"] = after
 
-                # Step 2: Check archived products - mark existing ones as inactive
-                after = None
-                has_more = True
+                        response = client.get(
+                            f"{HUBSPOT_API_BASE}/crm/v3/objects/products",
+                            headers=self._get_headers(),
+                            params=params,
+                            timeout=30.0,
+                        )
 
-                while has_more:
-                    params = {
-                        "limit": 100,
-                        "archived": "true",
-                    }
-                    if after:
-                        params["after"] = after
+                        if response.status_code != 200:
+                            return {
+                                "success": False,
+                                "error": self._api_error_message(response.status_code),
+                                "created": created,
+                                "updated": updated,
+                            }
 
-                    response = client.get(
-                        f"{HUBSPOT_API_BASE}/crm/v3/objects/products",
-                        headers=self._get_headers(),
-                        params=params,
-                        timeout=30.0,
-                    )
+                        data = response.json()
+                        products = data.get("results", [])
 
-                    if response.status_code != 200:
-                        # Non-fatal - just log and continue
-                        logger.warning(f"Failed to fetch archived products: {response.status_code}")
-                        break
+                        for product in products:
+                            try:
+                                result = self._sync_product(product)
+                                if result == "created":
+                                    created += 1
+                                elif result == "updated":
+                                    updated += 1
+                            except Exception as e:
+                                errors.append(f"Product {product.get('id')}: {str(e)}")
+                                logger.exception(f"Failed to sync product {product.get('id')}")
 
-                    data = response.json()
-                    archived_products = data.get("results", [])
+                        paging = data.get("paging", {})
+                        next_page = paging.get("next", {})
+                        after = next_page.get("after")
+                        has_more = bool(after)
 
-                    for product in archived_products:
-                        hubspot_id = str(product["id"])
-                        # Only update if we already have this product
-                        existing = Product.objects.filter(
-                            tenant=self.tenant,
-                            hubspot_id=hubspot_id,
-                        ).first()
-                        if existing and existing.is_active:
-                            existing.is_active = False
-                            existing.synced_at = datetime.now(timezone.utc)
-                            existing.save(update_fields=["is_active", "synced_at"])
-                            updated += 1
+                    # Step 2: Check archived products - mark existing ones as inactive
+                    after = None
+                    has_more = True
 
-                    paging = data.get("paging", {})
-                    next_page = paging.get("next", {})
-                    after = next_page.get("after")
-                    has_more = bool(after)
+                    while has_more:
+                        params = {
+                            "limit": 100,
+                            "archived": "true",
+                        }
+                        if after:
+                            params["after"] = after
 
-            # Update last product sync time
-            self.tenant.hubspot_config["last_product_sync"] = datetime.now(timezone.utc).isoformat()
-            self.tenant.save(update_fields=["hubspot_config"])
+                        response = client.get(
+                            f"{HUBSPOT_API_BASE}/crm/v3/objects/products",
+                            headers=self._get_headers(),
+                            params=params,
+                            timeout=30.0,
+                        )
+
+                        if response.status_code != 200:
+                            logger.warning(f"Failed to fetch archived products: {response.status_code}")
+                            break
+
+                        data = response.json()
+                        archived_products = data.get("results", [])
+
+                        for product in archived_products:
+                            hubspot_id = str(product["id"])
+                            existing = Product.objects.filter(
+                                tenant=self.tenant,
+                                hubspot_id=hubspot_id,
+                            ).first()
+                            if existing and existing.is_active:
+                                existing.is_active = False
+                                existing.synced_at = datetime.now(timezone.utc)
+                                existing.save(update_fields=["is_active", "synced_at"])
+                                updated += 1
+
+                        paging = data.get("paging", {})
+                        next_page = paging.get("next", {})
+                        after = next_page.get("after")
+                        has_more = bool(after)
+
+            # Don't update last_sync for partial syncs
+            if not is_partial:
+                self.tenant.hubspot_config["last_product_sync"] = datetime.now(timezone.utc).isoformat()
+                self.tenant.save(update_fields=["hubspot_config"])
 
             return {
                 "success": True,
@@ -961,7 +1084,7 @@ class HubSpotService:
 
         return result
 
-    def sync_deals(self) -> dict[str, Any]:
+    def sync_deals(self, modified_since: date | None = None, modified_until: date | None = None) -> dict[str, Any]:
         """Sync closed won deals from HubSpot as contract drafts."""
         if not self.is_configured:
             return {
@@ -974,49 +1097,29 @@ class HubSpotService:
         created = 0
         skipped = 0
         errors = []
+        is_partial = modified_since is not None or modified_until is not None
+        deal_props = ["dealname", "closedate", "amount", "dealstage", "pipeline"]
 
         try:
             with httpx.Client() as client:
-                after = None
-                has_more = True
+                # Resolve closed-won stages dynamically from pipeline API
+                closed_won_stages = self._get_closed_won_stages(client)
 
-                while has_more:
-                    params = {
-                        "limit": 100,
-                        "properties": "dealname,closedate,amount,dealstage",
-                        "associations": "companies",
-                    }
-                    if after:
-                        params["after"] = after
-
-                    response = client.get(
-                        f"{HUBSPOT_API_BASE}/crm/v3/objects/deals",
-                        headers=self._get_headers(),
-                        params=params,
-                        timeout=30.0,
+                if is_partial:
+                    # Use search API for date-filtered syncs
+                    deals = self._search_objects(
+                        client, "deals",
+                        properties=deal_props,
+                        modified_since=modified_since,
+                        modified_until=modified_until,
                     )
-
-                    if response.status_code != 200:
-                        return {
-                            "success": False,
-                            "error": self._api_error_message(response.status_code),
-                            "created": created,
-                            "skipped": skipped,
-                        }
-
-                    data = response.json()
-                    deals = data.get("results", [])
-
                     for deal in deals:
                         try:
                             properties = deal.get("properties", {})
                             dealstage = properties.get("dealstage", "")
-
-                            # Only process closed won deals
-                            if dealstage != "closedwon":
+                            if dealstage not in closed_won_stages:
                                 continue
-
-                            result = self._sync_deal(deal, client)
+                            result = self._sync_deal(deal, client, closed_won_stages)
                             if result == "created":
                                 created += 1
                             elif result == "skipped":
@@ -1024,16 +1127,64 @@ class HubSpotService:
                         except Exception as e:
                             errors.append(f"Deal {deal.get('id')}: {str(e)}")
                             logger.exception(f"Failed to sync deal {deal.get('id')}")
+                else:
+                    after = None
+                    has_more = True
 
-                    # Check for pagination
-                    paging = data.get("paging", {})
-                    next_page = paging.get("next", {})
-                    after = next_page.get("after")
-                    has_more = bool(after)
+                    while has_more:
+                        params = {
+                            "limit": 100,
+                            "properties": ",".join(deal_props),
+                            "associations": "companies",
+                        }
+                        if after:
+                            params["after"] = after
 
-            # Update last deal sync time
-            self.tenant.hubspot_config["last_deal_sync"] = datetime.now(timezone.utc).isoformat()
-            self.tenant.save(update_fields=["hubspot_config"])
+                        response = client.get(
+                            f"{HUBSPOT_API_BASE}/crm/v3/objects/deals",
+                            headers=self._get_headers(),
+                            params=params,
+                            timeout=30.0,
+                        )
+
+                        if response.status_code != 200:
+                            return {
+                                "success": False,
+                                "error": self._api_error_message(response.status_code),
+                                "created": created,
+                                "skipped": skipped,
+                            }
+
+                        data = response.json()
+                        deals = data.get("results", [])
+
+                        for deal in deals:
+                            try:
+                                properties = deal.get("properties", {})
+                                dealstage = properties.get("dealstage", "")
+
+                                # Only process closed won deals (dynamic stage detection)
+                                if dealstage not in closed_won_stages:
+                                    continue
+
+                                result = self._sync_deal(deal, client, closed_won_stages)
+                                if result == "created":
+                                    created += 1
+                                elif result == "skipped":
+                                    skipped += 1
+                            except Exception as e:
+                                errors.append(f"Deal {deal.get('id')}: {str(e)}")
+                                logger.exception(f"Failed to sync deal {deal.get('id')}")
+
+                        paging = data.get("paging", {})
+                        next_page = paging.get("next", {})
+                        after = next_page.get("after")
+                        has_more = bool(after)
+
+            # Don't update last_sync for partial syncs
+            if not is_partial:
+                self.tenant.hubspot_config["last_deal_sync"] = datetime.now(timezone.utc).isoformat()
+                self.tenant.save(update_fields=["hubspot_config"])
 
             return {
                 "success": True,
@@ -1059,14 +1210,124 @@ class HubSpotService:
                 "skipped": skipped,
             }
 
-    def _sync_deal(self, deal_data: dict, client: httpx.Client) -> str:
+    def check_deal(self, deal_id: str) -> dict[str, Any]:
+        """Fetch a single deal from HubSpot and explain sync status."""
+        if not self.is_configured:
+            return {"success": False, "error": "API key not configured"}
+
+        try:
+            with httpx.Client() as client:
+                # Fetch deal
+                response = client.get(
+                    f"{HUBSPOT_API_BASE}/crm/v3/objects/deals/{deal_id}",
+                    headers=self._get_headers(),
+                    params={"properties": "dealname,closedate,amount,dealstage,pipeline"},
+                    timeout=15.0,
+                )
+                if response.status_code == 404:
+                    return {"success": False, "error": f"Deal {deal_id} not found in HubSpot"}
+                if response.status_code != 200:
+                    return {"success": False, "error": self._api_error_message(response.status_code, "Fetch deal")}
+
+                deal = response.json()
+                properties = deal.get("properties", {})
+                dealstage = properties.get("dealstage", "")
+                pipeline_id = properties.get("pipeline", "")
+                deal_name = properties.get("dealname", "")
+
+                # Resolve pipeline name and check if stage is closed-won
+                closed_won_stages = self._get_closed_won_stages(client)
+                is_closed_won = dealstage in closed_won_stages
+
+                # Resolve pipeline name
+                pipeline_name = pipeline_id
+                try:
+                    pipe_resp = client.get(
+                        f"{HUBSPOT_API_BASE}/crm/v3/pipelines/deals/{pipeline_id}",
+                        headers=self._get_headers(),
+                        timeout=10.0,
+                    )
+                    if pipe_resp.status_code == 200:
+                        pipe_data = pipe_resp.json()
+                        pipeline_name = pipe_data.get("label", pipeline_id)
+                        # Also resolve stage label
+                        for stage in pipe_data.get("stages", []):
+                            if stage["id"] == dealstage:
+                                dealstage_label = stage.get("label", dealstage)
+                                break
+                        else:
+                            dealstage_label = dealstage
+                    else:
+                        dealstage_label = dealstage
+                except Exception:
+                    dealstage_label = dealstage
+
+                # Check associated company
+                assoc_response = client.get(
+                    f"{HUBSPOT_API_BASE}/crm/v3/objects/deals/{deal_id}/associations/companies",
+                    headers=self._get_headers(),
+                    timeout=10.0,
+                )
+                associated_company = None
+                if assoc_response.status_code == 200:
+                    companies = assoc_response.json().get("results", [])
+                    if companies:
+                        company_id = str(companies[0].get("id"))
+                        customer = Customer.objects.filter(
+                            tenant=self.tenant, hubspot_id=company_id
+                        ).first()
+                        associated_company = {
+                            "hubspotId": company_id,
+                            "name": customer.name if customer else None,
+                            "synced": customer is not None,
+                        }
+
+                # Check existing contract
+                existing_contract = Contract.objects.filter(
+                    tenant=self.tenant, hubspot_deal_id=deal_id
+                ).first()
+
+                # Determine reason
+                reasons = []
+                if not is_closed_won:
+                    reasons.append(f"Stage '{dealstage_label}' ({dealstage}) is not a closed-won stage")
+                if not associated_company:
+                    reasons.append("No associated company found")
+                elif not associated_company["synced"]:
+                    reasons.append(f"Associated company {associated_company['hubspotId']} not synced to system")
+                if existing_contract:
+                    reasons.append(f"Contract already exists (ID: {existing_contract.id})")
+
+                return {
+                    "success": True,
+                    "dealName": deal_name,
+                    "dealStage": dealstage_label,
+                    "dealStageId": dealstage,
+                    "pipeline": pipeline_name,
+                    "pipelineId": pipeline_id,
+                    "isClosedWon": is_closed_won,
+                    "associatedCompany": associated_company,
+                    "existingContractId": str(existing_contract.id) if existing_contract else None,
+                    "wouldSync": is_closed_won and associated_company and associated_company["synced"] and not existing_contract,
+                    "reasons": reasons if reasons else ["Ready to sync"],
+                }
+
+        except Exception as e:
+            logger.exception("Failed to check deal %s", deal_id)
+            return {"success": False, "error": str(e)}
+
+    def _sync_deal(self, deal_data: dict, client: httpx.Client, closed_won_stages: set[str] | None = None) -> str:
         """Sync a single closed won deal as a contract draft."""
         hubspot_deal_id = str(deal_data["id"])
         properties = deal_data.get("properties", {})
 
         # Only import closed won deals
         dealstage = properties.get("dealstage", "")
-        if dealstage != "closedwon":
+        if closed_won_stages:
+            if dealstage not in closed_won_stages:
+                logger.debug("Deal %s stage is '%s', skipping (not closed-won)", hubspot_deal_id, dealstage)
+                return "skipped"
+        elif dealstage != "closedwon":
             logger.debug("Deal %s stage is '%s', skipping (not closedwon)", hubspot_deal_id, dealstage)
             return "skipped"
 

@@ -1,4 +1,5 @@
 """GraphQL schema for tenants."""
+from datetime import date
 from decimal import Decimal
 
 import strawberry
@@ -262,6 +263,41 @@ class HubSpotDealSyncResult:
     created: int
     skipped: int
     warnings: list[str] | None = None
+
+
+@strawberry.input
+class HubSpotDateRangeInput:
+    """Optional date range for filtered sync."""
+
+    modified_since: date | None = None
+    modified_until: date | None = None
+
+
+@strawberry.type
+class HubSpotAssociatedCompany:
+    """Associated company info from deal check."""
+
+    hubspot_id: str
+    name: str | None
+    synced: bool
+
+
+@strawberry.type
+class HubSpotDealCheckResult:
+    """Result of checking a single HubSpot deal."""
+
+    success: bool
+    error: str | None = None
+    deal_name: str | None = None
+    deal_stage: str | None = None
+    deal_stage_id: str | None = None
+    pipeline: str | None = None
+    pipeline_id: str | None = None
+    is_closed_won: bool | None = None
+    associated_company: HubSpotAssociatedCompany | None = None
+    existing_contract_id: str | None = None
+    would_sync: bool | None = None
+    reasons: list[str] | None = None
 
 
 @strawberry.type
@@ -709,6 +745,44 @@ class TenantQuery:
         )
 
     @strawberry.field
+    def check_hubspot_deal(
+        self, info: Info[Context, None], deal_id: str
+    ) -> HubSpotDealCheckResult:
+        """Check a single HubSpot deal and explain sync status."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return HubSpotDealCheckResult(success=False, error="No tenant assigned")
+
+        service = HubSpotService(user.tenant)
+        result = service.check_deal(deal_id)
+
+        if not result.get("success"):
+            return HubSpotDealCheckResult(success=False, error=result.get("error"))
+
+        associated = result.get("associatedCompany")
+        associated_company = None
+        if associated:
+            associated_company = HubSpotAssociatedCompany(
+                hubspot_id=associated["hubspotId"],
+                name=associated.get("name"),
+                synced=associated.get("synced", False),
+            )
+
+        return HubSpotDealCheckResult(
+            success=True,
+            deal_name=result.get("dealName"),
+            deal_stage=result.get("dealStage"),
+            deal_stage_id=result.get("dealStageId"),
+            pipeline=result.get("pipeline"),
+            pipeline_id=result.get("pipelineId"),
+            is_closed_won=result.get("isClosedWon"),
+            associated_company=associated_company,
+            existing_contract_id=result.get("existingContractId"),
+            would_sync=result.get("wouldSync"),
+            reasons=result.get("reasons"),
+        )
+
+    @strawberry.field
     def hubspot_contact_association_labels(
         self, info: Info[Context, None]
     ) -> HubSpotAssociationLabelsResult:
@@ -1000,7 +1074,9 @@ class TenantMutation:
         )
 
     @strawberry.mutation
-    def sync_hubspot_customers(self, info: Info[Context, None]) -> HubSpotSyncResult:
+    def sync_hubspot_customers(
+        self, info: Info[Context, None], date_range: HubSpotDateRangeInput | None = None,
+    ) -> HubSpotSyncResult:
         """Sync customers from HubSpot."""
         user = get_current_user(info)
         if not user.tenant:
@@ -1009,7 +1085,11 @@ class TenantMutation:
             )
 
         service = HubSpotService(user.tenant)
-        result = service.sync_companies()
+        kwargs = {}
+        if date_range:
+            kwargs["modified_since"] = date_range.modified_since
+            kwargs["modified_until"] = date_range.modified_until
+        result = service.sync_companies(**kwargs)
 
         return HubSpotSyncResult(
             success=result["success"],
@@ -1020,7 +1100,9 @@ class TenantMutation:
         )
 
     @strawberry.mutation
-    def sync_hubspot_products(self, info: Info[Context, None]) -> HubSpotSyncResult:
+    def sync_hubspot_products(
+        self, info: Info[Context, None], date_range: HubSpotDateRangeInput | None = None,
+    ) -> HubSpotSyncResult:
         """Sync products from HubSpot."""
         user = get_current_user(info)
         if not user.tenant:
@@ -1029,7 +1111,11 @@ class TenantMutation:
             )
 
         service = HubSpotService(user.tenant)
-        result = service.sync_products()
+        kwargs = {}
+        if date_range:
+            kwargs["modified_since"] = date_range.modified_since
+            kwargs["modified_until"] = date_range.modified_until
+        result = service.sync_products(**kwargs)
 
         return HubSpotSyncResult(
             success=result["success"],
@@ -1040,7 +1126,9 @@ class TenantMutation:
         )
 
     @strawberry.mutation
-    def sync_hubspot_deals(self, info: Info[Context, None]) -> HubSpotDealSyncResult:
+    def sync_hubspot_deals(
+        self, info: Info[Context, None], date_range: HubSpotDateRangeInput | None = None,
+    ) -> HubSpotDealSyncResult:
         """Sync closed won deals from HubSpot as contract drafts."""
         user = get_current_user(info)
         if not user.tenant:
@@ -1049,7 +1137,11 @@ class TenantMutation:
             )
 
         service = HubSpotService(user.tenant)
-        result = service.sync_deals()
+        kwargs = {}
+        if date_range:
+            kwargs["modified_since"] = date_range.modified_since
+            kwargs["modified_until"] = date_range.modified_until
+        result = service.sync_deals(**kwargs)
 
         return HubSpotDealSyncResult(
             success=result["success"],
