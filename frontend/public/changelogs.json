@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.20.1",
+    "date": "2026-03-09",
+    "title": "Clockodo activation dialog improvements",
+    "description": "Improved the contract activation workflow with inline Clockodo customer linking, project naming templates, and config overwrite fix.",
+    "type": "feature",
+    "details": [
+      "Added inline customer create/link in the Clockodo activation dialog with searchable select",
+      "Added {ab_number} placeholder for project naming templates",
+      "Added project naming templates settings UI under Time Tracking > Projects",
+      "Fixed save_time_tracking_settings overwriting project templates",
+      "Skipped order confirmation dialog when contract already has an AB number",
+      "Added next-steps hint to the activation confirmation dialog",
+      "Filtered archived Clockodo customers from linking dropdown",
+      "Fixed i18n interpolation in Clockodo dialog strings"
+    ]
+  },
+  {
     "version": "2.20.0",
     "date": "2026-03-09",
     "title": "Liquidity analysis",
@@ -169,13 +186,15 @@
   {
     "version": "2.16.0",
     "date": "2026-03-04",
-    "title": "Per-user dashboard section visibility",
-    "description": "Users can now choose which dashboard sections to display via toggle switches in User Settings. Preferences are stored per user and persist across sessions.",
+    "title": "Order confirmation and dashboard settings",
+    "description": "Contracts can now generate and send order confirmations (Auftragsbestätigungen) on activation. Users can also customize which dashboard sections are visible.",
     "type": "feature",
     "details": [
-      "Added Dashboard preferences section in User Settings with toggles for Contract KPIs, New Business, Price Increase Impact, and Revenue Goals",
-      "Dashboard conditionally renders sections based on user preferences",
-      "Fixed order confirmation template to display customer name correctly"
+      "Added order confirmation (Auftragsbestätigung) generation with PDF and email sending on contract activation",
+      "Added order confirmation email template settings with customizable subject and body",
+      "Added order confirmation numbering scheme in Settings",
+      "Added Dashboard preferences section in User Settings with toggles for visible sections",
+      "Dashboard conditionally renders sections based on user preferences"
     ]
   },
   {
