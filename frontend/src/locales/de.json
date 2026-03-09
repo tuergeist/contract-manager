@@ -544,6 +544,20 @@
       "wonDevelopment": "Gewonnener Entwicklungsumsatz",
       "wonDealCount": "Gewonnene Deals",
       "wonDeals": "Gewonnene Deals"
+    },
+    "liquidity": {
+      "title": "Liquiditätsanalyse {{year}}",
+      "balance": "Aktueller Kontostand",
+      "month": "Monat",
+      "actualCosts": "Ist-Kosten",
+      "projectedCosts": "Progn. Kosten",
+      "totalCosts": "Gesamtkosten",
+      "actualIncome": "Ist-Einnahmen",
+      "projectedIncome": "Progn. Einnahmen",
+      "totalIncome": "Gesamteinnahmen",
+      "net": "Netto",
+      "cumulative": "Kum. Saldo",
+      "total": "Gesamt"
     }
   },
   "forecast": {

@@ -99,6 +99,7 @@ const searchablePages: SearchablePage[] = [
   { labelKey: 'nav.offers', keywords: ['offers', 'angebote'], url: '/offers', permission: 'offers.read' },
   { labelKey: 'nav.banking', keywords: ['banking', 'bankkonten', 'bank'], url: '/banking', permission: 'banking.read' },
   { labelKey: 'nav.forecasts', keywords: ['forecasts', 'vorschauen', 'prognose'], url: '/forecasts' },
+  { labelKey: 'forecasts.liquidityTab', keywords: ['liquidity', 'liquidität', 'liquiditätsanalyse', 'cash flow', 'balance'], url: '/forecasts?tab=liquidity', permission: 'banking.read' },
   { labelKey: 'nav.departmentAnalysis', keywords: ['department', 'abteilung', 'analyse', 'analysis'], url: '/department-analysis' },
   { labelKey: 'nav.auditLog', keywords: ['audit', 'auditlog', 'log', 'history'], url: '/audit-log' },
   // Settings pages
