@@ -413,6 +413,8 @@ class TimeTrackingSettings:
     provider: str | None
     is_configured: bool
     show_revenue: bool = True
+    maintenance_project_template: str = ""
+    oneoff_project_template: str = ""
 
 
 @strawberry.type
@@ -585,7 +587,13 @@ class TenantQuery:
         provider = config.get("provider")
         is_configured = bool(provider and config.get("api_key"))
         show_revenue = config.get("show_revenue", True)
-        return TimeTrackingSettings(provider=provider, is_configured=is_configured, show_revenue=show_revenue)
+        return TimeTrackingSettings(
+            provider=provider,
+            is_configured=is_configured,
+            show_revenue=show_revenue,
+            maintenance_project_template=config.get("maintenance_project_template", ""),
+            oneoff_project_template=config.get("oneoff_project_template", ""),
+        )
 
     @strawberry.field
     def hubspot_settings(self, info: Info[Context, None]) -> HubSpotSettings | None:
@@ -890,12 +898,14 @@ class TenantMutation:
             return TimeTrackingTestResult(success=False, error="No tenant assigned")
 
         tenant = user.tenant
-        tenant.time_tracking_config = {
+        config = tenant.time_tracking_config or {}
+        config.update({
             "provider": provider,
             "api_email": api_email,
             "api_key": api_key,
             "show_revenue": show_revenue,
-        }
+        })
+        tenant.time_tracking_config = config
         tenant.save(update_fields=["time_tracking_config"])
 
         # Test connection
@@ -924,6 +934,26 @@ class TenantMutation:
         tenant = user.tenant
         config = tenant.time_tracking_config or {}
         config["show_revenue"] = show_revenue
+        tenant.time_tracking_config = config
+        tenant.save(update_fields=["time_tracking_config"])
+        return True
+
+    @strawberry.mutation
+    def save_time_tracking_project_templates(
+        self,
+        info: Info[Context, None],
+        maintenance_template: str = "",
+        oneoff_template: str = "",
+    ) -> bool:
+        """Save project naming templates for time tracking."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return False
+
+        tenant = user.tenant
+        config = tenant.time_tracking_config or {}
+        config["maintenance_project_template"] = maintenance_template
+        config["oneoff_project_template"] = oneoff_template
         tenant.time_tracking_config = config
         tenant.save(update_fields=["time_tracking_config"])
         return True

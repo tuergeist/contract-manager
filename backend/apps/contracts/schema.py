@@ -1518,6 +1518,7 @@ class ActivationPreviewResult:
     clockodo_configured: bool
     customer_linked: bool
     customer_name: str
+    customer_id: int
     clockodo_customer_id: str | None
     maintenance_needed: bool
     maintenance_project_exists: bool
@@ -2095,6 +2096,7 @@ class ContractQuery:
             clockodo_configured=result["clockodo_configured"],
             customer_linked=result["customer_linked"],
             customer_name=result["customer_name"],
+            customer_id=result["customer_id"],
             clockodo_customer_id=result.get("clockodo_customer_id"),
             maintenance_needed=result["maintenance_needed"],
             maintenance_project_exists=result["maintenance_project_exists"],

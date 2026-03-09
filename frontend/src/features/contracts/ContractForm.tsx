@@ -1374,7 +1374,8 @@ function StatusTransitionModal({
     setShowClockodoDialog(false)
 
     // After Clockodo provisioning, check if AB dialog is needed
-    if (isDraftToActive && m365Configured) {
+    // Skip if the contract already has an order confirmation number
+    if (isDraftToActive && m365Configured && !contract.orderConfirmationNumber) {
       setShowABDialog(true)
       return
     }
@@ -1464,6 +1465,11 @@ function StatusTransitionModal({
               ? t('contracts.statusTransition.warningReversible')
               : t('contracts.statusTransition.warningIrreversible')}
           </p>
+          {isDraftToActive && missingFields.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              {t('contracts.statusTransition.activationNextSteps')}
+            </p>
+          )}
         </div>
 
         <DialogFooter>

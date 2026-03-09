@@ -405,10 +405,12 @@ class ClockodoProvider(TimeTrackingProvider):
             logger.error("Failed to fetch projects for customer %s: %s", customer_id, e)
             return []
 
-    def get_customers(self) -> list[dict]:
-        """Fetch all customers from Clockodo."""
+    def get_customers(self, active_only: bool = True) -> list[dict]:
+        """Fetch customers from Clockodo, optionally filtering out archived ones."""
         try:
             customers = self._get_all_pages("customers", "customers")
+            if active_only:
+                customers = [c for c in customers if c.get("active", True)]
             return [{"id": str(c["id"]), "name": c.get("name", "")} for c in customers]
         except Exception as e:
             logger.error("Failed to fetch Clockodo customers: %s", e)

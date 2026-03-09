@@ -498,7 +498,8 @@
       "confirmEnd": "Möchten Sie diesen Vertrag beenden?",
       "confirmResetToDraft": "Möchten Sie diesen Vertrag zurück auf Entwurf setzen? Alle Nachträge werden gelöscht.",
       "warningIrreversible": "Diese Aktion kann nicht rückgängig gemacht werden.",
-      "warningReversible": "Der Vertrag kann später wieder aktiviert werden."
+      "warningReversible": "Der Vertrag kann später wieder aktiviert werden.",
+      "activationNextSteps": "Nach der Bestätigung werden Sie durch die Zeiterfassungs-Einrichtung und Auftragsbestätigung geführt."
     },
     "forecast": {
       "title": "Umsatzvorschau",
@@ -1313,7 +1314,18 @@
       "connectionSuccess": "Verbindung erfolgreich",
       "connectionFailed": "Verbindung fehlgeschlagen",
       "notConfigured": "Nicht konfiguriert",
-      "showRevenue": "Umsatz in Zeiterfassung anzeigen"
+      "showRevenue": "Umsatz in Zeiterfassung anzeigen",
+      "tabProjects": "Projekte",
+      "projectTemplates": "Projekt-Benennungsvorlagen",
+      "projectTemplatesDescription": "Legen Sie fest, wie Clockodo-Projekte bei der Aktivierung von Verträgen benannt werden.",
+      "maintenanceTemplate": "Wartungsprojekt-Vorlage",
+      "oneoffTemplate": "Einmal-Projekt-Vorlage",
+      "maintenanceTemplateDefault": "Wartung {customer_name}",
+      "oneoffTemplateDefault": "{customer_name} - {contract_name}",
+      "templatePlaceholders": "Verfügbare Platzhalter",
+      "templateSave": "Vorlagen speichern",
+      "templateSaved": "Projektvorlagen gespeichert",
+      "templateSaveFailed": "Projektvorlagen konnten nicht gespeichert werden"
     },
     "departments": {
       "title": "Abteilungen",
@@ -2092,12 +2104,20 @@
   "clockodo": {
     "activation": {
       "title": "Clockodo Projekt-Setup",
-      "customerLinked": "{name} ist mit Clockodo verknüpft",
-      "customerNotLinked": "{name} ist nicht mit Clockodo verknüpft",
+      "customerLinked": "{{name}} ist mit Clockodo verknüpft",
+      "customerNotLinked": "{{name}} ist nicht mit Clockodo verknüpft",
       "linkCustomerFirst": "Verknüpfen Sie diesen Kunden zuerst mit einem Clockodo-Kunden, um Projekte automatisch zu erstellen.",
+      "createInClockodo": "In Clockodo erstellen",
+      "linkExisting": "Mit bestehendem verknüpfen",
+      "confirmCreate": "Bestätigen — Jetzt erstellen",
+      "creatingCustomer": "Wird erstellt...",
+      "linkingCustomer": "Wird verknüpft...",
+      "selectClockodoCustomer": "Clockodo-Kunde auswählen...",
+      "customerCreateSuccess": "Kunde in Clockodo erstellt",
+      "customerLinkSuccess": "Kunde mit Clockodo verknüpft",
       "maintenanceProject": "Wartungsprojekt (wiederkehrende Positionen)",
-      "maintenanceExists": "Wird mit bestehendem Projekt verknüpft: {name}",
-      "maintenanceCreate": "Neues Projekt wird erstellt: {name}",
+      "maintenanceExists": "Wird mit bestehendem Projekt verknüpft: {{name}}",
+      "maintenanceCreate": "Neues Projekt wird erstellt: {{name}}",
       "oneOffProjects": "Einmal-Positionen Projekte",
       "oneOffCombined": "Ein Projekt für alle Einmal-Positionen",
       "oneOffPerItem": "Ein Projekt pro Position",
