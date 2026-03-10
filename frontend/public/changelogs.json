@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.20.3",
+    "date": "2026-03-10",
+    "title": "Invoice status display and liquidity forecast fixes",
+    "description": "Unified invoice status badges across all views and fixed liquidity forecast income projection and totals calculation.",
+    "type": "bugfix",
+    "details": [
+      "Unified invoice status display with shared InvoiceStatusBadge component across all views (invoices, customers, contracts)",
+      "Added invoice lifecycle stepper on invoice detail page showing Created → Sent → Paid progression",
+      "Renamed 'Finalized' status to 'Created' for clarity",
+      "Fixed liquidity forecast totals row showing 0 due to GraphQL Decimal string coercion",
+      "Fixed projected income using billing schedule net amounts instead of gross (now applies tax rate)",
+      "Fixed double-counting of paid invoices in liquidity forecast by tracking all invoice statuses",
+      "Finalized-but-not-sent invoices now use today+30 days as expected payment date",
+      "Added tenant name setting in Settings > General"
+    ]
+  },
+  {
     "version": "2.20.2",
     "date": "2026-03-09",
     "title": "Fix HubSpot deal sync for custom pipelines",
