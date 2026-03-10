@@ -32,7 +32,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="costcentersplitrule",
             constraint=models.CheckConstraint(
-                check=~models.Q(("counterparty__isnull", True), ("booking_text_pattern__isnull", True)) & ~models.Q(("counterparty__isnull", True), ("booking_text_pattern", "")),
+                condition=~models.Q(("counterparty__isnull", True), ("booking_text_pattern__isnull", True)) & ~models.Q(("counterparty__isnull", True), ("booking_text_pattern", "")),
                 name="split_rule_must_have_matcher",
             ),
         ),

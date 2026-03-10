@@ -182,7 +182,7 @@ class CounterpartyResult:
     counterparty: CounterpartyType | None = None
 
 
-@strawberry.type
+@strawberry.input
 class CreateCostCenterInput:
     code: str
     name: str
