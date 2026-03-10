@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.22.0",
+    "date": "2026-03-10",
+    "title": "Cost centers, incoming invoices & split rules",
+    "description": "Added cost center management with automatic and manual transaction splitting, incoming invoice import via email polling, and cost center split rules.",
+    "type": "feature",
+    "details": [
+      "Added cost centers (Kostenstellen) with settings UI for creating and managing cost centers",
+      "Added cost center split rules with counterparty and booking text matching for automatic transaction assignment",
+      "Added manual transaction cost center splitting with proportional amount distribution",
+      "Added cost center report page with aggregated transaction data per cost center",
+      "Added incoming invoice import via email inbox polling (M365/IMAP)",
+      "Added invoice inbox settings for configuring email sources",
+      "Added incoming invoices list and detail pages with extracted invoice data display",
+      "Fixed Django 5 compatibility and Strawberry input type issues"
+    ]
+  },
+  {
     "version": "2.21.0",
     "date": "2026-03-10",
     "title": "Back-to-Base ARR metric on dashboard",
