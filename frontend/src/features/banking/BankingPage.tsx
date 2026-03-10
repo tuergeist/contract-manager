@@ -79,6 +79,7 @@ const BANK_TRANSACTIONS = gql`
     $amountMin: Decimal
     $amountMax: Decimal
     $direction: String
+    $costCenterId: ID
     $unmatchedCreditsOnly: Boolean
     $sortBy: String
     $sortOrder: String
@@ -95,6 +96,7 @@ const BANK_TRANSACTIONS = gql`
       amountMin: $amountMin
       amountMax: $amountMax
       direction: $direction
+      costCenterId: $costCenterId
       unmatchedCreditsOnly: $unmatchedCreditsOnly
       sortBy: $sortBy
       sortOrder: $sortOrder
@@ -120,6 +122,11 @@ const BANK_TRANSACTIONS = gql`
         bookingText
         reference
         accountName
+        costCenter {
+          id
+          code
+          name
+        }
         matchedInvoice {
           invoiceId
           invoiceNumber
@@ -178,6 +185,18 @@ const DELETE_BANK_ACCOUNT = gql`
       success
       error
     }
+  }
+`
+
+const COST_CENTERS_QUERY = gql`
+  query CostCentersDropdown {
+    costCenters(isActive: true) { id code name }
+  }
+`
+
+const ASSIGN_TRANSACTION_COST_CENTER = gql`
+  mutation AssignTransactionCostCenter($transactionId: Int!, $costCenterId: ID) {
+    assignTransactionCostCenter(transactionId: $transactionId, costCenterId: $costCenterId) { success error }
   }
 `
 
@@ -244,6 +263,7 @@ const BANK_COUNTERPARTIES = gql`
         transactionCount
         firstDate
         lastDate
+        defaultCostCenter { id code name }
       }
       totalCount
       page
@@ -285,6 +305,7 @@ interface BankTransaction {
   bookingText: string
   reference: string
   accountName: string
+  costCenter: { id: string; code: string; name: string } | null
   matchedInvoice: { invoiceId: string; invoiceNumber: string; contractId: number | null; customerId: number | null; invoiceType: string } | null
 }
 
@@ -351,6 +372,7 @@ export function BankingPage() {
   const [amountMin, setAmountMin] = useState('')
   const [amountMax, setAmountMax] = useState('')
   const [direction, setDirection] = useState<string>('all')
+  const [filterCostCenterId, setFilterCostCenterId] = useState<string>('all')
   const [unmatchedCredits, setUnmatchedCredits] = useState(false)
   const [sortBy, setSortBy] = usePersistedState('cm:banking:sortBy', 'date')
   const [sortOrder, setSortOrder] = usePersistedState('cm:banking:sortOrder', 'desc')
@@ -372,7 +394,7 @@ export function BankingPage() {
   // Reset page on filter change
   useEffect(() => {
     setPage(1)
-  }, [filterAccountId, debouncedSearch, dateFrom, dateTo, amountMin, amountMax, direction, unmatchedCredits])
+  }, [filterAccountId, debouncedSearch, dateFrom, dateTo, amountMin, amountMax, direction, filterCostCenterId, unmatchedCredits])
 
   // Reset counterparty page on filter change
   useEffect(() => {
@@ -397,12 +419,15 @@ export function BankingPage() {
       setAmountMin('')
       setAmountMax('')
       setDirection('all')
+      setFilterCostCenterId('all')
       setUnmatchedCredits(false)
     }
   }, []) // Only run once on mount
 
   // Queries
   const { data: accountsData, loading: accountsLoading, refetch: refetchAccounts } = useQuery(BANK_ACCOUNTS)
+  const { data: costCentersData } = useQuery(COST_CENTERS_QUERY)
+  const [_assignCostCenter] = useMutation(ASSIGN_TRANSACTION_COST_CENTER)
   const accounts: BankAccount[] = accountsData?.bankAccounts ?? []
 
   const { data: txData, loading: txLoading, refetch: txRefetch } = useQuery(BANK_TRANSACTIONS, {
@@ -414,6 +439,7 @@ export function BankingPage() {
       amountMin: amountMin ? parseFloat(amountMin) : null,
       amountMax: amountMax ? parseFloat(amountMax) : null,
       direction: direction !== 'all' ? direction : null,
+      costCenterId: filterCostCenterId !== 'all' ? filterCostCenterId : null,
       unmatchedCreditsOnly: unmatchedCredits,
       sortBy,
       sortOrder,
@@ -692,6 +718,7 @@ export function BankingPage() {
     setAmountMax('')
     setDirection('all')
     setUnmatchedCredits(false)
+    setFilterCostCenterId('all')
     setPage(1)
   }
 
@@ -711,7 +738,7 @@ export function BankingPage() {
       : <ArrowDown className="h-3.5 w-3.5" />
   }
 
-  const hasActiveFilters = filterAccountId !== 'all' || searchQuery || dateFrom || dateTo || amountMin || amountMax || direction !== 'all' || unmatchedCredits
+  const hasActiveFilters = filterAccountId !== 'all' || searchQuery || dateFrom || dateTo || amountMin || amountMax || direction !== 'all' || filterCostCenterId !== 'all' || unmatchedCredits
 
   // --- Render ---
 
@@ -943,23 +970,24 @@ export function BankingPage() {
                           {getCpSortIcon('lastDate')}
                         </span>
                       </th>
+                      <th className="px-4 py-3 whitespace-nowrap">{t('costCenters.defaultCostCenter')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {cpLoading && counterparties.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-4 py-12 text-center text-gray-400">
+                        <td colSpan={5} className="px-4 py-12 text-center text-gray-400">
                           <Loader2 className="mx-auto h-6 w-6 animate-spin" />
                         </td>
                       </tr>
                     ) : counterparties.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-4 py-12 text-center text-gray-500">
+                        <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
                           {t('banking.noCounterparties')}
                         </td>
                       </tr>
                     ) : (
-                      counterparties.map((cp: { id: string; name: string; transactionCount: number; totalDebit: string; totalCredit: string; lastDate: string }) => {
+                      counterparties.map((cp: { id: string; name: string; transactionCount: number; totalDebit: string; totalCredit: string; lastDate: string; defaultCostCenter?: { id: string; code: string; name: string } | null }) => {
                         const totalDebit = parseFloat(cp.totalDebit)
                         const totalCredit = parseFloat(cp.totalCredit)
                         const netAmount = totalDebit + totalCredit
@@ -986,6 +1014,9 @@ export function BankingPage() {
                             </td>
                             <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">
                               {formatDate(cp.lastDate)}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-2.5 text-gray-500">
+                              {cp.defaultCostCenter && <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">{cp.defaultCostCenter.code}</span>}
                             </td>
                           </tr>
                         )
@@ -1145,6 +1176,20 @@ export function BankingPage() {
               </Select>
             </div>
 
+            {/* Cost Center Filter */}
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">{t('costCenters.costCenter')}</label>
+              <Select value={filterCostCenterId} onValueChange={setFilterCostCenterId}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('costCenters.allCostCenters')}</SelectItem>
+                  {(costCentersData?.costCenters || []).map((cc: { id: string; code: string; name: string }) => (
+                    <SelectItem key={cc.id} value={cc.id}>{cc.code} – {cc.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Unmatched Credits */}
             <div className="flex items-end pb-1">
               <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
@@ -1192,19 +1237,20 @@ export function BankingPage() {
                       {getSortIcon('amount')}
                     </span>
                   </th>
+                  <th className="w-[8%] px-4 py-3">{t('costCenters.costCenter')}</th>
                   <th className="w-[10%] px-4 py-3">{t('banking.account')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {txLoading && transactions.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-gray-400">
+                    <td colSpan={6} className="px-4 py-12 text-center text-gray-400">
                       <Loader2 className="mx-auto h-6 w-6 animate-spin" />
                     </td>
                   </tr>
                 ) : transactions.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
                       {t('banking.noTransactions')}
                     </td>
                   </tr>
@@ -1410,6 +1456,9 @@ export function BankingPage() {
                             )}
                             {formatCurrency(tx.amount, { currency: tx.currency || 'EUR' })}
                           </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-2.5 text-gray-500">
+                          {tx.costCenter && <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">{tx.costCenter.code}</span>}
                         </td>
                         <td className="whitespace-nowrap px-4 py-2.5 text-gray-500">
                           {tx.accountName}

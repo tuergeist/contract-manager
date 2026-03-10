@@ -21,6 +21,8 @@ PERMISSION_REGISTRY = {
     "invoices": ["read", "write", "delete", "export", "generate", "settings"],
     "offers": ["read", "write", "delete"],
     "banking": ["read", "write"],
+    "incoming_invoices": ["read", "write", "config"],
+    "cost_centers": ["read", "write", "config"],
 }
 
 # All permissions as flat "resource.action" strings
@@ -39,6 +41,8 @@ DEFAULT_ROLES = {
         if not perm.startswith("users.")
         and not perm.startswith("settings.")
         and perm != "invoices.settings"
+        and perm != "incoming_invoices.config"
+        and perm != "cost_centers.config"
     },
     "Viewer": {
         "contracts.read": True,
@@ -50,6 +54,8 @@ DEFAULT_ROLES = {
         "notes.read": True,
         "notes.write": True,
         "invoices.read": True,
+        "incoming_invoices.read": True,
+        "cost_centers.read": True,
     },
 }
 

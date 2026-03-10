@@ -64,6 +64,7 @@ const COUNTERPARTY_DETAIL = gql`
         id
         name
       }
+      defaultCostCenter { id code name isActive }
     }
   }
 `
@@ -158,8 +159,15 @@ const UPDATE_COUNTERPARTY = gql`
         name
         iban
         bic
+        defaultCostCenter { id code name isActive }
       }
     }
+  }
+`
+
+const COST_CENTERS_FOR_DROPDOWN = gql`
+  query CostCentersForDropdown {
+    costCenters(isActive: true) { id code name }
   }
 `
 
@@ -250,6 +258,7 @@ interface CounterpartySummary {
   firstDate: string
   lastDate: string
   customer: { id: number; name: string } | null
+  defaultCostCenter: { id: string; code: string; name: string; isActive: boolean } | null
 }
 
 interface CustomerSearchResult {
@@ -321,6 +330,7 @@ export function CounterpartyDetailPage() {
   }, [filterAccountId, debouncedSearch, dateFrom, dateTo, amountMin, amountMax, direction])
 
   // Counterparty detail query
+  const { data: costCentersData } = useQuery(COST_CENTERS_FOR_DROPDOWN)
   const { data: cpData, loading: cpLoading } = useQuery(COUNTERPARTY_DETAIL, {
     variables: { id, dateFrom: cpDateFrom, dateTo: cpDateTo },
     skip: !id,
@@ -623,6 +633,23 @@ export function CounterpartyDetailPage() {
           {summary?.bic && <span>{summary.bic}</span>}
         </p>
       )}
+
+      {/* Default Cost Center */}
+      <div className="mt-2 flex items-center gap-2">
+        <span className="text-sm text-gray-500">{t('costCenters.defaultCostCenter')}:</span>
+        <select
+          value={summary?.defaultCostCenter?.id || ''}
+          onChange={async (e) => {
+            await updateCounterparty({ variables: { input: { id, defaultCostCenterId: e.target.value || null } } })
+          }}
+          className="rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        >
+          <option value="">{t('costCenters.noCostCenter')}</option>
+          {(costCentersData?.costCenters || []).map((cc: { id: string; code: string; name: string }) => (
+            <option key={cc.id} value={cc.id}>{cc.code} – {cc.name}</option>
+          ))}
+        </select>
+      </div>
 
       {/* Merge Dialog */}
       <Dialog open={mergeDialogOpen} onOpenChange={setMergeDialogOpen}>

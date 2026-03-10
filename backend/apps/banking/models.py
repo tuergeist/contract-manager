@@ -8,6 +8,27 @@ from django.db import models
 from apps.core.models import TenantModel
 
 
+class CostCenter(TenantModel):
+    """A cost center (Kostenstelle) for categorizing transactions."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.CharField(max_length=20, help_text="Short code, e.g. 100, IT, MKTG")
+    name = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "code"],
+                name="unique_cost_center_code_per_tenant",
+            ),
+        ]
+        ordering = ["code"]
+
+    def __str__(self):
+        return f"{self.code} – {self.name}"
+
+
 class Counterparty(TenantModel):
     """A counterparty (business partner) that appears in bank transactions."""
 
@@ -22,6 +43,14 @@ class Counterparty(TenantModel):
         blank=True,
         related_name="counterparties",
         help_text="Linked customer for payment matching",
+    )
+    default_cost_center = models.ForeignKey(
+        CostCenter,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="counterparties",
+        help_text="Default cost center for new transactions with this counterparty",
     )
 
     class Meta:
@@ -94,6 +123,14 @@ class BankTransaction(TenantModel):
         related_name="transactions",
         help_text="Reference to counterparty entity",
     )
+    cost_center = models.ForeignKey(
+        CostCenter,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="transactions",
+        help_text="Cost center assignment",
+    )
     booking_text = models.TextField(
         blank=True, help_text="Verwendungszweck from :86: ?20-?29 subfields"
     )
@@ -145,6 +182,116 @@ class BankTransaction(TenantModel):
         """Compute deterministic SHA256 hash for deduplication."""
         raw = f"{account_id}|{entry_date}|{amount}|{currency}|{reference}|{counterparty_name}"
         return hashlib.sha256(raw.encode()).hexdigest()
+
+
+class CostCenterSplitRule(TenantModel):
+    """A rule for automatically splitting transactions across cost centers."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    counterparty = models.ForeignKey(
+        Counterparty,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="split_rules",
+        help_text="Match transactions with this counterparty",
+    )
+    booking_text_pattern = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Regex or substring pattern to match booking text",
+    )
+    priority = models.IntegerField(
+        default=0,
+        help_text="Higher priority rules are evaluated first",
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-priority", "id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(counterparty__isnull=True, booking_text_pattern__isnull=True)
+                & ~models.Q(counterparty__isnull=True, booking_text_pattern=""),
+                name="split_rule_must_have_matcher",
+            ),
+        ]
+
+    def __str__(self):
+        if self.counterparty:
+            return f"Split rule: {self.counterparty.name} (priority {self.priority})"
+        return f"Split rule: pattern '{self.booking_text_pattern}' (priority {self.priority})"
+
+
+class CostCenterSplitAllocation(models.Model):
+    """An allocation line within a split rule."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    rule = models.ForeignKey(
+        CostCenterSplitRule,
+        on_delete=models.CASCADE,
+        related_name="allocations",
+    )
+    cost_center = models.ForeignKey(
+        CostCenter,
+        on_delete=models.CASCADE,
+        related_name="split_allocations",
+    )
+    percentage = models.DecimalField(
+        max_digits=7,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="Percentage of transaction amount (0-100)",
+    )
+    fixed_amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Fixed amount to allocate",
+    )
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        if self.percentage is not None:
+            return f"{self.cost_center.code}: {self.percentage}%"
+        return f"{self.cost_center.code}: {self.fixed_amount} fixed"
+
+
+class TransactionCostCenterSplit(models.Model):
+    """An actual cost center split applied to a transaction."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    transaction = models.ForeignKey(
+        "BankTransaction",
+        on_delete=models.CASCADE,
+        related_name="cost_center_splits",
+    )
+    cost_center = models.ForeignKey(
+        CostCenter,
+        on_delete=models.CASCADE,
+        related_name="transaction_splits",
+    )
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    is_manual = models.BooleanField(default=False)
+    rule = models.ForeignKey(
+        CostCenterSplitRule,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="applied_splits",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.transaction} → {self.cost_center.code}: {self.amount}"
 
 
 class RecurringPattern(TenantModel):
@@ -218,3 +365,80 @@ class RecurringPattern(TenantModel):
 
     def __str__(self):
         return f"{self.counterparty.name} ({self.frequency}) {self.average_amount}"
+
+
+def incoming_invoice_upload_path(instance, filename):
+    unique_filename = f"{uuid.uuid4().hex}.pdf"
+    return f"uploads/{instance.tenant_id}/incoming_invoices/{unique_filename}"
+
+
+class InvoiceInbox(TenantModel):
+    class InboxType(models.TextChoices):
+        IMAP = "imap", "IMAP"
+        M365 = "m365", "Microsoft 365"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    inbox_type = models.CharField(max_length=10, choices=InboxType.choices, default=InboxType.IMAP)
+    host = models.CharField(max_length=255, blank=True)
+    port = models.PositiveIntegerField(default=993)
+    username = models.CharField(max_length=255, blank=True)
+    password = models.CharField(max_length=500, blank=True)
+    folder = models.CharField(max_length=255, default="INBOX")
+    use_ssl = models.BooleanField(default=True)
+    m365_mailbox = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=True)
+    poll_interval_minutes = models.PositiveIntegerField(default=15)
+    last_polled_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_inbox_type_display()})"
+
+
+class IncomingInvoice(TenantModel):
+    class ExtractionStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        EXTRACTING = "extracting", "Extracting"
+        EXTRACTED = "extracted", "Extracted"
+        EXTRACTION_FAILED = "extraction_failed", "Extraction Failed"
+        CONFIRMED = "confirmed", "Confirmed"
+        MATCHED = "matched", "Matched"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    inbox = models.ForeignKey(InvoiceInbox, on_delete=models.SET_NULL, null=True, blank=True, related_name="incoming_invoices")
+    counterparty = models.ForeignKey(Counterparty, on_delete=models.SET_NULL, null=True, blank=True, related_name="incoming_invoices")
+    supplier_name = models.CharField(max_length=255, blank=True)
+    invoice_number = models.CharField(max_length=100, blank=True)
+    invoice_date = models.DateField(null=True, blank=True)
+    due_date = models.DateField(null=True, blank=True)
+    net_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    vat_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    gross_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=3, default="EUR")
+    pdf_file = models.FileField(upload_to=incoming_invoice_upload_path)
+    original_filename = models.CharField(max_length=255)
+    file_size = models.PositiveIntegerField(default=0)
+    extraction_status = models.CharField(max_length=20, choices=ExtractionStatus.choices, default=ExtractionStatus.PENDING)
+    extraction_error = models.TextField(blank=True)
+    email_message_id = models.CharField(max_length=500, blank=True)
+    source_email_subject = models.CharField(max_length=500, blank=True)
+    source_email_date = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "email_message_id", "original_filename"],
+                name="unique_incoming_invoice_per_tenant_email",
+                condition=models.Q(email_message_id__gt=""),
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["tenant", "extraction_status"], name="idx_incoming_inv_tenant_status"),
+        ]
+
+    def __str__(self):
+        return f"{self.supplier_name or 'Unknown'} - {self.invoice_number or self.original_filename}"

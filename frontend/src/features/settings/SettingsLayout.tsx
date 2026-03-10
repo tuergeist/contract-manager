@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { User, Settings, Puzzle, Users, FileText, Landmark, Hash, Mail } from 'lucide-react'
+import { User, Settings, Puzzle, Users, FileText, Landmark, Hash, Mail, Inbox } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { UserSettings } from './UserSettings'
 import { TeamSettingsTabs } from './TeamSettingsTabs'
@@ -11,6 +11,9 @@ import { EmailTemplateSettingsTabs } from './EmailTemplateSettingsTabs'
 import { GeneralSettingsTabs } from './GeneralSettingsTabs'
 import { IntegrationSettingsTabs } from './IntegrationSettingsTabs'
 import { BankingSettings } from './BankingSettings'
+import { InvoiceInboxSettings } from './InvoiceInboxSettings'
+import { CostCenterSettings } from './CostCenterSettings'
+import { SplitRuleSettings } from './SplitRuleSettings'
 
 export function SettingsLayout() {
   const { t } = useTranslation()
@@ -25,6 +28,7 @@ export function SettingsLayout() {
     if (location.pathname.startsWith('/settings/invoices')) return 'documents' // backward compat
     if (location.pathname.startsWith('/settings/numbering')) return 'numbering'
     if (location.pathname.startsWith('/settings/email-templates')) return 'email-templates'
+    if (location.pathname.startsWith('/settings/invoice-inboxes')) return 'invoice-inboxes'
     if (location.pathname.startsWith('/settings/banking')) return 'banking'
     if (location.pathname.startsWith('/settings/integrations')) return 'integrations'
     if (location.pathname.startsWith('/settings/general')) return 'general'
@@ -53,6 +57,9 @@ export function SettingsLayout() {
       case 'email-templates':
         navigate('/settings/email-templates')
         break
+      case 'invoice-inboxes':
+        navigate('/settings/invoice-inboxes')
+        break
       case 'banking':
         navigate('/settings/banking')
         break
@@ -65,6 +72,7 @@ export function SettingsLayout() {
   const canViewUsers = hasPermission('users', 'read')
   const canViewInvoiceSettings = hasPermission('invoices', 'settings')
   const canViewBanking = hasPermission('banking', 'read')
+  const canConfigInboxes = hasPermission('incoming_invoices', 'config')
 
   return (
     <div>
@@ -93,6 +101,9 @@ export function SettingsLayout() {
           )}
           {canViewBanking && (
             <TabsTrigger value="banking"><Landmark className="mr-1.5 h-4 w-4" />{t('settings.tabs.banking')}</TabsTrigger>
+          )}
+          {canConfigInboxes && (
+            <TabsTrigger value="invoice-inboxes"><Inbox className="mr-1.5 h-4 w-4" />{t('settings.tabs.invoiceInboxes')}</TabsTrigger>
           )}
         </TabsList>
 
@@ -137,8 +148,18 @@ export function SettingsLayout() {
         )}
 
         {canViewBanking && (
+          <TabsContent value="invoice-inboxes">
+            <InvoiceInboxSettings />
+          </TabsContent>
+        )}
+
+        {canViewBanking && (
           <TabsContent value="banking">
-            <BankingSettings />
+            <div className="space-y-6">
+              <BankingSettings />
+              <CostCenterSettings />
+              <SplitRuleSettings />
+            </div>
           </TabsContent>
         )}
       </Tabs>

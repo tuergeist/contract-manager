@@ -1,5 +1,6 @@
 """GraphQL schema for banking (bank accounts and transactions)."""
-from datetime import date
+import re
+from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
@@ -33,6 +34,16 @@ class BankAccountType:
 
 
 @strawberry.type
+class CostCenterType:
+    """A cost center (Kostenstelle)."""
+
+    id: strawberry.ID
+    code: str
+    name: str
+    is_active: bool
+
+
+@strawberry.type
 class CounterpartyType:
     """A counterparty entity with UUID identifier."""
 
@@ -43,6 +54,7 @@ class CounterpartyType:
     transaction_count: int
     customer_id: int | None = None
     customer_name: str | None = None
+    default_cost_center: CostCenterType | None = None
 
 
 @strawberry.type
@@ -67,6 +79,7 @@ class CounterpartySummaryType:
     first_date: date | None
     last_date: date | None
     customer: LinkedCustomerType | None = None
+    default_cost_center: CostCenterType | None = None
 
 
 @strawberry.type
@@ -103,6 +116,7 @@ class BankTransactionType:
     booking_text: str
     reference: str
     account_name: str
+    cost_center: CostCenterType | None = None
     matched_invoice: InvoiceMatchInfoType | None = None
 
 
@@ -152,6 +166,7 @@ class UpdateCounterpartyInput:
     name: str | None = None
     iban: str | None = None
     bic: str | None = None
+    default_cost_center_id: strawberry.ID | None = strawberry.UNSET
 
 
 @strawberry.input
@@ -165,6 +180,124 @@ class CounterpartyResult:
     success: bool
     error: str | None = None
     counterparty: CounterpartyType | None = None
+
+
+@strawberry.input
+class CreateCostCenterInput:
+    code: str
+    name: str
+    is_active: bool = True
+
+
+@strawberry.input
+class UpdateCostCenterInput:
+    id: strawberry.ID
+    code: str | None = None
+    name: str | None = None
+    is_active: bool | None = None
+
+
+@strawberry.type
+class CostCenterResult:
+    success: bool
+    error: str | None = None
+    cost_center: CostCenterType | None = None
+
+
+@strawberry.type
+class CostCenterSplitAllocationType:
+    id: strawberry.ID
+    cost_center: CostCenterType
+    percentage: Decimal | None = None
+    fixed_amount: Decimal | None = None
+
+
+@strawberry.type
+class CostCenterSplitRuleType:
+    id: strawberry.ID
+    counterparty: CounterpartyType | None = None
+    booking_text_pattern: str | None = None
+    priority: int
+    is_active: bool
+    allocations: List[CostCenterSplitAllocationType]
+
+
+@strawberry.type
+class TransactionCostCenterSplitType:
+    id: strawberry.ID
+    cost_center: CostCenterType
+    amount: Decimal
+    is_manual: bool
+    rule_id: strawberry.ID | None = None
+
+
+@strawberry.type
+class CostCenterSplitRuleResult:
+    success: bool
+    error: str | None = None
+    rule: CostCenterSplitRuleType | None = None
+
+
+@strawberry.input
+class SplitAllocationInput:
+    cost_center_id: strawberry.ID
+    percentage: Decimal | None = None
+    fixed_amount: Decimal | None = None
+
+
+@strawberry.input
+class CreateSplitRuleInput:
+    counterparty_id: strawberry.ID | None = None
+    booking_text_pattern: str | None = None
+    priority: int = 0
+    is_active: bool = True
+    allocations: List[SplitAllocationInput] = strawberry.field(default_factory=list)
+
+
+@strawberry.input
+class UpdateSplitRuleInput:
+    id: strawberry.ID
+    counterparty_id: strawberry.ID | None = strawberry.UNSET
+    booking_text_pattern: str | None = strawberry.UNSET
+    priority: int | None = None
+    is_active: bool | None = None
+    allocations: List[SplitAllocationInput] | None = None
+
+
+@strawberry.input
+class ManualSplitInput:
+    cost_center_id: strawberry.ID
+    amount: Decimal
+
+
+@strawberry.type
+class ManualSplitResult:
+    success: bool
+    error: str | None = None
+    splits: List[TransactionCostCenterSplitType] | None = None
+
+
+@strawberry.type
+class CostCenterReportRow:
+    cost_center: CostCenterType | None = None
+    label: str
+    total_amount: Decimal
+    transaction_count: int
+
+
+@strawberry.type
+class CostCenterReportType:
+    rows: List[CostCenterReportRow]
+    date_from: date
+    date_to: date
+
+
+@strawberry.type
+class DeleteCostCenterResult:
+    success: bool
+    error: str | None = None
+    in_use: bool = False
+    usage_count: int = 0
 
 
 @strawberry.type
@@ -264,8 +397,51 @@ class UpdatePatternInput:
 # --- Helper functions ---
 
 
+def _make_cost_center_type(cc) -> CostCenterType | None:
+    if cc is None:
+        return None
+    return CostCenterType(
+        id=strawberry.ID(str(cc.id)),
+        code=cc.code,
+        name=cc.name,
+        is_active=cc.is_active,
+    )
+
+
+def _make_split_rule_type(rule) -> CostCenterSplitRuleType:
+    """Convert a CostCenterSplitRule model to CostCenterSplitRuleType."""
+    allocations = []
+    for a in rule.allocations.select_related("cost_center").all():
+        allocations.append(CostCenterSplitAllocationType(
+            id=strawberry.ID(str(a.id)),
+            cost_center=_make_cost_center_type(a.cost_center),
+            percentage=a.percentage,
+            fixed_amount=a.fixed_amount,
+        ))
+    cp = getattr(rule, "counterparty", None)
+    return CostCenterSplitRuleType(
+        id=strawberry.ID(str(rule.id)),
+        counterparty=_make_counterparty_type(cp) if cp else None,
+        booking_text_pattern=rule.booking_text_pattern,
+        priority=rule.priority,
+        is_active=rule.is_active,
+        allocations=allocations,
+    )
+
+
+def _make_split_type(split) -> TransactionCostCenterSplitType:
+    return TransactionCostCenterSplitType(
+        id=strawberry.ID(str(split.id)),
+        cost_center=_make_cost_center_type(split.cost_center),
+        amount=split.amount,
+        is_manual=split.is_manual,
+        rule_id=strawberry.ID(str(split.rule_id)) if split.rule_id else None,
+    )
+
+
 def _make_counterparty_type(cp) -> CounterpartyType:
     """Convert a Counterparty model to CounterpartyType."""
+    dcc = getattr(cp, "default_cost_center", None)
     return CounterpartyType(
         id=strawberry.ID(str(cp.id)),
         name=cp.name,
@@ -274,6 +450,7 @@ def _make_counterparty_type(cp) -> CounterpartyType:
         transaction_count=getattr(cp, "txn_count", cp.transactions.count()),
         customer_id=cp.customer_id,
         customer_name=cp.customer.name if cp.customer_id and hasattr(cp, "customer") and cp.customer else None,
+        default_cost_center=_make_cost_center_type(dcc),
     )
 
 
@@ -318,6 +495,7 @@ def _make_transaction_type(t, include_invoice_match: bool = True) -> BankTransac
         booking_text=t.booking_text,
         reference=t.reference,
         account_name=t.account.name,
+        cost_center=_make_cost_center_type(getattr(t, "cost_center", None)),
         matched_invoice=matched_invoice,
     )
 
@@ -399,11 +577,289 @@ class SuggestedMatchesResultType:
     customer_id: int
 
 
+
+# --- Incoming Invoice Types ---
+
+
+@strawberry.type
+class InvoiceInboxType:
+    id: strawberry.ID
+    name: str
+    inbox_type: str
+    host: str
+    port: int
+    username: str
+    folder: str
+    m365_mailbox: str
+    is_active: bool
+    poll_interval_minutes: int
+    last_polled_at: str | None = None
+    use_ssl: bool = True
+
+
+@strawberry.type
+class InvoiceInboxResult:
+    success: bool
+    error: str | None = None
+    inbox: InvoiceInboxType | None = None
+
+
+@strawberry.type
+class TestConnectionResult:
+    success: bool
+    message: str
+
+
+@strawberry.input
+class CreateInvoiceInboxInput:
+    name: str
+    inbox_type: str = "imap"
+    host: str = ""
+    port: int = 993
+    username: str = ""
+    password: str = ""
+    folder: str = "INBOX"
+    use_ssl: bool = True
+    m365_mailbox: str = ""
+    is_active: bool = True
+    poll_interval_minutes: int = 15
+
+
+@strawberry.input
+class UpdateInvoiceInboxInput:
+    id: strawberry.ID
+    name: str | None = None
+    inbox_type: str | None = None
+    host: str | None = None
+    port: int | None = None
+    username: str | None = None
+    password: str | None = None
+    folder: str | None = None
+    use_ssl: bool | None = None
+    m365_mailbox: str | None = None
+    is_active: bool | None = None
+    poll_interval_minutes: int | None = None
+
+
+@strawberry.type
+class IncomingInvoiceType:
+    id: strawberry.ID
+    supplier_name: str
+    invoice_number: str
+    invoice_date: date | None
+    due_date: date | None
+    net_amount: Decimal | None
+    vat_amount: Decimal | None
+    gross_amount: Decimal | None
+    currency: str
+    original_filename: str
+    file_size: int
+    extraction_status: str
+    extraction_error: str
+    email_message_id: str
+    source_email_subject: str
+    source_email_date: str | None
+    counterparty_id: strawberry.ID | None = None
+    counterparty_name: str | None = None
+    inbox_name: str | None = None
+    pdf_url: str | None = None
+    created_at: str = ""
+
+
+@strawberry.type
+class IncomingInvoicePage:
+    items: List[IncomingInvoiceType]
+    total_count: int
+    page: int
+    page_size: int
+    has_next_page: bool
+
+
+@strawberry.type
+class IncomingInvoiceResult:
+    success: bool
+    error: str | None = None
+    invoice: IncomingInvoiceType | None = None
+
+
+@strawberry.input
+class UpdateIncomingInvoiceInput:
+    id: strawberry.ID
+    supplier_name: str | None = None
+    invoice_number: str | None = None
+    invoice_date: date | None = strawberry.UNSET
+    due_date: date | None = strawberry.UNSET
+    net_amount: Decimal | None = strawberry.UNSET
+    vat_amount: Decimal | None = strawberry.UNSET
+    gross_amount: Decimal | None = strawberry.UNSET
+    currency: str | None = None
+    counterparty_id: strawberry.ID | None = strawberry.UNSET
+    extraction_status: str | None = None
+
+
+def _make_inbox_type(inbox) -> InvoiceInboxType:
+    return InvoiceInboxType(
+        id=strawberry.ID(str(inbox.id)),
+        name=inbox.name,
+        inbox_type=inbox.inbox_type,
+        host=inbox.host,
+        port=inbox.port,
+        username=inbox.username,
+        folder=inbox.folder,
+        m365_mailbox=inbox.m365_mailbox,
+        is_active=inbox.is_active,
+        poll_interval_minutes=inbox.poll_interval_minutes,
+        last_polled_at=inbox.last_polled_at.isoformat() if inbox.last_polled_at else None,
+        use_ssl=inbox.use_ssl,
+    )
+
+
+def _make_incoming_invoice_type(inv) -> IncomingInvoiceType:
+    return IncomingInvoiceType(
+        id=strawberry.ID(str(inv.id)),
+        supplier_name=inv.supplier_name,
+        invoice_number=inv.invoice_number,
+        invoice_date=inv.invoice_date,
+        due_date=inv.due_date,
+        net_amount=inv.net_amount,
+        vat_amount=inv.vat_amount,
+        gross_amount=inv.gross_amount,
+        currency=inv.currency,
+        original_filename=inv.original_filename,
+        file_size=inv.file_size,
+        extraction_status=inv.extraction_status,
+        extraction_error=inv.extraction_error,
+        email_message_id=inv.email_message_id,
+        source_email_subject=inv.source_email_subject,
+        source_email_date=inv.source_email_date.isoformat() if inv.source_email_date else None,
+        counterparty_id=strawberry.ID(str(inv.counterparty_id)) if inv.counterparty_id else None,
+        counterparty_name=inv.counterparty.name if inv.counterparty_id and inv.counterparty else None,
+        inbox_name=inv.inbox.name if inv.inbox_id and inv.inbox else None,
+        pdf_url=inv.pdf_file.url if inv.pdf_file else None,
+        created_at=inv.created_at.isoformat() if inv.created_at else "",
+    )
+
+
 # --- Queries ---
 
 
 @strawberry.type
 class BankingQuery:
+    @strawberry.field
+    def cost_centers(
+        self, info: Info[Context, None], is_active: bool | None = None,
+    ) -> List[CostCenterType]:
+        user = require_perm(info, "cost_centers", "read")
+        from apps.banking.models import CostCenter
+        qs = CostCenter.objects.filter(tenant=user.tenant)
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active)
+        return [_make_cost_center_type(cc) for cc in qs]
+
+    @strawberry.field
+    def cost_center_split_rules(
+        self,
+        info: Info[Context, None],
+        counterparty_id: strawberry.ID | None = None,
+        is_active: bool | None = None,
+    ) -> List[CostCenterSplitRuleType]:
+        """List cost center split rules, optionally filtered by counterparty."""
+        user = require_perm(info, "cost_centers", "read")
+        from apps.banking.models import CostCenterSplitRule
+
+        qs = CostCenterSplitRule.objects.filter(
+            tenant=user.tenant
+        ).select_related("counterparty", "counterparty__customer", "counterparty__default_cost_center").prefetch_related(
+            "allocations__cost_center"
+        )
+        if counterparty_id is not None:
+            qs = qs.filter(counterparty_id=str(counterparty_id))
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active)
+        return [_make_split_rule_type(r) for r in qs]
+
+    @strawberry.field
+    def transaction_cost_center_splits(
+        self,
+        info: Info[Context, None],
+        transaction_id: int,
+    ) -> List[TransactionCostCenterSplitType]:
+        """Get cost center splits for a transaction."""
+        user = require_perm(info, "cost_centers", "read")
+        from apps.banking.models import TransactionCostCenterSplit
+
+        splits = TransactionCostCenterSplit.objects.filter(
+            transaction_id=transaction_id,
+            transaction__tenant=user.tenant,
+        ).select_related("cost_center")
+        return [_make_split_type(s) for s in splits]
+
+    @strawberry.field
+    def cost_center_report(
+        self,
+        info: Info[Context, None],
+        date_from: date,
+        date_to: date,
+    ) -> CostCenterReportType:
+        """Aggregate transaction splits by cost center for a date range."""
+        user = require_perm(info, "cost_centers", "read")
+        from apps.banking.models import BankTransaction, CostCenter, TransactionCostCenterSplit
+
+        # Transactions in range for this tenant
+        txn_qs = BankTransaction.objects.filter(
+            tenant=user.tenant,
+            entry_date__gte=date_from,
+            entry_date__lte=date_to,
+        )
+        txn_ids = set(txn_qs.values_list("id", flat=True))
+
+        # Aggregate splits
+        split_agg = (
+            TransactionCostCenterSplit.objects.filter(transaction_id__in=txn_ids)
+            .values("cost_center_id")
+            .annotate(
+                total_amount=Sum("amount"),
+                transaction_count=Count("transaction_id", distinct=True),
+            )
+        )
+
+        cc_ids = [row["cost_center_id"] for row in split_agg]
+        cc_map = {cc.id: cc for cc in CostCenter.objects.filter(id__in=cc_ids)}
+
+        rows = []
+        split_txn_ids = set(
+            TransactionCostCenterSplit.objects.filter(transaction_id__in=txn_ids)
+            .values_list("transaction_id", flat=True)
+        )
+
+        for row in split_agg:
+            cc = cc_map.get(row["cost_center_id"])
+            rows.append(CostCenterReportRow(
+                cost_center=_make_cost_center_type(cc) if cc else None,
+                label=f"{cc.code} – {cc.name}" if cc else "Unknown",
+                total_amount=row["total_amount"] or Decimal("0"),
+                transaction_count=row["transaction_count"],
+            ))
+
+        # Unassigned: transactions without any splits
+        unassigned_txn_ids = txn_ids - split_txn_ids
+        if unassigned_txn_ids:
+            unassigned_total = (
+                txn_qs.filter(id__in=unassigned_txn_ids).aggregate(
+                    total=Sum("amount")
+                )["total"]
+                or Decimal("0")
+            )
+            rows.append(CostCenterReportRow(
+                cost_center=None,
+                label="Unassigned",
+                total_amount=unassigned_total,
+                transaction_count=len(unassigned_txn_ids),
+            ))
+
+        rows.sort(key=lambda r: r.label)
+        return CostCenterReportType(rows=rows, date_from=date_from, date_to=date_to)
+
     @strawberry.field
     def transaction_match_details(
         self,
@@ -607,6 +1063,7 @@ class BankingQuery:
         amount_min: Decimal | None = None,
         amount_max: Decimal | None = None,
         direction: str | None = None,
+        cost_center_id: strawberry.ID | None = None,
         unmatched_credits_only: bool = False,
         sort_by: str | None = None,
         sort_order: str | None = None,
@@ -619,7 +1076,7 @@ class BankingQuery:
 
         qs = BankTransaction.objects.filter(
             tenant=user.tenant
-        ).select_related("account", "counterparty", "counterparty__customer").prefetch_related(
+        ).select_related("account", "counterparty", "counterparty__customer", "counterparty__default_cost_center", "cost_center").prefetch_related(
             "invoice_matches__invoice",
             "invoice_matches__invoice_record",
         )
@@ -650,6 +1107,8 @@ class BankingQuery:
             qs = qs.filter(
                 Q(amount__lte=amount_max) & Q(amount__gte=-amount_max)
             )
+        if cost_center_id is not None:
+            qs = qs.filter(cost_center_id=str(cost_center_id))
         if direction == "debit":
             qs = qs.filter(amount__lt=0)
         elif direction == "credit":
@@ -724,7 +1183,7 @@ class BankingQuery:
         try:
             cp = (
                 Counterparty.objects.filter(tenant=user.tenant, id=str(id))
-                .select_related("customer")
+                .select_related("customer", "default_cost_center")
                 .annotate(
                     total_debit=Sum(
                         "transactions__amount",
@@ -756,6 +1215,7 @@ class BankingQuery:
             first_date=cp.first_date,
             last_date=cp.last_date,
             customer=LinkedCustomerType(id=cp.customer.id, name=cp.customer.name) if cp.customer else None,
+            default_cost_center=_make_cost_center_type(cp.default_cost_center),
         )
 
     @strawberry.field
@@ -782,6 +1242,7 @@ class BankingQuery:
 
         qs = (
             Counterparty.objects.filter(tenant=user.tenant)
+            .select_related("default_cost_center")
             .annotate(
                 total_debit=Sum(
                     "transactions__amount",
@@ -839,6 +1300,7 @@ class BankingQuery:
                     transaction_count=cp.txn_count,
                     first_date=cp.first_date,
                     last_date=cp.last_date,
+                    default_cost_center=_make_cost_center_type(getattr(cp, "default_cost_center", None)),
                 )
                 for cp in items
             ],
@@ -965,6 +1427,41 @@ class BankingQuery:
             balance_as_of=analysis.balance_as_of,
             months=month_types,
         )
+
+
+
+    # --- Incoming Invoice Queries ---
+
+    @strawberry.field
+    def invoice_inboxes(self, info: Info[Context, None]) -> List[InvoiceInboxType]:
+        user = require_perm(info, "incoming_invoices", "config")
+        from apps.banking.models import InvoiceInbox
+        return [_make_inbox_type(i) for i in InvoiceInbox.objects.filter(tenant=user.tenant).order_by("name")]
+
+    @strawberry.field
+    def incoming_invoices(self, info: Info[Context, None], status: str | None = None, counterparty_id: strawberry.ID | None = None, date_from: date | None = None, date_to: date | None = None, search: str | None = None, page: int = 1, page_size: int = 50) -> IncomingInvoicePage:
+        user = require_perm(info, "incoming_invoices", "read")
+        from apps.banking.models import IncomingInvoice
+        qs = IncomingInvoice.objects.filter(tenant=user.tenant).select_related("counterparty", "inbox")
+        if status: qs = qs.filter(extraction_status=status)
+        if counterparty_id is not None: qs = qs.filter(counterparty_id=str(counterparty_id))
+        if date_from: qs = qs.filter(invoice_date__gte=date_from)
+        if date_to: qs = qs.filter(invoice_date__lte=date_to)
+        if search: qs = qs.filter(Q(supplier_name__icontains=search) | Q(invoice_number__icontains=search) | Q(source_email_subject__icontains=search))
+        total_count = qs.count()
+        offset = (page - 1) * page_size
+        items = list(qs[offset:offset + page_size])
+        return IncomingInvoicePage(items=[_make_incoming_invoice_type(inv) for inv in items], total_count=total_count, page=page, page_size=page_size, has_next_page=(offset + page_size) < total_count)
+
+    @strawberry.field
+    def incoming_invoice(self, info: Info[Context, None], id: strawberry.ID) -> IncomingInvoiceType | None:
+        user = require_perm(info, "incoming_invoices", "read")
+        from apps.banking.models import IncomingInvoice
+        try:
+            inv = IncomingInvoice.objects.filter(tenant=user.tenant).select_related("counterparty", "inbox").get(id=str(id))
+        except IncomingInvoice.DoesNotExist:
+            return None
+        return _make_incoming_invoice_type(inv)
 
 
 # --- Mutations ---
@@ -1168,7 +1665,20 @@ class BankingMutation:
             cp.bic = input.bic
             update_fields.append("bic")
 
+        if input.default_cost_center_id is not strawberry.UNSET:
+            if input.default_cost_center_id is None:
+                cp.default_cost_center = None
+            else:
+                from apps.banking.models import CostCenter as CostCenterModel
+                try:
+                    cc = CostCenterModel.objects.get(id=str(input.default_cost_center_id), tenant=user.tenant)
+                    cp.default_cost_center = cc
+                except CostCenterModel.DoesNotExist:
+                    return CounterpartyResult(success=False, error="Cost center not found.")
+            update_fields.append("default_cost_center")
+
         cp.save(update_fields=update_fields)
+        cp = Counterparty.objects.select_related("customer", "default_cost_center").get(id=cp.id)
 
         return CounterpartyResult(
             success=True,
@@ -1426,3 +1936,406 @@ class BankingMutation:
             success=True,
             counterparty=_make_counterparty_type(cp),
         )
+
+    # --- Invoice Inbox Mutations ---
+
+    @strawberry.mutation
+    def create_invoice_inbox(self, info: Info[Context, None], input: CreateInvoiceInboxInput) -> InvoiceInboxResult:
+        user, err = check_perm(info, "incoming_invoices", "config")
+        if err: return InvoiceInboxResult(success=False, error=err)
+        from apps.banking.models import InvoiceInbox
+        inbox = InvoiceInbox.objects.create(tenant=user.tenant, name=input.name, inbox_type=input.inbox_type, host=input.host, port=input.port, username=input.username, password=input.password, folder=input.folder, use_ssl=input.use_ssl, m365_mailbox=input.m365_mailbox, is_active=input.is_active, poll_interval_minutes=input.poll_interval_minutes)
+        return InvoiceInboxResult(success=True, inbox=_make_inbox_type(inbox))
+
+    @strawberry.mutation
+    def update_invoice_inbox(self, info: Info[Context, None], input: UpdateInvoiceInboxInput) -> InvoiceInboxResult:
+        user, err = check_perm(info, "incoming_invoices", "config")
+        if err: return InvoiceInboxResult(success=False, error=err)
+        from apps.banking.models import InvoiceInbox
+        try:
+            inbox = InvoiceInbox.objects.get(id=str(input.id), tenant=user.tenant)
+        except InvoiceInbox.DoesNotExist:
+            return InvoiceInboxResult(success=False, error="Inbox not found.")
+        fields = ["updated_at"]
+        for field in ["name", "inbox_type", "host", "port", "username", "password", "folder", "use_ssl", "m365_mailbox", "is_active", "poll_interval_minutes"]:
+            val = getattr(input, field)
+            if val is not None:
+                setattr(inbox, field, val)
+                fields.append(field)
+        inbox.save(update_fields=fields)
+        return InvoiceInboxResult(success=True, inbox=_make_inbox_type(inbox))
+
+    @strawberry.mutation
+    def delete_invoice_inbox(self, info: Info[Context, None], id: strawberry.ID) -> DeleteResult:
+        user, err = check_perm(info, "incoming_invoices", "config")
+        if err: return DeleteResult(success=False, error=err)
+        from apps.banking.models import InvoiceInbox
+        try:
+            inbox = InvoiceInbox.objects.get(id=str(id), tenant=user.tenant)
+        except InvoiceInbox.DoesNotExist:
+            return DeleteResult(success=False, error="Inbox not found.")
+        inbox.delete()
+        return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def test_invoice_inbox_connection(self, info: Info[Context, None], id: strawberry.ID) -> TestConnectionResult:
+        user, err = check_perm(info, "incoming_invoices", "config")
+        if err: return TestConnectionResult(success=False, message=err)
+        from apps.banking.models import InvoiceInbox
+        from apps.banking.services.inbox_polling import InboxPollingService
+        try:
+            inbox = InvoiceInbox.objects.get(id=str(id), tenant=user.tenant)
+        except InvoiceInbox.DoesNotExist:
+            return TestConnectionResult(success=False, message="Inbox not found.")
+        success, message = InboxPollingService().test_connection(inbox)
+        return TestConnectionResult(success=success, message=message)
+
+    # --- Incoming Invoice Mutations ---
+
+    @strawberry.mutation
+    def update_incoming_invoice(self, info: Info[Context, None], input: UpdateIncomingInvoiceInput) -> IncomingInvoiceResult:
+        user, err = check_perm(info, "incoming_invoices", "write")
+        if err: return IncomingInvoiceResult(success=False, error=err)
+        from apps.banking.models import IncomingInvoice, Counterparty
+        try:
+            inv = IncomingInvoice.objects.filter(tenant=user.tenant).select_related("counterparty", "inbox").get(id=str(input.id))
+        except IncomingInvoice.DoesNotExist:
+            return IncomingInvoiceResult(success=False, error="Invoice not found.")
+        fields = ["updated_at"]
+        for field in ["supplier_name", "invoice_number", "currency", "extraction_status"]:
+            val = getattr(input, field)
+            if val is not None:
+                setattr(inv, field, val)
+                fields.append(field)
+        for field in ["invoice_date", "due_date", "net_amount", "vat_amount", "gross_amount"]:
+            val = getattr(input, field)
+            if val is not strawberry.UNSET:
+                setattr(inv, field, val)
+                fields.append(field)
+        if input.counterparty_id is not strawberry.UNSET:
+            if input.counterparty_id is None:
+                inv.counterparty = None
+            else:
+                try:
+                    inv.counterparty = Counterparty.objects.get(id=str(input.counterparty_id), tenant=user.tenant)
+                except Counterparty.DoesNotExist:
+                    return IncomingInvoiceResult(success=False, error="Counterparty not found.")
+            fields.append("counterparty")
+        inv.save(update_fields=fields)
+        return IncomingInvoiceResult(success=True, invoice=_make_incoming_invoice_type(inv))
+
+    @strawberry.mutation
+    def delete_incoming_invoice(self, info: Info[Context, None], id: strawberry.ID) -> DeleteResult:
+        user, err = check_perm(info, "incoming_invoices", "write")
+        if err: return DeleteResult(success=False, error=err)
+        from apps.banking.models import IncomingInvoice
+        try:
+            inv = IncomingInvoice.objects.get(id=str(id), tenant=user.tenant)
+        except IncomingInvoice.DoesNotExist:
+            return DeleteResult(success=False, error="Invoice not found.")
+        if inv.pdf_file:
+            inv.pdf_file.delete(save=False)
+        inv.delete()
+        return DeleteResult(success=True)
+
+    # --- Cost Center CRUD ---
+
+    @strawberry.mutation
+    def create_cost_center(
+        self, info: Info[Context, None], input: CreateCostCenterInput
+    ) -> CostCenterResult:
+        user, err = check_perm(info, "cost_centers", "config")
+        if err:
+            return CostCenterResult(success=False, error=err)
+        from apps.banking.models import CostCenter
+        code = input.code.strip()
+        name = input.name.strip()
+        if not code or not name:
+            return CostCenterResult(success=False, error="Code and name are required.")
+        if CostCenter.objects.filter(tenant=user.tenant, code=code).exists():
+            return CostCenterResult(success=False, error="A cost center with this code already exists.")
+        cc = CostCenter.objects.create(tenant=user.tenant, code=code, name=name, is_active=input.is_active)
+        return CostCenterResult(success=True, cost_center=_make_cost_center_type(cc))
+
+    @strawberry.mutation
+    def update_cost_center(
+        self, info: Info[Context, None], input: UpdateCostCenterInput
+    ) -> CostCenterResult:
+        user, err = check_perm(info, "cost_centers", "config")
+        if err:
+            return CostCenterResult(success=False, error=err)
+        from apps.banking.models import CostCenter
+        try:
+            cc = CostCenter.objects.get(id=str(input.id), tenant=user.tenant)
+        except CostCenter.DoesNotExist:
+            return CostCenterResult(success=False, error="Cost center not found.")
+        update_fields = ["updated_at"]
+        if input.code is not None:
+            code = input.code.strip()
+            if CostCenter.objects.filter(tenant=user.tenant, code=code).exclude(id=cc.id).exists():
+                return CostCenterResult(success=False, error="A cost center with this code already exists.")
+            cc.code = code
+            update_fields.append("code")
+        if input.name is not None:
+            cc.name = input.name.strip()
+            update_fields.append("name")
+        if input.is_active is not None:
+            cc.is_active = input.is_active
+            update_fields.append("is_active")
+        cc.save(update_fields=update_fields)
+        return CostCenterResult(success=True, cost_center=_make_cost_center_type(cc))
+
+    @strawberry.mutation
+    def delete_cost_center(
+        self, info: Info[Context, None], id: strawberry.ID, force: bool = False,
+    ) -> DeleteCostCenterResult:
+        user, err = check_perm(info, "cost_centers", "config")
+        if err:
+            return DeleteCostCenterResult(success=False, error=err)
+        from apps.banking.models import CostCenter, BankTransaction, Counterparty
+        try:
+            cc = CostCenter.objects.get(id=str(id), tenant=user.tenant)
+        except CostCenter.DoesNotExist:
+            return DeleteCostCenterResult(success=False, error="Cost center not found.")
+        txn_count = BankTransaction.objects.filter(cost_center=cc).count()
+        cp_count = Counterparty.objects.filter(default_cost_center=cc).count()
+        total_usage = txn_count + cp_count
+        if total_usage > 0 and not force:
+            return DeleteCostCenterResult(
+                success=False,
+                error=f"Cost center is in use ({txn_count} transactions, {cp_count} counterparties).",
+                in_use=True, usage_count=total_usage,
+            )
+        BankTransaction.objects.filter(cost_center=cc).update(cost_center=None)
+        Counterparty.objects.filter(default_cost_center=cc).update(default_cost_center=None)
+        cc.delete()
+        return DeleteCostCenterResult(success=True)
+
+    # --- Cost Center Split Rule CRUD ---
+
+    @strawberry.mutation
+    def create_cost_center_split_rule(
+        self, info: Info[Context, None], input: CreateSplitRuleInput
+    ) -> CostCenterSplitRuleResult:
+        user, err = check_perm(info, "cost_centers", "config")
+        if err:
+            return CostCenterSplitRuleResult(success=False, error=err)
+
+        from apps.banking.models import CostCenter, CostCenterSplitRule, CostCenterSplitAllocation, Counterparty
+
+        if not input.counterparty_id and not input.booking_text_pattern:
+            return CostCenterSplitRuleResult(
+                success=False, error="Either counterparty or booking text pattern is required."
+            )
+
+        if not input.allocations:
+            return CostCenterSplitRuleResult(
+                success=False, error="At least one allocation is required."
+            )
+
+        # Validate allocations total 100% for percentage rules
+        has_pct = any(a.percentage is not None for a in input.allocations)
+        if has_pct:
+            total_pct = sum(a.percentage or Decimal("0") for a in input.allocations)
+            if total_pct != Decimal("100"):
+                return CostCenterSplitRuleResult(
+                    success=False,
+                    error=f"Allocation percentages must total 100% (got {total_pct}%).",
+                )
+
+        counterparty = None
+        if input.counterparty_id:
+            try:
+                counterparty = Counterparty.objects.get(id=str(input.counterparty_id), tenant=user.tenant)
+            except Counterparty.DoesNotExist:
+                return CostCenterSplitRuleResult(success=False, error="Counterparty not found.")
+
+        rule = CostCenterSplitRule.objects.create(
+            tenant=user.tenant,
+            counterparty=counterparty,
+            booking_text_pattern=input.booking_text_pattern or None,
+            priority=input.priority,
+            is_active=input.is_active,
+        )
+
+        for alloc_input in input.allocations:
+            try:
+                cc = CostCenter.objects.get(id=str(alloc_input.cost_center_id), tenant=user.tenant)
+            except CostCenter.DoesNotExist:
+                rule.delete()
+                return CostCenterSplitRuleResult(success=False, error=f"Cost center not found: {alloc_input.cost_center_id}")
+            CostCenterSplitAllocation.objects.create(
+                rule=rule,
+                cost_center=cc,
+                percentage=alloc_input.percentage,
+                fixed_amount=alloc_input.fixed_amount,
+            )
+
+        return CostCenterSplitRuleResult(success=True, rule=_make_split_rule_type(rule))
+
+    @strawberry.mutation
+    def update_cost_center_split_rule(
+        self, info: Info[Context, None], input: UpdateSplitRuleInput
+    ) -> CostCenterSplitRuleResult:
+        user, err = check_perm(info, "cost_centers", "config")
+        if err:
+            return CostCenterSplitRuleResult(success=False, error=err)
+
+        from apps.banking.models import CostCenter, CostCenterSplitRule, CostCenterSplitAllocation, Counterparty
+
+        try:
+            rule = CostCenterSplitRule.objects.get(id=str(input.id), tenant=user.tenant)
+        except CostCenterSplitRule.DoesNotExist:
+            return CostCenterSplitRuleResult(success=False, error="Split rule not found.")
+
+        update_fields = ["updated_at"]
+
+        if input.counterparty_id is not strawberry.UNSET:
+            if input.counterparty_id is None:
+                rule.counterparty = None
+            else:
+                try:
+                    rule.counterparty = Counterparty.objects.get(id=str(input.counterparty_id), tenant=user.tenant)
+                except Counterparty.DoesNotExist:
+                    return CostCenterSplitRuleResult(success=False, error="Counterparty not found.")
+            update_fields.append("counterparty")
+
+        if input.booking_text_pattern is not strawberry.UNSET:
+            rule.booking_text_pattern = input.booking_text_pattern or None
+            update_fields.append("booking_text_pattern")
+
+        if input.priority is not None:
+            rule.priority = input.priority
+            update_fields.append("priority")
+
+        if input.is_active is not None:
+            rule.is_active = input.is_active
+            update_fields.append("is_active")
+
+        rule.save(update_fields=update_fields)
+
+        # Replace allocations if provided
+        if input.allocations is not None:
+            has_pct = any(a.percentage is not None for a in input.allocations)
+            if has_pct:
+                total_pct = sum(a.percentage or Decimal("0") for a in input.allocations)
+                if total_pct != Decimal("100"):
+                    return CostCenterSplitRuleResult(
+                        success=False,
+                        error=f"Allocation percentages must total 100% (got {total_pct}%).",
+                    )
+
+            rule.allocations.all().delete()
+            for alloc_input in input.allocations:
+                try:
+                    cc = CostCenter.objects.get(id=str(alloc_input.cost_center_id), tenant=user.tenant)
+                except CostCenter.DoesNotExist:
+                    return CostCenterSplitRuleResult(success=False, error=f"Cost center not found: {alloc_input.cost_center_id}")
+                CostCenterSplitAllocation.objects.create(
+                    rule=rule,
+                    cost_center=cc,
+                    percentage=alloc_input.percentage,
+                    fixed_amount=alloc_input.fixed_amount,
+                )
+
+        return CostCenterSplitRuleResult(success=True, rule=_make_split_rule_type(rule))
+
+    @strawberry.mutation
+    def delete_cost_center_split_rule(
+        self, info: Info[Context, None], id: strawberry.ID
+    ) -> DeleteResult:
+        user, err = check_perm(info, "cost_centers", "config")
+        if err:
+            return DeleteResult(success=False, error=err)
+
+        from apps.banking.models import CostCenterSplitRule
+
+        try:
+            rule = CostCenterSplitRule.objects.get(id=str(id), tenant=user.tenant)
+        except CostCenterSplitRule.DoesNotExist:
+            return DeleteResult(success=False, error="Split rule not found.")
+
+        rule.delete()
+        return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def split_transaction_cost_centers(
+        self,
+        info: Info[Context, None],
+        transaction_id: int,
+        splits: List[ManualSplitInput],
+    ) -> ManualSplitResult:
+        """Manually split a transaction across cost centers."""
+        user, err = check_perm(info, "cost_centers", "write")
+        if err:
+            return ManualSplitResult(success=False, error=err)
+
+        from apps.banking.models import BankTransaction, CostCenter, TransactionCostCenterSplit
+
+        try:
+            txn = BankTransaction.objects.get(id=transaction_id, tenant=user.tenant)
+        except BankTransaction.DoesNotExist:
+            return ManualSplitResult(success=False, error="Transaction not found.")
+
+        # Validate amounts sum to abs(transaction.amount)
+        total = sum(s.amount for s in splits)
+        expected = abs(txn.amount)
+        if total != expected:
+            return ManualSplitResult(
+                success=False,
+                error=f"Split amounts must equal {expected} (got {total}).",
+            )
+
+        # Validate cost centers exist
+        cc_map = {}
+        for s in splits:
+            try:
+                cc_map[str(s.cost_center_id)] = CostCenter.objects.get(
+                    id=str(s.cost_center_id), tenant=user.tenant
+                )
+            except CostCenter.DoesNotExist:
+                return ManualSplitResult(
+                    success=False, error=f"Cost center not found: {s.cost_center_id}"
+                )
+
+        # Remove all existing splits
+        TransactionCostCenterSplit.objects.filter(transaction=txn).delete()
+
+        # Create manual splits
+        created = []
+        for s in splits:
+            split = TransactionCostCenterSplit.objects.create(
+                transaction=txn,
+                cost_center=cc_map[str(s.cost_center_id)],
+                amount=s.amount,
+                is_manual=True,
+            )
+            created.append(split)
+
+        return ManualSplitResult(
+            success=True,
+            splits=[_make_split_type(s) for s in created],
+        )
+
+    @strawberry.mutation
+    def assign_transaction_cost_center(
+        self, info: Info[Context, None], transaction_id: int, cost_center_id: strawberry.ID | None = None,
+    ) -> DeleteResult:
+        user, err = check_perm(info, "cost_centers", "write")
+        if err:
+            return DeleteResult(success=False, error=err)
+        from apps.banking.models import BankTransaction, CostCenter
+        try:
+            txn = BankTransaction.objects.get(id=transaction_id, tenant=user.tenant)
+        except BankTransaction.DoesNotExist:
+            return DeleteResult(success=False, error="Transaction not found.")
+        if cost_center_id is None:
+            txn.cost_center = None
+        else:
+            try:
+                cc = CostCenter.objects.get(id=str(cost_center_id), tenant=user.tenant)
+            except CostCenter.DoesNotExist:
+                return DeleteResult(success=False, error="Cost center not found.")
+            txn.cost_center = cc
+        txn.save(update_fields=["cost_center", "updated_at"])
+        return DeleteResult(success=True)
