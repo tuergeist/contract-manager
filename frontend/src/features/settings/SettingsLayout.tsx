@@ -148,6 +148,12 @@ export function SettingsLayout() {
         )}
 
         {canViewBanking && (
+          <TabsContent value="invoice-inboxes">
+            <InvoiceInboxSettings />
+          </TabsContent>
+        )}
+
+        {canViewBanking && (
           <TabsContent value="banking">
             <div className="space-y-6">
               <BankingSettings />

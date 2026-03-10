@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { Loader2, Plus, Trash2 } from 'lucide-react'
+import { Loader2, Trash2 } from 'lucide-react'
 
 const COST_CENTERS_QUERY = gql`
   query CostCentersForSplit { costCenters(isActive: true) { id code name } }
@@ -35,7 +35,7 @@ interface SplitRow {
   amount: string
 }
 
-export function TransactionSplitEditor({ transactionId, transactionAmount, onClose }: Props) {
+export function TransactionSplitEditor({ transactionId, transactionAmount, onClose: _onClose }: Props) {
   const { t } = useTranslation()
   const absAmount = Math.abs(transactionAmount)
   const { data: ccData } = useQuery(COST_CENTERS_QUERY)

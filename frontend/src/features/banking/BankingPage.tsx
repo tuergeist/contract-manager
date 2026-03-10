@@ -427,7 +427,7 @@ export function BankingPage() {
   // Queries
   const { data: accountsData, loading: accountsLoading, refetch: refetchAccounts } = useQuery(BANK_ACCOUNTS)
   const { data: costCentersData } = useQuery(COST_CENTERS_QUERY)
-  const [assignCostCenter] = useMutation(ASSIGN_TRANSACTION_COST_CENTER)
+  const [_assignCostCenter] = useMutation(ASSIGN_TRANSACTION_COST_CENTER)
   const accounts: BankAccount[] = accountsData?.bankAccounts ?? []
 
   const { data: txData, loading: txLoading, refetch: txRefetch } = useQuery(BANK_TRANSACTIONS, {
@@ -987,7 +987,7 @@ export function BankingPage() {
                         </td>
                       </tr>
                     ) : (
-                      counterparties.map((cp: { id: string; name: string; transactionCount: number; totalDebit: string; totalCredit: string; lastDate: string }) => {
+                      counterparties.map((cp: { id: string; name: string; transactionCount: number; totalDebit: string; totalCredit: string; lastDate: string; defaultCostCenter?: { id: string; code: string; name: string } | null }) => {
                         const totalDebit = parseFloat(cp.totalDebit)
                         const totalCredit = parseFloat(cp.totalCredit)
                         const netAmount = totalDebit + totalCredit
