@@ -213,7 +213,7 @@ class TestVoidInvoice:
         assert storno is not None
         assert storno.document_type == "storno"
         assert storno.storno_of_id == record.id
-        assert storno.status == InvoiceRecord.Status.FINALIZED
+        assert storno.status == InvoiceRecord.Status.VOIDED
         assert storno.total_gross == record.total_gross
         assert storno.invoice_number.startswith("S-")
 
@@ -244,7 +244,7 @@ class TestVoidInvoice:
         records = service.generate_and_persist(2026, 1)
         storno = service.void_invoice(records[0], reason="Void it")
 
-        with pytest.raises(ValueError, match="Storno documents cannot be voided"):
+        with pytest.raises(ValueError, match="Only finalized or sent"):
             service.void_invoice(storno, reason="Should fail")
 
     def test_voided_number_not_reused(self, db, tenant, legal_data, active_contract, contract_item):

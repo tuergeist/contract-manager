@@ -558,7 +558,9 @@
       "totalIncome": "Total Income",
       "net": "Net",
       "cumulative": "Cumulative Balance",
-      "total": "Total"
+      "total": "Total",
+      "paymentDelay": "Payment delay",
+      "days": "days"
     }
   },
   "forecast": {

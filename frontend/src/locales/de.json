@@ -558,7 +558,9 @@
       "totalIncome": "Gesamteinnahmen",
       "net": "Netto",
       "cumulative": "Kum. Saldo",
-      "total": "Gesamt"
+      "total": "Gesamt",
+      "paymentDelay": "Zahlungsfrist",
+      "days": "Tage"
     }
   },
   "forecast": {

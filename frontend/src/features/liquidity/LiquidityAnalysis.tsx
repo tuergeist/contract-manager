@@ -1,7 +1,7 @@
-import { useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery, gql } from '@apollo/client'
-import { Loader2 } from 'lucide-react'
+import { useQuery, useMutation, gql } from '@apollo/client'
+import { Loader2, Check } from 'lucide-react'
 import {
   ComposedChart,
   Bar,
@@ -15,6 +15,7 @@ import {
   ReferenceLine,
 } from 'recharts'
 import { formatCurrency, formatMonthShort } from '@/lib/utils'
+import { Input } from '@/components/ui/input'
 
 const LIQUIDITY_ANALYSIS_QUERY = gql`
   query LiquidityAnalysis($year: Int!) {
@@ -34,6 +35,18 @@ const LIQUIDITY_ANALYSIS_QUERY = gql`
         cumulativeBalance
         isPast
       }
+    }
+    tenantSettings {
+      paymentDelayDays
+    }
+  }
+`
+
+const SET_PAYMENT_DELAY = gql`
+  mutation SetPaymentDelayDays($days: Int!) {
+    setPaymentDelayDays(days: $days) {
+      success
+      error
     }
   }
 `
@@ -55,9 +68,28 @@ export function LiquidityAnalysis() {
   const { t } = useTranslation()
   const currentYear = new Date().getFullYear()
 
-  const { data, loading } = useQuery(LIQUIDITY_ANALYSIS_QUERY, {
+  const { data, loading, refetch } = useQuery(LIQUIDITY_ANALYSIS_QUERY, {
     variables: { year: currentYear },
   })
+  const [setDelay, { loading: savingDelay }] = useMutation(SET_PAYMENT_DELAY)
+
+  const [delayDays, setDelayDays] = useState<string>('60')
+  const serverDelay = data?.tenantSettings?.paymentDelayDays ?? 60
+
+  useEffect(() => {
+    setDelayDays(String(serverDelay))
+  }, [serverDelay])
+
+  const delayDirty = Number(delayDays) !== serverDelay
+
+  const handleSaveDelay = async () => {
+    const days = parseInt(delayDays, 10)
+    if (isNaN(days) || days < 0 || days > 365) return
+    const result = await setDelay({ variables: { days } })
+    if (result.data?.setPaymentDelayDays?.success) {
+      refetch()
+    }
+  }
 
   const analysis = data?.liquidityAnalysis
   const months: LiquidityMonth[] = analysis?.months || []
@@ -121,11 +153,35 @@ export function LiquidityAnalysis() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-medium">{t('forecasts.liquidity.title', { year: currentYear })}</h2>
-        {analysis.balanceAsOf && (
-          <span className="text-sm text-gray-500">
-            {t('forecasts.liquidity.balance')}: {formatCurrency(analysis.currentBalance)}
-          </span>
-        )}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <span>{t('forecasts.liquidity.paymentDelay')}:</span>
+            <Input
+              type="number"
+              min={0}
+              max={365}
+              value={delayDays}
+              onChange={(e) => setDelayDays(e.target.value)}
+              className="w-16 h-7 text-sm text-center"
+            />
+            <span>{t('forecasts.liquidity.days')}</span>
+            {delayDirty && (
+              <button
+                onClick={handleSaveDelay}
+                disabled={savingDelay}
+                className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-gray-300 hover:bg-gray-100"
+                title={t('common.save')}
+              >
+                {savingDelay ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              </button>
+            )}
+          </div>
+          {analysis.balanceAsOf && (
+            <span className="text-sm text-gray-500">
+              {t('forecasts.liquidity.balance')}: {formatCurrency(analysis.currentBalance)}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Chart */}

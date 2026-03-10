@@ -68,21 +68,18 @@ class TestLiquidityAnalysisService:
         assert jan.is_past is True
 
     def test_future_months_use_projected_costs(self, tenant, account, counterparty):
-        """Future months should use recurring patterns for cost projection."""
+        """Future months should use avg of recent actual costs for projection."""
         today = date.today()
 
-        cp = Counterparty.objects.create(tenant=tenant, name="Landlord")
-
-        # Create a confirmed monthly debit pattern
-        RecurringPattern.objects.create(
-            tenant=tenant,
-            counterparty=cp,
-            average_amount=Decimal("-1000.00"),
-            frequency=RecurringPattern.Frequency.MONTHLY,
-            day_of_month=15,
-            confidence_score=1.0,
-            is_confirmed=True,
-        )
+        # Create debit transactions in recent past months so the average is non-zero
+        for months_ago in range(1, 4):
+            past = date(today.year, today.month, 1) - timedelta(days=months_ago * 30)
+            BankTransaction.objects.create(
+                tenant=tenant, account=account, counterparty=counterparty,
+                entry_date=past,
+                amount=Decimal("-3000.00"), closing_balance=Decimal("5000.00"),
+                booking_text=f"Cost {months_ago}", import_hash=f"h_cost_{months_ago}",
+            )
 
         # Also set a closing balance so we get a current_balance
         BankTransaction.objects.create(

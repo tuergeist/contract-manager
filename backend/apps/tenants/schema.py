@@ -515,6 +515,7 @@ class HelpVideoLinksEntryInput:
 @strawberry.type
 class TenantSettingsType:
     two_factor_enforced: bool = False
+    payment_delay_days: int = 60
 
 
 @strawberry.type
@@ -528,6 +529,7 @@ class TenantQuery:
         s = user.tenant.settings or {}
         return TenantSettingsType(
             two_factor_enforced=s.get("two_factor_enforced", False),
+            payment_delay_days=s.get("payment_delay_days", 60),
         )
 
     @strawberry.field
@@ -1813,6 +1815,25 @@ class TenantMutation:
         tenant = user.tenant
         tenant.name = name
         tenant.save(update_fields=["name"])
+
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def set_payment_delay_days(self, info: Info[Context, None], days: int) -> OperationResult:
+        """Set the expected payment delay (days between invoice and payment arrival). Requires settings.write."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return OperationResult(success=False, error=err)
+        if not user.tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+        if days < 0 or days > 365:
+            return OperationResult(success=False, error="Days must be between 0 and 365")
+
+        tenant = user.tenant
+        s = tenant.settings or {}
+        s["payment_delay_days"] = days
+        tenant.settings = s
+        tenant.save(update_fields=["settings"])
 
         return OperationResult(success=True)
 
