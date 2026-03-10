@@ -1176,6 +1176,12 @@
       "tokenUrl": "Token",
       "registrationUrl": "Dynamic Registration"
     },
+    "tenantName": {
+      "title": "Organization Name",
+      "description": "The name of your organization as it appears throughout the application.",
+      "placeholder": "e.g. Acme GmbH",
+      "saved": "Organization name saved"
+    },
     "generalTabs": {
       "hubspot": "HubSpot",
       "timeTracking": "Time Tracking",

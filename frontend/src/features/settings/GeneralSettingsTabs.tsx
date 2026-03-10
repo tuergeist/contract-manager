@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Settings } from './Settings'
+import { TenantNameSettings } from './TenantNameSettings'
 import { ForecastCacheSettings } from './ForecastCacheSettings'
 import { RevenueGoalSettings } from './RevenueGoalSettings'
 import { TenantSecuritySettings } from './TenantSecuritySettings'
@@ -51,7 +52,10 @@ export function GeneralSettingsTabs() {
       </TabsList>
 
       <TabsContent value="contracts">
-        <Settings showHeader={false} section="contracts" />
+        <div className="space-y-6">
+          <TenantNameSettings />
+          <Settings showHeader={false} section="contracts" />
+        </div>
       </TabsContent>
 
       <TabsContent value="helpVideos">

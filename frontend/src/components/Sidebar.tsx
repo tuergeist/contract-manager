@@ -104,7 +104,7 @@ const searchablePages: SearchablePage[] = [
   { labelKey: 'nav.auditLog', keywords: ['audit', 'auditlog', 'log', 'history'], url: '/audit-log' },
   // Settings pages
   { labelKey: 'settings.tabs.user', keywords: ['user', 'benutzer', 'profile', 'profil', 'security', 'sicherheit', '2fa'], url: '/settings' },
-  { labelKey: 'settings.tabs.general', keywords: ['general', 'allgemein', 'settings', 'einstellungen', 'contracts'], url: '/settings/general', permission: 'settings.read' },
+  { labelKey: 'settings.tabs.general', keywords: ['general', 'allgemein', 'settings', 'einstellungen', 'contracts', 'tenant', 'organization', 'organisation', 'organisationsname'], url: '/settings/general', permission: 'settings.read' },
   { labelKey: 'settings.generalTabs.helpVideos', keywords: ['help videos', 'hilfevideos', 'video', 'tutorial'], url: '/settings/general/help-videos', permission: 'settings.read' },
   { labelKey: 'settings.generalTabs.performance', keywords: ['performance', 'leistung', 'cache'], url: '/settings/general/performance', permission: 'settings.read' },
   { labelKey: 'settings.generalTabs.revenueGoals', keywords: ['revenue goals', 'umsatzziele', 'ziele', 'goals'], url: '/settings/general/revenue-goals', permission: 'settings.read' },

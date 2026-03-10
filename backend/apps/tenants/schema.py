@@ -1798,6 +1798,25 @@ class TenantMutation:
         return TwoFactorConfirmResult(success=True, recovery_codes=plaintext_codes)
 
     @strawberry.mutation
+    def update_tenant_name(self, info: Info[Context, None], name: str) -> OperationResult:
+        """Update the tenant name. Requires settings.write."""
+        user, err = check_perm(info, "settings", "write")
+        if err:
+            return OperationResult(success=False, error=err)
+        if not user.tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        name = name.strip()
+        if not name:
+            return OperationResult(success=False, error="Name cannot be empty")
+
+        tenant = user.tenant
+        tenant.name = name
+        tenant.save(update_fields=["name"])
+
+        return OperationResult(success=True)
+
+    @strawberry.mutation
     def set_tenant_2fa_enforcement(self, info: Info[Context, None], enforced: bool) -> OperationResult:
         """Enable or disable 2FA enforcement for the tenant. Requires settings.write."""
         user, err = check_perm(info, "settings", "write")
