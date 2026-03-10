@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.22.1",
+    "date": "2026-03-10",
+    "title": "Accounting settings tab & todo reassignment",
+    "description": "Reorganized settings with a new Accounting tab and improved todo board with reassignment and drag-and-drop across columns.",
+    "type": "feature",
+    "details": [
+      "Added Accounting top-level settings tab with Revenue Goals and Cost Centers sub-tabs",
+      "Moved Cost Centers and Split Rules from Banking to Accounting settings",
+      "Moved Revenue Goals from General to Accounting settings",
+      "Assignees can now reassign todos to other team members (not just creators)",
+      "Todo reassignment and unassignment now create auto-comments for audit trail",
+      "Improved todo board with droppable columns for cross-column drag-and-drop"
+    ]
+  },
+  {
     "version": "2.22.0",
     "date": "2026-03-10",
     "title": "Cost centers, incoming invoices & split rules",
