@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.21.0",
+    "date": "2026-03-10",
+    "title": "Back-to-Base ARR metric on dashboard",
+    "description": "Split Won New ARR into New Name ARR (new customer deals) and Back-to-Base ARR (expansion on existing contracts) for better new business tracking.",
+    "type": "feature",
+    "details": [
+      "Added Back-to-Base ARR card on dashboard showing expansion/upsell revenue from line items added to existing contracts",
+      "Renamed 'Won New ARR' to 'New Name ARR' to clarify it tracks HubSpot deal-based new customer revenue",
+      "Added Back-to-Base ARR goal type in Revenue Goal Settings",
+      "Added arr_delta field on contract amendments for amendment-level revenue tracking",
+      "Added Beta badges to New Business and Price Increase Impact dashboard sections"
+    ]
+  },
+  {
     "version": "2.20.3",
     "date": "2026-03-10",
     "title": "Invoice status display and liquidity forecast fixes",
