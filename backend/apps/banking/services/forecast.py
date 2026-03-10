@@ -270,7 +270,7 @@ def get_liquidity_analysis(
             If None, reads from tenant settings (default 60).
     """
     from apps.contracts.models import Contract
-    from apps.invoices.models import InvoicePaymentMatch, InvoiceRecord
+    from apps.invoices.models import InvoiceRecord
 
     if payment_delay_days is None:
         payment_delay_days = get_payment_delay_days(tenant)
@@ -317,24 +317,47 @@ def get_liquidity_analysis(
 
     expected_payments_by_month: dict[int, Decimal] = defaultdict(Decimal)
     # Track which contracts+billing_dates have existing invoices to avoid double-counting
+    # from billing schedule. Include ALL statuses (paid, voided, etc.) not just unpaid.
     invoiced_events: set[tuple[int, date]] = set()
 
-    for inv in unpaid_invoices:
-        # Sent invoices: use sent date + delay; otherwise use invoice date + delay
-        if inv.status == InvoiceRecord.Status.SENT and inv.email_sent_at:
-            base_date = inv.email_sent_at.date()
-        else:
-            base_date = inv.invoice_date or inv.billing_date
+    # Collect ALL invoice events (any status) to prevent billing schedule duplicates
+    all_invoices_for_year = InvoiceRecord.objects.filter(
+        tenant=tenant,
+        document_type=InvoiceRecord.DocumentType.INVOICE,
+        contract_id__isnull=False,
+        billing_date__isnull=False,
+    )
+    for inv in all_invoices_for_year:
+        invoiced_events.add((inv.contract_id, inv.billing_date))
 
-        payment_date = base_date + timedelta(days=payment_delay_days)
+    # Now add unpaid invoices' expected payments
+    for inv in unpaid_invoices:
+        if inv.status == InvoiceRecord.Status.SENT and inv.email_sent_at:
+            # Sent: sent date + payment delay
+            payment_date = inv.email_sent_at.date() + timedelta(days=payment_delay_days)
+        elif inv.status == InvoiceRecord.Status.FINALIZED:
+            # Created but not sent yet: assume sent soon, payment ~30 days from now
+            payment_date = today + timedelta(days=30)
+        else:
+            # Dunning or other: invoice date + payment delay
+            base_date = inv.invoice_date or inv.billing_date
+            payment_date = base_date + timedelta(days=payment_delay_days)
+
         if year_start <= payment_date <= year_end and payment_date > today:
             expected_payments_by_month[payment_date.month] += inv.total_gross
 
-        # Track this so we don't double-count from billing schedule
-        if inv.contract_id and inv.billing_date:
-            invoiced_events.add((inv.contract_id, inv.billing_date))
-
     # 3b. Future billing events from contract schedules (not yet invoiced)
+    # Get default tax rate for converting net schedule amounts to gross
+    from apps.invoices.models import CompanyLegalData
+
+    try:
+        legal_data = CompanyLegalData.objects.get(tenant=tenant)
+        tax_rate = legal_data.default_tax_rate
+    except CompanyLegalData.DoesNotExist:
+        tax_rate = Decimal("19.00")  # Default German VAT
+
+    tax_multiplier = 1 + tax_rate / 100
+
     contracts = (
         Contract.objects.filter(
             tenant=tenant,
@@ -355,45 +378,14 @@ def get_liquidity_analysis(
             include_history=True,
         )
         for event in schedule:
-            # Skip if an invoice already exists for this billing event
+            # Skip if any invoice already exists for this billing event
             if (contract.id, event["date"]) in invoiced_events:
                 continue
             payment_date = event["date"] + timedelta(days=payment_delay_days)
             if year_start <= payment_date <= year_end and payment_date > today:
-                expected_payments_by_month[payment_date.month] += event["total"]
-
-    # 4. Subtract already-paid invoices that were counted in actual bank income
-    paid_invoice_amounts_by_month: dict[int, Decimal] = defaultdict(Decimal)
-    paid_matches = (
-        InvoicePaymentMatch.objects.filter(
-            tenant=tenant,
-            invoice_record__isnull=False,
-        )
-        .select_related("invoice_record")
-        .filter(
-            transaction__entry_date__gte=year_start,
-            transaction__entry_date__lte=year_end,
-        )
-    )
-    for match in paid_matches:
-        inv = match.invoice_record
-        if inv and inv.total_gross:
-            # Determine the expected payment month the same way as step 3a
-            if inv.email_sent_at:
-                base_date = inv.email_sent_at.date()
-            else:
-                base_date = inv.invoice_date or inv.billing_date
-            payment_month_expected = base_date + timedelta(days=payment_delay_days)
-            if year_start <= payment_month_expected <= year_end:
-                paid_invoice_amounts_by_month[payment_month_expected.month] += inv.total_gross
-
-    # Subtract paid amounts from projected income
-    for month_num in expected_payments_by_month:
-        expected_payments_by_month[month_num] -= paid_invoice_amounts_by_month.get(
-            month_num, Decimal("0.00")
-        )
-        if expected_payments_by_month[month_num] < 0:
-            expected_payments_by_month[month_num] = Decimal("0.00")
+                # Billing schedule returns net amounts; convert to gross
+                gross = (event["total"] * tax_multiplier).quantize(Decimal("0.01"))
+                expected_payments_by_month[payment_date.month] += gross
 
     # 5. Build monthly results
     months_data: list[LiquidityMonth] = []

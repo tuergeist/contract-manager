@@ -128,13 +128,13 @@ export function LiquidityAnalysis() {
   // Year totals
   const totals = months.reduce(
     (acc, m) => ({
-      actualCosts: acc.actualCosts + m.actualCosts,
-      projectedCosts: acc.projectedCosts + m.projectedCosts,
-      totalCosts: acc.totalCosts + m.totalCosts,
-      actualIncome: acc.actualIncome + m.actualIncome,
-      projectedIncome: acc.projectedIncome + m.projectedIncome,
-      totalIncome: acc.totalIncome + m.totalIncome,
-      net: acc.net + m.net,
+      actualCosts: acc.actualCosts + Number(m.actualCosts),
+      projectedCosts: acc.projectedCosts + Number(m.projectedCosts),
+      totalCosts: acc.totalCosts + Number(m.totalCosts),
+      actualIncome: acc.actualIncome + Number(m.actualIncome),
+      projectedIncome: acc.projectedIncome + Number(m.projectedIncome),
+      totalIncome: acc.totalIncome + Number(m.totalIncome),
+      net: acc.net + Number(m.net),
     }),
     {
       actualCosts: 0,
