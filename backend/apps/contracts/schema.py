@@ -21,7 +21,7 @@ from apps.customers.models import Customer
 from apps.customers.schema import CustomerType
 from apps.products.models import Product
 from apps.products.schema import ProductType
-from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, RevenueGoal, NewBusinessGoal, TimeTrackingProjectMapping, AutoLinkRule, Department, DepartmentServiceMapping, UserCostProfile, OrderConfirmation
+from .models import Contract, ContractComment, ContractItem, ContractAmendment, ContractItemPrice, ContractAttachment, ContractLink, ContractGroup, RevenueGoal, NewBusinessGoal, TimeTrackingProjectMapping, AutoLinkRule, Department, DepartmentServiceMapping, UserCostProfile, OrderConfirmation, calculate_arr_value
 from .order_confirmation_schema import OrderConfirmationType
 from .forecast_cache import (
     dict_to_forecast_result,
@@ -1458,9 +1458,56 @@ def calculate_new_business_metrics(tenant, year: int) -> dict:
     }
 
 
+def calculate_back_to_base_arr(tenant, year: int) -> Decimal:
+    """
+    Calculate Back-to-Base ARR: expansion/upsell on existing contracts.
+
+    Finds recurring line items whose effective start date (start_date or
+    billing_start_date) is after the contract's start_date and falls in the
+    given year.  Items without any start date are assumed to be original
+    contract items (start = contract start).
+
+    Excludes contracts that are New Name ARR (HubSpot deals won same year).
+    """
+    from django.db.models import Q
+    from apps.contracts.models import calculate_arr_value
+
+    contracts = Contract.objects.filter(
+        tenant=tenant,
+        status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
+        start_date__isnull=False,
+    ).exclude(
+        # Exclude New Name ARR contracts (HubSpot deals won same year)
+        ~Q(hubspot_deal_id=""),
+        hubspot_deal_id__isnull=False,
+        deal_won_date__year=year,
+    ).prefetch_related("items", "items__product")
+
+    total = Decimal("0")
+    for contract in contracts:
+        for item in contract.items.all():
+            if item.is_one_off:
+                continue
+            item_start = item.start_date or item.billing_start_date
+            if not item_start:
+                continue  # no date = original item
+            if item_start <= contract.start_date:
+                continue  # not an expansion
+            if item_start.year != year:
+                continue
+            arr = calculate_arr_value(
+                item.unit_price, item.quantity, item.price_period, False,
+            )
+            if arr > 0:
+                total += arr
+
+    return total
+
+
 @strawberry.type
 class NewBusinessMetricsType:
     won_new_arr: Decimal
+    back_to_base_arr: Decimal
     won_development_revenue: Decimal
     won_deal_count: int
 
@@ -3764,12 +3811,15 @@ class ContractQuery:
         if not user.tenant:
             return NewBusinessMetricsType(
                 won_new_arr=Decimal("0"),
+                back_to_base_arr=Decimal("0"),
                 won_development_revenue=Decimal("0"),
                 won_deal_count=0,
             )
         metrics = calculate_new_business_metrics(user.tenant, year)
+        b2b_arr = calculate_back_to_base_arr(user.tenant, year)
         return NewBusinessMetricsType(
             won_new_arr=metrics["won_new_arr"],
+            back_to_base_arr=b2b_arr,
             won_development_revenue=metrics["won_development_revenue"],
             won_deal_count=metrics["won_deal_count"],
         )
@@ -4168,6 +4218,10 @@ class ContractMutation:
                 # Create amendment record only for non-draft contracts
                 if contract.status != Contract.Status.DRAFT:
                     item_name = product.name if product else input.description[:50]
+                    arr_delta = calculate_arr_value(
+                        input.unit_price, input.quantity,
+                        input.price_period, input.is_one_off,
+                    )
                     ContractAmendment.objects.create(
                         tenant=user.tenant,
                         contract=contract,
@@ -4180,7 +4234,10 @@ class ContractMutation:
                             "description": input.description,
                             "quantity": input.quantity,
                             "unit_price": str(input.unit_price),
+                            "price_period": input.price_period,
+                            "is_one_off": input.is_one_off,
                         },
+                        arr_delta=arr_delta,
                     )
 
             # Get effective price for today (for new items, this is just the item price)
@@ -4247,6 +4304,8 @@ class ContractMutation:
                     "description": item.description,
                     "product_id": str(item.product_id) if item.product_id else None,
                     "product_name": item.product.name if item.product else None,
+                    "price_period": item.price_period,
+                    "is_one_off": item.is_one_off,
                 }
 
                 # Check if price is locked
@@ -4372,6 +4431,16 @@ class ContractMutation:
                             amendment_type = ContractAmendment.AmendmentType.TERMS_CHANGED
                             description = f"Updated {item_name}"
 
+                        old_arr = calculate_arr_value(
+                            old_values["unit_price"], old_values["quantity"],
+                            old_values["price_period"], old_values["is_one_off"],
+                        )
+                        new_arr = calculate_arr_value(
+                            item.unit_price, item.quantity,
+                            item.price_period, item.is_one_off,
+                        )
+                        arr_delta = new_arr - old_arr
+
                         ContractAmendment.objects.create(
                             tenant=user.tenant,
                             contract=item.contract,
@@ -4385,6 +4454,7 @@ class ContractMutation:
                                 "old_values": old_values,
                                 "new_values": new_values,
                             },
+                            arr_delta=arr_delta,
                         )
 
             # Get price periods
@@ -4473,6 +4543,10 @@ class ContractMutation:
                 # Create amendment record only for non-draft contracts
                 if item.contract.status != Contract.Status.DRAFT:
                     item_name = item.product.name if item.product else (item.description or "")[:50]
+                    arr_delta = -calculate_arr_value(
+                        item.unit_price, item.quantity,
+                        item.price_period, item.is_one_off,
+                    )
                     ContractAmendment.objects.create(
                         tenant=user.tenant,
                         contract=item.contract,
@@ -4485,7 +4559,10 @@ class ContractMutation:
                             "description": item.description,
                             "quantity": item.quantity,
                             "unit_price": str(item.unit_price),
+                            "price_period": item.price_period,
+                            "is_one_off": item.is_one_off,
                         },
+                        arr_delta=arr_delta,
                     )
 
                 item.delete()
@@ -4534,6 +4611,7 @@ class ContractMutation:
                         "action": "cancellation",
                         "effective_date": str(effective_date),
                     },
+                    arr_delta=Decimal("0"),
                 )
 
             return ContractResult(contract=contract, success=True)
@@ -4578,6 +4656,7 @@ class ContractMutation:
                         "action": "deletion",
                         "previous_status": old_status,
                     },
+                    arr_delta=Decimal("0"),
                 )
 
             return ContractResult(contract=contract, success=True)
@@ -4695,6 +4774,7 @@ class ContractMutation:
                             "old_status": old_status,
                             "new_status": new_status,
                         },
+                        arr_delta=Decimal("0"),
                     )
 
             return ContractResult(contract=contract, success=True)
@@ -5872,6 +5952,14 @@ class ContractImportMutation:
 
                         if contract.status != Contract.Status.DRAFT and old_item_values != new_item_values:
                             item_name = product.name if product else item_input.description[:50]
+                            old_arr = calculate_arr_value(
+                                old_item_values["unit_price"], old_item_values["quantity"],
+                                old_item_values["price_period"], old_item_values["is_one_off"],
+                            )
+                            new_arr = calculate_arr_value(
+                                item_input.unit_price, item_input.quantity,
+                                item_input.price_period, item_input.is_one_off,
+                            )
                             ContractAmendment.objects.create(
                                 tenant=user.tenant,
                                 contract=contract,
@@ -5889,6 +5977,7 @@ class ContractImportMutation:
                                     "is_one_off": item_input.is_one_off,
                                     "source": "pdf_import",
                                 },
+                                arr_delta=new_arr - old_arr,
                             )
 
                         updated_count += 1
@@ -5924,6 +6013,10 @@ class ContractImportMutation:
                                     "is_one_off": item_input.is_one_off,
                                     "source": "pdf_import",
                                 },
+                                arr_delta=calculate_arr_value(
+                                    item_input.unit_price, item_input.quantity,
+                                    item_input.price_period, item_input.is_one_off,
+                                ),
                             )
 
                         created_count += 1
@@ -6095,6 +6188,17 @@ class ContractImportMutation:
 
                 # Create amendment for non-draft contracts
                 if contract.status != Contract.Status.DRAFT and items_changed > 0:
+                    # Compute total ARR delta from changed items
+                    items_by_id = {item.id: item for item in items}
+                    bulk_arr_delta = Decimal("0")
+                    for d in details:
+                        if not d.skipped:
+                            itm = items_by_id.get(d.item_id)
+                            if itm:
+                                old_arr = calculate_arr_value(d.old_price, itm.quantity, itm.price_period, False)
+                                new_arr = calculate_arr_value(d.new_price, itm.quantity, itm.price_period, False)
+                                bulk_arr_delta += new_arr - old_arr
+
                     ContractAmendment.objects.create(
                         tenant=user.tenant,
                         contract=contract,
@@ -6131,6 +6235,7 @@ class ContractImportMutation:
                                 if d.skipped
                             ],
                         },
+                        arr_delta=bulk_arr_delta,
                     )
 
             return BulkPriceIncreaseResult(

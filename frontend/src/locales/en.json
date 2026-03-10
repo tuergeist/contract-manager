@@ -134,7 +134,8 @@
       "nextYearForecastExplanation": "Projected total revenue for the next calendar year. Excludes contracts ending before next year.",
       "inclOneOff": "incl. {{amount}} one-off",
       "inclDiscounts": "incl. {{amount}} discounts",
-      "wonNewArrExplanation": "Annualized recurring revenue from HubSpot deals won this year.",
+      "newNameArrExplanation": "Annualized recurring revenue from HubSpot deals won this year.",
+      "backToBaseArrExplanation": "Expansion and upsell ARR from amendments on existing active contracts.",
       "wonDevelopmentExplanation": "Development and training revenue from HubSpot deals won this year.",
       "wonDealCountExplanation": "Number of HubSpot deals won this year."
     },
@@ -541,7 +542,8 @@
     },
     "newBusiness": {
       "title": "New Business",
-      "wonNewArr": "Won New ARR",
+      "newNameArr": "New Name ARR",
+      "backToBaseArr": "Back-to-Base ARR",
       "wonDevelopment": "Won Development Revenue",
       "wonDealCount": "Won Deal Count",
       "wonDeals": "Won Deals"
@@ -1207,8 +1209,9 @@
     },
     "newBusinessGoals": {
       "title": "New Business Goals",
-      "description": "Set yearly targets for won deals from HubSpot",
-      "wonNewArr": "Won New ARR",
+      "description": "Set yearly targets for new business metrics",
+      "newNameArr": "New Name ARR",
+      "backToBaseArr": "Back-to-Base ARR",
       "wonDevelopment": "Won Development Revenue",
       "wonDealCount": "Won Deal Count"
     },
@@ -1831,6 +1834,7 @@
     "searchCustomers": "Search customers...",
     "noCustomersFound": "No customers found",
     "unlinkCustomer": "Unlink Customer",
+    "excludeFromForecast": "Exclude from forecast",
     "matchView": {
       "title": "Transaction Matching",
       "matchedInvoices": "Matched Invoices",

@@ -35,6 +35,7 @@ const DASHBOARD_KPIS_QUERY = gql`
     }
     newBusinessMetrics(year: $year) {
       wonNewArr
+      backToBaseArr
       wonDevelopmentRevenue
       wonDealCount
     }
@@ -97,6 +98,7 @@ interface PriceIncreaseImpact {
 
 interface NewBusinessMetrics {
   wonNewArr: string
+  backToBaseArr: string
   wonDevelopmentRevenue: string
   wonDealCount: number
 }
@@ -188,7 +190,8 @@ export function Dashboard() {
   ] as const
   const hasRevenueGoalsData = Object.keys(revenueGoalMap).length > 0 || Object.values(streamDataMap).some(s => s.forecast > 0)
   const newBusinessCards = nb ? [
-    { key: 'new_arr', label: t('forecasts.newBusiness.wonNewArr'), actual: parseFloat(nb.wonNewArr), target: nbGoalMap['new_arr'] || 0, isCurrency: true },
+    { key: 'new_arr', label: t('forecasts.newBusiness.newNameArr'), actual: parseFloat(nb.wonNewArr), target: nbGoalMap['new_arr'] || 0, isCurrency: true },
+    { key: 'back_to_base_arr', label: t('forecasts.newBusiness.backToBaseArr'), actual: parseFloat(nb.backToBaseArr), target: nbGoalMap['back_to_base_arr'] || 0, isCurrency: true },
     { key: 'new_development', label: t('forecasts.newBusiness.wonDevelopment'), actual: parseFloat(nb.wonDevelopmentRevenue), target: nbGoalMap['new_development'] || 0, isCurrency: true },
     { key: 'new_deal_count', label: t('forecasts.newBusiness.wonDealCount'), actual: nb.wonDealCount, target: nbGoalMap['new_deal_count'] || 0, isCurrency: false },
   ] : []
@@ -264,11 +267,11 @@ export function Dashboard() {
       )}
 
       {/* New Business KPIs */}
-      {(dashPrefs?.showNewBusiness !== false) && nb && (nb.wonDealCount > 0 || parseFloat(nb.wonNewArr) > 0 || Object.keys(nbGoalMap).length > 0) && (
+      {(dashPrefs?.showNewBusiness !== false) && nb && (nb.wonDealCount > 0 || parseFloat(nb.wonNewArr) > 0 || parseFloat(nb.backToBaseArr) > 0 || Object.keys(nbGoalMap).length > 0) && (
         <div className="mb-8">
-          <h2 className="text-lg font-semibold mb-3">{t('forecasts.newBusiness.title')}</h2>
+          <h2 className="text-lg font-semibold mb-3">{t('forecasts.newBusiness.title')} <span className="ml-1 inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">Beta</span></h2>
           <div
-            className="grid gap-4 md:grid-cols-3 cursor-pointer"
+            className="grid gap-4 md:grid-cols-4 cursor-pointer"
             onClick={() => navigate(`/contracts?newBusiness=true&wonYear=${currentYear}`)}
           >
             {newBusinessCards.map((card) => {
@@ -318,7 +321,7 @@ export function Dashboard() {
         if (!pi || totalImpact <= 0) return null
         return (
           <div className="mb-8">
-            <h2 className="text-lg font-semibold mb-3">{t('dashboard.priceIncrease.title')}</h2>
+            <h2 className="text-lg font-semibold mb-3">{t('dashboard.priceIncrease.title')} <span className="ml-1 inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">Beta</span></h2>
             <div
               className="grid gap-4 md:grid-cols-3 cursor-pointer"
               onClick={() => navigate(`/contracts?priceIncrease=true&year=${currentYear}`)}
@@ -460,8 +463,12 @@ export function Dashboard() {
               <h3 className="font-semibold text-base mb-2">{t('forecasts.newBusiness.title')}</h3>
               <dl className="space-y-3">
                 <div>
-                  <dt className="font-medium">{t('forecasts.newBusiness.wonNewArr')}</dt>
-                  <dd className="text-muted-foreground">{t('dashboard.kpis.wonNewArrExplanation')}</dd>
+                  <dt className="font-medium">{t('forecasts.newBusiness.newNameArr')}</dt>
+                  <dd className="text-muted-foreground">{t('dashboard.kpis.newNameArrExplanation')}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium">{t('forecasts.newBusiness.backToBaseArr')}</dt>
+                  <dd className="text-muted-foreground">{t('dashboard.kpis.backToBaseArrExplanation')}</dd>
                 </div>
                 <div>
                   <dt className="font-medium">{t('forecasts.newBusiness.wonDevelopment')}</dt>

@@ -134,7 +134,8 @@
       "nextYearForecastExplanation": "Prognostizierter Gesamtumsatz für das nächste Kalenderjahr. Ohne Verträge, die vor dem nächsten Jahr enden.",
       "inclOneOff": "inkl. {{amount}} einmalig",
       "inclDiscounts": "inkl. {{amount}} Rabatte",
-      "wonNewArrExplanation": "Jährlich wiederkehrender Umsatz aus gewonnenen HubSpot-Deals dieses Jahres.",
+      "newNameArrExplanation": "Jährlich wiederkehrender Umsatz aus gewonnenen HubSpot-Deals dieses Jahres.",
+      "backToBaseArrExplanation": "Expansions- und Upsell-ARR aus Änderungen an bestehenden aktiven Verträgen.",
       "wonDevelopmentExplanation": "Entwicklungs- und Schulungsumsatz aus gewonnenen HubSpot-Deals dieses Jahres.",
       "wonDealCountExplanation": "Anzahl der gewonnenen HubSpot-Deals dieses Jahres."
     },
@@ -541,7 +542,8 @@
     },
     "newBusiness": {
       "title": "Neugeschäft",
-      "wonNewArr": "Gewonnener neuer ARR",
+      "newNameArr": "Neukunden-ARR",
+      "backToBaseArr": "Bestandskunden-ARR",
       "wonDevelopment": "Gewonnener Entwicklungsumsatz",
       "wonDealCount": "Gewonnene Deals",
       "wonDeals": "Gewonnene Deals"
@@ -1207,8 +1209,9 @@
     },
     "newBusinessGoals": {
       "title": "Neugeschäft-Ziele",
-      "description": "Jährliche Ziele für gewonnene Deals aus HubSpot",
-      "wonNewArr": "Gewonnener neuer ARR",
+      "description": "Jährliche Ziele für Neugeschäft-Kennzahlen",
+      "newNameArr": "Neukunden-ARR",
+      "backToBaseArr": "Bestandskunden-ARR",
       "wonDevelopment": "Gewonnener Entwicklungsumsatz",
       "wonDealCount": "Gewonnene Deals"
     },
@@ -1831,6 +1834,7 @@
     "searchCustomers": "Kunden suchen...",
     "noCustomersFound": "Keine Kunden gefunden",
     "unlinkCustomer": "Kunde trennen",
+    "excludeFromForecast": "Von Prognose ausschließen",
     "matchView": {
       "title": "Transaktionszuordnung",
       "matchedInvoices": "Zugeordnete Rechnungen",

@@ -94,7 +94,8 @@ const REVENUE_TYPES = [
 ] as const
 
 const NEW_BUSINESS_GOAL_TYPES = [
-  { key: 'new_arr', i18nKey: 'settings.newBusinessGoals.wonNewArr' },
+  { key: 'new_arr', i18nKey: 'settings.newBusinessGoals.newNameArr' },
+  { key: 'back_to_base_arr', i18nKey: 'settings.newBusinessGoals.backToBaseArr' },
   { key: 'new_development', i18nKey: 'settings.newBusinessGoals.wonDevelopment' },
   { key: 'new_deal_count', i18nKey: 'settings.newBusinessGoals.wonDealCount' },
 ] as const
@@ -110,6 +111,7 @@ export function RevenueGoalSettings() {
   })
   const [newBusinessGoals, setNewBusinessGoals] = useState<Record<string, string>>({
     new_arr: '',
+    back_to_base_arr: '',
     new_development: '',
     new_deal_count: '',
   })
@@ -145,6 +147,7 @@ export function RevenueGoalSettings() {
     if (nbData?.newBusinessGoals) {
       const newGoals: Record<string, string> = {
         new_arr: '',
+        back_to_base_arr: '',
         new_development: '',
         new_deal_count: '',
       }

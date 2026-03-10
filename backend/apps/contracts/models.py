@@ -1,6 +1,7 @@
 """Contract models."""
 import os
 import uuid
+from decimal import Decimal
 
 from django.db import models
 
@@ -1302,12 +1303,37 @@ class ContractAmendment(TenantModel):
     )
     description = models.TextField(blank=True)
     changes = models.JSONField(default=dict)
+    arr_delta = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Annualized revenue delta caused by this amendment",
+    )
 
     class Meta:
         ordering = ["-effective_date"]
 
     def __str__(self):
         return f"Amendment {self.id} - {self.get_type_display()}"
+
+
+def calculate_arr_value(unit_price, quantity, price_period, is_one_off):
+    """Calculate annualized recurring revenue for a contract item."""
+    if is_one_off:
+        return Decimal("0")
+    multipliers = {
+        "monthly": 12,
+        "quarterly": 4,
+        "semi_annual": 2,
+        "annual": 1,
+        "biennial": Decimal("0.5"),
+        "triennial": Decimal("1") / 3,
+        "quadrennial": Decimal("0.25"),
+        "quinquennial": Decimal("0.2"),
+    }
+    period = price_period or "monthly"
+    return Decimal(str(unit_price)) * Decimal(str(quantity)) * multipliers.get(period, 12)
 
 
 class ContractItemPrice(TenantModel):
@@ -1559,6 +1585,7 @@ class RevenueGoal(TenantModel):
 
 class NewBusinessGoalType(models.TextChoices):
     NEW_ARR = "new_arr", "Won New ARR"
+    BACK_TO_BASE_ARR = "back_to_base_arr", "Back-to-Base ARR"
     NEW_DEVELOPMENT = "new_development", "Won Development Revenue"
     NEW_DEAL_COUNT = "new_deal_count", "Won Deal Count"
 
