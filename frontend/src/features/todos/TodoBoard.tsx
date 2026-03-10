@@ -14,6 +14,7 @@ import {
   closestCorners,
 } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -300,6 +301,9 @@ function BoardColumn({
   const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState(false)
 
+  const columnId = column.assigneeId != null ? `column-${column.assigneeId}` : 'column-unassigned'
+  const { setNodeRef, isOver } = useDroppable({ id: columnId })
+
   // Filter todos by search
   const filteredTodos = useMemo(() => {
     if (!searchFilter) return column.todos
@@ -314,7 +318,13 @@ function BoardColumn({
   const todoIds = filteredTodos.map((t) => `todo-${t.id}`)
 
   return (
-    <div className="flex flex-col bg-gray-50 rounded-lg w-80 min-w-[320px] max-h-full">
+    <div
+      ref={setNodeRef}
+      className={cn(
+        'flex flex-col bg-gray-50 rounded-lg w-80 min-w-[320px] max-h-full transition-colors',
+        isOver && 'bg-blue-50 ring-2 ring-blue-200'
+      )}
+    >
       {/* Column header */}
       <div
         className="flex items-center justify-between p-3 border-b bg-gray-100 rounded-t-lg cursor-pointer"
@@ -337,7 +347,7 @@ function BoardColumn({
 
       {/* Column content */}
       {!collapsed && (
-        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+        <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[60px]">
           <SortableContext items={todoIds} strategy={verticalListSortingStrategy}>
             {filteredTodos.length === 0 ? (
               <p className="text-center text-sm text-muted-foreground py-4">
@@ -377,6 +387,7 @@ export function TodoBoard() {
   const [searchFilter, setSearchFilter] = useState('')
   const [detailTodoId, setDetailTodoId] = useState<number | null>(null)
   const [detailCanEdit, setDetailCanEdit] = useState(false)
+  const [detailCanReassign, setDetailCanReassign] = useState(false)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
 
   // Queries
@@ -529,8 +540,8 @@ export function TodoBoard() {
                 column={column}
                 currentUserId={currentUserId}
                 onToggleComplete={handleToggleComplete}
-                onEdit={(todo) => { setDetailTodoId(todo.id); setDetailCanEdit(true) }}
-                onViewComments={(todo) => { setDetailTodoId(todo.id); setDetailCanEdit(todo.createdById === currentUserId) }}
+                onEdit={(todo) => { setDetailTodoId(todo.id); setDetailCanEdit(true); setDetailCanReassign(true) }}
+                onViewComments={(todo) => { setDetailTodoId(todo.id); setDetailCanEdit(todo.createdById === currentUserId); setDetailCanReassign(todo.assignedToId === currentUserId) }}
                 searchFilter={searchFilter}
               />
             ))}
@@ -560,6 +571,7 @@ export function TodoBoard() {
         open={detailTodoId !== null}
         onOpenChange={(open) => { if (!open) setDetailTodoId(null) }}
         canEdit={detailCanEdit}
+        canReassign={detailCanReassign}
         onRefresh={refetch}
       />
     </div>

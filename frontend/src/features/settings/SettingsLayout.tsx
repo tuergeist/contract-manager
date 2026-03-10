@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { User, Settings, Puzzle, Users, FileText, Landmark, Hash, Mail, Inbox } from 'lucide-react'
+import { User, Settings, Puzzle, Users, FileText, Landmark, Hash, Mail, Inbox, Calculator } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { UserSettings } from './UserSettings'
 import { TeamSettingsTabs } from './TeamSettingsTabs'
@@ -10,10 +10,9 @@ import { NumberingSettingsTabs } from './NumberingSettingsTabs'
 import { EmailTemplateSettingsTabs } from './EmailTemplateSettingsTabs'
 import { GeneralSettingsTabs } from './GeneralSettingsTabs'
 import { IntegrationSettingsTabs } from './IntegrationSettingsTabs'
+import { AccountingSettingsTabs } from './AccountingSettingsTabs'
 import { BankingSettings } from './BankingSettings'
 import { InvoiceInboxSettings } from './InvoiceInboxSettings'
-import { CostCenterSettings } from './CostCenterSettings'
-import { SplitRuleSettings } from './SplitRuleSettings'
 
 export function SettingsLayout() {
   const { t } = useTranslation()
@@ -29,6 +28,7 @@ export function SettingsLayout() {
     if (location.pathname.startsWith('/settings/numbering')) return 'numbering'
     if (location.pathname.startsWith('/settings/email-templates')) return 'email-templates'
     if (location.pathname.startsWith('/settings/invoice-inboxes')) return 'invoice-inboxes'
+    if (location.pathname.startsWith('/settings/accounting')) return 'accounting'
     if (location.pathname.startsWith('/settings/banking')) return 'banking'
     if (location.pathname.startsWith('/settings/integrations')) return 'integrations'
     if (location.pathname.startsWith('/settings/general')) return 'general'
@@ -59,6 +59,9 @@ export function SettingsLayout() {
         break
       case 'invoice-inboxes':
         navigate('/settings/invoice-inboxes')
+        break
+      case 'accounting':
+        navigate('/settings/accounting')
         break
       case 'banking':
         navigate('/settings/banking')
@@ -98,6 +101,9 @@ export function SettingsLayout() {
           )}
           {canViewInvoiceSettings && (
             <TabsTrigger value="email-templates"><Mail className="mr-1.5 h-4 w-4" />{t('settings.tabs.emailTemplates')}</TabsTrigger>
+          )}
+          {canViewSettings && (
+            <TabsTrigger value="accounting"><Calculator className="mr-1.5 h-4 w-4" />{t('settings.tabs.accounting')}</TabsTrigger>
           )}
           {canViewBanking && (
             <TabsTrigger value="banking"><Landmark className="mr-1.5 h-4 w-4" />{t('settings.tabs.banking')}</TabsTrigger>
@@ -153,13 +159,15 @@ export function SettingsLayout() {
           </TabsContent>
         )}
 
+        {canViewSettings && (
+          <TabsContent value="accounting">
+            <AccountingSettingsTabs />
+          </TabsContent>
+        )}
+
         {canViewBanking && (
           <TabsContent value="banking">
-            <div className="space-y-6">
-              <BankingSettings />
-              <CostCenterSettings />
-              <SplitRuleSettings />
-            </div>
+            <BankingSettings />
           </TabsContent>
         )}
       </Tabs>

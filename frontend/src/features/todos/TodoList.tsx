@@ -77,6 +77,7 @@ export function TodoList({ todos, showCreator = false, onUpdate, currentUserId }
   // Detail modal state
   const [detailTodoId, setDetailTodoId] = useState<number | null>(null)
   const [detailCanEdit, setDetailCanEdit] = useState(false)
+  const [detailCanReassign, setDetailCanReassign] = useState(false)
 
   // Date input refs - one per todo
   const dateInputRefs = useRef<Map<number, React.RefObject<HTMLInputElement>>>(new Map())
@@ -137,6 +138,7 @@ export function TodoList({ todos, showCreator = false, onUpdate, currentUserId }
   const openDetail = (todo: TodoItem) => {
     setDetailTodoId(todo.id)
     setDetailCanEdit(todo.createdById === effectiveUserId)
+    setDetailCanReassign(todo.assignedToId === effectiveUserId)
   }
 
 
@@ -292,6 +294,7 @@ export function TodoList({ todos, showCreator = false, onUpdate, currentUserId }
         open={detailTodoId !== null}
         onOpenChange={(open) => { if (!open) setDetailTodoId(null) }}
         canEdit={detailCanEdit}
+        canReassign={detailCanReassign}
         onRefresh={() => onUpdate?.()}
       />
     </>

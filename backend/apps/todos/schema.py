@@ -440,8 +440,8 @@ class TodoMutation:
                     return TodoUpdateResult(success=False, error="Only the creator can edit this todo")
 
             if not is_creator:
-                # Assignees can toggle completion and update reminder_date
-                if text is not None or is_public is not None or assigned_to_id is not strawberry.UNSET:
+                # Assignees can toggle completion, update reminder_date, and reassign
+                if text is not None or is_public is not None:
                     return TodoUpdateResult(success=False, error="Only the creator can edit this todo")
 
             old_assigned_to_id = todo.assigned_to_id
@@ -459,7 +459,7 @@ class TodoMutation:
                 todo.is_public = is_public
                 update_fields.append("is_public")
 
-            if assigned_to_id is not strawberry.UNSET and is_creator:
+            if assigned_to_id is not strawberry.UNSET and (is_creator or is_assignee):
                 # Validate assigned_to is in the same tenant
                 if assigned_to_id is not None:
                     from apps.tenants.models import User
@@ -502,20 +502,39 @@ class TodoMutation:
                 "created_by", "assigned_to", "contract__customer", "contract_item__product", "contract_item__contract__customer", "customer"
             ).get(pk=todo.pk)
 
-            # Notify if reassigned to a different user (not the creator)
-            if (
-                todo.assigned_to_id
-                and todo.assigned_to_id != old_assigned_to_id
-                and todo.assigned_to_id != todo.created_by_id
-            ):
-                from apps.core.notifications import notify
-                notify(
-                    user.tenant,
-                    "todo_assigned",
-                    recipients=[todo.assigned_to],
-                    todo=todo,
-                    assigner=user,
-                )
+            # Auto-comment and notify on reassignment
+            if todo.assigned_to_id != old_assigned_to_id:
+                from apps.todos.models import TodoComment
+                assigner_name = user.get_full_name() or user.email
+                if todo.assigned_to:
+                    new_name = todo.assigned_to.get_full_name() or todo.assigned_to.email
+                    TodoComment.objects.create(
+                        tenant=user.tenant,
+                        todo=todo,
+                        text=f"reassigned to {new_name}",
+                        author=user,
+                    )
+                else:
+                    TodoComment.objects.create(
+                        tenant=user.tenant,
+                        todo=todo,
+                        text="unassigned",
+                        author=user,
+                    )
+
+                # Notify the new assignee (if not the creator)
+                if (
+                    todo.assigned_to_id
+                    and todo.assigned_to_id != todo.created_by_id
+                ):
+                    from apps.core.notifications import notify
+                    notify(
+                        user.tenant,
+                        "todo_assigned",
+                        recipients=[todo.assigned_to],
+                        todo=todo,
+                        assigner=user,
+                    )
 
             return TodoUpdateResult(success=True, todo=todo_to_type(todo))
         except TodoItem.DoesNotExist:

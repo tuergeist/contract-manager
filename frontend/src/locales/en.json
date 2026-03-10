@@ -1151,7 +1151,8 @@
       "documents": "Documents",
       "numbering": "Numbering",
       "emailTemplates": "Email Templates",
-      "invoiceInboxes": "Invoice Inboxes"
+      "invoiceInboxes": "Invoice Inboxes",
+      "accounting": "Accounting"
     },
     "integrationTabs": {
       "hubspot": "HubSpot",
@@ -1198,6 +1199,10 @@
       "performance": "Performance",
       "revenueGoals": "Revenue Goals",
       "security": "Security"
+    },
+    "accountingTabs": {
+      "revenueGoals": "Revenue Goals",
+      "costCenters": "Cost Centers"
     },
     "revenueGoals": {
       "title": "Revenue Goals",
@@ -1398,7 +1403,9 @@
         "notes": "Notes",
         "invoices": "Invoices",
         "banking": "Banking",
-        "offers": "Offers"
+        "offers": "Offers",
+        "incoming_invoices": "Invoice Inbox",
+        "cost_centers": "Cost Centers"
       },
       "actions": {
         "read": "Read",
@@ -1406,7 +1413,8 @@
         "delete": "Delete",
         "export": "Export",
         "generate": "Generate",
-        "settings": "Settings"
+        "settings": "Settings",
+        "config": "Config"
       },
       "assignRoles": "Assign Roles",
       "selectRoles": "Select roles for this user",

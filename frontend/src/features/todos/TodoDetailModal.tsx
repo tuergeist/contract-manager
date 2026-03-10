@@ -144,13 +144,15 @@ interface TodoDetailModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   canEdit: boolean
+  canReassign?: boolean
   onRefresh: () => void
 }
 
-export function TodoDetailModal({ todoId, open, onOpenChange, canEdit, onRefresh }: TodoDetailModalProps) {
+export function TodoDetailModal({ todoId, open, onOpenChange, canEdit, canReassign, onRefresh }: TodoDetailModalProps) {
   const { t } = useTranslation()
   const { hasPermission } = useAuth()
   const canDeleteTodo = hasPermission('todos', 'delete')
+  const canChangeAssignee = canEdit || canReassign
   const [editingText, setEditingText] = useState(false)
   const [text, setText] = useState('')
   const [reminderDate, setReminderDate] = useState('')
@@ -158,7 +160,7 @@ export function TodoDetailModal({ todoId, open, onOpenChange, canEdit, onRefresh
   const [assignedToId, setAssignedToId] = useState<string>('')
   const [newComment, setNewComment] = useState('')
 
-  const { data: usersData } = useQuery(USERS_QUERY, { skip: !open || !canEdit })
+  const { data: usersData } = useQuery(USERS_QUERY, { skip: !open || !canChangeAssignee })
   const users = (usersData?.users || []).filter(
     (u: { id: string; isActive: boolean }) => u.isActive
   )
@@ -417,7 +419,7 @@ export function TodoDetailModal({ todoId, open, onOpenChange, canEdit, onRefresh
               {/* Assignee */}
               <div>
                 <p className="text-xs text-muted-foreground mb-1">{t('todos.assignee')}</p>
-                {canEdit ? (
+                {canChangeAssignee ? (
                   <Select
                     value={assignedToId || '__none__'}
                     onValueChange={(val) => {
