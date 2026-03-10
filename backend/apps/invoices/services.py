@@ -1422,7 +1422,7 @@ class InvoiceService:
                 total_gross=invoice_record.total_gross,
                 line_items_snapshot=invoice_record.line_items_snapshot,
                 company_data_snapshot=invoice_record.company_data_snapshot,
-                status=InvoiceRecord.Status.FINALIZED,
+                status=InvoiceRecord.Status.VOIDED,
                 customer_name=invoice_record.customer_name,
                 contract_name=invoice_record.contract_name,
                 invoice_text=invoice_record.invoice_text,

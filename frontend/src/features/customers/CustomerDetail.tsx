@@ -32,6 +32,7 @@ import { useDocumentTitle } from '@/lib/useDocumentTitle'
 import { useAuditLogs, AuditLogTable } from '@/features/audit'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { CommentsSection } from '@/components/CommentsSection'
+import { InvoiceStatusBadge } from '@/components/InvoiceStatusBadge'
 
 type SortField = 'name' | 'status' | 'startDate' | 'endDate' | 'arr' | 'totalValue' | 'remainingMonths' | null
 type SortOrder = 'asc' | 'desc'
@@ -1545,7 +1546,7 @@ export function CustomerDetail() {
                         {t('contracts.title')}
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        {t('invoices.import.colPayment')}
+                        {t('invoices.import.colStatus')}
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                         {t('common.actions')}
@@ -1604,39 +1605,34 @@ export function CustomerDetail() {
                           )}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4">
-                          {row.isPaid ? (
-                            <div className="flex flex-col">
-                              <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-green-100 text-green-800 w-fit">
-                                {t('invoices.import.paid')}
-                              </span>
-                              {row.source === 'imported' && row.imported!.paidAt && (
-                                row.imported!.firstPaymentTransactionId ? (
-                                  <Link
-                                    to={`/banking?tx=${row.imported!.firstPaymentTransactionId}`}
-                                    className="text-xs text-blue-600 hover:text-blue-800 mt-1"
-                                  >
-                                    {formatDate(row.imported!.paidAt)}
-                                  </Link>
-                                ) : (
-                                  <span className="text-xs text-gray-500 mt-1">
-                                    {formatDate(row.imported!.paidAt)}
-                                  </span>
-                                )
-                              )}
-                              {row.source === 'generated' && row.generated!.paymentMatches.length > 0 && (
+                          <div className="flex flex-col">
+                            <InvoiceStatusBadge
+                              status={row.source === 'generated' ? row.generated!.status : undefined}
+                              isPaid={row.isPaid}
+                            />
+                            {row.isPaid && row.source === 'imported' && row.imported!.paidAt && (
+                              row.imported!.firstPaymentTransactionId ? (
                                 <Link
-                                  to={`/banking?tx=${row.generated!.paymentMatches[0].transactionId}`}
+                                  to={`/banking?tx=${row.imported!.firstPaymentTransactionId}`}
                                   className="text-xs text-blue-600 hover:text-blue-800 mt-1"
                                 >
-                                  {formatDate(row.generated!.paymentMatches[0].transactionDate)}
+                                  {formatDate(row.imported!.paidAt)}
                                 </Link>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-gray-100 text-gray-600">
-                              {t('invoices.import.unpaid')}
-                            </span>
-                          )}
+                              ) : (
+                                <span className="text-xs text-gray-500 mt-1">
+                                  {formatDate(row.imported!.paidAt)}
+                                </span>
+                              )
+                            )}
+                            {row.isPaid && row.source === 'generated' && row.generated!.paymentMatches.length > 0 && (
+                              <Link
+                                to={`/banking?tx=${row.generated!.paymentMatches[0].transactionId}`}
+                                className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                              >
+                                {formatDate(row.generated!.paymentMatches[0].transactionDate)}
+                              </Link>
+                            )}
+                          </div>
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-right">
                           {row.pdfUrl && (

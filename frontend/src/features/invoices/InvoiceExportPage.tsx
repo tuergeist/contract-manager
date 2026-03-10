@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation } from '@apollo/client'
 import { gql } from '@apollo/client'
-import { FileDown, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, XCircle, Loader2, Eye } from 'lucide-react'
+import { FileDown, Files, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Loader2, Eye } from 'lucide-react'
 import { format } from 'date-fns'
 import { de, enUS } from 'date-fns/locale'
 
@@ -33,6 +33,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
+import { InvoiceStatusBadge } from '@/components/InvoiceStatusBadge'
 
 const INVOICES_FOR_MONTH = gql`
   query InvoicesForMonth($year: Int!, $month: Int!) {
@@ -139,52 +140,6 @@ interface InvoiceRecord {
   status: string
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const { t } = useTranslation()
-  switch (status) {
-    case 'finalized':
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
-          <CheckCircle className="h-3 w-3" />
-          {t('invoices.statusFinalized')}
-        </span>
-      )
-    case 'sent':
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-          <CheckCircle className="h-3 w-3" />
-          {t('invoices.statusSent')}
-        </span>
-      )
-    case 'paid':
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-          <CheckCircle className="h-3 w-3" />
-          {t('invoices.statusPaid')}
-        </span>
-      )
-    case 'dunning':
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700">
-          <AlertTriangle className="h-3 w-3" />
-          {t('invoices.statusDunning')}
-        </span>
-      )
-    case 'voided':
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
-          <XCircle className="h-3 w-3" />
-          {t('invoices.statusVoided')}
-        </span>
-      )
-    default:
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
-          {t('invoices.statusNotGenerated')}
-        </span>
-      )
-  }
-}
 
 // Unique key for invoice previews (a contract can have multiple billing events per month)
 function invoiceKey(inv: { contractId: number; billingDate: string }): string {
@@ -630,7 +585,7 @@ export function InvoiceExportPage() {
                           ) : '—'}
                         </TableCell>
                         <TableCell>
-                          <StatusBadge status={record?.status || ''} />
+                          <InvoiceStatusBadge status={record?.status || ''} />
                         </TableCell>
                         <TableCell className="font-medium">
                           <Link

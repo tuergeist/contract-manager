@@ -43,6 +43,7 @@ import { useAuth } from '@/lib/auth'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { CustomerPickerDialog } from '@/components/CustomerPickerDialog'
 import { PaymentMatchModal } from './PaymentMatchModal'
+import { InvoiceStatusBadge } from '@/components/InvoiceStatusBadge'
 
 // --- GraphQL ---
 
@@ -569,8 +570,9 @@ export function InvoiceList() {
     if (sourceFilter !== 'IMPORTED') {
       for (const rec of generatedInvoices) {
         // Apply payment status filter client-side for generated invoices
-        if (paymentStatus === 'PAID' && !rec.isPaid) continue
-        if (paymentStatus === 'UNPAID' && rec.isPaid) continue
+        // Voided invoices are neither paid nor unpaid
+        if (paymentStatus === 'PAID' && (!rec.isPaid || rec.status === 'voided')) continue
+        if (paymentStatus === 'UNPAID' && (rec.isPaid || rec.status === 'voided')) continue
         rows.push({
           key: `gen-${rec.id}`,
           source: 'generated',
@@ -852,13 +854,6 @@ export function InvoiceList() {
     setPaymentMatchInvoice(null)
   }
 
-  const getPaymentBadge = (invoice: Invoice) => {
-    if (invoice.isPaid) {
-      return <Badge variant="default" className="bg-green-500"><Check className="w-3 h-3 mr-1" />{t('invoices.import.paid')}</Badge>
-    }
-    return <Badge variant="outline">{t('invoices.import.unpaid')}</Badge>
-  }
-
   const getUploadStatusBadge = (invoice: Invoice) => {
     if (invoice.uploadStatus === 'pending') {
       return <Badge variant="secondary">{t('invoices.import.uploadPending')}</Badge>
@@ -1097,7 +1092,7 @@ export function InvoiceList() {
               {sourceFilter === 'ALL' && (
                 <th className="px-4 py-3">{t('invoices.import.source')}</th>
               )}
-              <th className="px-4 py-3">{t('invoices.import.colPayment')}</th>
+              <th className="px-4 py-3">{t('invoices.import.colStatus')}</th>
               <th className="px-4 py-3 text-right">{t('common.actions')}</th>
             </tr>
           </thead>
@@ -1233,7 +1228,7 @@ export function InvoiceList() {
                   <td className="px-4 py-3">
                     {row.source === 'imported' && row.imported ? (
                       <div className="flex items-center gap-2">
-                        {getPaymentBadge(row.imported)}
+                        <InvoiceStatusBadge isPaid={row.imported.isPaid} />
                         {row.imported.isPaid && row.imported.paymentMatches.length > 0 && (
                           <button
                             onClick={() => openPaymentMatchModal(row.imported!)}
@@ -1246,15 +1241,7 @@ export function InvoiceList() {
                       </div>
                     ) : row.source === 'generated' && row.generated ? (
                       <div className="flex items-center gap-2">
-                        {row.generated.isPaid ? (
-                          <Badge variant="default" className="bg-green-500 text-white text-xs">
-                            {t('invoices.import.paid')}
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-xs">
-                            {t('invoices.import.unpaid')}
-                          </Badge>
-                        )}
+                        <InvoiceStatusBadge status={row.generated.status} isPaid={row.generated.isPaid} />
                         {row.generated.isPaid && row.generated.paymentMatches.length > 0 && (
                           <button
                             onClick={() => openPaymentMatchRecordModal(row.generated!)}
@@ -1665,10 +1652,10 @@ export function InvoiceList() {
               <h3 className="font-semibold text-base mb-2">{t('invoices.import.infoGeneratedStatusTitle')}</h3>
               <div className="space-y-2">
                 {[
-                  { key: 'finalized', label: t('invoices.import.generatedStatus.finalized'), desc: t('invoices.import.infoGeneratedStatusFinalized'), color: 'bg-blue-100 text-blue-800' },
-                  { key: 'sent', label: t('invoices.import.generatedStatus.sent'), desc: t('invoices.import.infoGeneratedStatusSent'), color: 'bg-green-100 text-green-800' },
+                  { key: 'finalized', label: t('invoices.import.generatedStatus.finalized'), desc: t('invoices.import.infoGeneratedStatusFinalized'), color: 'bg-gray-50 text-gray-600' },
+                  { key: 'sent', label: t('invoices.import.generatedStatus.sent'), desc: t('invoices.import.infoGeneratedStatusSent'), color: 'bg-purple-50 text-purple-700' },
                   { key: 'paid', label: t('invoices.import.generatedStatus.paid'), desc: t('invoices.import.infoGeneratedStatusPaid'), color: 'bg-green-100 text-green-800' },
-                  { key: 'dunning', label: t('invoices.import.generatedStatus.dunning'), desc: t('invoices.import.infoGeneratedStatusDunning'), color: 'bg-orange-100 text-orange-800' },
+                  { key: 'dunning', label: t('invoices.import.generatedStatus.dunning'), desc: t('invoices.import.infoGeneratedStatusDunning'), color: 'bg-orange-100 text-orange-700' },
                   { key: 'voided', label: t('invoices.import.generatedStatus.voided'), desc: t('invoices.import.infoGeneratedStatusVoided'), color: 'bg-gray-100 text-gray-600' },
                 ].map((s) => (
                   <div key={s.key} className="flex gap-3 items-start">

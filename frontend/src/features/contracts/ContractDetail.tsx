@@ -97,6 +97,7 @@ import { OrderConfirmationDialog } from './OrderConfirmationDialog'
 import { CommentsSection } from '@/components/CommentsSection'
 import { TimeTrackingTab } from './TimeTrackingTab'
 import { PdfAnalysisPanel } from './PdfAnalysisPanel'
+import { InvoiceStatusBadge } from '@/components/InvoiceStatusBadge'
 import { ListTodo, Receipt } from 'lucide-react'
 
 const CONTRACT_DETAIL_QUERY = gql`
@@ -274,6 +275,7 @@ const CONTRACT_GENERATED_INVOICES_QUERY = gql`
         invoiceDate
         totalGross
         status
+        isPaid
         pdfUrl
         emailSentAt
         emailSentTo
@@ -1746,7 +1748,7 @@ export function ContractDetail() {
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {/* Generated invoices */}
-                  {generatedInvoicesData?.invoiceRecords?.items?.map((record: { id: number; invoiceNumber: string; billingDate: string; invoiceDate: string | null; totalGross: string; status: string; pdfUrl: string | null; emailSentAt: string | null; emailSentTo: string[] }) => (
+                  {generatedInvoicesData?.invoiceRecords?.items?.map((record: { id: number; invoiceNumber: string; billingDate: string; invoiceDate: string | null; totalGross: string; status: string; isPaid: boolean; pdfUrl: string | null; emailSentAt: string | null; emailSentTo: string[] }) => (
                     <tr key={`gen-${record.id}`} className="hover:bg-gray-50">
                       <td className="whitespace-nowrap px-6 py-4">
                         <Link to={`/invoices/${record.id}`} className="font-medium text-blue-600 hover:underline">
@@ -1760,9 +1762,7 @@ export function ContractDetail() {
                         {formatCurrency(record.totalGross)}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4">
-                        <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-blue-100 text-blue-800 w-fit">
-                          {t(`invoices.import.generatedStatus.${record.status}`, record.status)}
-                        </span>
+                        <InvoiceStatusBadge status={record.status} isPaid={record.isPaid} />
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-right">
                         {record.pdfUrl ? (
@@ -1812,31 +1812,23 @@ export function ContractDetail() {
                           : '-'}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4">
-                        {invoice.isPaid ? (
-                          <div className="flex flex-col">
-                            <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-green-100 text-green-800 w-fit">
-                              {t('invoices.import.paid')}
-                            </span>
-                            {invoice.paidAt && (
-                              invoice.firstPaymentTransactionId ? (
-                                <Link
-                                  to={`/banking?tx=${invoice.firstPaymentTransactionId}`}
-                                  className="text-xs text-blue-600 hover:text-blue-800 mt-1"
-                                >
-                                  {formatDate(invoice.paidAt)}
-                                </Link>
-                              ) : (
-                                <span className="text-xs text-gray-500 mt-1">
-                                  {formatDate(invoice.paidAt)}
-                                </span>
-                              )
-                            )}
-                          </div>
-                        ) : (
-                          <span className="inline-flex rounded-full px-2 text-xs font-semibold leading-5 bg-gray-100 text-gray-600">
-                            {t('invoices.import.unpaid')}
-                          </span>
-                        )}
+                        <div className="flex flex-col">
+                          <InvoiceStatusBadge isPaid={invoice.isPaid} />
+                          {invoice.isPaid && invoice.paidAt && (
+                            invoice.firstPaymentTransactionId ? (
+                              <Link
+                                to={`/banking?tx=${invoice.firstPaymentTransactionId}`}
+                                className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                              >
+                                {formatDate(invoice.paidAt)}
+                              </Link>
+                            ) : (
+                              <span className="text-xs text-gray-500 mt-1">
+                                {formatDate(invoice.paidAt)}
+                              </span>
+                            )
+                          )}
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-right">
                         {invoice.pdfUrl && (

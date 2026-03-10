@@ -4,8 +4,6 @@ import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
 import {
   ArrowLeft,
-  CheckCircle,
-  XCircle,
   Download,
   Mail,
   Ban,
@@ -13,7 +11,6 @@ import {
   FileText,
   CreditCard,
   Clock,
-  Send,
   Eye,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -40,6 +37,7 @@ import { getToken } from '@/lib/auth'
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
 import { useDocumentTitle } from '@/lib/useDocumentTitle'
 import { ImportedInvoiceDetail } from './ImportedInvoiceDetail'
+import { InvoiceStatusStepper } from '@/components/InvoiceStatusBadge'
 
 const INVOICE_RECORD_QUERY = gql`
   query InvoiceRecord($id: Int!) {
@@ -218,56 +216,14 @@ interface AuditEntry {
   timestamp: string
 }
 
-function StatusBadge({ status, isPaid, documentType }: { status: string; isPaid?: boolean; documentType?: string }) {
+function StornoBadge() {
   const { t } = useTranslation()
-
-  if (documentType === 'storno') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 text-sm font-medium text-orange-700">
-        <FileText className="h-4 w-4" />
-        {t('invoiceDetail.statusStorno')}
-      </span>
-    )
-  }
-
-  if (isPaid) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-sm font-medium text-green-800">
-        <CheckCircle className="h-4 w-4" />
-        {t('invoiceDetail.statusPaid')}
-      </span>
-    )
-  }
-
-  switch (status) {
-    case 'finalized':
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-sm font-medium text-blue-700">
-          <CheckCircle className="h-4 w-4" />
-          {t('invoices.statusFinalized')}
-        </span>
-      )
-    case 'voided':
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-sm font-medium text-red-700">
-          <XCircle className="h-4 w-4" />
-          {t('invoices.statusVoided')}
-        </span>
-      )
-    case 'sent':
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-1 text-sm font-medium text-purple-700">
-          <Send className="h-4 w-4" />
-          {t('invoiceDetail.statusSent')}
-        </span>
-      )
-    default:
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-sm font-medium text-gray-600">
-          {status}
-        </span>
-      )
-  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 text-sm font-medium text-orange-700">
+      <FileText className="h-4 w-4" />
+      {t('invoiceDetail.statusStorno')}
+    </span>
+  )
 }
 
 
@@ -449,9 +405,8 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
           <div>
             <h1 className="text-2xl font-bold">{record.invoiceNumber}</h1>
             <div className="mt-1 flex items-center gap-3">
-              <StatusBadge status={record.status} isPaid={record.isPaid} documentType={record.documentType} />
-              {record.isPaid && record.status === 'finalized' && (
-                <span className="text-sm text-muted-foreground">({t('invoices.statusFinalized')})</span>
+              {record.documentType === 'storno' ? <StornoBadge /> : (
+                <InvoiceStatusStepper status={record.status} isPaid={record.isPaid} />
               )}
               {record.status === 'voided' && record.voidReason && (
                 <span className="text-sm text-muted-foreground">{record.voidReason}</span>
