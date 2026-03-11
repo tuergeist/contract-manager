@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.22.2",
+    "date": "2026-03-11",
+    "title": "Contract list & customer detail performance",
+    "description": "Fixed N+1 query issues in contract list and customer detail pages by adding proper prefetching for items, price periods, and groups.",
+    "type": "bugfix",
+    "details": [
+      "Added prefetch_related for contract items and price periods in contract list query",
+      "Added select_related for contract groups with annotated count to avoid per-row queries",
+      "Optimized ARR and monthly recurring value field resolvers to use prefetched data",
+      "Added prefetching to customer detail contracts resolver",
+      "Added select_related for todo resolver related models"
+    ]
+  },
+  {
     "version": "2.22.1",
     "date": "2026-03-10",
     "title": "Accounting settings tab & todo reassignment",
