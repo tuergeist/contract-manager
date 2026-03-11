@@ -12,7 +12,7 @@ from strawberry import auto, UNSET
 import strawberry_django
 from strawberry.types import Info
 from django.db import transaction
-from django.db.models import Sum, F, Q
+from django.db.models import Count, Sum, F, Q, Subquery, OuterRef
 
 from apps.core.context import Context
 from apps.core.permissions import check_perm, get_current_user, require_perm
@@ -337,13 +337,18 @@ class ContractType:
         """Get the contract's group."""
         if not self.group_id:
             return None
-        group = ContractGroup.objects.filter(id=self.group_id).first()
+        # Use select_related cache if available
+        group = self.group
         if not group:
             return None
+        # Use annotated count if available (from prefetch), otherwise query
+        contract_count = getattr(self, "_group_contract_count", None)
+        if contract_count is None:
+            contract_count = Contract.objects.filter(group=group).count()
         return ContractGroupType(
             id=group.id,
             name=group.name,
-            contract_count=Contract.objects.filter(group=group).count(),
+            contract_count=contract_count,
         )
 
     @strawberry.field
@@ -573,12 +578,12 @@ class ContractType:
         from datetime import date
         today = date.today()
 
-        items = ContractItem.objects.filter(contract=self, is_one_off=False)
-
         monthly_total = Decimal("0")
-        for item in items:
-            # Use effective price considering period-specific pricing
-            monthly_unit_price = item.get_price_at(today, normalize_to_monthly=True)
+        for item in self.items.all():
+            if item.is_one_off:
+                continue
+            price_periods = list(item.price_periods.all())
+            monthly_unit_price = item.get_price_at_cached(today, price_periods, normalize_to_monthly=True)
             monthly_total += monthly_unit_price * item.quantity
 
         return monthly_total
@@ -594,10 +599,12 @@ class ContractType:
         if contract_end and contract_end < today:
             return Decimal("0")
 
-        items = ContractItem.objects.filter(contract=self, is_one_off=False)
         monthly_total = Decimal("0")
-        for item in items:
-            monthly_unit_price = item.get_price_at(today, normalize_to_monthly=True)
+        for item in self.items.all():
+            if item.is_one_off:
+                continue
+            price_periods = list(item.price_periods.all())
+            monthly_unit_price = item.get_price_at_cached(today, price_periods, normalize_to_monthly=True)
             monthly_total += monthly_unit_price * item.quantity
         return monthly_total * 12
 
@@ -2933,7 +2940,15 @@ class ContractQuery:
                 has_previous_page=False,
             )
 
-        queryset = Contract.objects.filter(tenant=user.tenant).select_related("customer")
+        queryset = Contract.objects.filter(tenant=user.tenant).select_related(
+            "customer", "group"
+        ).prefetch_related("items", "items__price_periods").annotate(
+            _group_contract_count=Subquery(
+                Contract.objects.filter(
+                    group_id=OuterRef("group_id"),
+                ).values("group_id").annotate(cnt=Count("id")).values("cnt")[:1]
+            )
+        )
 
         # Exclude deleted by default unless specifically requested or filtering by deleted status
         if not include_deleted and status != "deleted":
@@ -2987,7 +3002,7 @@ class ContractQuery:
             order_field = "-customer__name" if sort_order == "desc" else "customer__name"
         elif sort_by == "arr":
             # Sort by ARR in Python (monthly_recurring * 12)
-            all_contracts = list(queryset.prefetch_related("items"))
+            all_contracts = list(queryset)
 
             def get_arr(contract):
                 from decimal import Decimal
@@ -2997,7 +3012,8 @@ class ContractQuery:
                 monthly_total = Decimal("0")
                 for item in contract.items.all():
                     if not item.is_one_off:
-                        monthly_unit_price = item.get_price_at(today, normalize_to_monthly=True)
+                        price_periods = list(item.price_periods.all())
+                        monthly_unit_price = item.get_price_at_cached(today, price_periods, normalize_to_monthly=True)
                         monthly_total += monthly_unit_price * item.quantity
                 return monthly_total * 12
 

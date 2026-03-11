@@ -86,7 +86,12 @@ class CustomerType:
         """Get all contracts for this customer."""
         from apps.contracts.models import Contract
 
-        return list(Contract.objects.filter(customer=self).order_by("-created_at"))
+        return list(
+            Contract.objects.filter(customer=self)
+            .select_related("customer", "group")
+            .prefetch_related("items", "items__price_periods")
+            .order_by("-created_at")
+        )
 
     @strawberry.field
     def contract_count(self) -> int:
@@ -166,7 +171,11 @@ class CustomerType:
             Q(customer=self) | Q(contract_id__in=contract_ids)
         ).filter(
             Q(created_by=user) | Q(is_public=True)
-        ).select_related("created_by", "contract").order_by("-created_at")
+        ).select_related(
+            "created_by", "assigned_to", "contract", "contract__customer",
+            "contract_item", "contract_item__product", "contract_item__contract",
+            "contract_item__contract__customer", "customer",
+        ).order_by("-created_at")
 
         return [todo_to_type(todo) for todo in todos]
 
