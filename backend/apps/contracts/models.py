@@ -1087,6 +1087,12 @@ class ContractItem(TenantModel):
         related_name="dependent_items",
         help_text="Item that must be delivered before this one can be billed.",
     )
+    source_hubspot_deal_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="HubSpot deal ID from source contract when item was transferred via merge.",
+    )
 
     class Meta:
         ordering = ["sort_order", "created_at"]

@@ -121,6 +121,13 @@ class OfferRecord(TenantModel):
     # Frozen VAT sentence
     vat_sentence = models.TextField(blank=True, help_text="Frozen VAT sentence at generation time")
 
+    # Scoped item IDs (for offers covering a subset of contract items)
+    scoped_item_ids = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="List of contract item IDs this offer covers. Null = all items.",
+    )
+
     # Email sending tracking
     email_sent_at = models.DateTimeField(null=True, blank=True)
     email_sent_to = models.JSONField(default=list, blank=True)

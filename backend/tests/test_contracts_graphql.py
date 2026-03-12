@@ -2027,3 +2027,185 @@ class TestDeliverableEta:
         assert result.errors is None
         assert result.data["setDeliverableEta"]["success"] is False
         assert "delivery tracking" in result.data["setDeliverableEta"]["error"]
+
+
+# =============================================================================
+# Contract Merge Tests
+# =============================================================================
+
+MERGE_PREVIEW_QUERY = """
+    query MergePreview($sourceId: ID!, $targetId: ID!) {
+        mergeContractPreview(sourceContractId: $sourceId, targetContractId: $targetId) {
+            items {
+                id
+                productName
+                quantity
+                unitPrice
+                isOneOff
+            }
+            willCreateAmendments
+            sourceContractName
+            targetContractName
+            errors
+        }
+    }
+"""
+
+MERGE_MUTATION = """
+    mutation MergeContract($input: MergeContractInput!) {
+        mergeContract(input: $input) {
+            success
+            errors
+            itemsTransferred
+            contract {
+                id
+                name
+            }
+        }
+    }
+"""
+
+
+class TestMergeContractPreview:
+    def test_preview_returns_items(self, user, tenant, customer, product):
+        source = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Source",
+            status=Contract.Status.DRAFT, start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+        target = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Target",
+            status=Contract.Status.ACTIVE, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+        ContractItem.objects.create(
+            tenant=tenant, contract=source, product=product,
+            quantity=2, unit_price=Decimal("100.00"),
+        )
+
+        result = run_graphql(MERGE_PREVIEW_QUERY, {
+            "sourceId": str(source.id), "targetId": str(target.id),
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["mergeContractPreview"]
+        assert len(data["items"]) == 1
+        assert data["items"][0]["quantity"] == 2
+        assert data["willCreateAmendments"] is True
+        assert data["errors"] == []
+
+    def test_preview_returns_errors_for_invalid_merge(self, user, tenant, customer):
+        source = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Source",
+            status=Contract.Status.PAUSED, start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+        target = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Target",
+            status=Contract.Status.ACTIVE, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+
+        result = run_graphql(MERGE_PREVIEW_QUERY, {
+            "sourceId": str(source.id), "targetId": str(target.id),
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["mergeContractPreview"]
+        assert len(data["errors"]) > 0
+        assert "Only draft or active" in data["errors"][0]
+
+
+class TestMergeContractMutation:
+    def test_merge_success(self, user, tenant, customer, product):
+        source = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Source Draft",
+            status=Contract.Status.DRAFT, start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+        target = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Target Active",
+            status=Contract.Status.ACTIVE, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+        ContractItem.objects.create(
+            tenant=tenant, contract=source, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+        )
+
+        result = run_graphql(MERGE_MUTATION, {
+            "input": {
+                "sourceContractId": str(source.id),
+                "targetContractId": str(target.id),
+            },
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["mergeContract"]
+        assert data["success"] is True
+        assert data["itemsTransferred"] == 1
+        assert data["contract"]["name"] == "Target Active"
+
+        source.refresh_from_db()
+        assert source.status == Contract.Status.DELETED
+
+    def test_merge_with_date_overrides(self, user, tenant, customer, product):
+        source = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Source",
+            status=Contract.Status.DRAFT, start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+        target = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Target",
+            status=Contract.Status.DRAFT, start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=source, product=product,
+            quantity=1, unit_price=Decimal("100.00"),
+            start_date=date(2026, 1, 1),
+        )
+
+        result = run_graphql(MERGE_MUTATION, {
+            "input": {
+                "sourceContractId": str(source.id),
+                "targetContractId": str(target.id),
+                "itemOverrides": [
+                    {"itemId": item.id, "startDate": "2026-06-01"},
+                ],
+            },
+        }, make_context(user))
+
+        assert result.errors is None
+        assert result.data["mergeContract"]["success"] is True
+
+        item.refresh_from_db()
+        assert item.start_date == date(2026, 6, 1)
+
+    def test_merge_fails_for_invalid_preconditions(self, user, tenant, customer):
+        contract = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Self",
+            status=Contract.Status.DRAFT, start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+        )
+
+        result = run_graphql(MERGE_MUTATION, {
+            "input": {
+                "sourceContractId": str(contract.id),
+                "targetContractId": str(contract.id),
+            },
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["mergeContract"]
+        assert data["success"] is False
+        assert len(data["errors"]) > 0

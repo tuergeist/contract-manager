@@ -5,7 +5,7 @@ import { useQuery, useMutation, gql } from '@apollo/client'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2, ArrowLeft, Check, ChevronsUpDown, Edit, ExternalLink, Trash2, Plus } from 'lucide-react'
+import { Loader2, ArrowLeft, Check, ChevronsUpDown, Edit, ExternalLink, Trash2, Plus, GitMerge } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -49,6 +49,7 @@ import {
 import { CustomerPickerDialog } from '@/components/CustomerPickerDialog'
 import { OrderConfirmationDialog } from './OrderConfirmationDialog'
 import { ClockodoActivationDialog } from './ClockodoActivationDialog'
+import { MergeContractDialog } from './MergeContractDialog'
 
 const CUSTOMERS_SEARCH_QUERY = gql`
   query CustomersSearch($search: String) {
@@ -308,6 +309,7 @@ export function ContractForm() {
   const [statusTransition, setStatusTransition] = useState<StatusTransition | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showChangeCustomer, setShowChangeCustomer] = useState(false)
+  const [showMergeDialog, setShowMergeDialog] = useState(false)
   const [groupPopoverOpen, setGroupPopoverOpen] = useState(false)
   const [groupSearchTerm, setGroupSearchTerm] = useState('')
   const billingStartManuallyChanged = useRef(false)
@@ -542,6 +544,17 @@ export function ContractForm() {
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 {t('contracts.actions.delete')}
+              </Button>
+            )}
+            {/* Merge Button - only for draft/active contracts without invoices */}
+            {(contract.status === 'draft' || contract.status === 'active') && !contract.hasInvoices && (
+              <Button
+                variant="outline"
+                onClick={() => setShowMergeDialog(true)}
+                data-testid="merge-contract-button"
+              >
+                <GitMerge className="mr-2 h-4 w-4" />
+                {t('contracts.merge.button')}
               </Button>
             )}
             {/* Status Transition Buttons */}
@@ -1269,6 +1282,18 @@ export function ContractForm() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Merge Contract Dialog */}
+      {id && contract && (
+        <MergeContractDialog
+          open={showMergeDialog}
+          onOpenChange={setShowMergeDialog}
+          contractId={id}
+          contractName={contract.name || `Contract #${id}`}
+          customerId={contract.customer.id}
+          customerName={contract.customer.name}
+        />
+      )}
 
       {/* Change Customer Dialog */}
       {id && (

@@ -96,12 +96,16 @@ class OfferService:
     def __init__(self, tenant: Tenant):
         self.tenant = tenant
 
-    def create_offer(self, contract_id: int, billing_date: date) -> "OfferRecord":
+    def create_offer(self, contract_id: int, billing_date: date, item_ids: list[int] | None = None) -> "OfferRecord":
         """Create an offer from a contract's billing event.
 
         Computes the billing event for the given date, snapshots line items
         and company data, assigns an offer number, generates a PDF, and
         returns the created OfferRecord.
+
+        Args:
+            item_ids: Optional list of contract item IDs to scope the offer to.
+                      If provided, only those items are included in the snapshot.
         """
         from apps.invoices.models import CompanyLegalData
         from apps.offers.models import OfferRecord
@@ -157,9 +161,13 @@ class OfferService:
 
         # Build line items snapshot
         contract_items_by_id = {ci.id: ci for ci in contract.items.all()}
+        item_ids_set = set(item_ids) if item_ids else None
         line_items_snapshot = []
         total_net = Decimal("0.00")
         for item in event["items"]:
+            # Skip items not in scope if item_ids provided
+            if item_ids_set and item["item_id"] not in item_ids_set:
+                continue
             amount = item["amount"]
             total_net += amount
             line_items_snapshot.append({
@@ -211,6 +219,7 @@ class OfferService:
                 customer_name=contract.customer.name,
                 contract_name=contract.name or f"Contract {contract.id}",
                 vat_sentence=vat_sentence,
+                scoped_item_ids=item_ids,
             )
 
         # Generate PDF synchronously (offers are single-page, fast)

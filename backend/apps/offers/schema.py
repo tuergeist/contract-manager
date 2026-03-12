@@ -46,6 +46,7 @@ class OfferRecordType:
     email_sent_at: str | None
     email_sent_to: list[str]
     email_message_id: str
+    scoped_item_ids: list[int] | None = None
 
 
 @strawberry.type
@@ -141,6 +142,7 @@ def _convert_offer_record(record) -> OfferRecordType:
         email_sent_at=record.email_sent_at.isoformat() if record.email_sent_at else None,
         email_sent_to=record.email_sent_to or [],
         email_message_id=record.email_message_id or "",
+        scoped_item_ids=record.scoped_item_ids,
     )
 
 
@@ -282,7 +284,8 @@ class OfferMutation:
 
     @strawberry.mutation
     def create_offer(
-        self, info: Info[Context, None], contract_id: int, billing_date: date
+        self, info: Info[Context, None], contract_id: int, billing_date: date,
+        item_ids: list[int] | None = None,
     ) -> CreateOfferResult:
         """Create an offer from a contract billing event."""
         user, err = check_perm(info, "offers", "write")
@@ -293,7 +296,7 @@ class OfferMutation:
 
         try:
             service = OfferService(user.tenant)
-            record = service.create_offer(contract_id, billing_date)
+            record = service.create_offer(contract_id, billing_date, item_ids=item_ids)
             return CreateOfferResult(
                 success=True,
                 offer=_convert_offer_record(record),

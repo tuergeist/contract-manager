@@ -245,6 +245,8 @@ class ContractItemType:
     # Revenue type classification
     revenue_type: str | None = None
     effective_revenue_type: str | None = None
+    # Merge traceability
+    source_hubspot_deal_id: str | None = None
 
 
 @strawberry_django.type(Contract)
@@ -459,6 +461,7 @@ class ContractType:
                     price_periods=price_periods,
                     revenue_type=item.revenue_type,
                     effective_revenue_type=item.get_effective_revenue_type(),
+                    source_hubspot_deal_id=item.source_hubspot_deal_id,
                 )
             )
         return result
@@ -2123,6 +2126,64 @@ class UnclassifiedItemType:
     customer_id: int
 
 
+@strawberry.input
+class MergeContractItemOverrideInput:
+    """Per-item date overrides for contract merge."""
+    item_id: int
+    start_date: date | None = None
+    billing_start_date: date | None = None
+
+
+@strawberry.input
+class MergeContractInput:
+    """Input for merging a source contract into a target contract."""
+    source_contract_id: strawberry.ID
+    target_contract_id: strawberry.ID
+    item_overrides: list[MergeContractItemOverrideInput] | None = None
+
+
+@strawberry.type
+class MergePreviewItemType:
+    """An item in the merge preview."""
+    id: int
+    product_name: str | None
+    description: str
+    quantity: int
+    unit_price: str
+    price_period: str
+    start_date: str | None
+    billing_start_date: str | None
+    is_one_off: bool
+
+
+@strawberry.type
+class MergeClockodoPreviewType:
+    """Clockodo impact preview for merge."""
+    has_new_recurring_items: bool
+    new_one_off_items: list[str]
+    source_mappings_will_be_deleted: int
+
+
+@strawberry.type
+class MergeContractPreviewType:
+    """Preview result for a contract merge."""
+    items: list[MergePreviewItemType]
+    will_create_amendments: bool
+    clockodo_preview: MergeClockodoPreviewType | None = None
+    source_contract_name: str
+    target_contract_name: str
+    errors: list[str] = strawberry.field(default_factory=list)
+
+
+@strawberry.type
+class MergeContractResult:
+    """Result of a contract merge operation."""
+    contract: ContractType | None = None
+    success: bool = False
+    errors: list[str] = strawberry.field(default_factory=list)
+    items_transferred: int = 0
+
+
 @strawberry.type
 class ContractQuery:
     @strawberry.field
@@ -2159,6 +2220,75 @@ class ContractQuery:
                 ActivationPreviewOneOffItem(id=i["id"], description=i["description"])
                 for i in result["one_off_items"]
             ],
+        )
+
+    @strawberry.field
+    def merge_contract_preview(
+        self,
+        info: Info[Context, None],
+        source_contract_id: strawberry.ID,
+        target_contract_id: strawberry.ID,
+    ) -> MergeContractPreviewType:
+        """Preview a contract merge operation."""
+        from apps.contracts.services.contract_merge import (
+            preview_merge,
+            validate_merge_preconditions,
+        )
+
+        user = require_perm(info, "contracts", "read")
+
+        try:
+            source = Contract.objects.select_related("customer", "tenant").prefetch_related(
+                "items__product", "time_tracking_mappings"
+            ).get(id=source_contract_id, tenant=user.tenant)
+            target = Contract.objects.select_related("customer", "tenant").prefetch_related(
+                "time_tracking_mappings"
+            ).get(id=target_contract_id, tenant=user.tenant)
+        except Contract.DoesNotExist:
+            return MergeContractPreviewType(
+                items=[], will_create_amendments=False,
+                source_contract_name="", target_contract_name="",
+                errors=["Contract not found"],
+            )
+
+        errors = validate_merge_preconditions(source, target)
+        if errors:
+            return MergeContractPreviewType(
+                items=[], will_create_amendments=False,
+                source_contract_name=source.name, target_contract_name=target.name,
+                errors=errors,
+            )
+
+        result = preview_merge(source, target)
+
+        clockodo_preview = None
+        if result.get("clockodo_preview"):
+            cp = result["clockodo_preview"]
+            clockodo_preview = MergeClockodoPreviewType(
+                has_new_recurring_items=cp["has_new_recurring_items"],
+                new_one_off_items=[item["description"] for item in cp["new_one_off_items"]],
+                source_mappings_will_be_deleted=cp["source_mappings_will_be_deleted"],
+            )
+
+        return MergeContractPreviewType(
+            items=[
+                MergePreviewItemType(
+                    id=item["id"],
+                    product_name=item["product_name"],
+                    description=item["description"],
+                    quantity=item["quantity"],
+                    unit_price=item["unit_price"],
+                    price_period=item["price_period"],
+                    start_date=item["start_date"],
+                    billing_start_date=item["billing_start_date"],
+                    is_one_off=item["is_one_off"],
+                )
+                for item in result["items"]
+            ],
+            will_create_amendments=result["will_create_amendments"],
+            clockodo_preview=clockodo_preview,
+            source_contract_name=result["source_contract_name"],
+            target_contract_name=result["target_contract_name"],
         )
 
     @strawberry.field
@@ -4288,6 +4418,7 @@ class ContractMutation:
                     price_periods=[],  # Newly created items have no price periods
                     revenue_type=item.revenue_type,
                     effective_revenue_type=item.get_effective_revenue_type(),
+                    source_hubspot_deal_id=item.source_hubspot_deal_id,
                 ),
                 success=True,
             )
@@ -4519,6 +4650,7 @@ class ContractMutation:
                     price_periods=price_periods,
                     revenue_type=item.revenue_type,
                     effective_revenue_type=item.get_effective_revenue_type(),
+                    source_hubspot_deal_id=item.source_hubspot_deal_id,
                 ),
                 success=True,
             )
@@ -5455,6 +5587,54 @@ class ContractMutation:
         contract.group = group
         contract.save()
         return ContractResult(success=True, contract=contract)
+
+    @strawberry.mutation
+    def merge_contract(
+        self,
+        info: Info[Context, None],
+        input: MergeContractInput,
+    ) -> MergeContractResult:
+        """Merge a source contract's items into a target contract."""
+        from apps.contracts.services.contract_merge import execute_merge
+
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return MergeContractResult(errors=[err])
+
+        try:
+            source = Contract.objects.select_related("customer", "tenant").prefetch_related(
+                "items__product", "time_tracking_mappings"
+            ).get(id=input.source_contract_id, tenant=user.tenant)
+            target = Contract.objects.select_related("customer", "tenant").get(
+                id=input.target_contract_id, tenant=user.tenant
+            )
+        except Contract.DoesNotExist:
+            return MergeContractResult(errors=["Contract not found"])
+
+        # Build item_overrides dict
+        item_overrides = {}
+        if input.item_overrides:
+            for override in input.item_overrides:
+                overrides = {}
+                if override.start_date is not None:
+                    overrides["start_date"] = override.start_date
+                if override.billing_start_date is not None:
+                    overrides["billing_start_date"] = override.billing_start_date
+                if overrides:
+                    item_overrides[override.item_id] = overrides
+
+        try:
+            items_count = source.items.count()
+            updated_target = execute_merge(
+                source, target, item_overrides=item_overrides, user=user
+            )
+            return MergeContractResult(
+                contract=updated_target,
+                success=True,
+                items_transferred=items_count,
+            )
+        except ValueError as e:
+            return MergeContractResult(errors=str(e).split("; "))
 
 
 # =============================================================================

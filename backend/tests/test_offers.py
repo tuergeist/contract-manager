@@ -753,3 +753,84 @@ class TestOfferNumberSchemeModel:
         assert scheme.pattern == "{YYYY}-{NNNN}"
         assert scheme.next_counter == 1
         assert scheme.reset_period == OfferNumberScheme.ResetPeriod.YEARLY
+
+
+# =========================================================================
+# Scoped Offer Creation Tests
+# =========================================================================
+
+
+class TestScopedOfferCreation:
+    """Tests for creating offers scoped to specific contract items."""
+
+    @patch("apps.offers.services.OfferService._generate_and_save_pdf")
+    def test_scoped_offer_includes_only_specified_items(
+        self, mock_pdf, tenant, contract_with_items, legal_data
+    ):
+        from apps.offers.services import OfferService
+
+        items = list(contract_with_items.items.all())
+        first_item = items[0]
+
+        service = OfferService(tenant)
+        record = service.create_offer(
+            contract_with_items.id,
+            date(2026, 1, 1),
+            item_ids=[first_item.id],
+        )
+
+        assert len(record.line_items_snapshot) == 1
+        assert record.line_items_snapshot[0]["item_id"] == first_item.id
+        assert record.scoped_item_ids == [first_item.id]
+
+    @patch("apps.offers.services.OfferService._generate_and_save_pdf")
+    def test_scoped_offer_totals_only_scoped_items(
+        self, mock_pdf, tenant, contract_with_items, legal_data
+    ):
+        from apps.offers.services import OfferService
+
+        items = list(contract_with_items.items.all())
+        first_item = items[0]  # 2 x 100 = 200
+
+        service = OfferService(tenant)
+        record = service.create_offer(
+            contract_with_items.id,
+            date(2026, 1, 1),
+            item_ids=[first_item.id],
+        )
+
+        assert record.total_net == Decimal("200.00")
+
+    @patch("apps.offers.services.OfferService._generate_and_save_pdf")
+    def test_unscoped_offer_includes_all_items(
+        self, mock_pdf, tenant, contract_with_items, legal_data
+    ):
+        from apps.offers.services import OfferService
+
+        service = OfferService(tenant)
+        record = service.create_offer(
+            contract_with_items.id,
+            date(2026, 1, 1),
+        )
+
+        assert len(record.line_items_snapshot) == 2
+        assert record.scoped_item_ids is None
+        assert record.total_net == Decimal("700.00")
+
+    @patch("apps.offers.services.OfferService._generate_and_save_pdf")
+    def test_scoped_item_ids_stored_on_record(
+        self, mock_pdf, tenant, contract_with_items, legal_data
+    ):
+        from apps.offers.services import OfferService
+
+        items = list(contract_with_items.items.all())
+        item_ids = [items[0].id, items[1].id]
+
+        service = OfferService(tenant)
+        record = service.create_offer(
+            contract_with_items.id,
+            date(2026, 1, 1),
+            item_ids=item_ids,
+        )
+
+        assert record.scoped_item_ids == item_ids
