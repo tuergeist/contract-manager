@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { RevenueGoalSettings } from './RevenueGoalSettings'
 import { CostCenterSettings } from './CostCenterSettings'
 import { SplitRuleSettings } from './SplitRuleSettings'
+import { FteSnapshotSettings } from './FteSnapshotSettings'
 
 export function AccountingSettingsTabs() {
   const { t } = useTranslation()
@@ -42,6 +43,7 @@ export function AccountingSettingsTabs() {
         <div className="space-y-6">
           <CostCenterSettings />
           <SplitRuleSettings />
+          <FteSnapshotSettings />
         </div>
       </TabsContent>
     </Tabs>

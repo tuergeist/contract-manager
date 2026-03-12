@@ -6,7 +6,7 @@ import { Plus, Pencil, Trash2, Loader2 } from 'lucide-react'
 const SPLIT_RULES_QUERY = gql`
   query SplitRules {
     costCenterSplitRules {
-      id bookingTextPattern priority isActive
+      id mode bookingTextPattern priority isActive
       counterparty { id name }
       allocations { id costCenter { id code name } percentage fixedAmount }
     }
@@ -19,7 +19,7 @@ const CREATE_SPLIT_RULE = gql`
   mutation CreateSplitRule($input: CreateSplitRuleInput!) {
     createCostCenterSplitRule(input: $input) {
       success error
-      rule { id counterparty { id name } bookingTextPattern priority isActive allocations { id costCenter { id code name } percentage fixedAmount } }
+      rule { id mode counterparty { id name } bookingTextPattern priority isActive allocations { id costCenter { id code name } percentage fixedAmount } }
     }
   }
 `
@@ -28,7 +28,7 @@ const UPDATE_SPLIT_RULE = gql`
   mutation UpdateSplitRule($input: UpdateSplitRuleInput!) {
     updateCostCenterSplitRule(input: $input) {
       success error
-      rule { id counterparty { id name } bookingTextPattern priority isActive allocations { id costCenter { id code name } percentage fixedAmount } }
+      rule { id mode counterparty { id name } bookingTextPattern priority isActive allocations { id costCenter { id code name } percentage fixedAmount } }
     }
   }
 `
@@ -48,6 +48,7 @@ interface RuleForm {
   counterpartyId: string
   bookingTextPattern: string
   priority: string
+  mode: string
   allocations: Allocation[]
 }
 
@@ -55,6 +56,7 @@ const emptyForm: RuleForm = {
   counterpartyId: '',
   bookingTextPattern: '',
   priority: '0',
+  mode: 'percentage',
   allocations: [{ costCenterId: '', percentage: '' }],
 }
 
@@ -75,19 +77,23 @@ export function SplitRuleSettings() {
 
   const totalPct = form.allocations.reduce((sum, a) => sum + (parseFloat(a.percentage) || 0), 0)
 
+  const isFteMode = form.mode === 'fte_distribution'
+
   const handleSubmit = async () => {
     setError('')
     if (!form.counterpartyId && !form.bookingTextPattern) {
       setError(t('splitRules.errorNeedMatcher'))
       return
     }
-    if (form.allocations.some(a => !a.costCenterId || !a.percentage)) {
-      setError(t('splitRules.errorIncompleteAllocation'))
-      return
-    }
-    if (Math.abs(totalPct - 100) > 0.01) {
-      setError(t('splitRules.errorMustTotal100'))
-      return
+    if (!isFteMode) {
+      if (form.allocations.some(a => !a.costCenterId || !a.percentage)) {
+        setError(t('splitRules.errorIncompleteAllocation'))
+        return
+      }
+      if (Math.abs(totalPct - 100) > 0.01) {
+        setError(t('splitRules.errorMustTotal100'))
+        return
+      }
     }
 
     const input: any = {
@@ -95,7 +101,8 @@ export function SplitRuleSettings() {
       bookingTextPattern: form.bookingTextPattern || null,
       priority: parseInt(form.priority) || 0,
       isActive: true,
-      allocations: form.allocations.map(a => ({
+      mode: form.mode,
+      allocations: isFteMode ? [] : form.allocations.map(a => ({
         costCenterId: a.costCenterId,
         percentage: parseFloat(a.percentage),
       })),
@@ -126,7 +133,8 @@ export function SplitRuleSettings() {
       counterpartyId: rule.counterparty?.id || '',
       bookingTextPattern: rule.bookingTextPattern || '',
       priority: String(rule.priority),
-      allocations: rule.allocations.map((a: any) => ({
+      mode: rule.mode || 'percentage',
+      allocations: rule.mode === 'fte_distribution' ? [{ costCenterId: '', percentage: '' }] : rule.allocations.map((a: any) => ({
         costCenterId: a.costCenter.id,
         percentage: a.percentage != null ? String(a.percentage) : '',
       })),
@@ -199,17 +207,37 @@ export function SplitRuleSettings() {
             </div>
           </div>
 
-          <div>
-            <label className="text-sm font-medium">{t('splitRules.priority')}</label>
-            <input
-              type="number"
-              className="w-24 mt-1 rounded-md border px-3 py-2 text-sm"
-              value={form.priority}
-              onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium">{t('splitRules.mode')}</label>
+              <select
+                className="w-full mt-1 rounded-md border px-3 py-2 text-sm"
+                value={form.mode}
+                onChange={e => setForm(f => ({ ...f, mode: e.target.value }))}
+              >
+                <option value="percentage">{t('splitRules.modePercentage')}</option>
+                <option value="fixed_amount">{t('splitRules.modeFixedAmount')}</option>
+                <option value="fte_distribution">{t('splitRules.modeFteDistribution')}</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t('splitRules.priority')}</label>
+              <input
+                type="number"
+                className="w-full mt-1 rounded-md border px-3 py-2 text-sm"
+                value={form.priority}
+                onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
+              />
+            </div>
           </div>
 
-          <div>
+          {isFteMode && (
+            <p className="text-sm text-muted-foreground bg-blue-50 rounded-md p-3">
+              {t('splitRules.fteDescription')}
+            </p>
+          )}
+
+          {!isFteMode && <div>
             <label className="text-sm font-medium">{t('splitRules.allocations')}</label>
             <div className="space-y-2 mt-1">
               {form.allocations.map((alloc, idx) => (
@@ -248,7 +276,7 @@ export function SplitRuleSettings() {
             <p className={`text-sm mt-1 ${Math.abs(totalPct - 100) > 0.01 ? 'text-destructive' : 'text-muted-foreground'}`}>
               {t('splitRules.totalPercentage')}: {totalPct.toFixed(1)}%
             </p>
-          </div>
+          </div>}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -289,7 +317,11 @@ export function SplitRuleSettings() {
                 )}
               </div>
               <div className="text-xs text-muted-foreground mt-1">
-                {rule.allocations.map((a: any) => (
+                {rule.mode === 'fte_distribution' ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                    {t('splitRules.modeFteDistribution')}
+                  </span>
+                ) : rule.allocations.map((a: any) => (
                   <span key={a.id} className="mr-3">
                     {a.costCenter.code}: {a.percentage != null ? `${a.percentage}%` : `${a.fixedAmount} fixed`}
                   </span>

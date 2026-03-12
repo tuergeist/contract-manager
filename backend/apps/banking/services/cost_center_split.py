@@ -78,6 +78,10 @@ class CostCenterSplitService:
         if not rule:
             return []
 
+        # Handle FTE distribution mode
+        if rule.mode == CostCenterSplitRule.Mode.FTE_DISTRIBUTION:
+            return CostCenterSplitService._apply_fte_rule(transaction, rule)
+
         allocations = rule.allocations.select_related("cost_center").all()
         if not allocations:
             return []
@@ -140,6 +144,92 @@ class CostCenterSplitService:
                         transaction=transaction,
                         cost_center=remainder_alloc.cost_center,
                         amount=txn_amount - allocated,
+                        is_manual=False,
+                        rule=rule,
+                    )
+                )
+
+        TransactionCostCenterSplit.objects.bulk_create(splits)
+        return splits
+
+    @staticmethod
+    def _apply_fte_rule(
+        transaction: BankTransaction, rule: CostCenterSplitRule
+    ) -> list[TransactionCostCenterSplit]:
+        """Apply an FTE distribution rule: snapshot if available, else live data."""
+        from apps.banking.models import FteDistributionSnapshot
+        from apps.banking.services.fte_snapshot import compute_fte_distribution
+
+        # Remove existing auto-applied splits
+        TransactionCostCenterSplit.objects.filter(
+            transaction=transaction, is_manual=False
+        ).delete()
+
+        tenant = transaction.tenant
+        entry_date = transaction.entry_date
+        if not entry_date:
+            return []
+
+        year_month = entry_date.strftime("%Y-%m")
+        txn_amount = abs(transaction.amount)
+
+        # Try snapshot first
+        snapshot = FteDistributionSnapshot.objects.filter(
+            tenant=tenant, year_month=year_month
+        ).first()
+
+        if snapshot:
+            entries = list(snapshot.entries.select_related("cost_center").all())
+            distribution = [
+                {
+                    "cost_center": e.cost_center,
+                    "fte_percentage": e.fte_percentage,
+                }
+                for e in entries
+                if e.cost_center is not None
+            ]
+        else:
+            # Live data fallback
+            raw = compute_fte_distribution(tenant, year_month)
+            if not raw:
+                return []
+            distribution = [
+                {
+                    "cost_center": d["cost_center"],
+                    "fte_percentage": d["fte_percentage"],
+                }
+                for d in raw
+                if d["cost_center"] is not None
+            ]
+
+        if not distribution:
+            return []
+
+        total_pct = sum(d["fte_percentage"] for d in distribution)
+        if total_pct == 0:
+            return []
+
+        # Sort descending by percentage for remainder handling
+        distribution.sort(key=lambda d: d["fte_percentage"], reverse=True)
+
+        splits = []
+        remaining = txn_amount
+
+        for i, d in enumerate(distribution):
+            if i == len(distribution) - 1:
+                amount = remaining
+            else:
+                amount = (txn_amount * d["fte_percentage"] / total_pct).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                remaining -= amount
+
+            if amount > 0:
+                splits.append(
+                    TransactionCostCenterSplit(
+                        transaction=transaction,
+                        cost_center=d["cost_center"],
+                        amount=amount,
                         is_manual=False,
                         rule=rule,
                     )

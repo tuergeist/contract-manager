@@ -1399,7 +1399,9 @@
       "none": "None",
       "saveCostProfiles": "Save Cost Profiles",
       "costProfilesSaved": "User cost profiles saved successfully",
-      "costProfilesFailed": "Failed to save user cost profiles"
+      "costProfilesFailed": "Failed to save user cost profiles",
+      "noCostCenter": "— No cost center —",
+      "costCenter": "Cost Center"
     },
     "roles": {
       "title": "Roles & Permissions",
@@ -2291,7 +2293,12 @@
     "errorIncompleteAllocation": "All allocations must have a cost center and percentage.",
     "errorMustTotal100": "Allocation percentages must total 100%.",
     "saved": "Split rule saved.",
-    "deleted": "Split rule deleted."
+    "deleted": "Split rule deleted.",
+    "mode": "Mode",
+    "modePercentage": "Percentage",
+    "modeFixedAmount": "Fixed Amount",
+    "modeFteDistribution": "FTE Distribution",
+    "fteDescription": "This rule will automatically split transactions based on the FTE distribution across departments. No manual allocations needed — percentages are computed from time tracking data or snapshots."
   },
   "splitEditor": {
     "title": "Cost Center Split",
@@ -2311,5 +2318,34 @@
     "total": "Total",
     "noData": "No data for the selected period.",
     "unassigned": "Unassigned"
+  },
+  "fteSnapshots": {
+    "title": "FTE Distribution Snapshots",
+    "description": "Monthly snapshots of the FTE distribution across departments. Used to finalize cost center splits.",
+    "captureDay": "Auto-capture day",
+    "captureDayHint": "Day of the following month when snapshot is automatically captured (1–28).",
+    "notificationEmail": "Notification email",
+    "notificationEmailPlaceholder": "email@example.com",
+    "manualCapture": "Capture snapshot for month",
+    "capture": "Capture",
+    "year": "Year",
+    "noSnapshots": "No snapshots captured yet.",
+    "departments": "departments",
+    "department": "Department",
+    "costCenter": "Cost Center",
+    "ftePercent": "FTE %",
+    "income": "Income",
+    "hours": "Hours"
+  },
+  "activation": {
+    "title": "Activate Contract",
+    "confirmMessage": "This contract will be activated. This action cannot be undone.",
+    "optionsTitle": "Post-activation actions",
+    "sendOrderConfirmation": "Send order confirmation (Auftragsbestätigung)",
+    "abDisabledNoM365": "Email sending is not configured. Set up M365 in Settings to enable.",
+    "abDisabledNoEmails": "This customer has no billing email addresses.",
+    "activating": "Activating contract...",
+    "success": "Contract activated successfully",
+    "abBeingSent": "The order confirmation is being generated and will be sent by email."
   }
 }

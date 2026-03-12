@@ -1,6 +1,8 @@
 """Celery tasks for banking app."""
 
 import logging
+from datetime import date
+
 from celery import shared_task
 from django.utils import timezone
 
@@ -38,3 +40,41 @@ def poll_invoice_inboxes():
             logger.info("Inbox %s: created %d invoices", inbox.name, len(created))
         except Exception as e:
             logger.error("Error polling inbox %s: %s", inbox.id, e)
+
+
+@shared_task(ignore_result=True)
+def capture_monthly_fte_snapshots():
+    """Daily task: capture FTE distribution snapshots on configured day of month.
+
+    For each tenant, checks if today matches their configured capture day.
+    If so, captures last month's snapshot (skips if already exists).
+    """
+    from apps.banking.services.fte_snapshot import capture_snapshot
+    from apps.tenants.models import Tenant
+
+    today = date.today()
+
+    # Compute last month
+    if today.month == 1:
+        last_year_month = f"{today.year - 1}-12"
+    else:
+        last_year_month = f"{today.year}-{today.month - 1:02d}"
+
+    for tenant in Tenant.objects.filter(is_active=True):
+        settings = tenant.settings or {}
+        capture_day = settings.get("fte_snapshot_capture_day", 7)
+
+        if today.day != capture_day:
+            continue
+
+        try:
+            snapshot = capture_snapshot(tenant, last_year_month)
+            logger.info(
+                "Captured FTE snapshot for tenant %s, month %s",
+                tenant.name, last_year_month,
+            )
+        except ValueError as e:
+            # Expected: snapshot already exists or no data
+            logger.debug("Skipped FTE snapshot for %s: %s", tenant.name, e)
+        except Exception:
+            logger.exception("Error capturing FTE snapshot for %s", tenant.name)

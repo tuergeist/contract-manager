@@ -1399,7 +1399,9 @@
       "none": "Keine",
       "saveCostProfiles": "Kostenprofile speichern",
       "costProfilesSaved": "Mitarbeiter-Kostenprofile erfolgreich gespeichert",
-      "costProfilesFailed": "Kostenprofile konnten nicht gespeichert werden"
+      "costProfilesFailed": "Kostenprofile konnten nicht gespeichert werden",
+      "noCostCenter": "— Keine Kostenstelle —",
+      "costCenter": "Kostenstelle"
     },
     "roles": {
       "title": "Rollen & Berechtigungen",
@@ -2291,7 +2293,12 @@
     "errorIncompleteAllocation": "Alle Aufteilungen müssen eine Kostenstelle und einen Prozentsatz haben.",
     "errorMustTotal100": "Die Prozentsätze müssen zusammen 100% ergeben.",
     "saved": "Aufteilungsregel gespeichert.",
-    "deleted": "Aufteilungsregel gelöscht."
+    "deleted": "Aufteilungsregel gelöscht.",
+    "mode": "Modus",
+    "modePercentage": "Prozentual",
+    "modeFixedAmount": "Festbetrag",
+    "modeFteDistribution": "FTE-Verteilung",
+    "fteDescription": "Diese Regel teilt Transaktionen automatisch basierend auf der FTE-Verteilung über Abteilungen auf. Keine manuellen Zuweisungen nötig — Prozentsätze werden aus Zeiterfassungsdaten oder Snapshots berechnet."
   },
   "splitEditor": {
     "title": "Kostenstellenaufteilung",
@@ -2311,5 +2318,34 @@
     "total": "Gesamt",
     "noData": "Keine Daten für den gewählten Zeitraum.",
     "unassigned": "Nicht zugeordnet"
+  },
+  "fteSnapshots": {
+    "title": "FTE-Verteilungs-Snapshots",
+    "description": "Monatliche Snapshots der FTE-Verteilung über Abteilungen. Wird zur Finalisierung der Kostenstellenaufteilung verwendet.",
+    "captureDay": "Auto-Erfassungstag",
+    "captureDayHint": "Tag des Folgemonats, an dem der Snapshot automatisch erfasst wird (1–28).",
+    "notificationEmail": "Benachrichtigungs-E-Mail",
+    "notificationEmailPlaceholder": "email@beispiel.de",
+    "manualCapture": "Snapshot für Monat erfassen",
+    "capture": "Erfassen",
+    "year": "Jahr",
+    "noSnapshots": "Noch keine Snapshots erfasst.",
+    "departments": "Abteilungen",
+    "department": "Abteilung",
+    "costCenter": "Kostenstelle",
+    "ftePercent": "FTE %",
+    "income": "Einkommen",
+    "hours": "Stunden"
+  },
+  "activation": {
+    "title": "Vertrag aktivieren",
+    "confirmMessage": "Dieser Vertrag wird aktiviert. Diese Aktion kann nicht rückgängig gemacht werden.",
+    "optionsTitle": "Aktionen nach der Aktivierung",
+    "sendOrderConfirmation": "Auftragsbestätigung senden",
+    "abDisabledNoM365": "E-Mail-Versand ist nicht konfiguriert. Richten Sie M365 in den Einstellungen ein.",
+    "abDisabledNoEmails": "Dieser Kunde hat keine Rechnungs-E-Mail-Adressen.",
+    "activating": "Vertrag wird aktiviert...",
+    "success": "Vertrag erfolgreich aktiviert",
+    "abBeingSent": "Die Auftragsbestätigung wird erstellt und per E-Mail versendet."
   }
 }

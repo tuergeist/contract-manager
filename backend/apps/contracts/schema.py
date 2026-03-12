@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Annotated, List
+from typing import TYPE_CHECKING, Annotated, List, Optional
 import base64
 import tempfile
 import os
@@ -535,6 +535,12 @@ class ContractType:
         return [todo_to_type(todo) for todo in todos]
 
     @strawberry.field
+    def order_confirmation(self) -> OrderConfirmationType | None:
+        """Get the order confirmation for this contract, if one exists."""
+        ab = OrderConfirmation.objects.filter(contract=self).first()
+        return ab
+
+    @strawberry.field
     def time_tracking_mappings_count(self) -> int:
         """Get the number of time tracking project mappings for this contract."""
         return TimeTrackingProjectMapping.objects.filter(contract=self).count()
@@ -763,6 +769,12 @@ class ContractGroupResult:
     group: ContractGroupType | None = None
     success: bool = False
     error: str | None = None
+
+
+@strawberry.input
+class ActivationOptionsInput:
+    """Options for the draft → active transition."""
+    send_order_confirmation: bool = True
 
 
 @strawberry.input
@@ -1680,6 +1692,9 @@ class DepartmentType:
     id: strawberry.ID
     name: str
     sort_order: int
+    cost_center_id: Optional[strawberry.ID] = None
+    cost_center_name: Optional[str] = None
+    cost_center_code: Optional[str] = None
 
 
 @strawberry.type
@@ -3408,8 +3423,15 @@ class ContractQuery:
         if not user.tenant:
             return []
         return [
-            DepartmentType(id=strawberry.ID(str(d.id)), name=d.name, sort_order=d.sort_order)
-            for d in Department.objects.filter(tenant=user.tenant)
+            DepartmentType(
+                id=strawberry.ID(str(d.id)),
+                name=d.name,
+                sort_order=d.sort_order,
+                cost_center_id=strawberry.ID(str(d.cost_center_id)) if d.cost_center_id else None,
+                cost_center_name=d.cost_center.name if d.cost_center_id else None,
+                cost_center_code=d.cost_center.code if d.cost_center_id else None,
+            )
+            for d in Department.objects.filter(tenant=user.tenant).select_related("cost_center")
         ]
 
     @strawberry.field
@@ -4817,6 +4839,7 @@ class ContractMutation:
         info: Info[Context, None],
         contract_id: strawberry.ID,
         new_status: str,
+        activation_options: ActivationOptionsInput | None = None,
     ) -> ContractResult:
         """
         Transition a contract to a new status.
@@ -4924,6 +4947,33 @@ class ContractMutation:
                         },
                         arr_delta=Decimal("0"),
                     )
+
+            # Post-activation: create order confirmation if requested
+            if (
+                old_status == Contract.Status.DRAFT
+                and new_status == Contract.Status.ACTIVE
+            ):
+                send_ab = True
+                if activation_options is not None:
+                    send_ab = activation_options.send_order_confirmation
+                if send_ab:
+                    try:
+                        from apps.contracts.services.order_confirmation import OrderConfirmationService
+                        from apps.contracts.tasks import send_order_confirmation_email_task
+
+                        service = OrderConfirmationService(user.tenant)
+                        ab = service.create_order_confirmation(
+                            contract=contract,
+                            user=user,
+                        )
+                        # Queue email sending asynchronously
+                        send_order_confirmation_email_task.delay(ab.id, user_id=user.id)
+                    except Exception:
+                        # AB creation failure should not block activation
+                        import logging
+                        logging.getLogger(__name__).exception(
+                            "Failed to create order confirmation for contract %s", contract.id
+                        )
 
             return ContractResult(contract=contract, success=True)
         except Exception as e:
@@ -6805,9 +6855,13 @@ class ContractImportMutation:
 
     @strawberry.mutation
     def update_department(
-        self, info: Info[Context, None], id: strawberry.ID, name: str
+        self,
+        info: Info[Context, None],
+        id: strawberry.ID,
+        name: str,
+        cost_center_id: Optional[strawberry.ID] = UNSET,
     ) -> DeleteResult:
-        """Rename a department."""
+        """Update a department (name and/or cost center)."""
         user, err = check_perm(info, "settings", "write")
         if err:
             return DeleteResult(error=err)
@@ -6825,8 +6879,22 @@ class ContractImportMutation:
         if Department.objects.filter(tenant=user.tenant, name=name).exclude(id=id).exists():
             return DeleteResult(error="A department with this name already exists")
 
+        update_fields = ["name", "updated_at"]
         dept.name = name
-        dept.save(update_fields=["name", "updated_at"])
+
+        if cost_center_id is not UNSET:
+            if cost_center_id is None:
+                dept.cost_center = None
+            else:
+                from apps.banking.models import CostCenter
+
+                cc = CostCenter.objects.filter(tenant=user.tenant, id=cost_center_id).first()
+                if not cc:
+                    return DeleteResult(error="Cost center not found")
+                dept.cost_center = cc
+            update_fields.append("cost_center_id")
+
+        dept.save(update_fields=update_fields)
         return DeleteResult(success=True)
 
     @strawberry.mutation

@@ -215,6 +215,7 @@ class CostCenterSplitAllocationType:
 @strawberry.type
 class CostCenterSplitRuleType:
     id: strawberry.ID
+    mode: str
     counterparty: CounterpartyType | None = None
     booking_text_pattern: str | None = None
     priority: int
@@ -251,6 +252,7 @@ class CreateSplitRuleInput:
     booking_text_pattern: str | None = None
     priority: int = 0
     is_active: bool = True
+    mode: str = "percentage"
     allocations: List[SplitAllocationInput] = strawberry.field(default_factory=list)
 
 
@@ -298,6 +300,32 @@ class DeleteCostCenterResult:
     error: str | None = None
     in_use: bool = False
     usage_count: int = 0
+
+
+@strawberry.type
+class FteDistributionEntryType:
+    id: strawberry.ID
+    department_name: str
+    cost_center_code: str
+    fte_percentage: Decimal
+    monthly_income_total: Decimal
+    hours_total: Decimal
+
+
+@strawberry.type
+class FteDistributionSnapshotType:
+    id: strawberry.ID
+    year_month: str
+    captured_at: str
+    captured_by_name: str | None = None
+    entries: List[FteDistributionEntryType] = strawberry.field(default_factory=list)
+
+
+@strawberry.type
+class FteSnapshotResult:
+    success: bool
+    error: str | None = None
+    snapshot: FteDistributionSnapshotType | None = None
 
 
 @strawberry.type
@@ -421,6 +449,7 @@ def _make_split_rule_type(rule) -> CostCenterSplitRuleType:
     cp = getattr(rule, "counterparty", None)
     return CostCenterSplitRuleType(
         id=strawberry.ID(str(rule.id)),
+        mode=rule.mode,
         counterparty=_make_counterparty_type(cp) if cp else None,
         booking_text_pattern=rule.booking_text_pattern,
         priority=rule.priority,
@@ -859,6 +888,42 @@ class BankingQuery:
 
         rows.sort(key=lambda r: r.label)
         return CostCenterReportType(rows=rows, date_from=date_from, date_to=date_to)
+
+    @strawberry.field
+    def fte_distribution_snapshots(
+        self, info: Info[Context, None], year: int | None = None,
+    ) -> List[FteDistributionSnapshotType]:
+        """List FTE distribution snapshots, optionally filtered by year."""
+        user = require_perm(info, "cost_centers", "read")
+        from apps.banking.models import FteDistributionSnapshot
+
+        qs = FteDistributionSnapshot.objects.filter(
+            tenant=user.tenant
+        ).select_related("captured_by").prefetch_related("entries__cost_center")
+        if year is not None:
+            qs = qs.filter(year_month__startswith=str(year))
+
+        results = []
+        for snap in qs:
+            entries = [
+                FteDistributionEntryType(
+                    id=strawberry.ID(str(e.id)),
+                    department_name=e.department_name,
+                    cost_center_code=e.cost_center_code,
+                    fte_percentage=e.fte_percentage,
+                    monthly_income_total=e.monthly_income_total,
+                    hours_total=e.hours_total,
+                )
+                for e in snap.entries.all()
+            ]
+            results.append(FteDistributionSnapshotType(
+                id=strawberry.ID(str(snap.id)),
+                year_month=snap.year_month,
+                captured_at=snap.captured_at.isoformat(),
+                captured_by_name=snap.captured_by.get_full_name() if snap.captured_by else None,
+                entries=entries,
+            ))
+        return results
 
     @strawberry.field
     def transaction_match_details(
@@ -2128,20 +2193,23 @@ class BankingMutation:
                 success=False, error="Either counterparty or booking text pattern is required."
             )
 
-        if not input.allocations:
+        is_fte_mode = input.mode == "fte_distribution"
+
+        if not is_fte_mode and not input.allocations:
             return CostCenterSplitRuleResult(
                 success=False, error="At least one allocation is required."
             )
 
         # Validate allocations total 100% for percentage rules
-        has_pct = any(a.percentage is not None for a in input.allocations)
-        if has_pct:
-            total_pct = sum(a.percentage or Decimal("0") for a in input.allocations)
-            if total_pct != Decimal("100"):
-                return CostCenterSplitRuleResult(
-                    success=False,
-                    error=f"Allocation percentages must total 100% (got {total_pct}%).",
-                )
+        if not is_fte_mode:
+            has_pct = any(a.percentage is not None for a in input.allocations)
+            if has_pct:
+                total_pct = sum(a.percentage or Decimal("0") for a in input.allocations)
+                if total_pct != Decimal("100"):
+                    return CostCenterSplitRuleResult(
+                        success=False,
+                        error=f"Allocation percentages must total 100% (got {total_pct}%).",
+                    )
 
         counterparty = None
         if input.counterparty_id:
@@ -2156,6 +2224,7 @@ class BankingMutation:
             booking_text_pattern=input.booking_text_pattern or None,
             priority=input.priority,
             is_active=input.is_active,
+            mode=input.mode,
         )
 
         for alloc_input in input.allocations:
@@ -2257,6 +2326,46 @@ class BankingMutation:
 
         rule.delete()
         return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def capture_fte_distribution_snapshot(
+        self, info: Info[Context, None], year_month: str,
+    ) -> FteSnapshotResult:
+        """Manually capture an FTE distribution snapshot for a given month."""
+        user, err = check_perm(info, "cost_centers", "config")
+        if err:
+            return FteSnapshotResult(success=False, error=err)
+        if not user.tenant:
+            return FteSnapshotResult(success=False, error="No tenant assigned")
+
+        from apps.banking.services.fte_snapshot import capture_snapshot
+
+        try:
+            snapshot = capture_snapshot(user.tenant, year_month, user=user)
+        except ValueError as e:
+            return FteSnapshotResult(success=False, error=str(e))
+
+        entries = [
+            FteDistributionEntryType(
+                id=strawberry.ID(str(e.id)),
+                department_name=e.department_name,
+                cost_center_code=e.cost_center_code,
+                fte_percentage=e.fte_percentage,
+                monthly_income_total=e.monthly_income_total,
+                hours_total=e.hours_total,
+            )
+            for e in snapshot.entries.all()
+        ]
+        return FteSnapshotResult(
+            success=True,
+            snapshot=FteDistributionSnapshotType(
+                id=strawberry.ID(str(snapshot.id)),
+                year_month=snapshot.year_month,
+                captured_at=snapshot.captured_at.isoformat(),
+                captured_by_name=user.get_full_name() if user else None,
+                entries=entries,
+            ),
+        )
 
     @strawberry.mutation
     def split_transaction_cost_centers(

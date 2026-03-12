@@ -47,8 +47,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { CustomerPickerDialog } from '@/components/CustomerPickerDialog'
-import { OrderConfirmationDialog } from './OrderConfirmationDialog'
-import { ClockodoActivationDialog } from './ClockodoActivationDialog'
+import { ActivationWorkflowModal } from './ActivationWorkflowModal'
 import { MergeContractDialog } from './MergeContractDialog'
 
 const CUSTOMERS_SEARCH_QUERY = gql`
@@ -1243,16 +1242,27 @@ export function ContractForm() {
         </form>
       </Form>
 
-      {/* Status Transition Modal */}
-      {statusTransition && id && contract && (
-        <StatusTransitionModal
+      {/* Activation Workflow Modal (draft → active) */}
+      {statusTransition && id && contract && statusTransition.from === 'draft' && statusTransition.to === 'active' && (
+        <ActivationWorkflowModal
           contractId={id}
           contract={contract}
+          onClose={() => setStatusTransition(null)}
+          onSuccess={() => {
+            setStatusTransition(null)
+            window.location.reload()
+          }}
+        />
+      )}
+
+      {/* Status Transition Modal (all other transitions) */}
+      {statusTransition && id && contract && !(statusTransition.from === 'draft' && statusTransition.to === 'active') && (
+        <StatusTransitionModal
+          contractId={id}
           transition={statusTransition}
           onClose={() => setStatusTransition(null)}
           onSuccess={() => {
             setStatusTransition(null)
-            // Refetch contract data
             window.location.reload()
           }}
         />
@@ -1317,145 +1327,40 @@ export function ContractForm() {
   )
 }
 
-const ACTIVATION_CHECKLIST_QUERY = gql`
-  query ActivationChecklistSettings {
-    activationChecklistSettings {
-      availableFields
-      requiredFields
-    }
-  }
-`
-
-// Map backend field names to contract object keys
-const FIELD_KEY_MAP: Record<string, keyof Contract> = {
-  po_number: 'poNumber',
-  order_confirmation_number: 'orderConfirmationNumber',
-  netsuite_sales_order_number: 'netsuiteSalesOrderNumber',
-  netsuite_contract_number: 'netsuiteContractNumber',
-  netsuite_url: 'netsuiteUrl',
-}
-
-const M365_CHECK_QUERY = gql`
-  query M365Check {
-    m365Settings {
-      isConfigured
-    }
-  }
-`
-
-// Status Transition Modal Component
+// Status Transition Modal Component (for non-activation transitions)
 function StatusTransitionModal({
   contractId,
-  contract,
   transition,
   onClose,
   onSuccess,
 }: {
   contractId: string
-  contract: Contract
   transition: StatusTransition
   onClose: () => void
   onSuccess: () => void
 }) {
   const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
-  const [showABDialog, setShowABDialog] = useState(false)
-
-  const isDraftToActive = transition.from === 'draft' && transition.to === 'active'
-  const { data: checklistData } = useQuery(ACTIVATION_CHECKLIST_QUERY, { skip: !isDraftToActive })
-  const { data: m365Data } = useQuery(M365_CHECK_QUERY, { skip: !isDraftToActive })
 
   const [transitionStatus, { loading }] = useMutation(TRANSITION_CONTRACT_STATUS_MUTATION)
 
-  const m365Configured = m365Data?.m365Settings?.isConfigured === true
-
-  // Determine missing required fields
-  const missingFields: string[] = []
-  if (isDraftToActive && checklistData?.activationChecklistSettings) {
-    const requiredFields: string[] = checklistData.activationChecklistSettings.requiredFields || []
-    for (const field of requiredFields) {
-      const key = FIELD_KEY_MAP[field]
-      if (key && !contract[key]) {
-        missingFields.push(field)
-      }
-    }
-  }
-
-  const [showClockodoDialog, setShowClockodoDialog] = useState(false)
-
-  const doTransition = async () => {
-    const result = await transitionStatus({
-      variables: {
-        contractId,
-        newStatus: transition.to,
-      },
-    })
-    if (!result.data?.transitionContractStatus.success) {
-      throw new Error(result.data?.transitionContractStatus.error || 'Status change failed')
-    }
-  }
-
-  const proceedAfterClockodo = async () => {
-    setShowClockodoDialog(false)
-
-    // After Clockodo provisioning, check if AB dialog is needed
-    // Skip if the contract already has an order confirmation number
-    if (isDraftToActive && m365Configured && !contract.orderConfirmationNumber) {
-      setShowABDialog(true)
-      return
-    }
-
-    try {
-      await doTransition()
-      onSuccess()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    }
-  }
-
   const handleConfirm = async () => {
     setError(null)
-
-    // For draft→active, show Clockodo dialog first (if applicable)
-    if (isDraftToActive && missingFields.length === 0) {
-      setShowClockodoDialog(true)
-      return
-    }
-
     try {
-      await doTransition()
+      const result = await transitionStatus({
+        variables: {
+          contractId,
+          newStatus: transition.to,
+        },
+      })
+      if (!result.data?.transitionContractStatus.success) {
+        setError(result.data?.transitionContractStatus.error || 'Status change failed')
+        return
+      }
       onSuccess()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     }
-  }
-
-  if (showClockodoDialog) {
-    return (
-      <ClockodoActivationDialog
-        contractId={contractId}
-        open={true}
-        onClose={() => setShowClockodoDialog(false)}
-        onComplete={proceedAfterClockodo}
-      />
-    )
-  }
-
-  if (showABDialog) {
-    return (
-      <OrderConfirmationDialog
-        open={true}
-        onOpenChange={(open) => {
-          if (!open) {
-            setShowABDialog(false)
-          }
-        }}
-        contractId={contractId}
-        activationMode={true}
-        onActivate={doTransition}
-        onSuccess={onSuccess}
-      />
-    )
   }
 
   return (
@@ -1471,18 +1376,6 @@ function StatusTransitionModal({
           </div>
         )}
 
-        {missingFields.length > 0 && (
-          <div className="rounded border border-amber-200 bg-amber-50 p-3">
-            <p className="text-sm font-medium text-amber-800">{t('settings.activationChecklist.missingFieldsTitle')}</p>
-            <p className="mt-1 text-sm text-amber-700">{t('settings.activationChecklist.missingFieldsDescription')}</p>
-            <ul className="mt-2 list-inside list-disc text-sm text-amber-700">
-              {missingFields.map((field) => (
-                <li key={field}>{t(`settings.activationChecklist.fields.${field}`)}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
         <div className="space-y-4 py-4">
           <p>{t(`contracts.statusTransition.${transition.confirmKey}`)}</p>
           <p className={`text-sm ${transition.isReversible ? 'text-muted-foreground' : 'text-destructive font-medium'}`}>
@@ -1490,11 +1383,6 @@ function StatusTransitionModal({
               ? t('contracts.statusTransition.warningReversible')
               : t('contracts.statusTransition.warningIrreversible')}
           </p>
-          {isDraftToActive && missingFields.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              {t('contracts.statusTransition.activationNextSteps')}
-            </p>
-          )}
         </div>
 
         <DialogFooter>
@@ -1504,7 +1392,7 @@ function StatusTransitionModal({
           <Button
             variant={transition.to === 'cancelled' || transition.to === 'ended' ? 'destructive' : 'default'}
             onClick={handleConfirm}
-            disabled={loading || missingFields.length > 0}
+            disabled={loading}
           >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {t(`contracts.statusTransition.${transition.label}`)}

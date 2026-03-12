@@ -350,6 +350,42 @@ class OrderConfirmationMutation:
         )
 
     @strawberry.mutation
+    def regenerate_order_confirmation_pdf(
+        self,
+        info: Info[Context, None],
+        order_confirmation_id: strawberry.ID,
+    ) -> OrderConfirmationResult:
+        """Regenerate the PDF for an order confirmation (e.g. after a failed generation)."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return OrderConfirmationResult(error=err)
+        if not user.tenant:
+            return OrderConfirmationResult(error="No tenant assigned")
+
+        ab = OrderConfirmation.objects.filter(
+            tenant=user.tenant, id=order_confirmation_id
+        ).select_related("contract").first()
+        if not ab:
+            return OrderConfirmationResult(error="Order confirmation not found")
+
+        from django.core.files.base import ContentFile
+        from apps.contracts.services.order_confirmation import OrderConfirmationService
+
+        service = OrderConfirmationService(user.tenant)
+        try:
+            pdf_bytes = service.generate_pdf(
+                contract=ab.contract,
+                ab_number=ab.order_confirmation_number,
+                personal_message=ab.personal_message or "",
+                include_message_in_pdf=ab.include_message_in_pdf,
+                language=ab.language,
+            )
+            ab.pdf_file.save(f"{ab.order_confirmation_number}.pdf", ContentFile(pdf_bytes), save=True)
+            return OrderConfirmationResult(order_confirmation=ab, success=True)
+        except Exception as e:
+            return OrderConfirmationResult(error=str(e))
+
+    @strawberry.mutation
     def set_ab_email_template(
         self,
         info: Info[Context, None],

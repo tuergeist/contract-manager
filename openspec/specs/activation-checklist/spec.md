@@ -8,7 +8,7 @@ Configurable per-tenant checklist of required contract fields that must be fille
 
 2. **REQ-2: Backend validation** — When transitioning a contract from `draft` to `active`, the `update_contract_status` mutation checks all configured required fields. If any are empty/null, the mutation returns an error listing the missing fields.
 
-3. **REQ-3: Frontend pre-check** — The activate confirmation dialog checks required fields before showing the confirm button. Missing fields are displayed as a warning list. The confirm button is disabled until all required fields are filled.
+3. **REQ-3: Frontend pre-check** — The `ActivationWorkflowModal` checks required fields before showing the confirm button. Missing fields are displayed as a warning list. The Activate button is disabled until all required fields are filled. (Previously in `StatusTransitionModal`, relocated to the new activation workflow modal.)
 
 4. **REQ-4: No impact on existing contracts** — Validation only applies to the draft → active transition. Already-active contracts and other transitions are unaffected.
 

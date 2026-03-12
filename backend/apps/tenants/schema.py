@@ -512,10 +512,11 @@ class HelpVideoLinksEntryInput:
 
 
 @strawberry.type
-@strawberry.type
 class TenantSettingsType:
     two_factor_enforced: bool = False
     payment_delay_days: int = 60
+    fte_snapshot_capture_day: int = 7
+    fte_snapshot_notification_email: str | None = None
 
 
 @strawberry.type
@@ -530,6 +531,8 @@ class TenantQuery:
         return TenantSettingsType(
             two_factor_enforced=s.get("two_factor_enforced", False),
             payment_delay_days=s.get("payment_delay_days", 60),
+            fte_snapshot_capture_day=s.get("fte_snapshot_capture_day", 7),
+            fte_snapshot_notification_email=s.get("fte_snapshot_notification_email"),
         )
 
     @strawberry.field
@@ -1852,6 +1855,35 @@ class TenantMutation:
         tenant.settings = s
         tenant.save(update_fields=["settings"])
 
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def update_fte_snapshot_settings(
+        self,
+        info: Info[Context, None],
+        capture_day: int | None = None,
+        notification_email: str | None = strawberry.UNSET,
+    ) -> OperationResult:
+        """Update FTE snapshot settings. Requires cost_centers.config."""
+        user, err = check_perm(info, "cost_centers", "config")
+        if err:
+            return OperationResult(success=False, error=err)
+        if not user.tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        tenant = user.tenant
+        s = tenant.settings or {}
+
+        if capture_day is not None:
+            if capture_day < 1 or capture_day > 28:
+                return OperationResult(success=False, error="Capture day must be between 1 and 28")
+            s["fte_snapshot_capture_day"] = capture_day
+
+        if notification_email is not strawberry.UNSET:
+            s["fte_snapshot_notification_email"] = notification_email
+
+        tenant.settings = s
+        tenant.save(update_fields=["settings"])
         return OperationResult(success=True)
 
     @strawberry.mutation

@@ -1562,6 +1562,168 @@ class TestActivationChecklist:
 
 
 # =============================================================================
+# Activation Workflow Tests
+# =============================================================================
+
+UPDATE_CONTRACT_STATUS_WITH_OPTIONS_MUTATION = """
+    mutation TransitionContractStatus(
+        $contractId: ID!, $newStatus: String!, $activationOptions: ActivationOptionsInput
+    ) {
+        transitionContractStatus(
+            contractId: $contractId, newStatus: $newStatus,
+            activationOptions: $activationOptions
+        ) {
+            success
+            error
+            contract { id status }
+        }
+    }
+"""
+
+CONTRACT_ORDER_CONFIRMATION_QUERY = """
+    query Contract($id: ID!) {
+        contract(id: $id) {
+            id
+            orderConfirmation {
+                id
+                orderConfirmationNumber
+                status
+                pdfUrl
+            }
+        }
+    }
+"""
+
+
+@pytest.mark.django_db
+class TestActivationWorkflow:
+    @pytest.fixture
+    def customer(self, tenant):
+        return Customer.objects.create(tenant=tenant, name="Test Customer")
+
+    @pytest.fixture
+    def draft_contract(self, tenant, customer):
+        return Contract.objects.create(
+            tenant=tenant, customer=customer, name="Draft Contract",
+            status=Contract.Status.DRAFT, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+        )
+
+    def test_activation_with_send_ab_false(self, user, tenant, draft_contract):
+        """Activation with sendOrderConfirmation=false should not create an AB."""
+        from apps.contracts.order_confirmation_models import OrderConfirmation
+
+        result = run_graphql(UPDATE_CONTRACT_STATUS_WITH_OPTIONS_MUTATION, {
+            "contractId": str(draft_contract.id),
+            "newStatus": "active",
+            "activationOptions": {"sendOrderConfirmation": False},
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["transitionContractStatus"]
+        assert data["success"] is True
+        assert data["contract"]["status"] == "active"
+
+        # No OrderConfirmation should exist
+        assert not OrderConfirmation.objects.filter(contract=draft_contract).exists()
+
+    def test_activation_with_send_ab_true(self, user, tenant, draft_contract):
+        """Activation with sendOrderConfirmation=true should create an AB."""
+        from apps.contracts.order_confirmation_models import OrderConfirmation
+        from unittest.mock import patch
+
+        # Mock the email task to avoid actual sending
+        with patch("apps.contracts.tasks.send_order_confirmation_email_task") as mock_task:
+            result = run_graphql(UPDATE_CONTRACT_STATUS_WITH_OPTIONS_MUTATION, {
+                "contractId": str(draft_contract.id),
+                "newStatus": "active",
+                "activationOptions": {"sendOrderConfirmation": True},
+            }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["transitionContractStatus"]
+        assert data["success"] is True
+
+        # OrderConfirmation should exist
+        ab = OrderConfirmation.objects.filter(contract=draft_contract).first()
+        assert ab is not None
+        assert ab.order_confirmation_number != ""
+        mock_task.delay.assert_called_once()
+
+    def test_activation_options_ignored_for_non_draft(self, user, tenant, customer):
+        """activationOptions should be ignored for non-draft→active transitions."""
+        from apps.contracts.order_confirmation_models import OrderConfirmation
+
+        contract = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Paused",
+            status=Contract.Status.PAUSED, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+        )
+        result = run_graphql(UPDATE_CONTRACT_STATUS_WITH_OPTIONS_MUTATION, {
+            "contractId": str(contract.id),
+            "newStatus": "active",
+            "activationOptions": {"sendOrderConfirmation": True},
+        }, make_context(user))
+
+        assert result.errors is None
+        assert result.data["transitionContractStatus"]["success"] is True
+        assert not OrderConfirmation.objects.filter(contract=contract).exists()
+
+    def test_activation_default_creates_ab(self, user, tenant, draft_contract):
+        """Activation without activationOptions defaults to creating AB."""
+        from apps.contracts.order_confirmation_models import OrderConfirmation
+        from unittest.mock import patch
+
+        with patch("apps.contracts.tasks.send_order_confirmation_email_task"):
+            result = run_graphql(UPDATE_CONTRACT_STATUS_WITH_OPTIONS_MUTATION, {
+                "contractId": str(draft_contract.id),
+                "newStatus": "active",
+            }, make_context(user))
+
+        assert result.errors is None
+        assert result.data["transitionContractStatus"]["success"] is True
+        assert OrderConfirmation.objects.filter(contract=draft_contract).exists()
+
+    def test_order_confirmation_query_on_contract(self, user, tenant, draft_contract):
+        """Contract query should return linked OrderConfirmation."""
+        from apps.contracts.order_confirmation_models import OrderConfirmation
+        from unittest.mock import patch
+
+        # Activate with AB
+        with patch("apps.contracts.tasks.send_order_confirmation_email_task"):
+            run_graphql(UPDATE_CONTRACT_STATUS_WITH_OPTIONS_MUTATION, {
+                "contractId": str(draft_contract.id),
+                "newStatus": "active",
+                "activationOptions": {"sendOrderConfirmation": True},
+            }, make_context(user))
+
+        result = run_graphql(CONTRACT_ORDER_CONFIRMATION_QUERY, {
+            "id": str(draft_contract.id),
+        }, make_context(user))
+
+        assert result.errors is None
+        contract_data = result.data["contract"]
+        assert contract_data["orderConfirmation"] is not None
+        assert contract_data["orderConfirmation"]["orderConfirmationNumber"] != ""
+
+    def test_checklist_still_blocks_activation(self, user, tenant, draft_contract):
+        """Checklist validation still blocks activation with activationOptions."""
+        tenant.settings = {"activation_required_fields": ["po_number"]}
+        tenant.save(update_fields=["settings"])
+
+        result = run_graphql(UPDATE_CONTRACT_STATUS_WITH_OPTIONS_MUTATION, {
+            "contractId": str(draft_contract.id),
+            "newStatus": "active",
+            "activationOptions": {"sendOrderConfirmation": True},
+        }, make_context(user))
+
+        assert result.errors is None
+        data = result.data["transitionContractStatus"]
+        assert data["success"] is False
+        assert "po_number" in data["error"]
+
+
+# =============================================================================
 # Item Dependencies & Delivery Tests
 # =============================================================================
 

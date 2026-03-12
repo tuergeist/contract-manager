@@ -279,4 +279,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.contracts.tasks.auto_link_time_tracking_projects",
         "schedule": 86400,  # daily
     },
+    "capture-fte-snapshots": {
+        "task": "apps.banking.tasks.capture_monthly_fte_snapshots",
+        "schedule": 86400,  # daily (checks capture day internally)
+    },
 }

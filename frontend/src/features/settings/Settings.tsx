@@ -71,7 +71,13 @@ const SAVE_PROJECT_TEMPLATES = gql`
 
 const DEPARTMENTS_QUERY = gql`
   query Departments {
-    departments { id name sortOrder }
+    departments { id name sortOrder costCenterId costCenterName costCenterCode }
+  }
+`
+
+const COST_CENTERS_FOR_DEPT_QUERY = gql`
+  query CostCentersForDept {
+    costCenters(isActive: true) { id code name }
   }
 `
 
@@ -94,8 +100,8 @@ const CREATE_DEPARTMENT = gql`
 `
 
 const UPDATE_DEPARTMENT = gql`
-  mutation UpdateDepartment($id: ID!, $name: String!) {
-    updateDepartment(id: $id, name: $name) { success error }
+  mutation UpdateDepartment($id: ID!, $name: String!, $costCenterId: ID) {
+    updateDepartment(id: $id, name: $name, costCenterId: $costCenterId) { success error }
   }
 `
 
@@ -399,6 +405,7 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
 
   const isTimeTrackingConfigured = !!ttSettingsData?.timeTrackingSettings?.isConfigured
   const { data: deptsData, refetch: refetchDepts } = useQuery(DEPARTMENTS_QUERY, { skip: !isTimeTrackingConfigured })
+  const { data: costCentersForDeptData } = useQuery(COST_CENTERS_FOR_DEPT_QUERY, { skip: !isTimeTrackingConfigured })
   const [fetchServices, { data: servicesData, loading: loadingServices }] = useLazyQuery(CLOCKODO_SERVICES_QUERY)
   const { data: mappingsData, refetch: refetchMappings } = useQuery(DEPARTMENT_SERVICE_MAPPINGS_QUERY, { skip: !isTimeTrackingConfigured })
   const [createDepartment] = useMutation(CREATE_DEPARTMENT)
@@ -1815,7 +1822,7 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
             <div className="mt-4 space-y-4">
               {/* Department list */}
               <div className="space-y-2">
-                {(deptsData?.departments || []).map((dept: { id: string; name: string }) => (
+                {(deptsData?.departments || []).map((dept: { id: string; name: string; costCenterId: string | null; costCenterName: string | null; costCenterCode: string | null }) => (
                   <div key={dept.id} className="flex items-center gap-2">
                     {editingDeptId === dept.id ? (
                       <>
@@ -1842,7 +1849,21 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
                       </>
                     ) : (
                       <>
-                        <span className="text-sm text-gray-900">{dept.name}</span>
+                        <span className="text-sm text-gray-900 min-w-[120px]">{dept.name}</span>
+                        <select
+                          value={dept.costCenterId || ''}
+                          onChange={async (e) => {
+                            const ccId = e.target.value || null
+                            const result = await updateDepartment({ variables: { id: dept.id, name: dept.name, costCenterId: ccId } })
+                            if (result.data?.updateDepartment?.success) refetchDepts()
+                          }}
+                          className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700"
+                        >
+                          <option value="">{t('settings.departments.noCostCenter')}</option>
+                          {(costCentersForDeptData?.costCenters || []).map((cc: { id: string; code: string; name: string }) => (
+                            <option key={cc.id} value={cc.id}>{cc.code} — {cc.name}</option>
+                          ))}
+                        </select>
                         <button
                           onClick={() => { setEditingDeptId(dept.id); setEditingDeptName(dept.name) }}
                           className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"

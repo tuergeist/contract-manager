@@ -187,7 +187,17 @@ class BankTransaction(TenantModel):
 class CostCenterSplitRule(TenantModel):
     """A rule for automatically splitting transactions across cost centers."""
 
+    class Mode(models.TextChoices):
+        PERCENTAGE = "percentage", "Percentage"
+        FIXED_AMOUNT = "fixed_amount", "Fixed Amount"
+        FTE_DISTRIBUTION = "fte_distribution", "FTE Distribution"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    mode = models.CharField(
+        max_length=20,
+        choices=Mode.choices,
+        default=Mode.PERCENTAGE,
+    )
     counterparty = models.ForeignKey(
         Counterparty,
         on_delete=models.CASCADE,
@@ -292,6 +302,65 @@ class TransactionCostCenterSplit(models.Model):
 
     def __str__(self):
         return f"{self.transaction} → {self.cost_center.code}: {self.amount}"
+
+
+class FteDistributionSnapshot(TenantModel):
+    """Immutable monthly snapshot of FTE distribution across departments."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    year_month = models.CharField(
+        max_length=7,
+        help_text="YYYY-MM format, e.g. 2026-03",
+    )
+    captured_at = models.DateTimeField(auto_now_add=True)
+    captured_by = models.ForeignKey(
+        "tenants.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="captured_fte_snapshots",
+    )
+
+    class Meta:
+        unique_together = ["tenant", "year_month"]
+        ordering = ["-year_month"]
+
+    def __str__(self):
+        return f"FTE Snapshot {self.year_month} ({self.tenant})"
+
+
+class FteDistributionEntry(models.Model):
+    """Per-department entry within an FTE distribution snapshot."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    snapshot = models.ForeignKey(
+        FteDistributionSnapshot,
+        on_delete=models.CASCADE,
+        related_name="entries",
+    )
+    department = models.ForeignKey(
+        "contracts.Department",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    department_name = models.CharField(max_length=100)
+    cost_center = models.ForeignKey(
+        CostCenter,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    cost_center_code = models.CharField(max_length=20)
+    fte_percentage = models.DecimalField(max_digits=7, decimal_places=4)
+    monthly_income_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    hours_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ["-fte_percentage"]
+
+    def __str__(self):
+        return f"{self.department_name} ({self.cost_center_code}): {self.fte_percentage}%"
 
 
 class RecurringPattern(TenantModel):
