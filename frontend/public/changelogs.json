@@ -1,5 +1,21 @@
 [
   {
+    "version": "2.22.3",
+    "date": "2026-03-12",
+    "title": "Contract merge & scoped offers",
+    "description": "Merge a source contract's items into a target contract of the same customer, with date overrides, amendment tracking, and HubSpot deal ID preservation. Offers can now be scoped to specific contract items.",
+    "type": "feature",
+    "details": [
+      "Added 'Merge into...' action on draft/active contracts without invoices",
+      "Merge dialog with target contract selector, item preview table, and per-item date editing",
+      "Automatic amendment creation when merging into active contracts",
+      "HubSpot deal ID preserved on transferred items for traceability",
+      "Atomic merge with source contract deletion and Clockodo mapping cleanup",
+      "Added scoped offer creation — generate offers for a subset of contract items",
+      "Clockodo impact preview shown during merge when applicable"
+    ]
+  },
+  {
     "version": "2.22.2",
     "date": "2026-03-11",
     "title": "Contract list & customer detail performance",
