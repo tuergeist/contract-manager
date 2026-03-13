@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.22.5",
+    "date": "2026-03-13",
+    "title": "Fix credit note sending & audit log improvements",
+    "description": "Credit notes (stornos) can now be sent via email again. Audit log filter now includes invoice and todo entity types.",
+    "type": "bugfix",
+    "details": [
+      "Fixed credit note email sending — was blocked by finalized-only status check",
+      "Added invoice and todo entity types to audit log filter dropdown",
+      "Defaulted contract list view to show active contracts"
+    ]
+  },
+  {
     "version": "2.22.4",
     "date": "2026-03-13",
     "title": "FTE-based payroll split & activation workflow",
