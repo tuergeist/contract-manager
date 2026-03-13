@@ -2462,8 +2462,8 @@ class InvoiceMutation:
         except InvoiceRecord.DoesNotExist:
             return DeleteResult(success=False, error="Invoice record not found")
 
-        # Validate preconditions
-        if record.status != InvoiceRecord.Status.FINALIZED:
+        # Validate preconditions — stornos have 'voided' status but should be sendable
+        if record.status != InvoiceRecord.Status.FINALIZED and record.document_type != "storno":
             return DeleteResult(success=False, error="Only finalized invoices can be sent")
 
         if not record.pdf_file:

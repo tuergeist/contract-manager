@@ -88,7 +88,7 @@ interface UsersData {
   }>
 }
 
-const ENTITY_TYPES = ['contract', 'contract_item', 'customer', 'product'] as const
+const ENTITY_TYPES = ['contract', 'contract_item', 'customer', 'product', 'invoice_record', 'todo'] as const
 const ACTIONS = ['create', 'update', 'delete'] as const
 const PAGE_SIZE = 25
 

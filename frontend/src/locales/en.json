@@ -1071,7 +1071,9 @@
       "contract": "Contract",
       "contract_item": "Contract Item",
       "customer": "Customer",
-      "product": "Product"
+      "product": "Product",
+      "invoice_record": "Invoice",
+      "todo": "Todo"
     },
     "fields": {
       "name": "Name",

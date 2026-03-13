@@ -131,7 +131,7 @@ export function ContractList() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [searchTerm, setSearchTerm] = useState('')
   const [searchInput, setSearchInput] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [statusFilter, setStatusFilter] = useState<string>('active')
   const [page, setPage] = useState(1)
   const [sortBy, setSortBy] = usePersistedState<SortField>('contracts-sort-by', 'updated_at')
   const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('contracts-sort-order', 'desc')

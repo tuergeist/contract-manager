@@ -1071,7 +1071,9 @@
       "contract": "Vertrag",
       "contract_item": "Vertragsposition",
       "customer": "Kunde",
-      "product": "Produkt"
+      "product": "Produkt",
+      "invoice_record": "Rechnung",
+      "todo": "Aufgabe"
     },
     "fields": {
       "name": "Name",

@@ -357,11 +357,12 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
     )
   }
 
-  const canSendEmail = record.status === 'finalized' && record.pdfUrl
+  const isStorno = record.documentType === 'storno'
+  const canSendEmail = (record.status === 'finalized' || isStorno) && record.pdfUrl
   const sendEmailDisabledReason = !canSendEmail
-    ? record.status === 'voided'
+    ? record.status === 'voided' && !isStorno
       ? t('invoiceDetail.sendDisabledVoided')
-      : record.status !== 'finalized'
+      : record.status !== 'finalized' && !isStorno
         ? t('invoiceDetail.sendDisabledNotFinalized')
         : !record.pdfUrl
           ? t('invoiceDetail.sendDisabledNoPdf')
