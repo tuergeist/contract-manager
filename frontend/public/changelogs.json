@@ -1,5 +1,21 @@
 [
   {
+    "version": "2.22.4",
+    "date": "2026-03-13",
+    "title": "FTE-based payroll split & activation workflow",
+    "description": "Departments can now link to cost centers with FTE-based payroll splitting using automatic monthly snapshots. Contract activation consolidates checklist, order confirmation, and Clockodo setup into a single workflow modal.",
+    "type": "feature",
+    "details": [
+      "Added Department→CostCenter link with FTE distribution snapshots for payroll cost splitting",
+      "Added FTE-based split rule mode alongside existing percentage and revenue-based modes",
+      "Automatic monthly FTE snapshot capture via Celery task with Clockodo fallback",
+      "Department settings UI for cost center picker, FTE distribution, and snapshot management",
+      "Unified contract activation workflow modal with checklist validation, order confirmation toggle, and Clockodo setup",
+      "Server-side order confirmation creation on contract activation (replaces client-side orchestration)",
+      "Added regenerateOrderConfirmationPdf mutation for retry on failed PDF generation"
+    ]
+  },
+  {
     "version": "2.22.3",
     "date": "2026-03-12",
     "title": "Contract merge & scoped offers",
