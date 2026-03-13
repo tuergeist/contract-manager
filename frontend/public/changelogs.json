@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.22.6",
+    "date": "2026-03-13",
+    "title": "Fix CI: add missing tenants migration",
+    "description": "Added untracked tenants migration that was causing all CI backend tests to fail with NodeNotFoundError.",
+    "type": "bugfix",
+    "details": [
+      "Committed tenants migration 0016_add_cost_center_permissions (was on disk but untracked)",
+      "Fixed banking.0013_fte_distribution_snapshot dependency resolution in CI"
+    ]
+  },
+  {
     "version": "2.22.5",
     "date": "2026-03-13",
     "title": "Fix credit note sending & audit log improvements",
