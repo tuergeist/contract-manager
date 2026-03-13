@@ -86,7 +86,8 @@ def list_mailboxes(tenant) -> list[dict]:
 
 
 def send_mail(tenant, *, to: list[str], subject: str, body_html: str,
-              attachments: list[dict] | None = None) -> str:
+              attachments: list[dict] | None = None,
+              bcc: list[str] | None = None) -> str:
     """Send an email via Microsoft Graph API.
 
     Args:
@@ -95,6 +96,7 @@ def send_mail(tenant, *, to: list[str], subject: str, body_html: str,
         subject: Email subject
         body_html: HTML body content
         attachments: List of dicts with 'name', 'content_type', 'content_bytes' (bytes)
+        bcc: Optional list of BCC recipient email addresses
 
     Returns:
         Message ID from Graph API response headers
@@ -113,6 +115,11 @@ def send_mail(tenant, *, to: list[str], subject: str, body_html: str,
             {"emailAddress": {"address": addr}} for addr in to
         ],
     }
+
+    if bcc:
+        message["bccRecipients"] = [
+            {"emailAddress": {"address": addr}} for addr in bcc
+        ]
 
     if attachments:
         message["attachments"] = [
@@ -142,3 +149,17 @@ def send_mail(tenant, *, to: list[str], subject: str, body_html: str,
         return message_id
 
     raise M365Error(f"Failed to send email: {resp.status_code} {resp.text[:500]}")
+
+
+def get_document_bcc(tenant, document_type: str) -> list[str]:
+    """Get BCC recipients for a document type from tenant settings.
+
+    Args:
+        tenant: Tenant instance
+        document_type: One of 'invoice', 'storno', 'order_confirmation', 'offer'
+
+    Returns:
+        List of BCC email addresses (may be empty).
+    """
+    bcc_settings = (tenant.settings or {}).get("document_email_bcc", {})
+    return bcc_settings.get(document_type, [])

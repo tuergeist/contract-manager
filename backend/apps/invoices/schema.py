@@ -1109,10 +1109,10 @@ class InvoiceQuery:
                 is_paid=inv.extraction_status == "paid",
             ))
 
-        # Search generated invoice records
+        # Search generated invoice records (exclude voided and credit notes)
         record_qs = InvoiceRecord.objects.filter(
             tenant=user.tenant,
-        ).exclude(status="voided").select_related("customer")
+        ).exclude(status="voided").exclude(document_type="storno").select_related("customer")
         if search:
             record_qs = record_qs.filter(
                 Q(invoice_number__icontains=search)

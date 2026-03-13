@@ -309,6 +309,10 @@ def send_invoice_email_task(self, record_id: int, user_id: int | None = None) ->
         }
     ]
 
+    from apps.core.m365 import get_document_bcc
+    doc_type = "storno" if record.document_type == "storno" else "invoice"
+    bcc = get_document_bcc(record.tenant, doc_type)
+
     try:
         message_id = send_mail(
             record.tenant,
@@ -316,6 +320,7 @@ def send_invoice_email_task(self, record_id: int, user_id: int | None = None) ->
             subject=subject,
             body_html=body_html,
             attachments=attachments,
+            bcc=bcc or None,
         )
         record.email_sent_at = timezone.now()
         record.email_sent_to = recipients

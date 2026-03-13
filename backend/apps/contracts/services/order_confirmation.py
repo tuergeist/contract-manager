@@ -358,6 +358,9 @@ class OrderConfirmationService:
             }
         ]
 
+        from apps.core.m365 import get_document_bcc
+        bcc = get_document_bcc(self.tenant, "order_confirmation")
+
         try:
             message_id = send_mail(
                 self.tenant,
@@ -365,6 +368,7 @@ class OrderConfirmationService:
                 subject=subject,
                 body_html=body_html,
                 attachments=attachments,
+                bcc=bcc or None,
             )
             ab.sent_at = timezone.now()
             ab.sent_to = recipients

@@ -1641,7 +1641,21 @@
     },
     "emailTemplates": {
       "invoice": "Invoice Email",
-      "orderConfirmation": "Order Confirmation Email"
+      "orderConfirmation": "Order Confirmation Email",
+      "bcc": "BCC Recipients"
+    },
+    "bcc": {
+      "description": "Configure email addresses that receive a blind copy (BCC) of outgoing document emails.",
+      "cardDescription": "Add email addresses to BCC on outgoing emails of this type.",
+      "addPlaceholder": "email@example.com",
+      "add": "Add",
+      "save": "Save",
+      "docTypes": {
+        "invoice": "Invoices",
+        "storno": "Credit Notes",
+        "order_confirmation": "Order Confirmations",
+        "offer": "Offers"
+      }
     },
     "crossLink": {
       "numberingHint": "Numbering schemes are configured under",

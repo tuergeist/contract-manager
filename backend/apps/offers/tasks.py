@@ -102,6 +102,9 @@ def send_offer_email_task(
         }
     ]
 
+    from apps.core.m365 import get_document_bcc
+    bcc = get_document_bcc(record.tenant, "offer")
+
     try:
         message_id = send_mail(
             record.tenant,
@@ -109,6 +112,7 @@ def send_offer_email_task(
             subject=subject,
             body_html=body_html,
             attachments=attachments,
+            bcc=bcc or None,
         )
         record.email_sent_at = timezone.now()
         record.email_sent_to = recipients

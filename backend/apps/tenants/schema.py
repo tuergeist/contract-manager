@@ -373,6 +373,23 @@ class SetInvoiceEmailTemplateInput:
     body: str
 
 
+DOCUMENT_BCC_TYPES = ("invoice", "storno", "order_confirmation", "offer")
+
+
+@strawberry.type
+class DocumentEmailBccEntry:
+    """BCC recipients for a specific document type."""
+    document_type: str
+    recipients: list[str]
+
+
+@strawberry.input
+class SetDocumentEmailBccInput:
+    """Input for setting BCC recipients per document type."""
+    document_type: str
+    recipients: list[str]
+
+
 @strawberry.type
 class M365Settings:
     """Microsoft 365 integration settings."""
@@ -951,6 +968,24 @@ class TenantQuery:
             )
 
         return InvoiceEmailTemplatesResult(success=True, templates=templates)
+
+    @strawberry.field
+    def document_email_bcc(
+        self, info: Info[Context, None]
+    ) -> list[DocumentEmailBccEntry]:
+        """Get BCC recipients for all document types. Requires settings.read."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return []
+
+        bcc_settings = (user.tenant.settings or {}).get("document_email_bcc", {})
+        return [
+            DocumentEmailBccEntry(
+                document_type=doc_type,
+                recipients=bcc_settings.get(doc_type, []),
+            )
+            for doc_type in DOCUMENT_BCC_TYPES
+        ]
 
 
 @strawberry.input
@@ -2355,6 +2390,42 @@ class TenantMutation:
             tenant.settings["invoice_email_templates"] = templates
         else:
             tenant.settings.pop("invoice_email_templates", None)
+
+        tenant.save(update_fields=["settings"])
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def set_document_email_bcc(
+        self,
+        info: Info[Context, None],
+        input: SetDocumentEmailBccInput,
+    ) -> OperationResult:
+        """Set BCC recipients for a document type. Requires settings.write."""
+        user = require_perm(info, "settings", "write")
+        tenant = user.tenant
+        if not tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+
+        if input.document_type not in DOCUMENT_BCC_TYPES:
+            return OperationResult(
+                success=False,
+                error=f"Invalid document type. Must be one of: {', '.join(DOCUMENT_BCC_TYPES)}",
+            )
+
+        if not tenant.settings:
+            tenant.settings = {}
+
+        bcc_settings = tenant.settings.get("document_email_bcc", {})
+        cleaned = [addr.strip().lower() for addr in input.recipients if addr.strip()]
+        if cleaned:
+            bcc_settings[input.document_type] = cleaned
+        else:
+            bcc_settings.pop(input.document_type, None)
+
+        if bcc_settings:
+            tenant.settings["document_email_bcc"] = bcc_settings
+        else:
+            tenant.settings.pop("document_email_bcc", None)
 
         tenant.save(update_fields=["settings"])
         return OperationResult(success=True)

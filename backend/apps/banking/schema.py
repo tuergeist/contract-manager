@@ -1059,12 +1059,14 @@ class BankingQuery:
                 amount_difference=amt - txn_amount,
             ))
 
-        # Generated invoice records
+        # Generated invoice records (exclude voided, paid, and credit notes)
         record_qs = InvoiceRecord.objects.filter(
             tenant=user.tenant,
             customer=customer,
         ).exclude(
             status__in=["voided", "paid"]
+        ).exclude(
+            document_type="storno"
         ).filter(
             Q(invoice_date__lte=txn.entry_date) | Q(invoice_date__isnull=True)
         ).exclude(id__in=matched_record_ids)

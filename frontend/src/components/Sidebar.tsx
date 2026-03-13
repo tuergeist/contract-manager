@@ -126,6 +126,7 @@ const searchablePages: SearchablePage[] = [
   { labelKey: 'settings.numbering.orderConfirmations', keywords: ['order confirmation number', 'ab nummer', 'auftragsbestätigung nummer'], url: '/settings/numbering/order-confirmations', permission: 'invoices.settings' },
   { labelKey: 'settings.tabs.emailTemplates', keywords: ['email template', 'e-mail vorlage', 'email vorlage', 'mail template', 'invoice email', 'rechnungs-email'], url: '/settings/email-templates', permission: 'invoices.settings' },
   { labelKey: 'settings.emailTemplates.orderConfirmation', keywords: ['order confirmation', 'auftragsbestätigung', 'ab email', 'order email'], url: '/settings/email-templates/order-confirmation', permission: 'invoices.settings' },
+  { labelKey: 'settings.emailTemplates.bcc', keywords: ['bcc', 'blind copy', 'blindkopie', 'kopie', 'cc', 'copy recipient'], url: '/settings/email-templates/bcc', permission: 'settings.write' },
   { labelKey: 'settings.tabs.accounting', keywords: ['accounting', 'buchhaltung', 'revenue goals', 'umsatzziele'], url: '/settings/accounting', permission: 'settings.read' },
   { labelKey: 'settings.accountingTabs.revenueGoals', keywords: ['revenue goals', 'umsatzziele', 'ziele', 'goals'], url: '/settings/accounting', permission: 'settings.read' },
   { labelKey: 'settings.accountingTabs.costCenters', keywords: ['cost centers', 'kostenstellen', 'cost center', 'kostenstelle', 'split rules', 'aufteilungsregeln'], url: '/settings/accounting/cost-centers', permission: 'settings.read' },

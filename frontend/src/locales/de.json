@@ -1641,7 +1641,21 @@
     },
     "emailTemplates": {
       "invoice": "Rechnungs-E-Mail",
-      "orderConfirmation": "AB-E-Mail"
+      "orderConfirmation": "AB-E-Mail",
+      "bcc": "BCC-Empfänger"
+    },
+    "bcc": {
+      "description": "E-Mail-Adressen konfigurieren, die eine Blindkopie (BCC) ausgehender Dokument-E-Mails erhalten.",
+      "cardDescription": "E-Mail-Adressen hinzufügen, die bei diesem Dokumenttyp als BCC erhalten.",
+      "addPlaceholder": "email@beispiel.de",
+      "add": "Hinzufügen",
+      "save": "Speichern",
+      "docTypes": {
+        "invoice": "Rechnungen",
+        "storno": "Gutschriften",
+        "order_confirmation": "Auftragsbestätigungen",
+        "offer": "Angebote"
+      }
     },
     "crossLink": {
       "numberingHint": "Nummernkreise werden konfiguriert unter",
