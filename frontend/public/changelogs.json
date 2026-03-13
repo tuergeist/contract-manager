@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.22.7",
+    "date": "2026-03-13",
+    "title": "Document email BCC settings",
+    "description": "Configure BCC recipients per document type for outgoing emails. Credit notes are no longer shown in transaction invoice matching.",
+    "type": "feature",
+    "details": [
+      "Added BCC Recipients tab in Settings > Email Templates with per-type configuration (invoices, credit notes, order confirmations, offers)",
+      "BCC recipients are sent via Microsoft Graph API bccRecipients on all outgoing document emails",
+      "Excluded credit notes from suggested matches and invoice search in banking transaction matching"
+    ]
+  },
+  {
     "version": "2.22.6",
     "date": "2026-03-13",
     "title": "Fix CI: add missing tenants migration",
