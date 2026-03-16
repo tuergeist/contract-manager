@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.22.8",
+    "date": "2026-03-16",
+    "title": "Move contracts between customers",
+    "description": "Contracts can now be moved to a different customer regardless of status. FTE snapshot table now shows cost share percentage.",
+    "type": "feature",
+    "details": [
+      "Enabled 'Change Customer' on active, paused, and cancelled contracts (previously draft-only)",
+      "Moving a non-draft contract creates a TERMS_CHANGED amendment for traceability",
+      "Replaced Income column with Cost Share % in FTE distribution snapshot table"
+    ]
+  },
+  {
     "version": "2.22.7",
     "date": "2026-03-13",
     "title": "Document email BCC settings",
