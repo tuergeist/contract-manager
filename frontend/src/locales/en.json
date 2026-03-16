@@ -2350,7 +2350,7 @@
     "department": "Department",
     "costCenter": "Cost Center",
     "ftePercent": "FTE %",
-    "income": "Income",
+    "costShare": "Cost Share",
     "hours": "Hours"
   },
   "activation": {

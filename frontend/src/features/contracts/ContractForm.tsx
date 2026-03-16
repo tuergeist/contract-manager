@@ -594,7 +594,7 @@ export function ContractForm() {
                   <p className="text-sm font-medium">{t('contracts.customer')}</p>
                   <div className="mt-1 flex items-center gap-2">
                     <p className="text-sm text-muted-foreground">{contract?.customer.name}</p>
-                    {contract?.status === 'draft' && !isEditing && (
+                    {!isEditing && (
                       <Button
                         type="button"
                         variant="ghost"

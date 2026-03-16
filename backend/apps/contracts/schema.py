@@ -4986,21 +4986,18 @@ class ContractMutation:
         contract_id: strawberry.ID,
         customer_id: strawberry.ID,
     ) -> ContractResult:
-        """Change the customer of a draft contract."""
+        """Move a contract to a different customer."""
         user, err = check_perm(info, "contracts", "write")
         if err:
             return ContractResult(error=err)
         if not user.tenant:
             return ContractResult(error="No tenant assigned")
 
-        contract = Contract.objects.filter(
+        contract = Contract.objects.select_related("customer").filter(
             tenant=user.tenant, id=contract_id
         ).first()
         if not contract:
             return ContractResult(error="Contract not found")
-
-        if contract.status != Contract.Status.DRAFT:
-            return ContractResult(error="Can only change customer on draft contracts")
 
         customer = Customer.objects.filter(
             tenant=user.tenant, id=customer_id
@@ -5008,9 +5005,25 @@ class ContractMutation:
         if not customer:
             return ContractResult(error="Customer not found")
 
+        if contract.customer_id == customer.id:
+            return ContractResult(error="Contract already belongs to this customer")
+
+        old_customer_name = contract.customer.name if contract.customer else "—"
         contract.customer = customer
         contract.group = None
-        contract.save()
+        contract.save(update_fields=["customer", "group", "updated_at"])
+
+        if contract.status != Contract.Status.DRAFT:
+            ContractAmendment.objects.create(
+                tenant=user.tenant,
+                contract=contract,
+                effective_date=date.today(),
+                type=ContractAmendment.AmendmentType.TERMS_CHANGED,
+                description=f"Moved from {old_customer_name} to {customer.name}",
+                changes={
+                    "customer": {"old": old_customer_name, "new": customer.name},
+                },
+            )
 
         return ContractResult(contract=contract, success=True)
 

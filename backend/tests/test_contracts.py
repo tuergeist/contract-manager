@@ -1592,8 +1592,10 @@ class TestChangeContractCustomer:
         assert contract.customer_id == other_customer.id
         assert contract.group is None
 
-    def test_change_customer_on_non_draft_contract_fails(self, db, tenant, user, customer, client):
-        """Change customer on active contract returns error."""
+    def test_change_customer_on_active_contract_creates_amendment(self, db, tenant, user, customer, client):
+        """Change customer on active contract succeeds and creates amendment."""
+        from apps.contracts.models import ContractAmendment
+
         other_customer = Customer.objects.create(
             tenant=tenant,
             name="Other Customer 2",
@@ -1613,8 +1615,13 @@ class TestChangeContractCustomer:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["data"]["changeContractCustomer"]["success"] is False
-        assert "draft" in data["data"]["changeContractCustomer"]["error"]
+        assert data["data"]["changeContractCustomer"]["success"] is True
 
         contract.refresh_from_db()
-        assert contract.customer_id == customer.id
+        assert contract.customer_id == other_customer.id
+        assert contract.group is None
+
+        amendment = ContractAmendment.objects.filter(contract=contract).first()
+        assert amendment is not None
+        assert amendment.type == ContractAmendment.AmendmentType.TERMS_CHANGED
+        assert "Other Customer 2" in amendment.description

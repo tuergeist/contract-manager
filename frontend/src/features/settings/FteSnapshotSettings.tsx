@@ -171,20 +171,23 @@ export function FteSnapshotSettings() {
                       <th className="pb-1">{t('fteSnapshots.department')}</th>
                       <th className="pb-1">{t('fteSnapshots.costCenter')}</th>
                       <th className="pb-1 text-right">{t('fteSnapshots.ftePercent')}</th>
-                      <th className="pb-1 text-right">{t('fteSnapshots.income')}</th>
+                      <th className="pb-1 text-right">{t('fteSnapshots.costShare')}</th>
                       <th className="pb-1 text-right">{t('fteSnapshots.hours')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {snap.entries.map((e: any) => (
-                      <tr key={e.id} className="border-t">
-                        <td className="py-1">{e.departmentName}</td>
-                        <td className="py-1">{e.costCenterCode}</td>
-                        <td className="py-1 text-right">{Number(e.ftePercentage).toFixed(1)}%</td>
-                        <td className="py-1 text-right">{Number(e.monthlyIncomeTotal).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</td>
-                        <td className="py-1 text-right">{Number(e.hoursTotal).toFixed(1)}</td>
-                      </tr>
-                    ))}
+                    {(() => {
+                      const totalFte = snap.entries.reduce((sum: number, e: any) => sum + Number(e.ftePercentage), 0)
+                      return snap.entries.map((e: any) => (
+                        <tr key={e.id} className="border-t">
+                          <td className="py-1">{e.departmentName}</td>
+                          <td className="py-1">{e.costCenterCode}</td>
+                          <td className="py-1 text-right">{Number(e.ftePercentage).toFixed(1)}%</td>
+                          <td className="py-1 text-right">{totalFte > 0 ? (Number(e.ftePercentage) / totalFte * 100).toFixed(1) : '0.0'}%</td>
+                          <td className="py-1 text-right">{Number(e.hoursTotal).toFixed(1)}</td>
+                        </tr>
+                      ))
+                    })()}
                   </tbody>
                 </table>
               </div>

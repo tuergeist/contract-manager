@@ -2350,7 +2350,7 @@
     "department": "Abteilung",
     "costCenter": "Kostenstelle",
     "ftePercent": "FTE %",
-    "income": "Einkommen",
+    "costShare": "Kostenanteil",
     "hours": "Stunden"
   },
   "activation": {
