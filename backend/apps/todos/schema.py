@@ -394,12 +394,17 @@ class TodoMutation:
             # Notify if assigned to someone else
             if todo.assigned_to_id and todo.assigned_to_id != user.id:
                 from apps.core.notifications import notify
+                from django.conf import settings
+                request = info.context.request
+                origin = request.headers.get("Origin") or request.headers.get("Referer", "").rstrip("/")
+                base_url = origin or getattr(settings, "FRONTEND_URL", "")
                 notify(
                     user.tenant,
                     "todo_assigned",
                     recipients=[todo.assigned_to],
                     todo=todo,
                     assigner=user,
+                    base_url=base_url,
                 )
 
             return TodoCreateResult(success=True, todo=todo_to_type(todo))
@@ -522,18 +527,23 @@ class TodoMutation:
                         author=user,
                     )
 
-                # Notify the new assignee (if not the creator)
+                # Notify the new assignee (if not the person doing the reassignment)
                 if (
                     todo.assigned_to_id
-                    and todo.assigned_to_id != todo.created_by_id
+                    and todo.assigned_to_id != user.id
                 ):
                     from apps.core.notifications import notify
+                    from django.conf import settings
+                    request = info.context.request
+                    origin = request.headers.get("Origin") or request.headers.get("Referer", "").rstrip("/")
+                    base_url = origin or getattr(settings, "FRONTEND_URL", "")
                     notify(
                         user.tenant,
                         "todo_assigned",
                         recipients=[todo.assigned_to],
                         todo=todo,
                         assigner=user,
+                        base_url=base_url,
                     )
 
             return TodoUpdateResult(success=True, todo=todo_to_type(todo))

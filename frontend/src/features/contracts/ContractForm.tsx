@@ -480,7 +480,8 @@ export function ContractForm() {
     })
     if (result.data?.deleteContract?.success) {
       setShowDeleteConfirm(false)
-      navigate('/contracts')
+      const custId = form.getValues('customerId')
+      navigate(custId ? `/customers/${custId}` : '/contracts')
     } else {
       setError(result.data?.deleteContract?.error || 'Delete failed')
       setShowDeleteConfirm(false)

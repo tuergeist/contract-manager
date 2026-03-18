@@ -18,11 +18,20 @@ def get_naming_templates(tenant) -> dict:
 
 
 def render_template(template: str, **kwargs) -> str:
-    """Render a naming template with placeholders."""
+    """Render a naming template with placeholders (case-insensitive).
+
+    Unmatched placeholders are removed and excess whitespace is collapsed.
+    """
+    import re
     result = template
     for key, value in kwargs.items():
-        result = result.replace(f"{{{key}}}", str(value))
-    result = result.replace("{year}", str(date.today().year))
+        pattern = re.compile(re.escape(f"{{{key}}}"), re.IGNORECASE)
+        result = pattern.sub(str(value), result)
+    result = re.sub(r"\{year\}", str(date.today().year), result, flags=re.IGNORECASE)
+    # Remove any remaining unmatched placeholders
+    result = re.sub(r"\{[a-zA-Z_]+\}", "", result)
+    # Collapse whitespace and strip
+    result = re.sub(r"\s+", " ", result).strip()
     return result
 
 
@@ -198,7 +207,7 @@ def provision_projects(
                     customer_name=customer.name,
                     contract_name=contract.name,
                     item_name=item.description,
-                    ab_number=contract.order_confirmation_number or "",
+                    ab_number=item.order_confirmation_number or contract.order_confirmation_number or "",
                 )
                 try:
                     result = provider.create_project(customer.clockodo_customer_id, project_name)
