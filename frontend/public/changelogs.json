@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.22.9",
+    "date": "2026-03-18",
+    "title": "Todo notification links and Clockodo template fixes",
+    "description": "Todo assignment emails now include links to the related entity. Clockodo project template placeholders are now case-insensitive and unmatched ones are cleaned up.",
+    "type": "bugfix",
+    "details": [
+      "Added links to related entity and todos board in todo assignment notification emails",
+      "Todo reassignment now notifies the new assignee even when reassigned to the original creator",
+      "Fixed Clockodo project template placeholders being case-sensitive ({AB_number} now works)",
+      "Unmatched template placeholders are now stripped from Clockodo project names",
+      "Per-item Clockodo projects use the item's own AB number when available",
+      "Contract delete now redirects to the customer detail page instead of contract list"
+    ]
+  },
+  {
     "version": "2.22.8",
     "date": "2026-03-16",
     "title": "Move contracts between customers",
