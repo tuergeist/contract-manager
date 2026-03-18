@@ -3,7 +3,7 @@ import { usePersistedState } from '@/lib/usePersistedState'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, History, Paperclip, Upload, Download, File, Image, Trash2, Link2, Plus, TrendingUp, DollarSign, ListTodo, Mail, X, Receipt, ChevronsUpDown, Check, FolderOpen, Globe, Eye } from 'lucide-react'
+import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, History, Paperclip, Upload, Download, File, Image, Trash2, Link2, Plus, TrendingUp, DollarSign, ListTodo, Mail, X, Receipt, ChevronsUpDown, Check, FolderOpen, Globe, Eye, Pencil } from 'lucide-react'
 import { TodoModal, TodoList, type TodoContext, type TodoItem } from '@/features/todos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -186,6 +186,15 @@ const UPDATE_CUSTOMER_INVOICE_LANGUAGE_MUTATION = gql`
       success
       error
       invoiceLanguage
+    }
+  }
+`
+
+const UPDATE_CUSTOMER_MUTATION = gql`
+  mutation UpdateCustomer($input: UpdateCustomerInput!) {
+    updateCustomer(input: $input) {
+      success
+      error
     }
   }
 `
@@ -411,6 +420,11 @@ export function CustomerDetail() {
   const [todoModalOpen, setTodoModalOpen] = useState(false)
   const [todoContext, setTodoContext] = useState<TodoContext | undefined>()
 
+  // Customer edit state
+  const [editingCustomer, setEditingCustomer] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editCustomerNumber, setEditCustomerNumber] = useState('')
+
   // VAT ID state
   const [editingVatId, setEditingVatId] = useState(false)
   const [vatIdValue, setVatIdValue] = useState('')
@@ -454,6 +468,7 @@ export function CustomerDetail() {
   const [deleteAttachment] = useMutation(DELETE_CUSTOMER_ATTACHMENT_MUTATION)
   const [addLink] = useMutation(ADD_CUSTOMER_LINK_MUTATION)
   const [deleteLink] = useMutation(DELETE_CUSTOMER_LINK_MUTATION)
+  const [updateCustomer] = useMutation(UPDATE_CUSTOMER_MUTATION)
   const [updateBillingEmails] = useMutation(UPDATE_CUSTOMER_BILLING_EMAILS_MUTATION)
   const [updateVatId] = useMutation(UPDATE_CUSTOMER_VAT_ID_MUTATION)
   const [updateInvoiceLanguage] = useMutation(UPDATE_CUSTOMER_INVOICE_LANGUAGE_MUTATION)
@@ -819,6 +834,34 @@ export function CustomerDetail() {
     }
   }
 
+  const handleStartEditCustomer = () => {
+    if (!customer) return
+    setEditName(customer.name)
+    setEditCustomerNumber(customer.netsuiteCustomerNumber || '')
+    setEditingCustomer(true)
+  }
+
+  const handleSaveCustomer = async () => {
+    if (!id) return
+    try {
+      const result = await updateCustomer({
+        variables: {
+          input: {
+            customerId: id,
+            name: editName.trim() || null,
+            netsuiteCustomerNumber: editCustomerNumber,
+          },
+        },
+      })
+      if (result.data?.updateCustomer?.success) {
+        setEditingCustomer(false)
+        refetch()
+      }
+    } catch (err) {
+      console.error('Update customer error:', err)
+    }
+  }
+
   const handleVatIdSave = async () => {
     if (!id) return
     try {
@@ -899,33 +942,72 @@ export function CustomerDetail() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold" data-testid="customer-name">{customer.name}</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <span
-                data-testid="customer-status-badge"
-                className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
-                  customer.isActive
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-gray-100 text-gray-800'
-                }`}
-              >
-                {customer.isActive ? t('customers.active') : t('customers.inactive')}
-              </span>
-              {customer.netsuiteCustomerNumber && (
-                <span className="text-sm text-gray-500">{customer.netsuiteCustomerNumber}</span>
-              )}
-              {customer.hubspotUrl && (
-                <a
-                  href={customer.hubspotUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-800"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  HubSpot
-                </a>
-              )}
-            </div>
+            {editingCustomer ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="text-xl font-bold h-9 w-80"
+                    placeholder={t('customers.name')}
+                    autoFocus
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveCustomer(); if (e.key === 'Escape') setEditingCustomer(false) }}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={editCustomerNumber}
+                    onChange={(e) => setEditCustomerNumber(e.target.value)}
+                    className="h-8 w-48 text-sm"
+                    placeholder={t('customers.customerNumber')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveCustomer(); if (e.key === 'Escape') setEditingCustomer(false) }}
+                  />
+                  <Button size="sm" onClick={handleSaveCustomer}>
+                    <Check className="h-3 w-3 mr-1" />
+                    {t('common.save')}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingCustomer(false)}>
+                    <X className="h-3 w-3 mr-1" />
+                    {t('common.cancel')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-bold" data-testid="customer-name">{customer.name}</h1>
+                  <button onClick={handleStartEditCustomer} className="text-gray-400 hover:text-gray-600">
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span
+                    data-testid="customer-status-badge"
+                    className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
+                      customer.isActive
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}
+                  >
+                    {customer.isActive ? t('customers.active') : t('customers.inactive')}
+                  </span>
+                  {customer.netsuiteCustomerNumber && (
+                    <span className="text-sm text-gray-500">{customer.netsuiteCustomerNumber}</span>
+                  )}
+                  {customer.hubspotUrl && (
+                    <a
+                      href={customer.hubspotUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-800"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      HubSpot
+                    </a>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
         <HelpVideoButton />

@@ -269,6 +269,23 @@ class UpdateCustomerVatIdResult:
     vat_id: str | None = None
 
 
+@strawberry.input
+class UpdateCustomerInput:
+    """Input for updating editable customer fields."""
+
+    customer_id: strawberry.ID
+    name: str | None = None
+    netsuite_customer_number: str | None = None
+
+
+@strawberry.type
+class UpdateCustomerResult:
+    """Result of updating a customer."""
+
+    success: bool = False
+    error: str | None = None
+
+
 @strawberry.type
 class CustomerAttachmentResult:
     """Result of customer attachment operations."""
@@ -898,6 +915,43 @@ class CustomerMutation:
             success=True,
             vat_id=customer.vat_id,
         )
+
+    # =========================================================================
+    # General Customer Update
+    # =========================================================================
+
+    @strawberry.mutation
+    def update_customer(
+        self,
+        info: Info[Context, None],
+        input: UpdateCustomerInput,
+    ) -> UpdateCustomerResult:
+        """Update editable customer fields (name, customer number)."""
+        user, err = check_perm(info, "customers", "write")
+        if err:
+            return UpdateCustomerResult(error=err)
+        if not user.tenant:
+            return UpdateCustomerResult(error="No tenant assigned")
+
+        customer = Customer.objects.filter(
+            tenant=user.tenant, id=input.customer_id
+        ).first()
+        if not customer:
+            return UpdateCustomerResult(error="Customer not found")
+
+        update_fields = ["updated_at"]
+        if input.name is not None:
+            name = input.name.strip()
+            if not name:
+                return UpdateCustomerResult(error="Name cannot be empty")
+            customer.name = name
+            update_fields.append("name")
+        if input.netsuite_customer_number is not None:
+            customer.netsuite_customer_number = input.netsuite_customer_number.strip() or None
+            update_fields.append("netsuite_customer_number")
+
+        customer.save(update_fields=update_fields)
+        return UpdateCustomerResult(success=True)
 
     # =========================================================================
     # Customer Comment Mutations

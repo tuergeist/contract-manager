@@ -169,6 +169,7 @@
     "noContracts": "Keine Verträge für diesen Kunden",
     "noInvoices": "Keine Rechnungen für diesen Kunden",
     "name": "Name",
+    "customerNumber": "Kundennummer (z.B. CUS174)",
     "address": "Adresse",
     "status": "Status",
     "syncedAt": "Synchronisiert am",
