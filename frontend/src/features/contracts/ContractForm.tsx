@@ -518,6 +518,7 @@ export function ContractForm() {
                 {isEdit
                   ? (contract?.name || contract?.customer.name || t('contracts.detail.details'))
                   : t('contracts.newContract')}
+                {isEdit && id && <span className="text-base font-normal text-gray-400"> [{id}]</span>}
               </h1>
               {isEdit && contract && (
                 <span

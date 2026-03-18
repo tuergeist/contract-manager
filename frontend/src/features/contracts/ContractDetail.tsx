@@ -934,7 +934,7 @@ export function ContractDetail() {
           </button>
           <div>
             <h1 className="text-2xl font-bold">
-              {contract.name || contract.customer.name}
+              {contract.name || contract.customer.name} <span className="text-base font-normal text-gray-400">[{contract.id}]</span>
             </h1>
             <Link to={`/customers/${contract.customer.id}`} className="text-sm text-blue-600 hover:text-blue-800 hover:underline">
               {contract.customer.name}
