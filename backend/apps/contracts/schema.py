@@ -775,6 +775,7 @@ class ContractGroupResult:
 class ActivationOptionsInput:
     """Options for the draft → active transition."""
     send_order_confirmation: bool = True
+    create_order_confirmation_only: bool = False
 
 
 @strawberry.input
@@ -4953,21 +4954,38 @@ class ContractMutation:
                 old_status == Contract.Status.DRAFT
                 and new_status == Contract.Status.ACTIVE
             ):
-                send_ab = True
+                create_ab = False
+                send_ab = False
                 if activation_options is not None:
-                    send_ab = activation_options.send_order_confirmation
-                if send_ab:
+                    if activation_options.create_order_confirmation_only:
+                        create_ab = True
+                    elif activation_options.send_order_confirmation:
+                        create_ab = True
+                        send_ab = True
+                else:
+                    create_ab = True
+                    send_ab = True
+
+                if create_ab:
                     try:
                         from apps.contracts.services.order_confirmation import OrderConfirmationService
-                        from apps.contracts.tasks import send_order_confirmation_email_task
+                        from django.conf import settings as django_settings
+
+                        request = info.context.request
+                        origin = request.headers.get("Origin") or request.headers.get("Referer", "").rstrip("/")
+                        base_url = origin or getattr(django_settings, "FRONTEND_URL", "")
 
                         service = OrderConfirmationService(user.tenant)
                         ab = service.create_order_confirmation(
                             contract=contract,
                             user=user,
                         )
-                        # Queue email sending asynchronously
-                        send_order_confirmation_email_task.delay(ab.id, user_id=user.id)
+                        # Set contract OC number and create link
+                        OrderConfirmationService.link_to_contract(ab, user, base_url)
+
+                        if send_ab:
+                            from apps.contracts.tasks import send_order_confirmation_email_task
+                            send_order_confirmation_email_task.delay(ab.id, user_id=user.id)
                     except Exception:
                         # AB creation failure should not block activation
                         import logging

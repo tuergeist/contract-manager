@@ -2357,12 +2357,16 @@
   "activation": {
     "title": "Activate Contract",
     "confirmMessage": "This contract will be activated. This action cannot be undone.",
-    "optionsTitle": "Post-activation actions",
-    "sendOrderConfirmation": "Send order confirmation (Auftragsbestätigung)",
+    "optionsTitle": "Order confirmation",
+    "sendOrderConfirmation": "Create & send order confirmation",
+    "createOrderConfirmationOnly": "Create order confirmation (do not send)",
+    "skipOrderConfirmation": "Skip order confirmation",
+    "existingOcWarning": "This contract already has an order confirmation number ({{number}}). Creating a new one will overwrite it.",
     "abDisabledNoM365": "Email sending is not configured. Set up M365 in Settings to enable.",
     "abDisabledNoEmails": "This customer has no billing email addresses.",
     "activating": "Activating contract...",
     "success": "Contract activated successfully",
-    "abBeingSent": "The order confirmation is being generated and will be sent by email."
+    "abBeingSent": "The order confirmation is being generated and will be sent by email.",
+    "abCreated": "The order confirmation has been created. You can send it later from the contract detail page."
   }
 }

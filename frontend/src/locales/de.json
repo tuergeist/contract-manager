@@ -2357,12 +2357,16 @@
   "activation": {
     "title": "Vertrag aktivieren",
     "confirmMessage": "Dieser Vertrag wird aktiviert. Diese Aktion kann nicht rückgängig gemacht werden.",
-    "optionsTitle": "Aktionen nach der Aktivierung",
-    "sendOrderConfirmation": "Auftragsbestätigung senden",
+    "optionsTitle": "Auftragsbestätigung",
+    "sendOrderConfirmation": "Auftragsbestätigung erstellen & senden",
+    "createOrderConfirmationOnly": "Auftragsbestätigung erstellen (nicht senden)",
+    "skipOrderConfirmation": "Keine Auftragsbestätigung",
+    "existingOcWarning": "Dieser Vertrag hat bereits eine Auftragsbestätigungs-Nr. ({{number}}). Eine neue AB überschreibt diese.",
     "abDisabledNoM365": "E-Mail-Versand ist nicht konfiguriert. Richten Sie M365 in den Einstellungen ein.",
     "abDisabledNoEmails": "Dieser Kunde hat keine Rechnungs-E-Mail-Adressen.",
     "activating": "Vertrag wird aktiviert...",
     "success": "Vertrag erfolgreich aktiviert",
-    "abBeingSent": "Die Auftragsbestätigung wird erstellt und per E-Mail versendet."
+    "abBeingSent": "Die Auftragsbestätigung wird erstellt und per E-Mail versendet.",
+    "abCreated": "Die Auftragsbestätigung wurde erstellt. Sie können sie später von der Vertragsdetailseite senden."
   }
 }

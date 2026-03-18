@@ -3,8 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, gql } from '@apollo/client'
 import { Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
@@ -97,9 +95,10 @@ export function ActivationWorkflowModal({
 }: ActivationWorkflowModalProps) {
   const { t } = useTranslation()
   const [state, setState] = useState<ModalState>('options')
-  const [sendAB, setSendAB] = useState(true)
+  const [abOption, setAbOption] = useState<'send' | 'create' | 'skip'>('send')
   const [error, setError] = useState<string | null>(null)
   const [abSent, setAbSent] = useState(false)
+  const [abCreated, setAbCreated] = useState(false)
 
   const { data: checklistData } = useQuery(ACTIVATION_CHECKLIST_QUERY)
   const { data: m365Data } = useQuery(M365_CHECK_QUERY)
@@ -138,12 +137,14 @@ export function ActivationWorkflowModal({
     setError(null)
     setState('activating')
     try {
+      const effectiveOption = canSendAB ? abOption : (abOption === 'send' ? 'create' : abOption)
       const result = await transitionStatus({
         variables: {
           contractId,
           newStatus: 'active',
           activationOptions: {
-            sendOrderConfirmation: sendAB && canSendAB,
+            sendOrderConfirmation: effectiveOption === 'send',
+            createOrderConfirmationOnly: effectiveOption === 'create',
           },
         },
       })
@@ -152,7 +153,8 @@ export function ActivationWorkflowModal({
         setState('options')
         return
       }
-      setAbSent(sendAB && canSendAB)
+      setAbSent(effectiveOption === 'send')
+      setAbCreated(effectiveOption === 'create')
       setState('success')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -222,24 +224,55 @@ export function ActivationWorkflowModal({
               {t('activation.confirmMessage')}
             </p>
 
+            {/* Warning if OC number already exists */}
+            {contract.orderConfirmationNumber && (
+              <div className="rounded border border-amber-200 bg-amber-50 p-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />
+                  <p className="text-sm text-amber-700">
+                    {t('activation.existingOcWarning', { number: contract.orderConfirmationNumber })}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Post-activation options */}
             <div className="rounded border p-3 space-y-3">
               <p className="text-sm font-medium">{t('activation.optionsTitle')}</p>
-              <div className="flex items-start gap-2">
-                <Checkbox
-                  id="send-ab"
-                  checked={canSendAB ? sendAB : false}
-                  onCheckedChange={(c) => setSendAB(!!c)}
-                  disabled={!canSendAB}
-                />
-                <div className="space-y-1">
-                  <Label htmlFor="send-ab" className={!canSendAB ? 'text-muted-foreground' : ''}>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="abOption"
+                    checked={abOption === 'send'}
+                    onChange={() => setAbOption('send')}
+                    disabled={!canSendAB}
+                  />
+                  <span className={!canSendAB ? 'text-muted-foreground' : ''}>
                     {t('activation.sendOrderConfirmation')}
-                  </Label>
-                  {abDisabledReason && (
-                    <p className="text-xs text-muted-foreground">{abDisabledReason}</p>
-                  )}
-                </div>
+                  </span>
+                </label>
+                {!canSendAB && abDisabledReason && (
+                  <p className="text-xs text-muted-foreground ml-6">{abDisabledReason}</p>
+                )}
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="abOption"
+                    checked={abOption === 'create'}
+                    onChange={() => setAbOption('create')}
+                  />
+                  {t('activation.createOrderConfirmationOnly')}
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="abOption"
+                    checked={abOption === 'skip'}
+                    onChange={() => setAbOption('skip')}
+                  />
+                  {t('activation.skipOrderConfirmation')}
+                </label>
               </div>
             </div>
           </div>
@@ -261,6 +294,11 @@ export function ActivationWorkflowModal({
             {abSent && (
               <p className="text-sm text-muted-foreground">
                 {t('activation.abBeingSent')}
+              </p>
+            )}
+            {abCreated && (
+              <p className="text-sm text-muted-foreground">
+                {t('activation.abCreated')}
               </p>
             )}
           </div>

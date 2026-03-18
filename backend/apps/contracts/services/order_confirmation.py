@@ -288,6 +288,38 @@ class OrderConfirmationService:
 
         return ab
 
+    @staticmethod
+    def link_to_contract(ab, user, base_url: str = ""):
+        """Set contract OC number and create a contract link for the OC.
+
+        Call this after creating an order confirmation to update the contract
+        and attach a link to the OC detail page.
+        """
+        from apps.contracts.models import ContractLink
+        import logging
+
+        contract = ab.contract
+        logger = logging.getLogger(__name__)
+
+        # Set the contract's order_confirmation_number
+        contract.order_confirmation_number = ab.order_confirmation_number
+        contract.save(update_fields=["order_confirmation_number", "updated_at"])
+
+        # Create a contract link pointing to the OC detail page
+        if base_url:
+            oc_url = f"{base_url}/contracts/{contract.id}/order-confirmation/{ab.id}"
+            link_name = f"Auftragsbestätigung # {ab.order_confirmation_number}"
+            try:
+                ContractLink.objects.create(
+                    tenant=ab.tenant,
+                    contract=contract,
+                    name=link_name,
+                    url=oc_url,
+                    created_by=user,
+                )
+            except Exception:
+                logger.exception("Failed to create OC link for contract %s", contract.id)
+
     def get_email_template(self, language: str) -> dict:
         """Get AB email template, preferring tenant custom templates."""
         if language not in AB_EMAIL_TEMPLATES:
