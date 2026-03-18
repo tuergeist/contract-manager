@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.22.12",
+    "date": "2026-03-18",
+    "title": "Invitation emails and customer active toggle",
+    "description": "Invited users now receive an email with the inviter's name and a link to accept. Customer active status can be toggled from the detail page.",
+    "type": "feature",
+    "details": [
+      "Added automatic invitation email with DE/EN templates showing inviter name and email",
+      "Customer status badge is now clickable to toggle active/inactive"
+    ]
+  },
+  {
     "version": "2.22.11",
     "date": "2026-03-18",
     "title": "Show contract ID in title",
