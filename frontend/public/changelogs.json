@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.22.10",
+    "date": "2026-03-18",
+    "title": "OC auto-linking and customer editing",
+    "description": "Order confirmations now auto-populate the contract's OC number and create a link in attachments. Customers can be edited inline.",
+    "type": "feature",
+    "details": [
+      "Order confirmation number is automatically written to the contract field on OC creation",
+      "A contract link to the OC detail page is created automatically (Auftragsbestätigung # ...)",
+      "Activation dialog now offers three options: create & send, create only, or skip OC",
+      "Warning shown when activating a contract that already has an OC number",
+      "Added inline editing for customer name and customer number (CUS...) on detail page"
+    ]
+  },
+  {
     "version": "2.22.9",
     "date": "2026-03-18",
     "title": "Todo notification links and Clockodo template fixes",
