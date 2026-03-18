@@ -177,6 +177,8 @@
     "info": "Informationen",
     "active": "Aktiv",
     "inactive": "Inaktiv",
+    "activate": "Klicken zum Aktivieren",
+    "deactivate": "Klicken zum Deaktivieren",
     "total": "Kunden",
     "searchPlaceholder": "Nach Name oder CUS-Nr. suchen...",
     "showOnlyActive": "Nur aktive Kunden",

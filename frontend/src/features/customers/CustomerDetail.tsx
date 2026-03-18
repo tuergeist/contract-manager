@@ -981,16 +981,24 @@ export function CustomerDetail() {
                   </button>
                 </div>
                 <div className="flex items-center gap-2 mt-1">
-                  <span
+                  <button
                     data-testid="customer-status-badge"
-                    className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
+                    onClick={async () => {
+                      if (!id) return
+                      const result = await updateCustomer({
+                        variables: { input: { customerId: id, isActive: !customer.isActive } },
+                      })
+                      if (result.data?.updateCustomer?.success) refetch()
+                    }}
+                    title={customer.isActive ? t('customers.deactivate') : t('customers.activate')}
+                    className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 cursor-pointer hover:opacity-80 ${
                       customer.isActive
                         ? 'bg-green-100 text-green-800'
                         : 'bg-gray-100 text-gray-800'
                     }`}
                   >
                     {customer.isActive ? t('customers.active') : t('customers.inactive')}
-                  </span>
+                  </button>
                   {customer.netsuiteCustomerNumber && (
                     <span className="text-sm text-gray-500">{customer.netsuiteCustomerNumber}</span>
                   )}

@@ -276,6 +276,7 @@ class UpdateCustomerInput:
     customer_id: strawberry.ID
     name: str | None = None
     netsuite_customer_number: str | None = None
+    is_active: bool | None = None
 
 
 @strawberry.type
@@ -949,6 +950,9 @@ class CustomerMutation:
         if input.netsuite_customer_number is not None:
             customer.netsuite_customer_number = input.netsuite_customer_number.strip() or None
             update_fields.append("netsuite_customer_number")
+        if input.is_active is not None:
+            customer.is_active = input.is_active
+            update_fields.append("is_active")
 
         customer.save(update_fields=update_fields)
         return UpdateCustomerResult(success=True)

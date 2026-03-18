@@ -233,3 +233,90 @@ def send_signup_verification_email(self, verification_id: int, base_url: str) ->
     except SmtpError as e:
         logger.error("Failed to send signup verification to %s: %s", verification.email, e)
         return False
+
+
+INVITATION_TEMPLATES = {
+    "en": {
+        "subject": "You've been invited to {tenant_name}",
+        "body": """
+<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h2 style="color: #1a1a1a;">You've been invited!</h2>
+  <p><strong>{inviter_name}</strong> ({inviter_email}) has invited you to join <strong>{tenant_name}</strong> on Contract Manager.</p>
+  <p>Click the link below to set up your account. This invitation is valid for 7 days.</p>
+  <p style="margin: 24px 0;">
+    <a href="{invite_url}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+      Accept Invitation
+    </a>
+  </p>
+  <p style="color: #999; font-size: 12px;">Or copy this link: {invite_url}</p>
+</div>
+""",
+    },
+    "de": {
+        "subject": "Einladung zu {tenant_name}",
+        "body": """
+<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h2 style="color: #1a1a1a;">Du wurdest eingeladen!</h2>
+  <p><strong>{inviter_name}</strong> ({inviter_email}) hat dich eingeladen, <strong>{tenant_name}</strong> im Contract Manager beizutreten.</p>
+  <p>Klicke auf den Link, um dein Konto einzurichten. Die Einladung ist 7 Tage gültig.</p>
+  <p style="margin: 24px 0;">
+    <a href="{invite_url}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+      Einladung annehmen
+    </a>
+  </p>
+  <p style="color: #999; font-size: 12px;">Oder kopiere diesen Link: {invite_url}</p>
+</div>
+""",
+    },
+}
+
+
+@shared_task(bind=True, max_retries=0)
+def send_invitation_email(self, invitation_id: int, invite_url: str, inviter_user_id: int) -> bool:
+    """Send invitation email to an invited user.
+
+    Args:
+        invitation_id: ID of the UserInvitation record
+        invite_url: Full URL to accept the invitation
+        inviter_user_id: ID of the user who created the invitation
+    """
+    from apps.tenants.models import User, UserInvitation
+
+    try:
+        invitation = UserInvitation.objects.select_related("tenant").get(id=invitation_id)
+    except UserInvitation.DoesNotExist:
+        logger.error("Invitation %s not found", invitation_id)
+        return False
+
+    try:
+        inviter = User.objects.get(id=inviter_user_id)
+    except User.DoesNotExist:
+        logger.error("Inviter user %s not found", inviter_user_id)
+        return False
+
+    tenant = invitation.tenant
+    if not tenant:
+        logger.error("Invitation %s has no tenant", invitation_id)
+        return False
+
+    lang = (tenant.settings or {}).get("language", "de")
+    template = INVITATION_TEMPLATES.get(lang, INVITATION_TEMPLATES["de"])
+    tenant_name = tenant.name or "Contract Manager"
+    inviter_name = inviter.get_full_name() or inviter.email
+    inviter_email = inviter.email
+
+    subject = template["subject"].format(tenant_name=tenant_name)
+    body_html = template["body"].format(
+        invite_url=invite_url,
+        tenant_name=tenant_name,
+        inviter_name=inviter_name,
+        inviter_email=inviter_email,
+    )
+
+    try:
+        send_notification(tenant, to=[invitation.email], subject=subject, body_html=body_html)
+        logger.info("Invitation email sent to %s", invitation.email)
+        return True
+    except SmtpError as e:
+        logger.error("Failed to send invitation to %s: %s", invitation.email, e)
+        return False

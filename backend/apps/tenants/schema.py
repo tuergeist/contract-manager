@@ -1489,6 +1489,10 @@ class TenantMutation:
         url_base = base_url or origin or getattr(settings, "FRONTEND_URL", "http://localhost:5173")
         invite_url = f"{url_base}/invite/{invitation.token}"
 
+        # Send invitation email asynchronously
+        from apps.tenants.tasks import send_invitation_email
+        send_invitation_email.delay(invitation.id, invite_url, admin.id)
+
         return InvitationResult(
             success=True,
             invitation=invitation,
