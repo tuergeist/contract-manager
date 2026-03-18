@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.22.11",
+    "date": "2026-03-18",
+    "title": "Show contract ID in title",
+    "description": "The internal contract ID is now displayed after the contract title for easier reference.",
+    "type": "feature",
+    "details": [
+      "Added contract ID as [123] after the title on both detail and edit views"
+    ]
+  },
+  {
     "version": "2.22.10",
     "date": "2026-03-18",
     "title": "OC auto-linking and customer editing",
