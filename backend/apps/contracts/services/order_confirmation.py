@@ -21,6 +21,15 @@ AB_LABELS = {
         "quantity": "Menge",
         "unit_price": "Einzelpreis",
         "per_month": "/Monat",
+        "per_monthly": "/Monat",
+        "per_bi_monthly": "/2 Monate",
+        "per_quarterly": "/Quartal",
+        "per_semi_annual": "/Halbjahr",
+        "per_annual": "/Jahr",
+        "per_biennial": "/2 Jahre",
+        "per_triennial": "/3 Jahre",
+        "per_quadrennial": "/4 Jahre",
+        "per_quinquennial": "/5 Jahre",
         "amount": "Betrag",
         "net_total": "Nettobetrag",
         "tax": "MwSt.",
@@ -36,6 +45,11 @@ AB_LABELS = {
         "share_capital": "Stammkapital",
         "bank_details": "Bankverbindung",
         "phone": "Telefon",
+        "recurring_section": "Wiederkehrende Leistungen",
+        "one_off_section": "Einmalige Leistungen",
+        "period_label": "Zeitraum",
+        "subtotal": "Zwischensumme",
+        "from_date": "ab",
     },
     "en": {
         "title": "Order Confirmation",
@@ -48,6 +62,15 @@ AB_LABELS = {
         "quantity": "Qty",
         "unit_price": "Unit Price",
         "per_month": "/mo.",
+        "per_monthly": "/mo.",
+        "per_bi_monthly": "/2 mo.",
+        "per_quarterly": "/quarter",
+        "per_semi_annual": "/half-year",
+        "per_annual": "/year",
+        "per_biennial": "/2 years",
+        "per_triennial": "/3 years",
+        "per_quadrennial": "/4 years",
+        "per_quinquennial": "/5 years",
         "amount": "Amount",
         "net_total": "Net Total",
         "tax": "VAT",
@@ -63,6 +86,11 @@ AB_LABELS = {
         "share_capital": "Share Capital",
         "bank_details": "Bank Details",
         "phone": "Phone",
+        "recurring_section": "Recurring Services",
+        "one_off_section": "One-Time Services",
+        "period_label": "Period",
+        "subtotal": "Subtotal",
+        "from_date": "from",
     },
 }
 
@@ -146,31 +174,67 @@ class OrderConfirmationService:
             "tax_rate": tax_rate,
         }
 
-    def _build_line_items(self, contract) -> list[dict]:
-        """Build line item dicts from contract items."""
+    def _get_interval_label(self, price_period: str, labels: dict) -> str:
+        """Map a price_period value to a display label."""
+        label_key = f"per_{price_period}"
+        return labels.get(label_key, "")
+
+    def _build_line_items(self, contract, labels: dict) -> list[dict]:
+        """Build line item dicts from contract items, including price periods."""
         items = []
-        for item in contract.items.select_related("product").order_by("id"):
+        for item in contract.items.select_related("product").prefetch_related("price_periods").order_by("sort_order", "id"):
             product_name = ""
             if item.product:
                 product_name = item.product.name
-            amount = item.quantity * item.unit_price
-            items.append({
+
+            price_period_records = list(item.price_periods.all())
+            billing_interval_label = self._get_interval_label(item.price_period, labels)
+
+            line = {
                 "product_name": product_name,
                 "description": item.description or "",
                 "quantity": item.quantity,
-                "unit_price": item.unit_price,
-                "amount": amount,
-                "billing_interval": item.price_period if item.price_period != "monthly" else "",
-            })
+                "is_one_off": item.is_one_off,
+                "billing_interval_label": billing_interval_label if not item.is_one_off else "",
+                "has_price_periods": bool(price_period_records),
+                "item_start_date": item.start_date or item.billing_start_date,
+                "item_end_date": item.billing_end_date,
+            }
+
+            if price_period_records:
+                # Use first period's price for the amount (used in totals)
+                first_period = price_period_records[0]
+                line["unit_price"] = first_period.unit_price
+                line["amount"] = item.quantity * first_period.unit_price
+                line["price_periods"] = []
+                for pp in price_period_records:
+                    pp_label = self._get_interval_label(pp.price_period, labels)
+                    line["price_periods"].append({
+                        "valid_from": pp.valid_from,
+                        "valid_to": pp.valid_to,
+                        "unit_price": pp.unit_price,
+                        "amount": item.quantity * pp.unit_price,
+                        "billing_interval_label": pp_label,
+                    })
+            else:
+                line["unit_price"] = item.unit_price
+                line["amount"] = item.quantity * item.unit_price
+                line["price_periods"] = []
+
+            items.append(line)
         return items
 
     def _build_totals(self, line_items: list[dict], tax_rate: Decimal) -> dict:
-        """Calculate net, tax, gross totals."""
-        net = sum(item["amount"] for item in line_items)
+        """Calculate net, tax, gross totals with recurring/one-off split."""
+        recurring_net = sum(item["amount"] for item in line_items if not item["is_one_off"])
+        one_off_net = sum(item["amount"] for item in line_items if item["is_one_off"])
+        net = recurring_net + one_off_net
         tax_amount = (net * tax_rate / Decimal("100")).quantize(Decimal("0.01"))
         gross = net + tax_amount
         return {
             "net": net,
+            "recurring_net": recurring_net,
+            "one_off_net": one_off_net,
             "tax_rate": tax_rate,
             "tax_amount": tax_amount if tax_amount > 0 else None,
             "gross": gross,
@@ -187,13 +251,17 @@ class OrderConfirmationService:
         """Build the full template context for rendering the AB HTML."""
         labels = AB_LABELS.get(language, AB_LABELS["de"])
         template_ctx = self._get_template_context()
-        line_items = self._build_line_items(contract)
+        line_items = self._build_line_items(contract, labels)
         totals = self._build_totals(line_items, template_ctx["tax_rate"])
         currency_symbol = self.tenant.currency_symbol
 
         customer = contract.customer
         customer_address = customer.address if customer else {}
         customer_vat_id = customer.vat_id if customer else ""
+
+        recurring_items = [i for i in line_items if not i["is_one_off"]]
+        one_off_items = [i for i in line_items if i["is_one_off"]]
+        has_both_sections = bool(recurring_items) and bool(one_off_items)
 
         return {
             "labels": labels,
@@ -205,6 +273,9 @@ class OrderConfirmationService:
             "customer_address": customer_address,
             "customer_vat_id": customer_vat_id,
             "line_items": line_items,
+            "recurring_items": recurring_items,
+            "one_off_items": one_off_items,
+            "has_both_sections": has_both_sections,
             "totals": totals,
             "personal_message": personal_message,
             "include_message_in_pdf": include_message_in_pdf,

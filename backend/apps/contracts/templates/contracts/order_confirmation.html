@@ -103,6 +103,35 @@
         table.line-items .quantity { text-align: center; }
         table.line-items .unit-price { text-align: right; }
 
+        .section-header {
+            font-size: 10pt;
+            font-weight: 600;
+            color: var(--accent-color);
+            margin-top: 16px;
+            margin-bottom: 6px;
+            padding-bottom: 3px;
+            border-bottom: 1px solid var(--accent-color);
+        }
+        .section-subtotal {
+            display: flex;
+            justify-content: flex-end;
+            gap: 16px;
+            font-size: 9pt;
+            font-weight: 600;
+            padding: 4px 8px;
+            margin-bottom: 12px;
+        }
+        tr.price-period-row td {
+            border-bottom: none !important;
+            padding-top: 1px !important;
+            padding-bottom: 1px !important;
+        }
+        .price-period-date {
+            font-size: 7.5pt;
+            color: #666;
+            font-style: italic;
+        }
+
         .totals { float: right; width: 260px; }
         .total-row {
             display: flex;
@@ -250,6 +279,11 @@
     </div>
 
     <!-- Line items -->
+    {% if has_both_sections and recurring_items %}
+    <div class="section-header">{{ labels.recurring_section }}</div>
+    {% endif %}
+
+    {% if recurring_items %}
     <table class="line-items">
         <thead>
             <tr>
@@ -261,7 +295,70 @@
             </tr>
         </thead>
         <tbody>
-            {% for item in line_items %}
+            {% for item in recurring_items %}
+            <tr>
+                <td class="pos">{{ forloop.counter }}</td>
+                <td>
+                    {% if item.product_name %}
+                        {{ item.product_name }}
+                        {% if item.description %}<br><span style="font-size:7.5pt;color:#666;font-style:italic;">{{ item.description|linebreaksbr }}</span>{% endif %}
+                    {% else %}
+                        {{ item.description|linebreaksbr }}
+                    {% endif %}
+                </td>
+                {% if item.has_price_periods %}
+                <td></td><td></td><td></td>
+                {% else %}
+                <td class="quantity">{{ item.quantity }}</td>
+                <td class="unit-price">{{ currency_symbol }}{{ item.unit_price|money:language }}{% if item.billing_interval_label %}<span style="font-size:7.5pt;color:#666;"> {{ item.billing_interval_label }}</span>{% endif %}</td>
+                <td>{{ currency_symbol }}{{ item.amount|money:language }}</td>
+                {% endif %}
+            </tr>
+            {% if item.has_price_periods %}
+            {% for pp in item.price_periods %}
+            <tr class="price-period-row">
+                <td class="pos"></td>
+                <td class="price-period-date">{{ pp.valid_from|date:"d.m.Y" }}{% if pp.valid_to %} – {{ pp.valid_to|date:"d.m.Y" }}{% endif %}</td>
+                <td class="quantity">{{ item.quantity }}</td>
+                <td class="unit-price">{{ currency_symbol }}{{ pp.unit_price|money:language }}{% if pp.billing_interval_label %}<span style="font-size:7.5pt;color:#666;"> {{ pp.billing_interval_label }}</span>{% endif %}</td>
+                <td>{{ currency_symbol }}{{ pp.amount|money:language }}</td>
+            </tr>
+            {% endfor %}
+            {% elif item.item_start_date %}
+            <tr class="price-period-row">
+                <td class="pos"></td>
+                <td class="price-period-date">{{ labels.from_date }} {{ item.item_start_date|date:"d.m.Y" }}{% if item.item_end_date %} – {{ item.item_end_date|date:"d.m.Y" }}{% endif %}</td>
+                <td></td><td></td><td></td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if has_both_sections %}
+    <div class="section-subtotal">
+        <span>{{ labels.subtotal }}:</span>
+        <span>{{ currency_symbol }}{{ totals.recurring_net|money:language }}</span>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if has_both_sections and one_off_items %}
+    <div class="section-header">{{ labels.one_off_section }}</div>
+    {% endif %}
+
+    {% if one_off_items %}
+    <table class="line-items">
+        <thead>
+            <tr>
+                <th class="pos">{{ labels.pos }}</th>
+                <th>{{ labels.description }}</th>
+                <th class="quantity">{{ labels.quantity }}</th>
+                <th class="unit-price">{{ labels.unit_price }}</th>
+                <th>{{ labels.amount }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in one_off_items %}
             <tr>
                 <td class="pos">{{ forloop.counter }}</td>
                 <td>
@@ -273,15 +370,32 @@
                     {% endif %}
                 </td>
                 <td class="quantity">{{ item.quantity }}</td>
-                <td class="unit-price">{{ currency_symbol }}{{ item.unit_price|money:language }}{% if item.billing_interval %}<span style="font-size:7.5pt;color:#666;"> {{ labels.per_month }}</span>{% endif %}</td>
+                <td class="unit-price">{{ currency_symbol }}{{ item.unit_price|money:language }}</td>
                 <td>{{ currency_symbol }}{{ item.amount|money:language }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    {% if has_both_sections %}
+    <div class="section-subtotal">
+        <span>{{ labels.subtotal }}:</span>
+        <span>{{ currency_symbol }}{{ totals.one_off_net|money:language }}</span>
+    </div>
+    {% endif %}
+    {% endif %}
 
     <!-- Totals -->
     <div class="totals">
+        {% if has_both_sections %}
+        <div class="total-row subtotal">
+            <span>{{ labels.recurring_section }} ({{ labels.net_total|lower }})</span>
+            <span>{{ currency_symbol }}{{ totals.recurring_net|money:language }}</span>
+        </div>
+        <div class="total-row subtotal">
+            <span>{{ labels.one_off_section }} ({{ labels.net_total|lower }})</span>
+            <span>{{ currency_symbol }}{{ totals.one_off_net|money:language }}</span>
+        </div>
+        {% endif %}
         <div class="total-row subtotal">
             <span>{{ labels.net_total }}</span>
             <span>{{ currency_symbol }}{{ totals.net|money:language }}</span>

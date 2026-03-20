@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from unittest.mock import patch, MagicMock
 
-from apps.contracts.models import Contract, ContractItem, OrderConfirmation, OrderConfirmationNumberScheme
+from apps.contracts.models import Contract, ContractItem, ContractItemPrice, OrderConfirmation, OrderConfirmationNumberScheme
 from apps.contracts.order_confirmation_numbering import OrderConfirmationNumberService
 from apps.contracts.services.order_confirmation import OrderConfirmationService, AB_LABELS
 from apps.customers.models import Customer
@@ -110,22 +110,28 @@ class TestOrderConfirmationNumbering:
 class TestOrderConfirmationService:
     def test_build_line_items(self, tenant, contract_with_items):
         service = OrderConfirmationService(tenant)
-        items = service._build_line_items(contract_with_items)
+        labels = AB_LABELS["de"]
+        items = service._build_line_items(contract_with_items, labels)
         assert len(items) == 2
         assert items[0]["product_name"] == "Test Product"
         assert items[0]["amount"] == Decimal("100.00")
         assert items[1]["amount"] == Decimal("500.00")
+        assert items[0]["is_one_off"] is False
+        assert items[0]["has_price_periods"] is False
+        assert items[0]["billing_interval_label"] == "/Monat"
 
     def test_build_totals(self, tenant):
         service = OrderConfirmationService(tenant)
         items = [
-            {"amount": Decimal("100.00")},
-            {"amount": Decimal("500.00")},
+            {"amount": Decimal("100.00"), "is_one_off": False},
+            {"amount": Decimal("500.00"), "is_one_off": False},
         ]
         totals = service._build_totals(items, Decimal("19.00"))
         assert totals["net"] == Decimal("600.00")
         assert totals["tax_amount"] == Decimal("114.00")
         assert totals["gross"] == Decimal("714.00")
+        assert totals["recurring_net"] == Decimal("600.00")
+        assert totals["one_off_net"] == Decimal("0")
 
     def test_render_html(self, tenant, contract_with_items):
         service = OrderConfirmationService(tenant)
@@ -237,6 +243,275 @@ class TestOrderConfirmationService:
         recipients = call_kwargs.kwargs.get("to") or call_kwargs[1].get("to")
         assert "billing@acme.com" in recipients
         assert "cfo@acme.com" in recipients
+
+
+# ---- Price Periods & Sections ----
+
+class TestOrderConfirmationPricePeriods:
+    """Tests for price period support, recurring/one-off sections, and interval labels."""
+
+    def test_item_with_price_periods(self, tenant, contract, product):
+        """Item with 2 price periods shows both in line items."""
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            description="Software License",
+            quantity=1,
+            unit_price=Decimal("100.00"),
+        )
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2026, 4, 1),
+            valid_to=date(2027, 3, 31),
+            unit_price=Decimal("100.00"),
+        )
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2027, 4, 1),
+            unit_price=Decimal("120.00"),
+        )
+
+        service = OrderConfirmationService(tenant)
+        labels = AB_LABELS["de"]
+        items = service._build_line_items(contract, labels)
+
+        assert len(items) == 1
+        assert items[0]["has_price_periods"] is True
+        assert len(items[0]["price_periods"]) == 2
+        assert items[0]["price_periods"][0]["unit_price"] == Decimal("100.00")
+        assert items[0]["price_periods"][0]["valid_from"] == date(2026, 4, 1)
+        assert items[0]["price_periods"][0]["valid_to"] == date(2027, 3, 31)
+        assert items[0]["price_periods"][1]["unit_price"] == Decimal("120.00")
+        assert items[0]["price_periods"][1]["valid_to"] is None
+        # Amount uses first period price
+        assert items[0]["amount"] == Decimal("100.00")
+
+    def test_price_periods_in_html(self, tenant, contract, product):
+        """Item with 2 price periods -> both date ranges visible in HTML."""
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            description="Software License",
+            quantity=1,
+            unit_price=Decimal("100.00"),
+        )
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2026, 4, 1),
+            valid_to=date(2027, 3, 31),
+            unit_price=Decimal("100.00"),
+        )
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2027, 4, 1),
+            unit_price=Decimal("120.00"),
+        )
+
+        service = OrderConfirmationService(tenant)
+        html = service.render_html(contract, language="de")
+        assert "01.04.2026" in html
+        assert "31.03.2027" in html
+        assert "01.04.2027" in html
+
+    def test_mixed_recurring_and_one_off_sections(self, tenant, contract, product):
+        """Mixed recurring + one-off items -> separate sections with headers."""
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            description="Monthly service",
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            is_one_off=False,
+        )
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            description="Setup fee",
+            quantity=1,
+            unit_price=Decimal("500.00"),
+            is_one_off=True,
+        )
+
+        service = OrderConfirmationService(tenant)
+        html = service.render_html(contract, language="de")
+        assert "Wiederkehrende Leistungen" in html
+        assert "Einmalige Leistungen" in html
+        assert "Zwischensumme" in html
+
+    def test_only_recurring_no_section_header(self, tenant, contract, product):
+        """Only recurring items -> no section headers."""
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            is_one_off=False,
+        )
+
+        service = OrderConfirmationService(tenant)
+        html = service.render_html(contract, language="de")
+        assert "Wiederkehrende Leistungen" not in html
+        assert "Einmalige Leistungen" not in html
+
+    def test_only_one_off_no_section_header(self, tenant, contract):
+        """Only one-off items -> no section headers."""
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            description="One-time setup",
+            quantity=1,
+            unit_price=Decimal("500.00"),
+            is_one_off=True,
+        )
+
+        service = OrderConfirmationService(tenant)
+        html = service.render_html(contract, language="de")
+        assert "Wiederkehrende Leistungen" not in html
+        assert "Einmalige Leistungen" not in html
+
+    def test_interval_labels_annual(self, tenant, contract, product):
+        """Annual price period -> '/Jahr' label."""
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("1200.00"),
+            price_period="annual",
+        )
+
+        service = OrderConfirmationService(tenant)
+        html = service.render_html(contract, language="de")
+        assert "/Jahr" in html
+
+    def test_interval_labels_quarterly(self, tenant, contract, product):
+        """Quarterly price period -> '/Quartal' label."""
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("300.00"),
+            price_period="quarterly",
+        )
+
+        service = OrderConfirmationService(tenant)
+        html = service.render_html(contract, language="de")
+        assert "/Quartal" in html
+
+    def test_interval_labels_english(self, tenant, contract, product):
+        """English annual label -> '/year'."""
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("1200.00"),
+            price_period="annual",
+        )
+
+        service = OrderConfirmationService(tenant)
+        html = service.render_html(contract, language="en")
+        assert "/year" in html
+
+    def test_item_with_start_date(self, tenant, contract, product):
+        """Item with custom start_date -> date shown in HTML."""
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("50.00"),
+            start_date=date(2026, 6, 1),
+        )
+
+        service = OrderConfirmationService(tenant)
+        html = service.render_html(contract, language="de")
+        assert "01.06.2026" in html
+
+    def test_totals_with_recurring_and_one_off(self, tenant):
+        """Totals split recurring and one-off amounts."""
+        service = OrderConfirmationService(tenant)
+        items = [
+            {"amount": Decimal("100.00"), "is_one_off": False},
+            {"amount": Decimal("200.00"), "is_one_off": False},
+            {"amount": Decimal("500.00"), "is_one_off": True},
+        ]
+        totals = service._build_totals(items, Decimal("19.00"))
+        assert totals["recurring_net"] == Decimal("300.00")
+        assert totals["one_off_net"] == Decimal("500.00")
+        assert totals["net"] == Decimal("800.00")
+        assert totals["tax_amount"] == Decimal("152.00")
+        assert totals["gross"] == Decimal("952.00")
+
+    def test_price_period_billing_interval_label(self, tenant, contract, product):
+        """Price periods get their own billing_interval_label."""
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            price_period="monthly",
+        )
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2026, 1, 1),
+            valid_to=date(2026, 12, 31),
+            unit_price=Decimal("100.00"),
+            price_period="monthly",
+        )
+        ContractItemPrice.objects.create(
+            tenant=tenant,
+            item=item,
+            valid_from=date(2027, 1, 1),
+            unit_price=Decimal("110.00"),
+            price_period="annual",
+        )
+
+        service = OrderConfirmationService(tenant)
+        labels = AB_LABELS["de"]
+        items = service._build_line_items(contract, labels)
+        pp = items[0]["price_periods"]
+        assert pp[0]["billing_interval_label"] == "/Monat"
+        assert pp[1]["billing_interval_label"] == "/Jahr"
+
+    def test_mixed_sections_html_subtotals(self, tenant, contract, product):
+        """Mixed sections show subtotals in totals area."""
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            description="Monthly service",
+            quantity=1,
+            unit_price=Decimal("100.00"),
+            is_one_off=False,
+        )
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            description="Setup fee",
+            quantity=1,
+            unit_price=Decimal("2000.00"),
+            is_one_off=True,
+        )
+
+        service = OrderConfirmationService(tenant)
+        ctx = service.build_template_context(contract, language="de")
+        assert len(ctx["recurring_items"]) == 1
+        assert len(ctx["one_off_items"]) == 1
+        assert ctx["has_both_sections"] is True
+        assert ctx["totals"]["recurring_net"] == Decimal("100.00")
+        assert ctx["totals"]["one_off_net"] == Decimal("2000.00")
 
 
 # ---- Model ----
