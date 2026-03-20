@@ -312,9 +312,11 @@ export function ContractList() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t('contracts.title')}</h1>
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-500">
-            {totalCount} {t('contracts.total')}
-          </span>
+          {!loading && (
+            <span className="text-sm text-gray-500">
+              {totalCount} {t('contracts.total')}
+            </span>
+          )}
           <HelpVideoButton />
           <button
             onClick={handleExport}
