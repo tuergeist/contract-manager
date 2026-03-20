@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.23.0",
+    "date": "2026-03-20",
+    "title": "Absence reports and billing start hint",
+    "description": "Monthly absence reports can be generated, finalized, and sent via email from the department analysis page. Contract edit form now warns when billing start date differs from start date with minimum duration set.",
+    "type": "feature",
+    "details": [
+      "Added monthly absence report with generation, finalization (PDF), and email sending",
+      "Integration-agnostic absence type normalization (Clockodo as first provider)",
+      "New 'Fehlzeiten' tab in department analysis page with grouped entries by employee",
+      "Added hint on contract edit form when billing start differs from start date with min duration"
+    ]
+  },
+  {
     "version": "2.22.13",
     "date": "2026-03-20",
     "title": "AB price periods and Goals improvements",
