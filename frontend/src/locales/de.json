@@ -306,6 +306,8 @@
       "billingAlignmentDate": "Abrechnungs-Angleichungsdatum",
       "billingAlignmentDateHint": "Datum, ab dem die Abrechnung im regulären Zyklus erfolgt. Die erste Rechnung deckt den Zeitraum vom Abrechnungsstart bis zu diesem Datum ab (anteilig).",
       "billingDescription": "Konfigurieren Sie, wie und wann der Vertrag abgerechnet wird. Bei Intervallen größer als monatlich können Sie ein Angleichungsdatum festlegen, um die erste Rechnung anteilig zu berechnen.",
+      "billingStartMismatchHint": "Startdatum weicht ab — Mindestlaufzeit & Gesamtwert werden ab Startdatum berechnet.",
+      "alignStartDate": "Startdatum angleichen",
       "group": "Gruppe",
       "selectGroup": "Gruppe auswählen...",
       "noGroup": "Keine Gruppe"

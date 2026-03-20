@@ -306,6 +306,8 @@
       "billingAlignmentDate": "Billing Alignment Date",
       "billingAlignmentDateHint": "Date when billing aligns to regular cycle. First invoice covers period from billing start to this date (pro-rated).",
       "billingDescription": "Configure how and when the contract is billed. For intervals larger than monthly, you can set an alignment date to pro-rate the first invoice.",
+      "billingStartMismatchHint": "Start date differs — minimum duration & total value are calculated from start date.",
+      "alignStartDate": "Align start date",
       "group": "Group",
       "selectGroup": "Select group...",
       "noGroup": "No group"

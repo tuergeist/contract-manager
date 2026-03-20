@@ -998,23 +998,44 @@ export function ContractForm() {
               <FormField
                 control={form.control}
                 name="billingStartDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('contracts.form.billingStartDate')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="date"
-                        {...field}
-                        disabled={!isEditing}
-                        onChange={(e) => {
-                          billingStartManuallyChanged.current = true
-                          field.onChange(e)
-                        }}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                render={({ field }) => {
+                  const startDateVal = form.watch('startDate')
+                  const minDuration = form.watch('minDurationMonths')
+                  const datesMismatch = startDateVal && field.value && startDateVal !== field.value && minDuration
+                  return (
+                    <FormItem>
+                      <FormLabel>{t('contracts.form.billingStartDate')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="date"
+                          {...field}
+                          disabled={!isEditing}
+                          onChange={(e) => {
+                            billingStartManuallyChanged.current = true
+                            field.onChange(e)
+                          }}
+                        />
+                      </FormControl>
+                      {datesMismatch && (
+                        <p className="text-xs text-amber-600">
+                          {t('contracts.form.billingStartMismatchHint')}
+                          {isEditing && (
+                            <button
+                              type="button"
+                              className="ml-1 underline hover:text-amber-800"
+                              onClick={() => {
+                                form.setValue('startDate', field.value ?? '', { shouldDirty: true })
+                              }}
+                            >
+                              {t('contracts.form.alignStartDate')}
+                            </button>
+                          )}
+                        </p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )
+                }}
               />
 
               {/* Billing Interval */}
