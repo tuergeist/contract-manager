@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.22.13",
+    "date": "2026-03-20",
+    "title": "AB price periods and Goals improvements",
+    "description": "Order confirmations now show per-period pricing with date ranges, correct billing interval labels, and separate recurring/one-off sections. The Goals unclassified list hides 0 EUR items and revenue types can be assigned to all contract items.",
+    "type": "feature",
+    "details": [
+      "Added price period sub-rows with date ranges in order confirmations",
+      "Fixed billing interval labels (e.g. /Jahr, /Quartal instead of always /Monat)",
+      "Added separate recurring and one-off sections with subtotals in AB when both types exist",
+      "Skipped 0 EUR items in Goals unclassified revenue list",
+      "Enabled revenue type assignment for items whose product has no revenue type set"
+    ]
+  },
+  {
     "version": "2.22.12",
     "date": "2026-03-18",
     "title": "Invitation emails and customer active toggle",
