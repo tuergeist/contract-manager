@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
 import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Download } from 'lucide-react'
+import { AbsenceReport } from './AbsenceReport'
 
 const DEPARTMENT_TIME_ANALYSIS = gql`
   query DepartmentTimeAnalysis($dateFrom: Date!, $dateTo: Date!) {
@@ -103,6 +104,7 @@ export function DepartmentAnalysis() {
   const [showFilled, setShowFilled] = useState(false)
   const [sortBy, setSortBy] = useState<string>('__user')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [activeTab, setActiveTab] = useState<'allocation' | 'absences'>('allocation')
 
   const monthShortcuts = useMemo(() => getMonthShortcuts(), [])
   const ytdFrom = formatDate(new Date(now.getFullYear(), 0, 1))
@@ -181,8 +183,35 @@ export function DepartmentAnalysis() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">{t('departmentAnalysis.title')}</h1>
+      <h1 className="text-2xl font-bold mb-4">{t('departmentAnalysis.title')}</h1>
 
+      {/* Tab switcher */}
+      <div className="mb-6 flex gap-1 border-b">
+        <button
+          onClick={() => setActiveTab('allocation')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            activeTab === 'allocation'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          {t('departmentAnalysis.allocationTab')}
+        </button>
+        <button
+          onClick={() => setActiveTab('absences')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            activeTab === 'absences'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          {t('departmentAnalysis.absencesTab')}
+        </button>
+      </div>
+
+      {activeTab === 'absences' && <AbsenceReport />}
+
+      {activeTab === 'allocation' && <>
       {/* Month shortcuts + date range picker */}
       <div className="mb-6 flex flex-wrap items-center gap-2">
         {monthShortcuts.map((s) => (
@@ -535,6 +564,7 @@ export function DepartmentAnalysis() {
           </div>
         </>
       )}
+      </>}
     </div>
   )
 }

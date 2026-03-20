@@ -2142,6 +2142,29 @@ class UnclassifiedItemType:
     customer_id: int
 
 
+@strawberry.type
+class AbsenceReportEntryType:
+    """An individual absence entry within a report."""
+    id: int
+    user_name: str
+    external_user_id: str
+    absence_type: str
+    date_from: date
+    date_to: date
+    days_count: Decimal
+
+
+@strawberry.type
+class AbsenceReportType:
+    """Monthly absence report."""
+    id: int
+    year: int
+    month: int
+    status: str
+    finalized_at: datetime | None
+    entries: list[AbsenceReportEntryType]
+
+
 @strawberry.input
 class MergeContractItemOverrideInput:
     """Per-item date overrides for contract merge."""
@@ -3957,6 +3980,46 @@ class ContractQuery:
         return result
 
     @strawberry.field
+    def absence_report(
+        self,
+        info: Info[Context, None],
+        year: int,
+        month: int,
+    ) -> AbsenceReportType | None:
+        """Get an existing absence report for the given month."""
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return None
+
+        from apps.contracts.models import AbsenceReport
+        report = AbsenceReport.objects.filter(
+            tenant=user.tenant, year=year, month=month,
+        ).prefetch_related("entries").first()
+
+        if not report:
+            return None
+
+        return AbsenceReportType(
+            id=report.id,
+            year=report.year,
+            month=report.month,
+            status=report.status,
+            finalized_at=report.finalized_at,
+            entries=[
+                AbsenceReportEntryType(
+                    id=e.id,
+                    user_name=e.user_name,
+                    external_user_id=e.external_user_id,
+                    absence_type=e.absence_type,
+                    date_from=e.date_from,
+                    date_to=e.date_to,
+                    days_count=e.days_count,
+                )
+                for e in report.entries.all()
+            ],
+        )
+
+    @strawberry.field
     def new_business_goals(
         self, info: Info[Context, None], year: int
     ) -> list[NewBusinessGoalGQLType]:
@@ -4135,6 +4198,88 @@ def _build_pdf_analysis_result(result):
 
 @strawberry.type
 class ContractMutation:
+    @strawberry.mutation
+    def generate_absence_report(
+        self,
+        info: Info[Context, None],
+        year: int,
+        month: int,
+    ) -> AbsenceReportType:
+        """Generate or regenerate a draft absence report."""
+        user = require_perm(info, "contracts", "read")
+        from apps.contracts.services.absence_report import AbsenceReportService
+
+        service = AbsenceReportService(user.tenant)
+        report = service.generate_report(year, month)
+        report.refresh_from_db()
+
+        return AbsenceReportType(
+            id=report.id,
+            year=report.year,
+            month=report.month,
+            status=report.status,
+            finalized_at=report.finalized_at,
+            entries=[
+                AbsenceReportEntryType(
+                    id=e.id,
+                    user_name=e.user_name,
+                    external_user_id=e.external_user_id,
+                    absence_type=e.absence_type,
+                    date_from=e.date_from,
+                    date_to=e.date_to,
+                    days_count=e.days_count,
+                )
+                for e in report.entries.all()
+            ],
+        )
+
+    @strawberry.mutation
+    def finalize_absence_report(
+        self,
+        info: Info[Context, None],
+        report_id: strawberry.ID,
+    ) -> AbsenceReportType:
+        """Finalize a draft absence report."""
+        user = require_perm(info, "contracts", "read")
+        from apps.contracts.services.absence_report import AbsenceReportService
+
+        service = AbsenceReportService(user.tenant)
+        report = service.finalize_report(int(report_id), user)
+
+        return AbsenceReportType(
+            id=report.id,
+            year=report.year,
+            month=report.month,
+            status=report.status,
+            finalized_at=report.finalized_at,
+            entries=[
+                AbsenceReportEntryType(
+                    id=e.id,
+                    user_name=e.user_name,
+                    external_user_id=e.external_user_id,
+                    absence_type=e.absence_type,
+                    date_from=e.date_from,
+                    date_to=e.date_to,
+                    days_count=e.days_count,
+                )
+                for e in report.entries.all()
+            ],
+        )
+
+    @strawberry.mutation
+    def send_absence_report(
+        self,
+        info: Info[Context, None],
+        report_id: strawberry.ID,
+        recipients: list[str],
+    ) -> bool:
+        """Send a finalized absence report via email."""
+        user = require_perm(info, "contracts", "read")
+        from apps.contracts.services.absence_report import AbsenceReportService
+
+        service = AbsenceReportService(user.tenant)
+        return service.send_report(int(report_id), recipients)
+
     @strawberry.mutation
     def provision_clockodo_projects(
         self,

@@ -2147,7 +2147,32 @@
     "department": "Department",
     "logged": "Logged",
     "filled": "Filled",
-    "absenceDays": "Absent days"
+    "absenceDays": "Absent days",
+    "allocationTab": "Time Allocation",
+    "absencesTab": "Absences"
+  },
+  "absenceReport": {
+    "generate": "Generate Report",
+    "regenerate": "Regenerate",
+    "finalize": "Finalize",
+    "send": "Send",
+    "sendTitle": "Send Absence Report",
+    "recipients": "Recipients",
+    "recipientsHint": "Comma-separated email addresses",
+    "statusDraft": "Draft",
+    "statusFinalized": "Finalized",
+    "generated": "Absence report generated",
+    "finalized": "Absence report finalized",
+    "sent": "Absence report sent",
+    "error": "Error",
+    "noReport": "No report for this month.",
+    "clickGenerate": "Click \"Generate Report\" to fetch absence data.",
+    "noEntries": "No absences in this month.",
+    "type": "Type",
+    "from": "From",
+    "to": "To",
+    "days": "Days",
+    "totalDays": "Total Absence Days"
   },
   "orderConfirmation": {
     "dialog": {

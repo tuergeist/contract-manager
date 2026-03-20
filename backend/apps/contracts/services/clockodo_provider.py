@@ -183,6 +183,28 @@ class ClockodoProvider(TimeTrackingProvider):
             logger.error("Failed to fetch Clockodo absences: %s", e)
             return []
 
+    # Clockodo absence type codes → internal AbsenceType values
+    # See: https://www.clockodo.com/en/api/absences/
+    ABSENCE_TYPE_MAP = {
+        0: "vacation",             # Regular vacation
+        1: "sick",                 # Sick leave
+        2: "sick",                 # Sick (with pay continuation) — still sick
+        3: "sick_certificate",     # Sick with doctor's certificate
+        4: "sick_certificate",     # Sick (certificate, long-term)
+        5: "special_leave",        # Special leave
+        6: "sick_child",           # Sick child
+        7: "overtime_reduction",   # Overtime reduction
+        8: "education",            # Training / education
+        9: "other",                # Home office (typically filtered out)
+        10: "other",               # Maternity protection
+        11: "other",               # Parental leave
+        12: "other",               # Sabbatical
+    }
+
+    def normalize_absence_type(self, raw_type: int) -> str:
+        """Map Clockodo absence type code to internal AbsenceType value."""
+        return self.ABSENCE_TYPE_MAP.get(raw_type, "other")
+
     def get_department_time_data(
         self,
         date_from: date | None = None,

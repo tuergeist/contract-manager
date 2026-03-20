@@ -2147,7 +2147,32 @@
     "department": "Abteilung",
     "logged": "Erfasst",
     "filled": "Aufgefüllt",
-    "absenceDays": "Abwesenheitstage"
+    "absenceDays": "Abwesenheitstage",
+    "allocationTab": "Zeitverteilung",
+    "absencesTab": "Fehlzeiten"
+  },
+  "absenceReport": {
+    "generate": "Report generieren",
+    "regenerate": "Neu generieren",
+    "finalize": "Festschreiben",
+    "send": "Versenden",
+    "sendTitle": "Fehlzeiten-Report versenden",
+    "recipients": "Empfänger",
+    "recipientsHint": "Komma-getrennte E-Mail-Adressen",
+    "statusDraft": "Entwurf",
+    "statusFinalized": "Festgeschrieben",
+    "generated": "Fehlzeiten-Report generiert",
+    "finalized": "Fehlzeiten-Report festgeschrieben",
+    "sent": "Fehlzeiten-Report versendet",
+    "error": "Fehler",
+    "noReport": "Kein Report für diesen Monat vorhanden.",
+    "clickGenerate": "Klicken Sie auf \"Report generieren\", um Fehlzeiten abzurufen.",
+    "noEntries": "Keine Fehlzeiten in diesem Monat.",
+    "type": "Art",
+    "from": "Von",
+    "to": "Bis",
+    "days": "Tage",
+    "totalDays": "Gesamt Fehltage"
   },
   "orderConfirmation": {
     "dialog": {

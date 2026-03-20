@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Contract, ContractItem, ContractAmendment, RevenueGoal, NewBusinessGoal, AutoLinkRule, Department, DepartmentServiceMapping
+from .models import Contract, ContractItem, ContractAmendment, RevenueGoal, NewBusinessGoal, AutoLinkRule, Department, DepartmentServiceMapping, AbsenceReport, AbsenceReportEntry
 
 
 class ContractItemInline(admin.TabularInline):
@@ -66,3 +66,15 @@ class DepartmentServiceMappingAdmin(admin.ModelAdmin):
     list_display = ["external_service_name", "department", "tenant"]
     list_filter = ["tenant", "department"]
     search_fields = ["external_service_name"]
+
+
+class AbsenceReportEntryInline(admin.TabularInline):
+    model = AbsenceReportEntry
+    extra = 0
+
+
+@admin.register(AbsenceReport)
+class AbsenceReportAdmin(admin.ModelAdmin):
+    list_display = ["year", "month", "status", "tenant", "finalized_at"]
+    list_filter = ["tenant", "status", "year"]
+    inlines = [AbsenceReportEntryInline]

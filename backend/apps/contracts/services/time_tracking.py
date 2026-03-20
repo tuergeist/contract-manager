@@ -103,6 +103,14 @@ class TimeTrackingProvider(ABC):
         """
         raise NotImplementedError
 
+    def normalize_absence_type(self, raw_type: int) -> str:
+        """Map provider-specific absence type code to internal AbsenceType value.
+
+        Subclasses should override with provider-specific mappings.
+        Default returns 'other' for all types.
+        """
+        return "other"
+
 
 logger = logging.getLogger(__name__)
 

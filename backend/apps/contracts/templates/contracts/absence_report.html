@@ -1,0 +1,100 @@
+{% load invoice_filters %}
+<!DOCTYPE html>
+<html lang="{{ language }}">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ labels.title }} — {{ month_name }} {{ report.year }}</title>
+    <style>
+        :root { --accent-color: {{ accent_color|default:"#2563eb" }}; }
+        @page { size: A4; margin: 2cm 2cm 3cm 2cm; }
+        * { box-sizing: border-box; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 9pt; line-height: 1.4; color: #333; margin: 0; padding: 0; }
+
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+        .header-left { display: flex; align-items: flex-start; }
+        .company-logo { max-width: 180px; max-height: 50px; }
+        .company-info { text-align: right; }
+        .company-name { font-size: 12pt; font-weight: bold; color: var(--accent-color); }
+        .company-address { font-size: 8pt; color: #555; margin-top: 2px; }
+
+        .report-title { font-size: 16pt; font-weight: bold; display: inline-block; padding-bottom: 4px; border-bottom: 3px solid var(--accent-color); margin-bottom: 6px; }
+        .report-meta { font-size: 9pt; color: #666; margin-bottom: 20px; }
+
+        .employee-section { margin-bottom: 16px; }
+        .employee-name { font-size: 10pt; font-weight: 600; color: var(--accent-color); padding: 4px 0; border-bottom: 1px solid var(--accent-color); margin-bottom: 4px; }
+
+        table.entries { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+        table.entries th { background: #f3f4f6; padding: 4px 8px; text-align: left; font-weight: 600; font-size: 8pt; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+        table.entries th:last-child { text-align: right; }
+        table.entries td { padding: 4px 8px; border-bottom: 1px solid #f3f4f6; font-size: 9pt; }
+        table.entries td:last-child { text-align: right; }
+
+        .employee-total { text-align: right; font-weight: 600; font-size: 9pt; padding: 2px 8px; color: #555; }
+
+        .grand-total { margin-top: 20px; padding: 8px; background: var(--accent-color); color: white; font-size: 10pt; font-weight: bold; display: flex; justify-content: space-between; }
+
+        .footer { margin-top: 30px; font-size: 8pt; color: #999; border-top: 1px solid #e5e7eb; padding-top: 8px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            {% if logo_url %}
+            <img src="{{ logo_url }}" alt="{{ company.company_name }}" class="company-logo">
+            {% endif %}
+        </div>
+        <div class="company-info">
+            <div class="company-name">{{ company.company_name }}</div>
+            <div class="company-address">
+                {{ company.street }}<br>
+                {{ company.zip_code }} {{ company.city }}
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <span class="report-title">{{ labels.title }}</span>
+    </div>
+    <div class="report-meta">
+        {{ labels.month_label }}: {{ month_name }} {{ report.year }}
+    </div>
+
+    {% for group in grouped_entries %}
+    <div class="employee-section">
+        <div class="employee-name">{{ group.user_name }}</div>
+        <table class="entries">
+            <thead>
+                <tr>
+                    <th>{{ labels.absence_type }}</th>
+                    <th>{{ labels.date_from }}</th>
+                    <th>{{ labels.date_to }}</th>
+                    <th>{{ labels.days }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in group.entries %}
+                <tr>
+                    <td>{{ entry.type_label }}</td>
+                    <td>{{ entry.date_from|date:"d.m.Y" }}</td>
+                    <td>{{ entry.date_to|date:"d.m.Y" }}</td>
+                    <td>{{ entry.days_count|money:language }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="employee-total">{{ group.total_days|money:language }} {{ labels.days }}</div>
+    </div>
+    {% endfor %}
+
+    {% if grouped_entries %}
+    <div class="grand-total">
+        <span>{{ labels.total_days }}</span>
+        <span>{{ total_days|money:language }}</span>
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        {{ labels.generated_at }}: {{ generated_date|date:"d.m.Y" }}
+    </div>
+</body>
+</html>

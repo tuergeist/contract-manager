@@ -1695,3 +1695,74 @@ class UserCostProfile(TenantModel):
 
     def __str__(self):
         return f"{self.external_user_name} (FTE {self.fte_percentage}%)"
+
+
+class AbsenceReport(TenantModel):
+    """Monthly absence report snapshot."""
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        FINALIZED = "finalized", "Finalized"
+
+    class AbsenceType(models.TextChoices):
+        SICK = "sick", "Sick"
+        SICK_CHILD = "sick_child", "Sick (child)"
+        SICK_CERTIFICATE = "sick_certificate", "Sick (with certificate)"
+        VACATION = "vacation", "Vacation"
+        SPECIAL_LEAVE = "special_leave", "Special leave"
+        EDUCATION = "education", "Education/Training"
+        OVERTIME_REDUCTION = "overtime_reduction", "Overtime reduction"
+        OTHER = "other", "Other"
+
+    year = models.PositiveIntegerField()
+    month = models.PositiveIntegerField()
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT,
+    )
+    finalized_at = models.DateTimeField(null=True, blank=True)
+    finalized_by = models.ForeignKey(
+        "tenants.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="finalized_absence_reports",
+    )
+    pdf_file = models.FileField(
+        upload_to="absence_reports/",
+        blank=True,
+    )
+
+    class Meta:
+        unique_together = ["tenant", "year", "month"]
+        ordering = ["-year", "-month"]
+
+    def __str__(self):
+        return f"Absence Report {self.year}-{self.month:02d} ({self.get_status_display()})"
+
+
+class AbsenceReportEntry(TenantModel):
+    """Individual absence entry within a report."""
+
+    report = models.ForeignKey(
+        AbsenceReport,
+        on_delete=models.CASCADE,
+        related_name="entries",
+    )
+    user_name = models.CharField(max_length=255)
+    external_user_id = models.CharField(max_length=100)
+    absence_type = models.CharField(
+        max_length=30,
+        choices=AbsenceReport.AbsenceType.choices,
+    )
+    date_from = models.DateField()
+    date_to = models.DateField()
+    days_count = models.DecimalField(max_digits=5, decimal_places=2)
+    raw_data = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["user_name", "date_from"]
+
+    def __str__(self):
+        return f"{self.user_name}: {self.get_absence_type_display()} ({self.date_from} - {self.date_to})"
