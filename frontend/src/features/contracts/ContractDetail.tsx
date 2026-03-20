@@ -2580,8 +2580,8 @@ function AddItemModal({
             />
           </div>
 
-          {/* Revenue Type - shown prominently when no product selected */}
-          {!productId ? (
+          {/* Revenue Type - editable when no product or product has no revenue type */}
+          {!productId || !selectedProduct?.revenueType ? (
             <div className="space-y-2">
               <label className="text-sm font-medium">
                 {t('contracts.revenueType.label')}
@@ -2597,7 +2597,7 @@ function AddItemModal({
                 </SelectContent>
               </Select>
             </div>
-          ) : selectedProduct?.revenueType ? (
+          ) : (
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('contracts.revenueType.label')}</label>
               <p className="text-sm text-muted-foreground">
@@ -2605,7 +2605,7 @@ function AddItemModal({
                 {' '}({t('contracts.revenueType.inherited')})
               </p>
             </div>
-          ) : null}
+          )}
 
           {/* Item-specific overrides - collapsed by default */}
           <details className="group rounded-lg border">
@@ -3470,8 +3470,8 @@ function EditItemModal({
             </div>
           )}
 
-          {/* Revenue Type - shown prominently when no product selected */}
-          {!productId ? (
+          {/* Revenue Type - editable when no product or product has no revenue type */}
+          {!productId || !selectedProduct?.revenueType ? (
             <div className="space-y-2">
               <label className="text-sm font-medium">
                 {t('contracts.revenueType.label')}
@@ -3487,7 +3487,7 @@ function EditItemModal({
                 </SelectContent>
               </Select>
             </div>
-          ) : selectedProduct?.revenueType ? (
+          ) : (
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('contracts.revenueType.label')}</label>
               <p className="text-sm text-muted-foreground">
@@ -3495,7 +3495,7 @@ function EditItemModal({
                 {' '}({t('contracts.revenueType.inherited')})
               </p>
             </div>
-          ) : null}
+          )}
 
           {/* Item-specific overrides - auto-open if any field has a value */}
           <details className="group rounded-lg border" open={!!(orderConfirmationNumber || startDate || billingStartDate || billingEndDate || alignToContractAt) || undefined}>

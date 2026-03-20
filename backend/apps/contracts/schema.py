@@ -3939,6 +3939,8 @@ class ContractQuery:
 
         result = []
         for item in items:
+            if item.unit_price == 0:
+                continue
             if item.get_effective_revenue_type() is None:
                 result.append(UnclassifiedItemType(
                     item_id=item.id,
