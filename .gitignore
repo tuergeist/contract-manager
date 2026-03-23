@@ -74,3 +74,4 @@ frontend/public/licenses-frontend.json
 
 # Claude Code
 .claude/
+.gstack/

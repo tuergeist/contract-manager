@@ -546,7 +546,14 @@
       "total": "Total",
       "totalForecast": "Total Forecast",
       "prorated": "prorated",
-      "noEvents": "No billing events in selected period"
+      "noEvents": "No billing events in selected period",
+      "importInvoice": "Import invoice PDF",
+      "confirmInvoice": "Confirm Invoice",
+      "confirmInvoiceDescription": "Please verify the extracted invoice data before saving.",
+      "extractionFailed": "Could not extract data from PDF. Please enter the invoice details manually.",
+      "invoiceNumber": "Invoice Number",
+      "invoiceDate": "Invoice Date",
+      "invoiceAmount": "Amount (gross)"
     }
   },
   "forecasts": {
@@ -931,7 +938,7 @@
       "filterPendingUpload": "Pending Upload",
       "filterUploaded": "Uploaded",
       "uploadPending": "Pending",
-      "bulkUploadDescription": "Upload one or more invoice PDFs. Files will be matched to expected invoices from CSV imports.",
+      "bulkUploadDescription": "Upload one or more invoice PDFs. Invoice number, date, customer and amount will be extracted automatically.",
       "dropzoneTextMultiple": "Click to select or drag & drop PDF files",
       "filesSelected": "{{count}} file(s) selected",
       "uploadFiles": "Upload {{count}} file(s)",

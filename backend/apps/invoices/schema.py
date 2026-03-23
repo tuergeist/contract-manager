@@ -413,6 +413,25 @@ class UploadInvoiceInput:
 
 
 @strawberry.input
+class UploadForecastInvoiceInput:
+    """Input for uploading an invoice PDF from the revenue forecast tab."""
+
+    file_content: str  # Base64-encoded PDF
+    filename: str
+    contract_id: int
+
+
+@strawberry.input
+class ConfirmForecastInvoiceInput:
+    """Input for confirming an uploaded forecast invoice with user-edited fields."""
+
+    invoice_id: strawberry.ID
+    invoice_number: str
+    invoice_date: date
+    total_amount: Decimal
+
+
+@strawberry.input
 class UpdateInvoiceInput:
     """Input for correcting extracted invoice fields."""
 
@@ -1801,6 +1820,121 @@ class InvoiceMutation:
         ).prefetch_related(
             "payment_matches__transaction__counterparty"
         ).get(id=id)
+
+        return InvoiceResult(
+            success=True,
+            invoice=_convert_imported_invoice(invoice),
+        )
+
+    @strawberry.mutation
+    def upload_forecast_invoice(
+        self, info: Info[Context, None], input: UploadForecastInvoiceInput
+    ) -> InvoiceResult:
+        """Upload an invoice PDF from the revenue forecast tab.
+
+        Runs extraction synchronously and links to the contract.
+        Returns extracted data for user confirmation.
+        """
+        user, err = check_perm(info, "invoices", "generate")
+        if err:
+            return InvoiceResult(success=False, error=err)
+
+        # Validate extension
+        ext = os.path.splitext(input.filename)[1].lower()
+        if ext != ".pdf":
+            return InvoiceResult(
+                success=False,
+                error="Only PDF files are accepted.",
+            )
+
+        # Decode base64
+        try:
+            file_bytes = base64.b64decode(input.file_content, validate=True)
+        except Exception:
+            return InvoiceResult(
+                success=False, error="Invalid base64 file content"
+            )
+
+        # Validate size (20MB max)
+        max_size = 20 * 1024 * 1024
+        if len(file_bytes) > max_size:
+            return InvoiceResult(
+                success=False,
+                error="File too large. Maximum size is 20MB",
+            )
+
+        # Validate contract exists
+        from apps.contracts.models import Contract
+
+        try:
+            contract = Contract.objects.get(id=input.contract_id, tenant=user.tenant)
+        except Contract.DoesNotExist:
+            return InvoiceResult(
+                success=False, error="Contract not found"
+            )
+
+        # Create the imported invoice record linked to contract
+        invoice = ImportedInvoice(
+            tenant=user.tenant,
+            original_filename=input.filename,
+            file_size=len(file_bytes),
+            extraction_status=ImportedInvoice.ExtractionStatus.EXTRACTING,
+            created_by=user,
+            contract=contract,
+            customer=contract.customer,
+        )
+        invoice.pdf_file.save(input.filename, ContentFile(file_bytes), save=False)
+        invoice.save()
+
+        # Run extraction synchronously
+        from apps.invoices.extraction import run_extraction
+
+        run_extraction(invoice)
+
+        # Reload with relations
+        invoice = ImportedInvoice.objects.select_related(
+            "customer", "created_by", "contract"
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty"
+        ).get(id=invoice.id)
+
+        return InvoiceResult(
+            success=True,
+            invoice=_convert_imported_invoice(invoice),
+        )
+
+    @strawberry.mutation
+    def confirm_forecast_invoice(
+        self, info: Info[Context, None], input: ConfirmForecastInvoiceInput
+    ) -> InvoiceResult:
+        """Confirm an uploaded forecast invoice with user-edited fields."""
+        user, err = check_perm(info, "invoices", "generate")
+        if err:
+            return InvoiceResult(success=False, error=err)
+
+        try:
+            invoice = ImportedInvoice.objects.get(id=input.invoice_id, tenant=user.tenant)
+        except ImportedInvoice.DoesNotExist:
+            return InvoiceResult(
+                success=False, error="Invoice not found"
+            )
+
+        # Update fields with user-confirmed values
+        invoice.invoice_number = input.invoice_number
+        invoice.invoice_date = input.invoice_date
+        invoice.total_amount = input.total_amount
+        invoice.extraction_status = ImportedInvoice.ExtractionStatus.CONFIRMED
+        invoice.save(update_fields=[
+            "invoice_number", "invoice_date", "total_amount",
+            "extraction_status", "updated_at",
+        ])
+
+        # Reload with relations
+        invoice = ImportedInvoice.objects.select_related(
+            "customer", "created_by", "contract"
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty"
+        ).get(id=input.invoice_id)
 
         return InvoiceResult(
             success=True,

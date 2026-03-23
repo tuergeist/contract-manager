@@ -546,7 +546,14 @@
       "total": "Gesamt",
       "totalForecast": "Gesamtprognose",
       "prorated": "anteilig",
-      "noEvents": "Keine Abrechnungen im gewählten Zeitraum"
+      "noEvents": "Keine Abrechnungen im gewählten Zeitraum",
+      "importInvoice": "Rechnung PDF importieren",
+      "confirmInvoice": "Rechnung bestätigen",
+      "confirmInvoiceDescription": "Bitte überprüfen Sie die extrahierten Rechnungsdaten vor dem Speichern.",
+      "extractionFailed": "Daten konnten nicht aus dem PDF extrahiert werden. Bitte geben Sie die Rechnungsdaten manuell ein.",
+      "invoiceNumber": "Rechnungsnummer",
+      "invoiceDate": "Rechnungsdatum",
+      "invoiceAmount": "Betrag (brutto)"
     }
   },
   "forecasts": {
@@ -931,7 +938,7 @@
       "filterPendingUpload": "Upload ausstehend",
       "filterUploaded": "Hochgeladen",
       "uploadPending": "Ausstehend",
-      "bulkUploadDescription": "Laden Sie eine oder mehrere Rechnungs-PDFs hoch. Dateien werden mit erwarteten Rechnungen aus CSV-Importen abgeglichen.",
+      "bulkUploadDescription": "Laden Sie eine oder mehrere Rechnungs-PDFs hoch. Rechnungsnummer, Datum, Kunde und Betrag werden automatisch extrahiert.",
       "dropzoneTextMultiple": "Klicken zum Auswählen oder PDF-Dateien hierher ziehen",
       "filesSelected": "{{count}} Datei(en) ausgewählt",
       "uploadFiles": "{{count}} Datei(en) hochladen",

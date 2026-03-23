@@ -576,7 +576,7 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
     )
   }
 
-  const isEditable = invoice.extractionStatus === 'extracted' || invoice.extractionStatus === 'confirmed'
+  const isEditable = invoice.extractionStatus === 'extracted' || invoice.extractionStatus === 'confirmed' || invoice.extractionStatus === 'extraction_failed'
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">

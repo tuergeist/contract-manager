@@ -476,6 +476,41 @@ const CREATE_OFFER_MUTATION = gql`
   }
 `
 
+const UPLOAD_FORECAST_INVOICE_MUTATION = gql`
+  mutation UploadForecastInvoice($input: UploadForecastInvoiceInput!) {
+    uploadForecastInvoice(input: $input) {
+      success
+      error
+      invoice {
+        id
+        invoiceNumber
+        invoiceDate
+        totalAmount
+        extractionStatus
+        extractionError
+      }
+    }
+  }
+`
+
+const CONFIRM_FORECAST_INVOICE_MUTATION = gql`
+  mutation ConfirmForecastInvoice($input: ConfirmForecastInvoiceInput!) {
+    confirmForecastInvoice(input: $input) {
+      success
+      error
+    }
+  }
+`
+
+const DELETE_INVOICE_MUTATION = gql`
+  mutation DeleteInvoice($id: ID!) {
+    deleteInvoice(id: $id) {
+      success
+      error
+    }
+  }
+`
+
 const UPLOAD_ATTACHMENT_MUTATION = gql`
   mutation UploadContractAttachment($input: UploadAttachmentInput!) {
     uploadContractAttachment(input: $input) {
@@ -3720,7 +3755,19 @@ function ForecastTab({ contractId }: { contractId: string }) {
   const [includeAllHistory, setIncludeAllHistory] = useState(false)
   const [creatingForDate, setCreatingForDate] = useState<string | null>(null)
 
-  const { data, loading, error } = useQuery(BILLING_SCHEDULE_QUERY, {
+  // Invoice upload state
+  const [uploadingForDate, setUploadingForDate] = useState<string | null>(null)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    invoiceId: string
+    invoiceNumber: string
+    invoiceDate: string
+    totalAmount: string
+    extractionFailed: boolean
+  } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const uploadDateRef = useRef<string | null>(null)
+
+  const { data, loading, error, refetch } = useQuery(BILLING_SCHEDULE_QUERY, {
     variables: {
       contractId,
       months: parseInt(months),
@@ -3734,6 +3781,95 @@ function ForecastTab({ contractId }: { contractId: string }) {
   })
 
   const [createOffer] = useMutation(CREATE_OFFER_MUTATION)
+  const [uploadForecastInvoice] = useMutation(UPLOAD_FORECAST_INVOICE_MUTATION)
+  const [confirmForecastInvoice] = useMutation(CONFIRM_FORECAST_INVOICE_MUTATION)
+  const [deleteInvoice] = useMutation(DELETE_INVOICE_MUTATION)
+
+  const handleInvoiceUpload = (billingDate: string) => {
+    uploadDateRef.current = billingDate
+    setUploadingForDate(billingDate)
+    fileInputRef.current?.click()
+  }
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) {
+      setUploadingForDate(null)
+      return
+    }
+
+    // Read file as base64
+    const reader = new FileReader()
+    reader.onload = async () => {
+      const base64 = (reader.result as string).split(',')[1]
+      try {
+        const result = await uploadForecastInvoice({
+          variables: {
+            input: {
+              fileContent: base64,
+              filename: file.name,
+              contractId: parseInt(contractId),
+            },
+          },
+        })
+
+        const data = result.data?.uploadForecastInvoice
+        if (data?.success && data.invoice) {
+          const inv = data.invoice
+          setConfirmDialog({
+            invoiceId: inv.id,
+            invoiceNumber: inv.invoiceNumber || '',
+            invoiceDate: inv.invoiceDate || '',
+            totalAmount: inv.totalAmount || '',
+            extractionFailed: inv.extractionStatus === 'extraction_failed',
+          })
+        } else {
+          alert(data?.error || t('common.error'))
+        }
+      } catch (err) {
+        alert(t('common.error'))
+      } finally {
+        setUploadingForDate(null)
+        // Reset file input
+        if (fileInputRef.current) fileInputRef.current.value = ''
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleConfirmInvoice = async () => {
+    if (!confirmDialog) return
+    try {
+      const result = await confirmForecastInvoice({
+        variables: {
+          input: {
+            invoiceId: confirmDialog.invoiceId,
+            invoiceNumber: confirmDialog.invoiceNumber,
+            invoiceDate: confirmDialog.invoiceDate,
+            totalAmount: confirmDialog.totalAmount,
+          },
+        },
+      })
+      if (result.data?.confirmForecastInvoice?.success) {
+        setConfirmDialog(null)
+        refetch()
+      } else {
+        alert(result.data?.confirmForecastInvoice?.error || t('common.error'))
+      }
+    } catch {
+      alert(t('common.error'))
+    }
+  }
+
+  const handleCancelInvoice = async () => {
+    if (!confirmDialog) return
+    try {
+      await deleteInvoice({ variables: { id: confirmDialog.invoiceId } })
+    } catch {
+      // Ignore delete errors
+    }
+    setConfirmDialog(null)
+  }
 
   // Build a map of billingDate -> offer for quick lookup
   const offersByDate = useMemo(() => {
@@ -3905,7 +4041,18 @@ function ForecastTab({ contractId }: { contractId: string }) {
                           )}
                         </div>
                       ) : (
-                        <span className="text-gray-400">—</span>
+                        <button
+                          onClick={() => handleInvoiceUpload(event.date)}
+                          disabled={uploadingForDate !== null}
+                          className="inline-flex items-center gap-1 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
+                          title={t('contracts.forecast.importInvoice')}
+                        >
+                          {uploadingForDate === event.date ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Upload className="h-4 w-4" />
+                          )}
+                        </button>
                       )}
                     </td>
                     {canCreateOffers && (
@@ -3965,6 +4112,65 @@ function ForecastTab({ contractId }: { contractId: string }) {
           </p>
         </div>
       )}
+
+      {/* Hidden file input for invoice PDF upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf"
+        className="hidden"
+        onChange={handleFileSelected}
+      />
+
+      {/* Invoice confirmation dialog */}
+      <Dialog open={confirmDialog !== null} onOpenChange={(open) => { if (!open) handleCancelInvoice() }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('contracts.forecast.confirmInvoice')}</DialogTitle>
+            <DialogDescription>
+              {confirmDialog?.extractionFailed
+                ? t('contracts.forecast.extractionFailed')
+                : t('contracts.forecast.confirmInvoiceDescription')}
+            </DialogDescription>
+          </DialogHeader>
+          {confirmDialog && (
+            <div className="space-y-4 py-2">
+              <div>
+                <Label>{t('contracts.forecast.invoiceNumber')}</Label>
+                <Input
+                  value={confirmDialog.invoiceNumber}
+                  onChange={(e) => setConfirmDialog({ ...confirmDialog, invoiceNumber: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>{t('contracts.forecast.invoiceDate')}</Label>
+                <Input
+                  type="date"
+                  value={confirmDialog.invoiceDate}
+                  onChange={(e) => setConfirmDialog({ ...confirmDialog, invoiceDate: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>{t('contracts.forecast.invoiceAmount')}</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={confirmDialog.totalAmount}
+                  onChange={(e) => setConfirmDialog({ ...confirmDialog, totalAmount: e.target.value })}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCancelInvoice}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={handleConfirmInvoice}>
+              {t('common.save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
