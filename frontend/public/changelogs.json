@@ -1,5 +1,21 @@
 [
   {
+    "version": "2.24.0",
+    "date": "2026-03-23",
+    "title": "Import invoices from revenue forecast",
+    "description": "Upload PDF invoices directly from the revenue forecast tab with automatic extraction of invoice number, date, and amount. Failed extractions can now be edited manually on the invoice detail page.",
+    "type": "feature",
+    "details": [
+      "Added PDF invoice upload button on revenue forecast billing periods without an invoice",
+      "Synchronous extraction with confirmation dialog to verify/edit extracted data before saving",
+      "Allowed manual editing of invoice fields when extraction fails",
+      "Clarified that PDF uploads on /invoices work independently from CSV imports",
+      "Improved sidebar nav touch targets, search input height, and table number alignment",
+      "Added color-scheme: light to prevent dark mode rendering artifacts",
+      "Hidden contract count badge while loading to prevent layout shift"
+    ]
+  },
+  {
     "version": "2.23.0",
     "date": "2026-03-20",
     "title": "Absence reports and billing start hint",
