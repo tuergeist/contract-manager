@@ -619,6 +619,7 @@ class InvoicePaymentMatch(TenantModel):
     class MatchType(models.TextChoices):
         INVOICE_NUMBER = "invoice_number", "Invoice Number Match"
         AMOUNT_CUSTOMER = "amount_customer", "Amount + Customer Match"
+        FUZZY_COMPOSITE = "fuzzy_composite", "Fuzzy Composite Match"
         MANUAL = "manual", "Manual Match"
 
     invoice = models.ForeignKey(

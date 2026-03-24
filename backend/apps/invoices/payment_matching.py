@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import List, Optional, Protocol, Union
 
 from django.db.models import Q
+from rapidfuzz import fuzz
 
 from apps.banking.models import BankTransaction
 from apps.invoices.models import ImportedInvoice, InvoicePaymentMatch, InvoiceRecord
@@ -66,34 +67,12 @@ class InvoiceNumberStrategy:
             return []
 
         matches = []
-        invoice_num = invoice.invoice_number.strip()
-
-        # Create normalized versions for matching
-        # Remove common separators for fuzzy matching
-        normalized_num = re.sub(r"[-_\s]", "", invoice_num.lower())
 
         for txn in transactions:
-            # Skip debit transactions (we want incoming payments = credits)
             if txn.amount <= 0:
                 continue
 
-            booking_lower = txn.booking_text.lower()
-            booking_normalized = re.sub(r"[-_\s]", "", booking_lower)
-
-            confidence = Decimal("0")
-
-            # Exact match in booking text
-            if invoice_num.lower() in booking_lower:
-                confidence = Decimal("1.0")
-            # Normalized match (ignoring separators)
-            elif normalized_num in booking_normalized:
-                confidence = Decimal("0.9")
-            # Partial match - last part of invoice number
-            elif len(normalized_num) > 4:
-                suffix = normalized_num[-6:]  # Last 6 chars
-                if suffix in booking_normalized:
-                    confidence = Decimal("0.7")
-
+            confidence = _extract_invoice_number_from_text(txn.booking_text, invoice.invoice_number)
             if confidence > 0:
                 matches.append(
                     PaymentMatchCandidate(
@@ -110,8 +89,87 @@ class InvoiceNumberStrategy:
         return sorted(matches, key=lambda m: m.confidence, reverse=True)
 
 
+def _get_fee_tolerance(tenant) -> tuple[Decimal, Decimal]:
+    """Get fee tolerance settings from tenant banking config."""
+    config = (tenant.settings or {}).get("banking", {})
+    return (
+        Decimal(config.get("fee_tolerance_fixed", "0")),
+        Decimal(config.get("fee_tolerance_percent", "0")),
+    )
+
+
+def _amount_within_tolerance(
+    transaction_amount: Decimal,
+    invoice_amount: Decimal,
+    tolerance_fixed: Decimal,
+    tolerance_percent: Decimal,
+) -> bool:
+    """Check if transaction amount is within tolerance of invoice amount.
+
+    The transaction may be less than the invoice by up to the tolerance
+    (e.g. bank fees deducted), but not more.
+    """
+    if transaction_amount == invoice_amount:
+        return True
+
+    max_tolerance = tolerance_fixed
+    if tolerance_percent > 0:
+        percent_tolerance = invoice_amount * tolerance_percent / Decimal("100")
+        max_tolerance = max(max_tolerance, percent_tolerance)
+
+    if max_tolerance <= 0:
+        return False
+
+    # Transaction can be up to max_tolerance less than invoice amount
+    diff = invoice_amount - transaction_amount
+    return Decimal("0") <= diff <= max_tolerance
+
+
+def _extract_invoice_number_from_text(booking_text: str, invoice_number: str) -> Decimal:
+    """Try to find the invoice number (or a recognizable part) in booking text.
+
+    Returns confidence score (0 = no match, 0.7-1.0 = match found).
+    """
+    if not invoice_number or not booking_text:
+        return Decimal("0")
+
+    inv_num = invoice_number.strip().lower()
+    booking_lower = booking_text.lower()
+    normalized_num = re.sub(r"[-_\s]", "", inv_num)
+    booking_normalized = re.sub(r"[-_\s]", "", booking_lower)
+
+    # Exact match
+    if inv_num in booking_lower:
+        return Decimal("1.0")
+    # Normalized match (ignoring separators like INV-VSX-26-0009 vs INVVSX260009)
+    if normalized_num in booking_normalized:
+        return Decimal("0.9")
+    # Partial: extract the numeric core (e.g. "26-0009" from "INV-VSX-26-0009")
+    # and search for it with flexible separators
+    numeric_parts = re.findall(r"\d+", inv_num)
+    if len(numeric_parts) >= 2:
+        # Try last two numeric segments (year + counter, e.g. "26" + "0009")
+        core = "".join(numeric_parts[-2:])
+        if len(core) >= 4 and core in booking_normalized:
+            return Decimal("0.8")
+        # Try with separator pattern between segments (e.g. "26-009" matching "26-0009")
+        # Strip leading zeros from counter for flexible matching
+        last_seg = numeric_parts[-1].lstrip("0") or "0"
+        second_last = numeric_parts[-2]
+        pattern = re.escape(second_last) + r"[-_\s./]*0*" + re.escape(last_seg)
+        if re.search(pattern, booking_lower):
+            return Decimal("0.7")
+    # Last 6 chars fallback
+    if len(normalized_num) > 4:
+        suffix = normalized_num[-6:]
+        if suffix in booking_normalized:
+            return Decimal("0.7")
+
+    return Decimal("0")
+
+
 class AmountCustomerStrategy:
-    """Match by exact amount and linked customer."""
+    """Match by amount (with tolerance) and linked customer."""
 
     def find_matches(
         self,
@@ -122,20 +180,21 @@ class AmountCustomerStrategy:
         if not invoice.total_amount or not invoice.customer:
             return []
 
+        tolerance_fixed, tolerance_percent = _get_fee_tolerance(invoice.tenant)
         matches = []
 
         for txn in transactions:
-            # Skip debit transactions
             if txn.amount <= 0:
                 continue
 
-            # Check if amount matches exactly
-            if txn.amount != invoice.total_amount:
+            if not _amount_within_tolerance(txn.amount, invoice.total_amount, tolerance_fixed, tolerance_percent):
                 continue
 
-            # Check if counterparty is linked to invoice's customer
             if txn.counterparty.customer_id != invoice.customer_id:
                 continue
+
+            # Exact amount = 0.8, within tolerance = 0.7
+            confidence = Decimal("0.8") if txn.amount == invoice.total_amount else Decimal("0.7")
 
             matches.append(
                 PaymentMatchCandidate(
@@ -145,11 +204,102 @@ class AmountCustomerStrategy:
                     counterparty_name=txn.counterparty.name,
                     booking_text=txn.booking_text[:200],
                     match_type=InvoicePaymentMatch.MatchType.AMOUNT_CUSTOMER,
-                    confidence=Decimal("0.8"),
+                    confidence=confidence,
                 )
             )
 
         return matches
+
+
+class UnlinkedCounterpartyStrategy:
+    """Match transactions where counterparty is not linked to a customer.
+
+    Combines three signals:
+    1. Invoice number found in booking text
+    2. Amount within fee tolerance
+    3. Fuzzy match of counterparty name to customer name
+
+    Requires at least invoice number OR (amount match + name match).
+    """
+
+    COUNTERPARTY_NAME_THRESHOLD = 60  # rapidfuzz score 0-100
+
+    def find_matches(
+        self,
+        invoice: Union[ImportedInvoice, InvoiceRecordAdapter],
+        transactions: list[BankTransaction],
+    ) -> List[PaymentMatchCandidate]:
+        if not invoice.total_amount:
+            return []
+
+        customer_name = self._get_customer_name(invoice)
+        if not customer_name:
+            return []
+
+        tolerance_fixed, tolerance_percent = _get_fee_tolerance(invoice.tenant)
+        matches = []
+
+        for txn in transactions:
+            if txn.amount <= 0:
+                continue
+
+            # Only consider transactions where counterparty is NOT linked to a customer
+            if txn.counterparty.customer_id is not None:
+                continue
+
+            # Signal 1: invoice number in booking text
+            inv_num_confidence = _extract_invoice_number_from_text(
+                txn.booking_text, invoice.invoice_number
+            )
+
+            # Signal 2: amount match (exact or within tolerance)
+            amount_ok = _amount_within_tolerance(
+                txn.amount, invoice.total_amount, tolerance_fixed, tolerance_percent
+            )
+
+            # Signal 3: fuzzy counterparty name match
+            name_score = fuzz.token_set_ratio(
+                txn.counterparty.name.lower(), customer_name.lower()
+            )
+            name_ok = name_score >= self.COUNTERPARTY_NAME_THRESHOLD
+
+            # Require meaningful combination of signals
+            if inv_num_confidence > 0:
+                # Invoice number found — strong signal; boost if amount/name also match
+                confidence = inv_num_confidence
+                if amount_ok:
+                    confidence = min(confidence + Decimal("0.05"), Decimal("1.0"))
+                if name_ok:
+                    confidence = min(confidence + Decimal("0.05"), Decimal("1.0"))
+            elif amount_ok and name_ok:
+                # No invoice number but amount + name match
+                name_factor = Decimal(str(round(name_score / 100, 2)))
+                confidence = Decimal("0.5") + name_factor * Decimal("0.2")
+                if txn.amount == invoice.total_amount:
+                    confidence += Decimal("0.05")
+            else:
+                continue
+
+            matches.append(
+                PaymentMatchCandidate(
+                    transaction_id=txn.id,
+                    transaction_date=txn.entry_date,
+                    amount=txn.amount,
+                    counterparty_name=txn.counterparty.name,
+                    booking_text=txn.booking_text[:200],
+                    match_type=InvoicePaymentMatch.MatchType.FUZZY_COMPOSITE,
+                    confidence=confidence,
+                )
+            )
+
+        return sorted(matches, key=lambda m: m.confidence, reverse=True)
+
+    def _get_customer_name(self, invoice) -> str | None:
+        if hasattr(invoice, "customer_name") and invoice.customer_name:
+            return invoice.customer_name
+        if invoice.customer:
+            return invoice.customer.name
+        return None
 
 
 class PaymentMatcher:
@@ -169,6 +319,7 @@ class PaymentMatcher:
         self.strategies = strategies or [
             InvoiceNumberStrategy(),
             AmountCustomerStrategy(),
+            UnlinkedCounterpartyStrategy(),
         ]
 
     def find_matches(
