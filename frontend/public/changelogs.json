@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.24.1",
+    "date": "2026-03-24",
+    "title": "Smarter payment matching for unlinked counterparties",
+    "description": "Payments can now be matched to invoices even when the counterparty isn't linked to a customer, using a combination of invoice number extraction, amount tolerance, and fuzzy company name matching.",
+    "type": "feature",
+    "details": [
+      "Added fuzzy composite matching strategy for transactions with unlinked counterparties",
+      "Flexible invoice number extraction from booking text (handles partial numbers like 26-009 for INV-VSX-26-0009)",
+      "Integrated fee tolerance settings into amount matching (was exact-only before)",
+      "Counterparty-to-customer fuzzy name matching via rapidfuzz",
+      "Fixed forecast invoice matching to use exact billing_date before falling back to heuristic"
+    ]
+  },
+  {
     "version": "2.24.0",
     "date": "2026-03-23",
     "title": "Import invoices from revenue forecast",
