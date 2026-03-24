@@ -419,6 +419,7 @@ class UploadForecastInvoiceInput:
     file_content: str  # Base64-encoded PDF
     filename: str
     contract_id: int
+    billing_date: date
 
 
 @strawberry.input
@@ -1882,6 +1883,7 @@ class InvoiceMutation:
             created_by=user,
             contract=contract,
             customer=contract.customer,
+            billing_date=input.billing_date,
         )
         invoice.pdf_file.save(input.filename, ContentFile(file_bytes), save=False)
         invoice.save()

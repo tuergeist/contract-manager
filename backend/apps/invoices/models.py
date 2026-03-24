@@ -535,6 +535,13 @@ class ImportedInvoice(TenantModel):
         help_text="Associated contract",
     )
 
+    # Billing date for exact matching in revenue forecast
+    billing_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Billing period date this invoice covers (set when uploaded from forecast)",
+    )
+
     # PDF file storage
     pdf_file = models.FileField(
         upload_to=imported_invoice_upload_path,

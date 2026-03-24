@@ -487,7 +487,6 @@ const UPLOAD_FORECAST_INVOICE_MUTATION = gql`
         invoiceDate
         totalAmount
         extractionStatus
-        extractionError
       }
     }
   }
@@ -3809,6 +3808,7 @@ function ForecastTab({ contractId }: { contractId: string }) {
               fileContent: base64,
               filename: file.name,
               contractId: parseInt(contractId),
+              billingDate: uploadDateRef.current,
             },
           },
         })

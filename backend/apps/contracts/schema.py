@@ -2542,14 +2542,28 @@ class ContractQuery:
                     pdf_url=pdf_url,
                 )
             else:
+                # Try exact match by billing_date on imported invoices
+                matched_invoice = None
+                for inv in contract_invoices:
+                    if inv.billing_date == event["date"]:
+                        pdf_url = inv.pdf_file.url if inv.pdf_file else None
+                        matched_invoice = MatchedInvoiceType(
+                            id=strawberry.ID(str(inv.id)),
+                            invoice_number=inv.invoice_number or "",
+                            is_paid=inv.is_paid,
+                            pdf_url=pdf_url,
+                        )
+                        break
+
                 # Fall back to imported invoice heuristic
-                matched_invoice = find_matching_invoice_for_billing_event(
-                    contract_id=int(contract_id),
-                    billing_date=event["date"],
-                    invoices=contract_invoices,
-                    expected_net=event["total"],
-                    tax_rate=default_tax_rate,
-                )
+                if not matched_invoice:
+                    matched_invoice = find_matching_invoice_for_billing_event(
+                        contract_id=int(contract_id),
+                        billing_date=event["date"],
+                        invoices=contract_invoices,
+                        expected_net=event["total"],
+                        tax_rate=default_tax_rate,
+                    )
             events.append(
                 BillingEvent(
                     date=event["date"],
