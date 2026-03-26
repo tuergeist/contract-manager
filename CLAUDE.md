@@ -133,6 +133,12 @@ Tags have **no `v` prefix**: use `1.7.2`, not `v1.7.2`. The CI workflow triggers
 - i18n: German (de) and English (en) supported
 - GraphQL API via Strawberry-Django
 
+## UI Conventions
+
+- **Date format**: Always `dd.mm.yyyy` (German format). Use 24h time format (`HH:mm`).
+- **Tables are always sortable**: Every table column that contains data should be sortable by clicking the header. Use the existing sortable table header pattern.
+- **Filters above tables**: When a table has filters, place them in a card above the table — same pattern as the Banking page (filter card with inputs/selects, table below). Never inline filters into the table header.
+
 ## Testing
 
 ### E2E Tests (Playwright)
