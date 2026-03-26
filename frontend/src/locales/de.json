@@ -2282,6 +2282,8 @@
     "allStatuses": "Alle Status",
     "empty": "Keine Eingangsrechnungen",
     "emptyDescription": "Konfigurieren Sie ein E-Mail-Postfach in den Einstellungen.",
+    "upload": "PDFs hochladen",
+    "searchCounterparty": "Geschäftspartner suchen...",
     "supplier": "Lieferant",
     "invoiceNumber": "Rechnungsnummer",
     "date": "Datum",
@@ -2404,5 +2406,10 @@
     "success": "Vertrag erfolgreich aktiviert",
     "abBeingSent": "Die Auftragsbestätigung wird erstellt und per E-Mail versendet.",
     "abCreated": "Die Auftragsbestätigung wurde erstellt. Sie können sie später von der Vertragsdetailseite senden."
+  },
+  "assistant": {
+    "placeholder": "Stelle eine Frage...",
+    "newConversation": "Neues Gespräch",
+    "emptyState": "Frag Cora nach Verträgen, Kunden oder Rechnungen."
   }
 }

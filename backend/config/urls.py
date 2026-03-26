@@ -60,6 +60,7 @@ urlpatterns = [
     path("api/customer-attachments/<int:attachment_id>/download/", CustomerAttachmentDownloadView.as_view(), name="customer-attachment-download"),
     path("api/banking/upload/<int:account_id>/", UploadStatementView.as_view(), name="banking-upload"),
     path("api/hubspot/webhook/", HubSpotWebhookView.as_view(), name="hubspot-webhook"),
+    path("api/assistant/", include("apps.assistant.urls")),
 ]
 
 if settings.DEBUG:

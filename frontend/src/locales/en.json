@@ -2282,6 +2282,8 @@
     "allStatuses": "All Statuses",
     "empty": "No incoming invoices",
     "emptyDescription": "Configure an email inbox in Settings to start importing invoices automatically.",
+    "upload": "Upload PDFs",
+    "searchCounterparty": "Search counterparty...",
     "supplier": "Supplier",
     "invoiceNumber": "Invoice Number",
     "date": "Date",
@@ -2404,5 +2406,10 @@
     "success": "Contract activated successfully",
     "abBeingSent": "The order confirmation is being generated and will be sent by email.",
     "abCreated": "The order confirmation has been created. You can send it later from the contract detail page."
+  },
+  "assistant": {
+    "placeholder": "Ask a question...",
+    "newConversation": "New conversation",
+    "emptyState": "Ask Cora anything about your contracts, customers, or invoices."
   }
 }
