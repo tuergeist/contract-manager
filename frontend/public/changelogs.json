@@ -1,5 +1,23 @@
 [
   {
+    "version": "2.25.0",
+    "date": "2026-03-26",
+    "title": "Cora AI assistant and incoming invoice improvements",
+    "description": "In-app AI chat assistant (Cora) answers questions about contracts, customers, and revenue using Claude API with GraphQL access. Incoming invoices gain PDF/ZIP upload, inbox debug view, searchable counterparty select, and auto-matching.",
+    "type": "feature",
+    "details": [
+      "Added Cora AI assistant with floating chat button, SSE streaming, and 8 read-only tools plus arbitrary GraphQL queries",
+      "Added PDF and ZIP upload for incoming invoices with auto-extraction",
+      "Added inbox debug modal showing email processing status with auto-refresh",
+      "Replaced counterparty dropdown with searchable select, pre-filled with supplier name",
+      "Auto-assign counterparty from previously confirmed supplier-counterparty mappings",
+      "Inbox polling now processes all emails (not just unread), relies on DB deduplication",
+      "Test connection button now shows email count in folder",
+      "Fixed time tracking monthly breakdown not summing correctly for legacy mappings",
+      "Added UI conventions to CLAUDE.md (German date format, sortable tables, filter card pattern)"
+    ]
+  },
+  {
     "version": "2.24.1",
     "date": "2026-03-24",
     "title": "Smarter payment matching for unlinked counterparties",
