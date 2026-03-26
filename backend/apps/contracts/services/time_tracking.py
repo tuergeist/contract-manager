@@ -165,15 +165,33 @@ def sync_mapping_data(mapping_id: int) -> bool:
         return False
 
 
+def _resync_stale_mappings(mappings_qs):
+    """Re-sync mappings that have hours but missing by_month data (legacy cache)."""
+    stale = [m for m in mappings_qs if m.cached_total_hours > 0 and not m.cached_by_month]
+    if not stale:
+        return
+    for m in stale:
+        try:
+            sync_mapping_data(m.id)
+            m.refresh_from_db()
+        except Exception:
+            logger.warning("Failed to re-sync stale mapping %s", m.id)
+
+
 def get_cached_summary(mappings_qs) -> dict:
     """Aggregate cached data across mappings, return dict matching TimeTrackingSummary shape."""
+    mappings_list = list(mappings_qs)
+
+    # Auto-fix legacy mappings missing by_month data
+    _resync_stale_mappings(mappings_list)
+
     total_hours = 0.0
     total_revenue = 0.0
     service_data: dict[str, dict] = defaultdict(lambda: {"hours": 0.0, "revenue": 0.0})
     month_data: dict[str, dict] = defaultdict(lambda: {"hours": 0.0, "revenue": 0.0})
     oldest_sync: datetime | None = None
 
-    for m in mappings_qs:
+    for m in mappings_list:
         total_hours += m.cached_total_hours
         total_revenue += m.cached_total_revenue
 
