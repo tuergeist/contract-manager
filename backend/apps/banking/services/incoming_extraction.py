@@ -168,6 +168,22 @@ def _auto_assign_counterparty(invoice: IncomingInvoice, iban: str | None = None)
                     match = cp
                     break
 
+    # Check if a previous incoming invoice with the same supplier was already
+    # linked to a counterparty (user-confirmed mapping)
+    if not match and invoice.supplier_name:
+        previous = (
+            IncomingInvoice.objects.filter(
+                tenant=tenant,
+                supplier_name__iexact=invoice.supplier_name,
+                counterparty__isnull=False,
+            )
+            .exclude(id=invoice.id)
+            .select_related("counterparty")
+            .first()
+        )
+        if previous:
+            match = previous.counterparty
+
     if match:
         invoice.counterparty = match
         invoice.save(update_fields=["counterparty", "updated_at"])

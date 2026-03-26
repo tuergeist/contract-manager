@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { Plus, Trash2, TestTube, Loader2, Mail, Pencil } from 'lucide-react'
+import { Plus, Trash2, TestTube, Loader2, Mail, Pencil, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,6 +12,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 
 const INVOICE_INBOXES = gql`
   query InvoiceInboxes {
@@ -41,7 +42,28 @@ const DELETE_INBOX = gql`
 
 const TEST_CONNECTION = gql`
   mutation TestInvoiceInboxConnection($id: ID!) {
-    testInvoiceInboxConnection(id: $id) { success message }
+    testInvoiceInboxConnection(id: $id) { success message emailCount }
+  }
+`
+
+const INBOX_EMAILS = gql`
+  query InboxEmails($inboxId: ID!, $page: Int!, $pageSize: Int!) {
+    incomingInvoices(inboxId: $inboxId, page: $page, pageSize: $pageSize) {
+      items {
+        id
+        sourceEmailSubject
+        sourceEmailDate
+        originalFilename
+        extractionStatus
+        extractionError
+        supplierName
+        grossAmount
+        currency
+        createdAt
+      }
+      totalCount
+      hasNextPage
+    }
   }
 `
 
@@ -56,13 +78,127 @@ const defaultForm: InboxFormData = {
   folder: 'INBOX', useSsl: true, m365Mailbox: '', isActive: true, pollIntervalMinutes: 15,
 }
 
+const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  pending: { label: 'Queued', className: 'bg-yellow-100 text-yellow-800' },
+  extracting: { label: 'Processing', className: 'bg-blue-100 text-blue-800' },
+  extracted: { label: 'Extracted', className: 'bg-green-100 text-green-800' },
+  extraction_failed: { label: 'Failed', className: 'bg-red-100 text-red-800' },
+  confirmed: { label: 'Confirmed', className: 'bg-emerald-100 text-emerald-800' },
+  matched: { label: 'Matched', className: 'bg-purple-100 text-purple-800' },
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const config = STATUS_CONFIG[status] || { label: status, className: 'bg-gray-100 text-gray-800' }
+  return (
+    <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', config.className)}>
+      {config.label}
+    </span>
+  )
+}
+
+function InboxDebugModal({ inboxId, inboxName, onClose }: { inboxId: string; inboxName: string; onClose: () => void }) {
+  const { t } = useTranslation()
+  const [page, setPage] = useState(1)
+  const { data, loading } = useQuery(INBOX_EMAILS, {
+    variables: { inboxId, page, pageSize: 30 },
+    pollInterval: 5000,
+  })
+
+  const emails = data?.incomingInvoices?.items || []
+  const totalCount = data?.incomingInvoices?.totalCount || 0
+  const hasNextPage = data?.incomingInvoices?.hasNextPage || false
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>{inboxName} — Emails ({totalCount})</DialogTitle>
+          <DialogDescription>Recent emails processed from this inbox. Auto-refreshes every 5s.</DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-auto min-h-0">
+          {loading && emails.length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : emails.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Mail className="mx-auto h-8 w-8 mb-2 opacity-50" />
+              <p>No emails found in this inbox.</p>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-white border-b">
+                <tr className="text-left text-xs text-muted-foreground">
+                  <th className="py-2 pr-3">Status</th>
+                  <th className="py-2 pr-3">Email Subject</th>
+                  <th className="py-2 pr-3">Filename</th>
+                  <th className="py-2 pr-3">Supplier</th>
+                  <th className="py-2 pr-3 text-right">Amount</th>
+                  <th className="py-2 pr-3">Email Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {emails.map((email: any) => (
+                  <tr key={email.id} className="hover:bg-gray-50">
+                    <td className="py-2 pr-3">
+                      <StatusBadge status={email.extractionStatus} />
+                    </td>
+                    <td className="py-2 pr-3 max-w-[200px]">
+                      <div className="truncate" title={email.sourceEmailSubject}>
+                        {email.sourceEmailSubject || '—'}
+                      </div>
+                      {email.extractionStatus === 'extraction_failed' && email.extractionError && (
+                        <div className="truncate text-xs text-red-500 mt-0.5" title={email.extractionError}>
+                          {email.extractionError}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 max-w-[150px]">
+                      <div className="truncate text-xs" title={email.originalFilename}>{email.originalFilename}</div>
+                    </td>
+                    <td className="py-2 pr-3">{email.supplierName || '—'}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {email.grossAmount ? `${Number(email.grossAmount).toLocaleString('de-DE', { minimumFractionDigits: 2 })} ${email.currency}` : '—'}
+                    </td>
+                    <td className="py-2 pr-3 text-xs text-muted-foreground whitespace-nowrap">
+                      {email.sourceEmailDate ? new Date(email.sourceEmailDate).toLocaleString() : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {totalCount > 30 && (
+          <div className="flex items-center justify-between border-t pt-3">
+            <span className="text-xs text-muted-foreground">
+              Page {page} · {totalCount} total
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage(p => p - 1)} disabled={page <= 1}>
+                {t('common.back')}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={!hasNextPage}>
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function InvoiceInboxSettings() {
   const { t } = useTranslation()
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<InboxFormData>(defaultForm)
   const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string; emailCount?: number | null } | null>(null)
+  const [debugInbox, setDebugInbox] = useState<{ id: string; name: string } | null>(null)
 
   const { data, loading, refetch } = useQuery(INVOICE_INBOXES)
   const [createInbox, { loading: creating }] = useMutation(CREATE_INBOX)
@@ -135,6 +271,9 @@ export function InvoiceInboxSettings() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setDebugInbox({ id: inbox.id, name: inbox.name })} title="View emails">
+                  <Eye className="h-4 w-4" />
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => handleTest(inbox.id)} disabled={testing}>
                   {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />}
                 </Button>
@@ -150,6 +289,10 @@ export function InvoiceInboxSettings() {
         <div className={`p-3 rounded-lg text-sm ${testResult.success ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'}`}>
           {testResult.message}
         </div>
+      )}
+
+      {debugInbox && (
+        <InboxDebugModal inboxId={debugInbox.id} inboxName={debugInbox.name} onClose={() => setDebugInbox(null)} />
       )}
 
       <Dialog open={showForm} onOpenChange={(open) => { if (!open) { setShowForm(false); setEditingId(null) } }}>

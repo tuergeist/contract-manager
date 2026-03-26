@@ -35,13 +35,16 @@ class InboxPollingService:
             conn.login(inbox.username, inbox.password)
             conn.select(inbox.folder)
 
-            status, msg_ids = conn.search(None, "UNSEEN")
+            # Fetch ALL emails, not just unseen — deduplication via
+            # email_message_id + filename prevents reprocessing
+            status, msg_ids = conn.search(None, "ALL")
             if status != "OK" or not msg_ids[0]:
                 conn.close()
                 conn.logout()
                 return created
 
-            for msg_id in msg_ids[0].split():
+            # Process most recent first (reverse order)
+            for msg_id in reversed(msg_ids[0].split()):
                 status, msg_data = conn.fetch(msg_id, "(RFC822)")
                 if status != "OK":
                     continue
@@ -95,9 +98,6 @@ class InboxPollingService:
                     created.append(invoice)
                     pdfs_found = True
 
-                if pdfs_found:
-                    conn.store(msg_id, "+FLAGS", "\\Seen")
-
             conn.close()
             conn.logout()
         except Exception as e:
@@ -114,9 +114,11 @@ class InboxPollingService:
             mailbox = inbox.m365_mailbox
             headers = {"Authorization": f"Bearer {token}"}
 
+            # Fetch all recent emails, not just unread — deduplication via
+            # email_message_id + filename prevents reprocessing
             url = (
                 f"{GRAPH_BASE}/users/{mailbox}/messages"
-                f"?$filter=isRead eq false&$select=id,subject,receivedDateTime,internetMessageId"
+                f"?$select=id,subject,receivedDateTime,internetMessageId,hasAttachments"
                 f"&$top=50&$orderby=receivedDateTime desc"
             )
             resp = httpx.get(url, headers=headers, timeout=30)
@@ -181,43 +183,38 @@ class InboxPollingService:
                     created.append(invoice)
                     pdfs_found = True
 
-                if pdfs_found:
-                    patch_url = f"{GRAPH_BASE}/users/{mailbox}/messages/{graph_msg_id}"
-                    httpx.patch(
-                        patch_url,
-                        headers={**headers, "Content-Type": "application/json"},
-                        json={"isRead": True},
-                        timeout=15,
-                    )
         except Exception as e:
             logger.error("M365 polling error for inbox %s: %s", inbox.id, e)
 
         return created
 
-    def test_connection(self, inbox: InvoiceInbox) -> tuple[bool, str]:
+    def test_connection(self, inbox: InvoiceInbox) -> tuple[bool, str, int | None]:
+        """Test inbox connection. Returns (success, message, email_count)."""
         if inbox.inbox_type == InvoiceInbox.InboxType.IMAP:
             return self._test_imap(inbox)
         elif inbox.inbox_type == InvoiceInbox.InboxType.M365:
             return self._test_m365(inbox)
-        return False, "Unknown inbox type"
+        return False, "Unknown inbox type", None
 
-    def _test_imap(self, inbox: InvoiceInbox) -> tuple[bool, str]:
+    def _test_imap(self, inbox: InvoiceInbox) -> tuple[bool, str, int | None]:
         try:
             if inbox.use_ssl:
                 conn = imaplib.IMAP4_SSL(inbox.host, inbox.port)
             else:
                 conn = imaplib.IMAP4(inbox.host, inbox.port)
             conn.login(inbox.username, inbox.password)
-            status, _ = conn.select(inbox.folder)
+            status, data = conn.select(inbox.folder)
+            if status != "OK":
+                conn.logout()
+                return False, f"Could not select folder: {inbox.folder}", None
+            total_count = int(data[0]) if data and data[0] else 0
             conn.close()
             conn.logout()
-            if status == "OK":
-                return True, "Connection successful"
-            return False, f"Could not select folder: {inbox.folder}"
+            return True, f"Connection successful. {total_count} emails in folder.", total_count
         except Exception as e:
-            return False, str(e)
+            return False, str(e), None
 
-    def _test_m365(self, inbox: InvoiceInbox) -> tuple[bool, str]:
+    def _test_m365(self, inbox: InvoiceInbox) -> tuple[bool, str, int | None]:
         try:
             from apps.core.m365 import get_m365_token, GRAPH_BASE
             token = get_m365_token(inbox.tenant)
@@ -227,7 +224,9 @@ class InboxPollingService:
                 timeout=15,
             )
             if resp.status_code == 200:
-                return True, "Connection successful"
-            return False, f"M365 API error: {resp.status_code}"
+                folder_data = resp.json()
+                total = folder_data.get("totalItemCount", 0)
+                return True, f"Connection successful. {total} emails in inbox.", total
+            return False, f"M365 API error: {resp.status_code}", None
         except Exception as e:
-            return False, str(e)
+            return False, str(e), None

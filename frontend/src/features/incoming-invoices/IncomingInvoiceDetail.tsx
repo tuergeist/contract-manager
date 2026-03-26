@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery, useMutation, gql } from '@apollo/client'
-import { Loader2, Check, ExternalLink } from 'lucide-react'
+import { useQuery, useLazyQuery, useMutation, gql } from '@apollo/client'
+import { Loader2, Check, ExternalLink, ChevronsUpDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,12 +12,19 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { cn } from '@/lib/utils'
 
 const INCOMING_INVOICE_DETAIL = gql`
   query IncomingInvoice($id: ID!) {
@@ -46,9 +53,9 @@ const INCOMING_INVOICE_DETAIL = gql`
   }
 `
 
-const COUNTERPARTIES_FOR_SELECT = gql`
-  query CounterpartiesForSelect {
-    counterparties(pageSize: 500) {
+const COUNTERPARTY_SEARCH = gql`
+  query CounterpartySearch($search: String, $pageSize: Int!) {
+    counterparties(search: $search, pageSize: $pageSize) {
       items { id name }
     }
   }
@@ -80,13 +87,16 @@ interface Props {
 export function IncomingInvoiceDetail({ id, open, onClose, onUpdate }: Props) {
   const { t } = useTranslation()
   const { data, loading } = useQuery(INCOMING_INVOICE_DETAIL, { variables: { id } })
-  const { data: cpData } = useQuery(COUNTERPARTIES_FOR_SELECT)
+  const [searchCounterparties, { data: cpData, loading: cpLoading }] = useLazyQuery(COUNTERPARTY_SEARCH)
   const [updateInvoice, { loading: updating }] = useMutation(UPDATE_INCOMING_INVOICE)
   const [deleteInvoice, { loading: deleting }] = useMutation(DELETE_INCOMING_INVOICE)
 
   const inv = data?.incomingInvoice
   const counterparties = cpData?.counterparties?.items || []
   const [form, setForm] = useState<any>({})
+  const [cpOpen, setCpOpen] = useState(false)
+  const [cpSearch, setCpSearch] = useState('')
+  const [selectedCpName, setSelectedCpName] = useState('')
 
   useEffect(() => {
     if (inv) {
@@ -101,8 +111,26 @@ export function IncomingInvoiceDetail({ id, open, onClose, onUpdate }: Props) {
         currency: inv.currency || 'EUR',
         counterpartyId: inv.counterpartyId || '',
       })
+      setSelectedCpName(inv.counterpartyName || '')
     }
   }, [inv])
+
+  // Search counterparties with debounce
+  useEffect(() => {
+    if (!cpOpen) return
+    const timer = setTimeout(() => {
+      searchCounterparties({ variables: { search: cpSearch || null, pageSize: 30 } })
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [cpSearch, cpOpen, searchCounterparties])
+
+  // Pre-populate search with supplier name when opening
+  const handleCpOpen = (isOpen: boolean) => {
+    setCpOpen(isOpen)
+    if (isOpen && !cpSearch && form.supplierName) {
+      setCpSearch(form.supplierName)
+    }
+  }
 
   const handleSave = async (newStatus?: string) => {
     const input: any = {
@@ -197,15 +225,61 @@ export function IncomingInvoiceDetail({ id, open, onClose, onUpdate }: Props) {
               </div>
               <div>
                 <Label>{t('incomingInvoices.counterparty')}</Label>
-                <Select value={form.counterpartyId || 'none'} onValueChange={(v) => setForm({ ...form, counterpartyId: v === 'none' ? '' : v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">—</SelectItem>
-                    {counterparties.map((cp: any) => (
-                      <SelectItem key={cp.id} value={cp.id}>{cp.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={cpOpen} onOpenChange={handleCpOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className={cn('w-full justify-between font-normal', !form.counterpartyId && 'text-muted-foreground')}
+                    >
+                      <span className="truncate">{selectedCpName || '—'}</span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder={t('incomingInvoices.searchCounterparty')}
+                        value={cpSearch}
+                        onValueChange={setCpSearch}
+                      />
+                      <CommandList>
+                        {cpLoading && (
+                          <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin" /></div>
+                        )}
+                        <CommandEmpty>{cpLoading ? '' : t('common.noResults')}</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="none"
+                            onSelect={() => {
+                              setForm({ ...form, counterpartyId: '' })
+                              setSelectedCpName('')
+                              setCpOpen(false)
+                              setCpSearch('')
+                            }}
+                          >
+                            <span className="text-muted-foreground">—</span>
+                          </CommandItem>
+                          {counterparties.map((cp: any) => (
+                            <CommandItem
+                              key={cp.id}
+                              value={cp.id}
+                              onSelect={() => {
+                                setForm({ ...form, counterpartyId: cp.id })
+                                setSelectedCpName(cp.name)
+                                setCpOpen(false)
+                                setCpSearch('')
+                              }}
+                            >
+                              <Check className={cn('mr-2 h-4 w-4', form.counterpartyId === cp.id ? 'opacity-100' : 'opacity-0')} />
+                              {cp.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
 

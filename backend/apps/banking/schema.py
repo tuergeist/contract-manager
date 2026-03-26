@@ -637,6 +637,7 @@ class InvoiceInboxResult:
 class TestConnectionResult:
     success: bool
     message: str
+    email_count: int | None = None
 
 
 @strawberry.input
@@ -724,6 +725,28 @@ class UpdateIncomingInvoiceInput:
     currency: str | None = None
     counterparty_id: strawberry.ID | None = strawberry.UNSET
     extraction_status: str | None = None
+
+
+@strawberry.input
+class UploadIncomingInvoiceFileInput:
+    file_content: str  # Base64-encoded
+    filename: str
+
+
+@strawberry.type
+class UploadIncomingInvoiceItemResult:
+    filename: str
+    success: bool
+    error: str | None = None
+
+
+@strawberry.type
+class UploadIncomingInvoicesResult:
+    success: bool
+    error: str | None = None
+    total_uploaded: int = 0
+    total_failed: int = 0
+    results: List[UploadIncomingInvoiceItemResult] = strawberry.field(default_factory=list)
 
 
 def _make_inbox_type(inbox) -> InvoiceInboxType:
@@ -1506,11 +1529,12 @@ class BankingQuery:
         return [_make_inbox_type(i) for i in InvoiceInbox.objects.filter(tenant=user.tenant).order_by("name")]
 
     @strawberry.field
-    def incoming_invoices(self, info: Info[Context, None], status: str | None = None, counterparty_id: strawberry.ID | None = None, date_from: date | None = None, date_to: date | None = None, search: str | None = None, page: int = 1, page_size: int = 50) -> IncomingInvoicePage:
+    def incoming_invoices(self, info: Info[Context, None], status: str | None = None, counterparty_id: strawberry.ID | None = None, inbox_id: strawberry.ID | None = None, date_from: date | None = None, date_to: date | None = None, search: str | None = None, page: int = 1, page_size: int = 50) -> IncomingInvoicePage:
         user = require_perm(info, "incoming_invoices", "read")
         from apps.banking.models import IncomingInvoice
         qs = IncomingInvoice.objects.filter(tenant=user.tenant).select_related("counterparty", "inbox")
         if status: qs = qs.filter(extraction_status=status)
+        if inbox_id is not None: qs = qs.filter(inbox_id=str(inbox_id))
         if counterparty_id is not None: qs = qs.filter(counterparty_id=str(counterparty_id))
         if date_from: qs = qs.filter(invoice_date__gte=date_from)
         if date_to: qs = qs.filter(invoice_date__lte=date_to)
@@ -2054,8 +2078,8 @@ class BankingMutation:
             inbox = InvoiceInbox.objects.get(id=str(id), tenant=user.tenant)
         except InvoiceInbox.DoesNotExist:
             return TestConnectionResult(success=False, message="Inbox not found.")
-        success, message = InboxPollingService().test_connection(inbox)
-        return TestConnectionResult(success=success, message=message)
+        success, message, email_count = InboxPollingService().test_connection(inbox)
+        return TestConnectionResult(success=success, message=message, email_count=email_count)
 
     # --- Incoming Invoice Mutations ---
 
@@ -2104,6 +2128,78 @@ class BankingMutation:
             inv.pdf_file.delete(save=False)
         inv.delete()
         return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def upload_incoming_invoices(
+        self, info: Info[Context, None], files: List[UploadIncomingInvoiceFileInput]
+    ) -> UploadIncomingInvoicesResult:
+        """Upload PDFs or a ZIP file containing PDFs as incoming invoices."""
+        import base64
+        import io
+        import zipfile
+
+        from django.core.files.base import ContentFile
+
+        from apps.banking.models import IncomingInvoice
+        from apps.banking.services.incoming_extraction import run_incoming_extraction
+
+        user = require_perm(info, "incoming_invoices", "write")
+        tenant = user.tenant
+
+        # Collect all PDFs (expand ZIPs)
+        pdf_files: list[tuple[str, bytes]] = []
+        for f in files:
+            try:
+                raw = base64.b64decode(f.file_content)
+            except Exception:
+                continue
+
+            if f.filename.lower().endswith(".zip"):
+                try:
+                    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+                        for name in zf.namelist():
+                            if name.lower().endswith(".pdf") and not name.startswith("__MACOSX"):
+                                pdf_files.append((name.split("/")[-1], zf.read(name)))
+                except zipfile.BadZipFile:
+                    return UploadIncomingInvoicesResult(success=False, error=f"Invalid ZIP file: {f.filename}")
+            elif f.filename.lower().endswith(".pdf"):
+                pdf_files.append((f.filename, raw))
+
+        if not pdf_files:
+            return UploadIncomingInvoicesResult(success=False, error="No PDF files found.")
+
+        results = []
+        uploaded = 0
+        failed = 0
+
+        for filename, pdf_data in pdf_files:
+            try:
+                invoice = IncomingInvoice(
+                    tenant=tenant,
+                    original_filename=filename,
+                    file_size=len(pdf_data),
+                    extraction_status=IncomingInvoice.ExtractionStatus.PENDING,
+                )
+                invoice.pdf_file.save(filename, ContentFile(pdf_data), save=False)
+                invoice.save()
+
+                try:
+                    run_incoming_extraction(invoice)
+                except Exception:
+                    pass  # extraction errors are stored on the invoice
+
+                uploaded += 1
+                results.append(UploadIncomingInvoiceItemResult(filename=filename, success=True))
+            except Exception as e:
+                failed += 1
+                results.append(UploadIncomingInvoiceItemResult(filename=filename, success=False, error=str(e)))
+
+        return UploadIncomingInvoicesResult(
+            success=True,
+            total_uploaded=uploaded,
+            total_failed=failed,
+            results=results,
+        )
 
     # --- Cost Center CRUD ---
 

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery, gql } from '@apollo/client'
-import { Loader2, FileText, Search, Filter } from 'lucide-react'
+import { useQuery, useMutation, gql } from '@apollo/client'
+import { Loader2, FileText, Search, Filter, Upload } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -45,6 +45,18 @@ const INCOMING_INVOICES = gql`
   }
 `
 
+const UPLOAD_INCOMING = gql`
+  mutation UploadIncomingInvoices($files: [UploadIncomingInvoiceFileInput!]!) {
+    uploadIncomingInvoices(files: $files) {
+      success
+      error
+      totalUploaded
+      totalFailed
+      results { filename success error }
+    }
+  }
+`
+
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
   extracting: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
@@ -62,6 +74,9 @@ export function IncomingInvoicesPage() {
   const [dateTo, setDateTo] = useState('')
   const [page, setPage] = useState(1)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadIncoming, { loading: uploading }] = useMutation(UPLOAD_INCOMING)
+  const [uploadResult, setUploadResult] = useState<{ total: number; failed: number } | null>(null)
 
   const { data, loading, refetch } = useQuery(INCOMING_INVOICES, {
     variables: {
@@ -78,6 +93,32 @@ export function IncomingInvoicesPage() {
   const totalCount = data?.incomingInvoices?.totalCount || 0
   const hasNextPage = data?.incomingInvoices?.hasNextPage || false
 
+  const handleFileUpload = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return
+    setUploadResult(null)
+
+    const files: { fileContent: string; filename: string }[] = []
+    for (const file of Array.from(fileList)) {
+      if (!file.name.toLowerCase().endsWith('.pdf') && !file.name.toLowerCase().endsWith('.zip')) continue
+      const buffer = await file.arrayBuffer()
+      const base64 = btoa(
+        new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+      )
+      files.push({ fileContent: base64, filename: file.name })
+    }
+
+    if (files.length === 0) return
+
+    const { data } = await uploadIncoming({ variables: { files } })
+    const result = data?.uploadIncomingInvoices
+    if (result) {
+      setUploadResult({ total: result.totalUploaded, failed: result.totalFailed })
+      refetch()
+    }
+    // Reset file input
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   const formatAmount = (amount: string | null, currency: string) => {
     if (!amount) return '—'
     return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(parseFloat(amount))
@@ -87,7 +128,27 @@ export function IncomingInvoicesPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">{t('incomingInvoices.title')}</h1>
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.zip"
+            multiple
+            className="hidden"
+            onChange={(e) => handleFileUpload(e.target.files)}
+          />
+          <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+            {uploading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Upload className="mr-1.5 h-4 w-4" />}
+            {t('incomingInvoices.upload')}
+          </Button>
+        </div>
       </div>
+
+      {uploadResult && (
+        <div className={`mb-4 p-3 rounded-lg text-sm ${uploadResult.failed > 0 ? 'bg-yellow-50 text-yellow-800' : 'bg-green-50 text-green-700'}`}>
+          {uploadResult.total} invoice(s) uploaded{uploadResult.failed > 0 ? `, ${uploadResult.failed} failed` : ''}.
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-3 mb-4">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
