@@ -68,6 +68,9 @@ class ChatView(View):
         if not tenant:
             return JsonResponse({"error": "No active tenant"}, status=403)
 
+        if not user.has_perm_check("assistant", "use"):
+            return JsonResponse({"error": "Permission denied"}, status=403)
+
         if _check_rate_limit(user.id):
             return JsonResponse(
                 {"error": "Rate limit exceeded. Please wait before sending more messages."},

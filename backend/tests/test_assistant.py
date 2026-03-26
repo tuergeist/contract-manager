@@ -32,6 +32,13 @@ def tenant(db):
 def user(db, tenant):
     from apps.tenants.models import User
 
+    from apps.tenants.models import Role
+
+    role = Role.objects.create(
+        tenant=tenant,
+        name="TestAdmin",
+        permissions={"assistant.use": True, "contracts.read": True, "customers.read": True},
+    )
     u = User.objects.create_user(
         email="test@test.local",
         password="test123",
@@ -39,6 +46,7 @@ def user(db, tenant):
         last_name="User",
         tenant=tenant,
     )
+    u.roles.add(role)
     return u
 
 

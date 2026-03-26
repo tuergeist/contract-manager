@@ -23,6 +23,7 @@ PERMISSION_REGISTRY = {
     "banking": ["read", "write"],
     "incoming_invoices": ["read", "write", "config"],
     "cost_centers": ["read", "write", "config"],
+    "assistant": ["use"],
 }
 
 # All permissions as flat "resource.action" strings

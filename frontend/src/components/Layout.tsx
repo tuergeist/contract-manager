@@ -3,9 +3,12 @@ import { Outlet } from 'react-router-dom'
 import { MessageSquare } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { ChatDrawer } from '@/features/assistant'
+import { useAuth } from '@/lib/auth'
 
 export function Layout() {
   const [chatOpen, setChatOpen] = useState(false)
+  const { hasPermission } = useAuth()
+  const canUseAssistant = hasPermission('assistant', 'use')
 
   return (
     <div className="flex h-screen">
@@ -15,7 +18,7 @@ export function Layout() {
       </main>
 
       {/* Chat toggle button — bottom right */}
-      {!chatOpen && (
+      {canUseAssistant && !chatOpen && (
         <button
           onClick={() => setChatOpen(true)}
           className="fixed bottom-6 right-6 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-700"
@@ -25,7 +28,9 @@ export function Layout() {
         </button>
       )}
 
-      <ChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} />
+      {canUseAssistant && (
+        <ChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} />
+      )}
     </div>
   )
 }
