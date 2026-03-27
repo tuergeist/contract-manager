@@ -19,15 +19,7 @@ import {
   Unlink,
   User,
 } from 'lucide-react'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { CurrencyInput } from '@/components/ui/currency-input'
 import {
   Dialog,
   DialogContent,
@@ -61,6 +53,8 @@ const COUNTERPARTY_DETAIL = gql`
       transactionCount
       firstDate
       lastDate
+      totalInvoiced
+      invoiceCount
       customer {
         id
         name
@@ -125,15 +119,6 @@ const BANK_TRANSACTIONS = gql`
       page
       pageSize
       hasNextPage
-    }
-  }
-`
-
-const BANK_ACCOUNTS = gql`
-  query BankAccounts {
-    bankAccounts {
-      id
-      name
     }
   }
 `
@@ -227,9 +212,17 @@ const UNLINK_COUNTERPARTY_FROM_CUSTOMER = gql`
   }
 `
 
+const COUNTERPARTY_INVOICE_YEARS = gql`
+  query CounterpartyInvoiceYears($counterpartyId: ID!) {
+    incomingInvoices(counterpartyId: $counterpartyId, pageSize: 200) {
+      items { invoiceDate }
+    }
+  }
+`
+
 const COUNTERPARTY_INVOICES = gql`
-  query CounterpartyInvoices($counterpartyId: ID!, $page: Int, $pageSize: Int) {
-    incomingInvoices(counterpartyId: $counterpartyId, page: $page, pageSize: $pageSize) {
+  query CounterpartyInvoices($counterpartyId: ID!, $sortBy: String, $sortOrder: String, $page: Int, $pageSize: Int) {
+    incomingInvoices(counterpartyId: $counterpartyId, sortBy: $sortBy, sortOrder: $sortOrder, page: $page, pageSize: $pageSize) {
       items {
         id
         supplierName
@@ -286,6 +279,8 @@ interface CounterpartySummary {
   transactionCount: number
   firstDate: string
   lastDate: string
+  totalInvoiced: string
+  invoiceCount: number
   customer: { id: number; name: string } | null
   defaultCostCenter: { id: string; code: string; name: string; isActive: boolean } | null
 }
@@ -303,6 +298,12 @@ export function CounterpartyDetailPage() {
   const [searchParams] = useSearchParams()
   const cpDateFrom = searchParams.get('dateFrom') || null
   const cpDateTo = searchParams.get('dateTo') || null
+
+  // Summary year filter
+  const currentYear = new Date().getFullYear()
+  const [summaryYear, setSummaryYear] = useState<string>(String(currentYear))
+  const summaryDateFrom = summaryYear === 'total' ? null : `${summaryYear}-01-01`
+  const summaryDateTo = summaryYear === 'total' ? null : `${summaryYear}-12-31`
 
   // Expanded transaction row
   const [expandedTxId, setExpandedTxId] = useState<number | null>(null)
@@ -331,18 +332,21 @@ export function CounterpartyDetailPage() {
   const customerSearchInputRef = useRef<HTMLInputElement>(null)
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<'transactions' | 'invoices'>('transactions')
+  const [activeTab, setActiveTab] = useState<'account' | 'transactions' | 'invoices'>('account')
   const [invPage, setInvPage] = useState(1)
+  const [invSortBy, setInvSortBy] = useState('invoice_date')
+  const [invSortOrder, setInvSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [ledgerSortOrder, setLedgerSortOrder] = useState<'asc' | 'desc'>('desc')
 
-  // Filters
-  const [filterAccountId, setFilterAccountId] = useState<string>('all')
-  const [searchQuery, setSearchQuery] = useState('')
+  // Filters (kept for query variables but no UI)
+  const [filterAccountId] = useState<string>('all')
+  const [searchQuery] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [amountMin, setAmountMin] = useState('')
-  const [amountMax, setAmountMax] = useState('')
-  const [direction, setDirection] = useState<string>('all')
+  const [dateFrom] = useState('')
+  const [dateTo] = useState('')
+  const [amountMin] = useState('')
+  const [amountMax] = useState('')
+  const [direction] = useState<string>('all')
   const [sortBy, setSortBy] = usePersistedState('cm:counterpartyDetail:sortBy', 'date')
   const [sortOrder, setSortOrder] = usePersistedState('cm:counterpartyDetail:sortOrder', 'desc')
   const [page, setPage] = useState(1)
@@ -365,18 +369,24 @@ export function CounterpartyDetailPage() {
   // Counterparty detail query
   const { data: costCentersData } = useQuery(COST_CENTERS_FOR_DROPDOWN)
   const { data: cpData, loading: cpLoading } = useQuery(COUNTERPARTY_DETAIL, {
-    variables: { id, dateFrom: cpDateFrom, dateTo: cpDateTo },
+    variables: { id, dateFrom: summaryDateFrom || cpDateFrom, dateTo: summaryDateTo || cpDateTo },
     skip: !id,
   })
 
   // Incoming invoices for this counterparty
   const { data: invData, loading: invLoading } = useQuery(COUNTERPARTY_INVOICES, {
-    variables: { counterpartyId: id, page: invPage, pageSize: 50 },
-    skip: !id || activeTab !== 'invoices',
+    variables: { counterpartyId: id, sortBy: invSortBy, sortOrder: invSortOrder, page: invPage, pageSize: 50 },
+    skip: !id,
   })
   const cpInvoices = invData?.incomingInvoices?.items || []
   const invTotalCount = invData?.incomingInvoices?.totalCount || 0
   const invHasNextPage = invData?.incomingInvoices?.hasNextPage || false
+
+  // Invoice years for year selector
+  const { data: invYearsData } = useQuery(COUNTERPARTY_INVOICE_YEARS, {
+    variables: { counterpartyId: id },
+    skip: !id,
+  })
 
   const summary: CounterpartySummary | null = cpData?.counterparty || null
 
@@ -404,10 +414,6 @@ export function CounterpartyDetailPage() {
   const totalCount = txData?.bankTransactions?.totalCount ?? 0
   const hasNextPage = txData?.bankTransactions?.hasNextPage ?? false
   const totalPages = Math.ceil(totalCount / pageSize)
-
-  // Accounts for filter dropdown
-  const { data: accountsData } = useQuery(BANK_ACCOUNTS)
-  const accounts = accountsData?.bankAccounts ?? []
 
   // Search counterparties for merge
   const { data: searchData } = useQuery(SEARCH_COUNTERPARTIES, {
@@ -535,19 +541,6 @@ export function CounterpartyDetailPage() {
       ? <ArrowUp className="h-3.5 w-3.5" />
       : <ArrowDown className="h-3.5 w-3.5" />
   }
-
-  const clearFilters = () => {
-    setFilterAccountId('all')
-    setSearchQuery('')
-    setDateFrom('')
-    setDateTo('')
-    setAmountMin('')
-    setAmountMax('')
-    setDirection('all')
-    setPage(1)
-  }
-
-  const hasActiveFilters = filterAccountId !== 'all' || searchQuery || dateFrom || dateTo || amountMin || amountMax || direction !== 'all'
 
   if (cpLoading && !cpData) {
     return (
@@ -839,51 +832,121 @@ export function CounterpartyDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Summary Cards - 3 in a row */}
-      {summary && (
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {/* Year selector + Summary Cards */}
+      {summary && (() => {
+        // Collect years from transactions and invoices
+        const yearSet = new Set<number>()
+        if (summary.firstDate) {
+          const from = new Date(summary.firstDate).getFullYear()
+          const to = summary.lastDate ? new Date(summary.lastDate).getFullYear() : currentYear
+          for (let y = from; y <= to; y++) yearSet.add(y)
+        }
+        for (const inv of (invYearsData?.incomingInvoices?.items || [])) {
+          if (inv.invoiceDate) yearSet.add(new Date(inv.invoiceDate).getFullYear())
+        }
+        if (yearSet.size === 0) yearSet.add(currentYear)
+        const years = Array.from(yearSet).sort((a, b) => b - a).map(String)
+
+        return (
+        <>
+        <div className="mt-6 mb-3 flex items-center gap-2">
+          {years.map(y => (
+            <button
+              key={y}
+              onClick={() => setSummaryYear(y)}
+              className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+                summaryYear === y
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {y}
+            </button>
+          ))}
+          <button
+            onClick={() => setSummaryYear('total')}
+            className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+              summaryYear === 'total'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {t('common.total', 'Total')}
+          </button>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+          {/* Invoiced (what they billed us) */}
           <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm font-medium text-gray-500">{t('banking.transactions')}</p>
-            <p className="mt-1 text-xl font-semibold text-gray-900">{summary.transactionCount}</p>
+            <p className="text-sm font-medium text-gray-500">{t('banking.invoiced', 'Invoiced')}</p>
+            <p className="mt-1 text-xl font-semibold text-gray-900">
+              {formatCurrency(summary.totalInvoiced)}
+            </p>
+            <p className="mt-1 text-xs text-gray-400">
+              {summary.invoiceCount} {t('incomingInvoices.title', 'invoices')}
+            </p>
+          </div>
+          {/* Paid (what we paid them) */}
+          <div className="rounded-lg border bg-white p-4">
+            <p className="text-sm font-medium text-gray-500">{t('banking.paid', 'Paid')}</p>
+            <p className="mt-1 text-xl font-semibold text-red-600">
+              {formatCurrency(summary.totalDebit)}
+            </p>
+            <p className="mt-1 text-xs text-gray-400">
+              {summary.transactionCount} {t('banking.transactions')}
+              {summary.totalCredit && parseFloat(summary.totalCredit) > 0 && (
+                <span className="text-green-600"> (+{formatCurrency(summary.totalCredit)})</span>
+              )}
+            </p>
+          </div>
+          {/* Outstanding (invoiced - paid) */}
+          <div className="rounded-lg border bg-white p-4">
+            <p className="text-sm font-medium text-gray-500">{t('banking.outstanding', 'Outstanding')}</p>
+            {(() => {
+              const invoiced = parseFloat(summary.totalInvoiced) || 0
+              const paid = Math.abs(parseFloat(summary.totalDebit) || 0)
+              const outstanding = invoiced - paid
+              return (
+                <p className={`mt-1 text-xl font-semibold ${outstanding > 0.01 ? 'text-orange-600' : outstanding < -0.01 ? 'text-green-600' : 'text-gray-900'}`}>
+                  {formatCurrency(outstanding)}
+                </p>
+              )
+            })()}
+          </div>
+          {/* Cash flow balance */}
+          <div className="rounded-lg border bg-white p-4">
+            <p className="text-sm font-medium text-gray-500">{t('banking.cashBalance', 'Cash Balance')}</p>
+            {(() => {
+              const saldo = parseFloat(summary.totalCredit) + parseFloat(summary.totalDebit)
+              return (
+                <p className={`mt-1 text-xl font-semibold ${saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatCurrency(saldo)}
+                </p>
+              )
+            })()}
             {summary.firstDate && summary.lastDate && (
               <p className="mt-1 text-xs text-gray-400">
                 {formatDate(summary.firstDate)} – {formatDate(summary.lastDate)}
               </p>
             )}
           </div>
-          <div className="rounded-lg border bg-white p-4">
-            <div className="flex items-baseline justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">{t('banking.totalDebit')}</p>
-                <p className="mt-1 text-xl font-semibold text-red-600">
-                  {formatCurrency(summary.totalDebit)}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-500">{t('banking.totalCredit')}</p>
-                <p className="mt-1 text-xl font-semibold text-green-600">
-                  {formatCurrency(summary.totalCredit)}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm font-medium text-gray-500">Saldo</p>
-            {(() => {
-              const saldo = parseFloat(summary.totalCredit) + parseFloat(summary.totalDebit);
-              return (
-                <p className={`mt-1 text-xl font-semibold ${saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatCurrency(saldo)}
-                </p>
-              );
-            })()}
-          </div>
         </div>
-      )}
+        </>
+        )
+      })()}
 
       {/* Tabs */}
       <div className="mt-6">
         <div className="flex gap-1 border-b mb-4">
+          <button
+            onClick={() => setActiveTab('account')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'account'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t('banking.account', 'Account')}
+          </button>
           <button
             onClick={() => setActiveTab('transactions')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -892,7 +955,10 @@ export function CounterpartyDetailPage() {
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            {t('banking.transactions')}
+            {t('banking.bankTransactions', 'Bank Transactions')}
+            {totalCount > 0 && (
+              <span className="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{totalCount}</span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('invoices')}
@@ -910,116 +976,108 @@ export function CounterpartyDetailPage() {
         </div>
       </div>
 
+      {/* Account Tab — unified ledger */}
+      {activeTab === 'account' && (() => {
+        interface LedgerEntry {
+          date: string
+          description: string
+          amount: number
+          type: 'invoice' | 'payment'
+          id: string
+        }
+
+        const entries: LedgerEntry[] = []
+
+        // Add invoices (what they billed us — positive = we owe)
+        for (const inv of cpInvoices) {
+          entries.push({
+            date: inv.invoiceDate || inv.createdAt?.split('T')[0] || '',
+            description: `${t('incomingInvoices.invoiceNumber')}: ${inv.invoiceNumber || inv.originalFilename}`,
+            amount: parseFloat(inv.grossAmount || '0'),
+            type: 'invoice',
+            id: `inv-${inv.id}`,
+          })
+        }
+
+        // Add payments (what we paid — negative amounts become positive payments)
+        for (const tx of transactions) {
+          if (parseFloat(tx.amount) >= 0) continue // skip credits (incoming payments to us)
+          const matchInfo = tx.matchedInvoice
+            ? ` → ${tx.matchedInvoice.invoiceNumber}`
+            : ''
+          entries.push({
+            date: tx.entryDate,
+            description: `${t('banking.payment', 'Payment')}${matchInfo}`,
+            amount: parseFloat(tx.amount), // negative
+            type: 'payment',
+            id: `tx-${tx.id}`,
+          })
+        }
+
+        // Always sort ascending first to compute running balance correctly
+        entries.sort((a, b) => a.date.localeCompare(b.date))
+
+        // Compute running saldo
+        let runningBalance = 0
+        const ledgerRows = entries.map(e => {
+          runningBalance += e.amount
+          return { ...e, balance: runningBalance }
+        })
+
+        // Apply display sort order
+        if (ledgerSortOrder === 'desc') ledgerRows.reverse()
+
+        return (
+        <div className="space-y-4">
+          {ledgerRows.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <FileText className="mx-auto h-10 w-10 mb-2 opacity-50" />
+              <p>{t('banking.noEntries', 'No entries')}</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border bg-white">
+              <table className="w-full table-fixed text-sm">
+                <thead>
+                  <tr className="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                    <th className="w-[12%] cursor-pointer whitespace-nowrap px-4 py-3" onClick={() => setLedgerSortOrder(ledgerSortOrder === 'asc' ? 'desc' : 'asc')}>
+                      <span className="inline-flex items-center gap-1">
+                        {t('incomingInvoices.date')}
+                        {ledgerSortOrder === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />}
+                      </span>
+                    </th>
+                    <th className="px-4 py-3">{t('common.description', 'Description')}</th>
+                    <th className="w-[12%] px-4 py-3 text-right">{t('banking.soll', 'Soll')}</th>
+                    <th className="w-[12%] px-4 py-3 text-right">{t('banking.haben', 'Haben')}</th>
+                    <th className="w-[12%] px-4 py-3 text-right">{t('banking.balance', 'Saldo')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledgerRows.map(row => (
+                    <tr key={row.id} className="border-b">
+                      <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{formatDate(row.date)}</td>
+                      <td className="px-4 py-2.5 text-gray-900">{row.description}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums font-medium text-gray-900">
+                        {row.type === 'invoice' ? formatCurrency(Math.abs(row.amount)) : ''}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums font-medium text-gray-900">
+                        {row.type === 'payment' ? formatCurrency(Math.abs(row.amount)) : ''}
+                      </td>
+                      <td className={`whitespace-nowrap px-4 py-2.5 text-right tabular-nums font-medium ${row.balance > 0.01 ? 'text-orange-600' : row.balance < -0.01 ? 'text-green-600' : 'text-gray-900'}`}>
+                        {row.balance < 0 ? `-${formatCurrency(Math.abs(row.balance))}` : formatCurrency(row.balance)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        )
+      })()}
+
       {/* Transactions Tab */}
       {activeTab === 'transactions' && (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">{t('banking.transactions')}</h2>
-          {hasActiveFilters && (
-            <button
-              onClick={clearFilters}
-              className="text-xs text-blue-600 hover:text-blue-800"
-            >
-              {t('banking.filters')} <X className="inline h-3 w-3" />
-            </button>
-          )}
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-gray-50 p-3">
-          <div className="min-w-[200px] flex-1">
-            <label className="mb-1 block text-xs font-medium text-gray-500">
-              {t('common.search')}
-            </label>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('common.search')}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-
-          <div className="w-[180px]">
-            <label className="mb-1 block text-xs font-medium text-gray-500">
-              {t('banking.account')}
-            </label>
-            <Select value={filterAccountId} onValueChange={setFilterAccountId}>
-              <SelectTrigger className="h-8 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('banking.allAccounts')}</SelectItem>
-                {accounts.map((a: { id: number; name: string }) => (
-                  <SelectItem key={a.id} value={String(a.id)}>
-                    {a.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="w-[130px]">
-            <label className="mb-1 block text-xs font-medium text-gray-500">
-              {t('banking.dateFrom')}
-            </label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-          <div className="w-[130px]">
-            <label className="mb-1 block text-xs font-medium text-gray-500">
-              {t('banking.dateTo')}
-            </label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-
-          <div className="w-[100px]">
-            <label className="mb-1 block text-xs font-medium text-gray-500">
-              {t('banking.amountMin')}
-            </label>
-            <CurrencyInput
-              value={amountMin}
-              onChange={setAmountMin}
-              className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-          <div className="w-[100px]">
-            <label className="mb-1 block text-xs font-medium text-gray-500">
-              {t('banking.amountMax')}
-            </label>
-            <CurrencyInput
-              value={amountMax}
-              onChange={setAmountMax}
-              className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-
-          <div className="w-[130px]">
-            <label className="mb-1 block text-xs font-medium text-gray-500">
-              {t('banking.direction')}
-            </label>
-            <Select value={direction} onValueChange={setDirection}>
-              <SelectTrigger className="h-8 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('banking.all')}</SelectItem>
-                <SelectItem value="debit">{t('banking.debit')}</SelectItem>
-                <SelectItem value="credit">{t('banking.credit')}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
         {/* Transaction Table */}
         <div className="overflow-x-auto rounded-lg border bg-white">
           <table className="w-full table-fixed text-sm">
@@ -1179,8 +1237,8 @@ export function CounterpartyDetailPage() {
           </table>
         </div>
 
-        {/* Pagination */}
-        {totalCount > 0 && (
+        {/* Pagination — hide if less than 10 entries */}
+        {totalCount > 10 && (
           <div className="flex items-center justify-between text-sm text-gray-600">
             <span>
               {t('common.pagination.showing', {
@@ -1216,7 +1274,21 @@ export function CounterpartyDetailPage() {
       )}
 
       {/* Invoices Tab */}
-      {activeTab === 'invoices' && (
+      {activeTab === 'invoices' && (() => {
+        const handleInvSort = (field: string) => {
+          if (invSortBy === field) {
+            setInvSortOrder(invSortOrder === 'asc' ? 'desc' : 'asc')
+          } else {
+            setInvSortBy(field)
+            setInvSortOrder('desc')
+          }
+        }
+        const getInvSortIcon = (field: string) => {
+          if (invSortBy !== field) return <ArrowUpDown className="h-3.5 w-3.5 text-gray-400" />
+          return invSortOrder === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+        }
+
+        return (
         <div className="space-y-4">
           {invLoading ? (
             <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div>
@@ -1231,11 +1303,21 @@ export function CounterpartyDetailPage() {
                 <table className="w-full table-fixed text-sm">
                   <thead>
                     <tr className="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-                      <th className="w-[12%] px-4 py-3">{t('incomingInvoices.date')}</th>
-                      <th className="px-4 py-3">{t('incomingInvoices.supplier')}</th>
-                      <th className="w-[18%] px-4 py-3">{t('incomingInvoices.invoiceNumber')}</th>
-                      <th className="w-[12%] px-4 py-3 text-right">{t('incomingInvoices.grossAmount')}</th>
-                      <th className="w-[12%] px-4 py-3">{t('incomingInvoices.statusLabel')}</th>
+                      <th className="w-[12%] cursor-pointer whitespace-nowrap px-4 py-3" onClick={() => handleInvSort('invoice_date')}>
+                        <span className="inline-flex items-center gap-1">{t('incomingInvoices.date')}{getInvSortIcon('invoice_date')}</span>
+                      </th>
+                      <th className="cursor-pointer px-4 py-3" onClick={() => handleInvSort('supplier_name')}>
+                        <span className="inline-flex items-center gap-1">{t('incomingInvoices.supplier')}{getInvSortIcon('supplier_name')}</span>
+                      </th>
+                      <th className="w-[18%] cursor-pointer px-4 py-3" onClick={() => handleInvSort('invoice_number')}>
+                        <span className="inline-flex items-center gap-1">{t('incomingInvoices.invoiceNumber')}{getInvSortIcon('invoice_number')}</span>
+                      </th>
+                      <th className="w-[12%] cursor-pointer whitespace-nowrap px-4 py-3 text-right" onClick={() => handleInvSort('gross_amount')}>
+                        <span className="inline-flex items-center justify-end gap-1">{t('incomingInvoices.grossAmount')}{getInvSortIcon('gross_amount')}</span>
+                      </th>
+                      <th className="w-[12%] cursor-pointer px-4 py-3" onClick={() => handleInvSort('extraction_status')}>
+                        <span className="inline-flex items-center gap-1">{t('incomingInvoices.statusLabel')}{getInvSortIcon('extraction_status')}</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1261,7 +1343,7 @@ export function CounterpartyDetailPage() {
                   </tbody>
                 </table>
               </div>
-              {invTotalCount > 50 && (
+              {invTotalCount > 10 && (
                 <div className="flex items-center justify-between text-sm text-gray-600">
                   <span>{invPage * 50 - 49}–{Math.min(invPage * 50, invTotalCount)} of {invTotalCount}</span>
                   <div className="flex items-center gap-2">
@@ -1277,7 +1359,8 @@ export function CounterpartyDetailPage() {
             </>
           )}
         </div>
-      )}
+        )
+      })()}
 
       {/* Transaction Match Sheet */}
       <TransactionMatchSheet

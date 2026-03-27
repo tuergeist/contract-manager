@@ -1835,6 +1835,7 @@
     "description": "Manage bank accounts and import statements",
     "accounts": "Accounts",
     "transactions": "Transactions",
+    "bankTransactions": "Bank Transactions",
     "addAccount": "Add Account",
     "editAccount": "Edit Account",
     "deleteAccount": "Delete Account",

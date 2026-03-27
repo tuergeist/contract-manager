@@ -1835,6 +1835,7 @@
     "description": "Bankkonten verwalten und Kontoauszüge importieren",
     "accounts": "Konten",
     "transactions": "Umsätze",
+    "bankTransactions": "Bankumsätze",
     "addAccount": "Konto hinzufügen",
     "editAccount": "Konto bearbeiten",
     "deleteAccount": "Konto löschen",

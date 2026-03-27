@@ -78,6 +78,8 @@ class CounterpartySummaryType:
     transaction_count: int
     first_date: date | None
     last_date: date | None
+    total_invoiced: Decimal = Decimal("0")
+    invoice_count: int = 0
     customer: LinkedCustomerType | None = None
     default_cost_center: CostCenterType | None = None
 
@@ -1394,6 +1396,20 @@ class BankingQuery:
         except Counterparty.DoesNotExist:
             return None
 
+        # Aggregate incoming invoices for this counterparty
+        from apps.banking.models import IncomingInvoice
+        inv_filter = Q(counterparty=cp)
+        if date_from:
+            inv_filter &= Q(invoice_date__gte=date_from)
+        if date_to:
+            inv_filter &= Q(invoice_date__lte=date_to)
+        inv_agg = IncomingInvoice.objects.filter(
+            inv_filter, tenant=user.tenant,
+        ).aggregate(
+            total=Sum("gross_amount", default=Decimal("0")),
+            count=Count("id"),
+        )
+
         return CounterpartySummaryType(
             id=strawberry.ID(str(cp.id)),
             name=cp.name,
@@ -1404,6 +1420,8 @@ class BankingQuery:
             transaction_count=cp.txn_count,
             first_date=cp.first_date,
             last_date=cp.last_date,
+            total_invoiced=inv_agg["total"],
+            invoice_count=inv_agg["count"],
             customer=LinkedCustomerType(id=cp.customer.id, name=cp.customer.name) if cp.customer else None,
             default_cost_center=_make_cost_center_type(cp.default_cost_center),
         )
