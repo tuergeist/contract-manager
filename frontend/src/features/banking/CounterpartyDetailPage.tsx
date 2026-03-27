@@ -46,7 +46,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { TransactionMatchSheet } from './TransactionMatchSheet'
-import { Link2, FileText } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Link2, FileText, Receipt } from 'lucide-react'
 
 const COUNTERPARTY_DETAIL = gql`
   query CounterpartyDetail($id: ID!, $dateFrom: Date, $dateTo: Date) {
@@ -226,6 +227,34 @@ const UNLINK_COUNTERPARTY_FROM_CUSTOMER = gql`
   }
 `
 
+const COUNTERPARTY_INVOICES = gql`
+  query CounterpartyInvoices($counterpartyId: ID!, $page: Int, $pageSize: Int) {
+    incomingInvoices(counterpartyId: $counterpartyId, page: $page, pageSize: $pageSize) {
+      items {
+        id
+        supplierName
+        invoiceNumber
+        invoiceDate
+        grossAmount
+        currency
+        extractionStatus
+        originalFilename
+      }
+      totalCount
+      hasNextPage
+    }
+  }
+`
+
+const invoiceStatusColors: Record<string, string> = {
+  pending: 'bg-yellow-100 text-yellow-800',
+  extracting: 'bg-blue-100 text-blue-800',
+  extracted: 'bg-green-100 text-green-800',
+  extraction_failed: 'bg-red-100 text-red-800',
+  confirmed: 'bg-emerald-100 text-emerald-800',
+  matched: 'bg-purple-100 text-purple-800',
+}
+
 interface Counterparty {
   id: string
   name: string
@@ -301,6 +330,10 @@ export function CounterpartyDetailPage() {
   const [customerPopoverOpen, setCustomerPopoverOpen] = useState(false)
   const customerSearchInputRef = useRef<HTMLInputElement>(null)
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'transactions' | 'invoices'>('transactions')
+  const [invPage, setInvPage] = useState(1)
+
   // Filters
   const [filterAccountId, setFilterAccountId] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -335,6 +368,15 @@ export function CounterpartyDetailPage() {
     variables: { id, dateFrom: cpDateFrom, dateTo: cpDateTo },
     skip: !id,
   })
+
+  // Incoming invoices for this counterparty
+  const { data: invData, loading: invLoading } = useQuery(COUNTERPARTY_INVOICES, {
+    variables: { counterpartyId: id, page: invPage, pageSize: 50 },
+    skip: !id || activeTab !== 'invoices',
+  })
+  const cpInvoices = invData?.incomingInvoices?.items || []
+  const invTotalCount = invData?.incomingInvoices?.totalCount || 0
+  const invHasNextPage = invData?.incomingInvoices?.hasNextPage || false
 
   const summary: CounterpartySummary | null = cpData?.counterparty || null
 
@@ -839,8 +881,38 @@ export function CounterpartyDetailPage() {
         </div>
       )}
 
-      {/* Transaction Table */}
-      <div className="mt-6 space-y-4">
+      {/* Tabs */}
+      <div className="mt-6">
+        <div className="flex gap-1 border-b mb-4">
+          <button
+            onClick={() => setActiveTab('transactions')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'transactions'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t('banking.transactions')}
+          </button>
+          <button
+            onClick={() => setActiveTab('invoices')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'invoices'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t('incomingInvoices.title', 'Incoming Invoices')}
+            {invTotalCount > 0 && (
+              <span className="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{invTotalCount}</span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Transactions Tab */}
+      {activeTab === 'transactions' && (
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">{t('banking.transactions')}</h2>
           {hasActiveFilters && (
@@ -1141,6 +1213,71 @@ export function CounterpartyDetailPage() {
           </div>
         )}
       </div>
+      )}
+
+      {/* Invoices Tab */}
+      {activeTab === 'invoices' && (
+        <div className="space-y-4">
+          {invLoading ? (
+            <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div>
+          ) : cpInvoices.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <Receipt className="mx-auto h-10 w-10 mb-2 opacity-50" />
+              <p>{t('incomingInvoices.empty')}</p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto rounded-lg border bg-white">
+                <table className="w-full table-fixed text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                      <th className="w-[12%] px-4 py-3">{t('incomingInvoices.date')}</th>
+                      <th className="px-4 py-3">{t('incomingInvoices.supplier')}</th>
+                      <th className="w-[18%] px-4 py-3">{t('incomingInvoices.invoiceNumber')}</th>
+                      <th className="w-[12%] px-4 py-3 text-right">{t('incomingInvoices.grossAmount')}</th>
+                      <th className="w-[12%] px-4 py-3">{t('incomingInvoices.statusLabel')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cpInvoices.map((inv: any) => (
+                      <tr
+                        key={inv.id}
+                        className="border-b cursor-pointer transition-colors hover:bg-blue-50/50"
+                        onClick={() => navigate(`/incoming-invoices?selected=${inv.id}`)}
+                      >
+                        <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{formatDate(inv.invoiceDate)}</td>
+                        <td className="px-4 py-2.5 font-medium text-gray-900 truncate">{inv.supplierName || inv.originalFilename}</td>
+                        <td className="px-4 py-2.5 text-gray-600">{inv.invoiceNumber || '—'}</td>
+                        <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">
+                          {formatCurrency(inv.grossAmount, { currency: inv.currency })}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <Badge variant="secondary" className={invoiceStatusColors[inv.extractionStatus] || ''}>
+                            {t(`incomingInvoices.status.${inv.extractionStatus === 'extraction_failed' ? 'extractionFailed' : inv.extractionStatus}`)}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {invTotalCount > 50 && (
+                <div className="flex items-center justify-between text-sm text-gray-600">
+                  <span>{invPage * 50 - 49}–{Math.min(invPage * 50, invTotalCount)} of {invTotalCount}</span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setInvPage(invPage - 1)} disabled={invPage <= 1} className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                      <ChevronLeft className="h-4 w-4" />{t('common.pagination.previous')}
+                    </button>
+                    <button onClick={() => setInvPage(invPage + 1)} disabled={!invHasNextPage} className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                      {t('common.pagination.next')}<ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Transaction Match Sheet */}
       <TransactionMatchSheet
