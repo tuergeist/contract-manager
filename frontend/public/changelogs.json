@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.25.1",
+    "date": "2026-03-27",
+    "title": "Debit matching and incoming invoices redesign",
+    "description": "Debit bank transactions can now be matched to incoming (supplier) invoices. The incoming invoices page has been redesigned to match the banking layout with sortable columns, filter card, and inline counterparty editing.",
+    "type": "feature",
+    "details": [
+      "Match debit transactions to incoming invoices and credit notes via counterparty link",
+      "Redesigned incoming invoices page with banking-style filter card, sortable table, and pen icon for counterparty editing",
+      "Supplier name links to counterparty detail page when matched",
+      "Added Invoices tab to counterparty detail page showing linked incoming invoices",
+      "Invoice type badge now shows 'Incoming' instead of 'Generated' for supplier invoices",
+      "Added assistant.use permission for Cora AI chat (Admin and Manager roles)"
+    ]
+  },
+  {
     "version": "2.25.0",
     "date": "2026-03-26",
     "title": "Cora AI assistant and incoming invoice improvements",
