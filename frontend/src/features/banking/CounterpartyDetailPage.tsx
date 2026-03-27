@@ -18,6 +18,9 @@ import {
   Link as LinkIcon,
   Unlink,
   User,
+  Eye,
+  Search as SearchIcon,
+  Link2 as ChainIcon,
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import {
@@ -38,6 +41,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { TransactionMatchSheet } from './TransactionMatchSheet'
+import { IncomingInvoiceDetail } from '../incoming-invoices/IncomingInvoiceDetail'
 import { Badge } from '@/components/ui/badge'
 import { Link2, FileText, Receipt } from 'lucide-react'
 
@@ -232,6 +236,7 @@ const COUNTERPARTY_INVOICES = gql`
         currency
         extractionStatus
         originalFilename
+        pdfUrl
       }
       totalCount
       hasNextPage
@@ -337,6 +342,7 @@ export function CounterpartyDetailPage() {
   const [invSortBy, setInvSortBy] = useState('invoice_date')
   const [invSortOrder, setInvSortOrder] = useState<'asc' | 'desc'>('desc')
   const [ledgerSortOrder, setLedgerSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [selectedInvId, setSelectedInvId] = useState<string | null>(null)
 
   // Filters (kept for query variables but no UI)
   const [filterAccountId] = useState<string>('all')
@@ -1318,15 +1324,12 @@ export function CounterpartyDetailPage() {
                       <th className="w-[12%] cursor-pointer px-4 py-3" onClick={() => handleInvSort('extraction_status')}>
                         <span className="inline-flex items-center gap-1">{t('incomingInvoices.statusLabel')}{getInvSortIcon('extraction_status')}</span>
                       </th>
+                      <th className="w-[10%] px-4 py-3"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {cpInvoices.map((inv: any) => (
-                      <tr
-                        key={inv.id}
-                        className="border-b cursor-pointer transition-colors hover:bg-blue-50/50"
-                        onClick={() => navigate(`/incoming-invoices?selected=${inv.id}`)}
-                      >
+                      <tr key={inv.id} className="border-b">
                         <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{formatDate(inv.invoiceDate)}</td>
                         <td className="px-4 py-2.5 font-medium text-gray-900 truncate">{inv.supplierName || inv.originalFilename}</td>
                         <td className="px-4 py-2.5 text-gray-600">{inv.invoiceNumber || '—'}</td>
@@ -1337,6 +1340,38 @@ export function CounterpartyDetailPage() {
                           <Badge variant="secondary" className={invoiceStatusColors[inv.extractionStatus] || ''}>
                             {t(`incomingInvoices.status.${inv.extractionStatus === 'extraction_failed' ? 'extractionFailed' : inv.extractionStatus}`)}
                           </Badge>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-1">
+                            {inv.pdfUrl && (
+                              <a
+                                href={inv.pdfUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                                title={t('common.viewPdf', 'View PDF')}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </a>
+                            )}
+                            <button
+                              onClick={() => setSelectedInvId(inv.id)}
+                              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                              title={t('common.details', 'Details')}
+                            >
+                              <SearchIcon className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setMatchSheetTxId(null)
+                                setMatchSheetOpen(true)
+                              }}
+                              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                              title={t('banking.matchView.matchButton', 'Match')}
+                            >
+                              <ChainIcon className="h-4 w-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1372,6 +1407,15 @@ export function CounterpartyDetailPage() {
         }}
         onMatchChanged={() => txRefetch()}
       />
+
+      {selectedInvId && (
+        <IncomingInvoiceDetail
+          id={selectedInvId}
+          open={!!selectedInvId}
+          onClose={() => setSelectedInvId(null)}
+          onUpdate={() => {}}
+        />
+      )}
     </div>
   )
 }

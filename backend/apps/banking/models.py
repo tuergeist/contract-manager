@@ -492,6 +492,7 @@ class IncomingInvoice(TenantModel):
     file_size = models.PositiveIntegerField(default=0)
     extraction_status = models.CharField(max_length=20, choices=ExtractionStatus.choices, default=ExtractionStatus.PENDING)
     extraction_error = models.TextField(blank=True)
+    content_hash = models.CharField(max_length=64, blank=True, db_index=True, help_text="SHA256 hash of PDF content for deduplication")
     email_message_id = models.CharField(max_length=500, blank=True)
     source_email_subject = models.CharField(max_length=500, blank=True)
     source_email_date = models.DateTimeField(null=True, blank=True)

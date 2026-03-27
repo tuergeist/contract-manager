@@ -9,6 +9,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
@@ -108,7 +111,10 @@ export function IncomingInvoicesPage() {
   const [showCreateCp, setShowCreateCp] = useState(false)
   const [newCpName, setNewCpName] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [uploadResult, setUploadResult] = useState<{ total: number; failed: number } | null>(null)
+  // Upload modal state
+  const [uploadModalOpen, setUploadModalOpen] = useState(false)
+  const [uploadFiles, setUploadFiles] = useState<{ name: string; status: 'pending' | 'uploading' | 'done' | 'skipped' | 'error'; error?: string }[]>([])
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0, done: false })
 
   // Debounce search
   useEffect(() => {
@@ -143,7 +149,7 @@ export function IncomingInvoicesPage() {
   const searchedCps = cpData?.counterparties?.items ?? []
 
   // Mutations
-  const [uploadIncoming, { loading: uploading }] = useMutation(UPLOAD_INCOMING)
+  const [uploadIncoming] = useMutation(UPLOAD_INCOMING)
   const [updateInvoice, { loading: updatingCp }] = useMutation(UPDATE_INCOMING_INVOICE)
 
   const invoices = data?.incomingInvoices?.items || []
@@ -181,21 +187,52 @@ export function IncomingInvoicesPage() {
 
   const handleFileUpload = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return
-    setUploadResult(null)
-    const files: { fileContent: string; filename: string }[] = []
+
+    // Prepare file list
+    const validFiles: { file: File; base64: string }[] = []
     for (const file of Array.from(fileList)) {
       if (!file.name.toLowerCase().endsWith('.pdf') && !file.name.toLowerCase().endsWith('.zip')) continue
       const buffer = await file.arrayBuffer()
       const base64 = btoa(new Uint8Array(buffer).reduce((d, byte) => d + String.fromCharCode(byte), ''))
-      files.push({ fileContent: base64, filename: file.name })
+      validFiles.push({ file, base64 })
     }
-    if (files.length === 0) return
-    const { data } = await uploadIncoming({ variables: { files } })
-    const result = data?.uploadIncomingInvoices
-    if (result) {
-      setUploadResult({ total: result.totalUploaded, failed: result.totalFailed })
-      refetch()
+    if (validFiles.length === 0) return
+
+    // Initialize modal
+    const fileStates = validFiles.map(f => ({ name: f.file.name, status: 'pending' as const }))
+    setUploadFiles(fileStates)
+    setUploadProgress({ current: 0, total: validFiles.length, done: false })
+    setUploadModalOpen(true)
+
+    // Upload files one by one
+    for (let i = 0; i < validFiles.length; i++) {
+      const { file, base64 } = validFiles[i]
+      setUploadFiles(prev => prev.map((f, idx) => idx === i ? { ...f, status: 'uploading' } : f))
+      setUploadProgress(prev => ({ ...prev, current: i + 1 }))
+
+      try {
+        const { data } = await uploadIncoming({
+          variables: { files: [{ fileContent: base64, filename: file.name }] },
+        })
+        const result = data?.uploadIncomingInvoices
+        if (result?.success) {
+          const firstResult = result.results?.[0]
+          if (firstResult?.error === 'duplicate_skipped') {
+            setUploadFiles(prev => prev.map((f, idx) => idx === i ? { ...f, status: 'skipped' } : f))
+          } else {
+            setUploadFiles(prev => prev.map((f, idx) => idx === i ? { ...f, status: 'done' } : f))
+          }
+        } else {
+          const errorMsg = result?.results?.[0]?.error || result?.error || 'Upload failed'
+          setUploadFiles(prev => prev.map((f, idx) => idx === i ? { ...f, status: 'error', error: errorMsg } : f))
+        }
+      } catch (e) {
+        setUploadFiles(prev => prev.map((f, idx) => idx === i ? { ...f, status: 'error', error: e instanceof Error ? e.message : 'Upload failed' } : f))
+      }
     }
+
+    setUploadProgress(prev => ({ ...prev, done: true }))
+    refetch()
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -228,18 +265,63 @@ export function IncomingInvoicesPage() {
         </div>
         <div>
           <input ref={fileInputRef} type="file" accept=".pdf,.zip" multiple className="hidden" onChange={(e) => handleFileUpload(e.target.files)} />
-          <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-            {uploading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Upload className="mr-1.5 h-4 w-4" />}
+          <Button onClick={() => fileInputRef.current?.click()} disabled={uploadModalOpen && !uploadProgress.done}>
+            <Upload className="mr-1.5 h-4 w-4" />
             {t('incomingInvoices.upload')}
           </Button>
         </div>
       </div>
 
-      {uploadResult && (
-        <div className={`mb-4 p-3 rounded-lg text-sm ${uploadResult.failed > 0 ? 'bg-yellow-50 text-yellow-800' : 'bg-green-50 text-green-700'}`}>
-          {uploadResult.total} invoice(s) uploaded{uploadResult.failed > 0 ? `, ${uploadResult.failed} failed` : ''}.
-        </div>
-      )}
+      {/* Upload Progress Modal */}
+      <Dialog open={uploadModalOpen} onOpenChange={(open) => { if (uploadProgress.done) setUploadModalOpen(open) }}>
+        <DialogContent className="max-w-2xl" onPointerDownOutside={(e) => { if (!uploadProgress.done) e.preventDefault() }}>
+          <DialogHeader>
+            <DialogTitle>
+              {uploadProgress.done
+                ? t('incomingInvoices.uploadComplete', 'Upload complete')
+                : t('incomingInvoices.uploadProgress', 'Uploading invoices...')}
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Progress bar */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-sm text-gray-600">
+              <span>{uploadProgress.current} / {uploadProgress.total}</span>
+              {!uploadProgress.done && (
+                <span className="text-xs text-gray-400">{t('incomingInvoices.uploadStayHint', 'Please wait, do not close this dialog.')}</span>
+              )}
+            </div>
+            <div className="h-2 w-full rounded-full bg-gray-100">
+              <div
+                className="h-2 rounded-full bg-blue-600 transition-all duration-300"
+                style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.current / uploadProgress.total) * 100 : 0}%` }}
+              />
+            </div>
+
+            {/* File list */}
+            <div className="max-h-[300px] overflow-y-auto space-y-1">
+              {uploadFiles.map((f, i) => (
+                <div key={i} className="flex items-center justify-between rounded px-2 py-1.5 text-sm">
+                  <span className="truncate flex-1 mr-2">{f.name}</span>
+                  {f.status === 'pending' && <span className="text-xs text-gray-400">{t('incomingInvoices.status.pending')}</span>}
+                  {f.status === 'uploading' && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />}
+                  {f.status === 'done' && <span className="text-xs text-green-600">✓</span>}
+                  {f.status === 'skipped' && <span className="text-xs text-gray-400">{t('incomingInvoices.duplicateSkipped', 'duplicate')}</span>}
+                  {f.status === 'error' && (
+                    <span className="text-xs text-red-600" title={f.error}>✗</span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {uploadProgress.done && (
+              <div className="flex justify-end pt-2">
+                <Button onClick={() => setUploadModalOpen(false)}>{t('common.close')}</Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Filter card */}
       <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-gray-50 p-3 mb-4">
@@ -468,15 +550,15 @@ export function IncomingInvoicesPage() {
           </div>
 
           {/* Pagination */}
-          <div className="flex items-center justify-between mt-4">
+          {totalCount > 10 && <div className="flex items-center justify-between mt-4">
             <span className="text-sm text-muted-foreground">
-              {t('common.showingOf', { count: invoices.length, total: totalCount })}
+              {t('common.showingOf', { from: (page - 1) * 50 + 1, to: Math.min(page * 50, totalCount), total: totalCount })}
             </span>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>{t('common.previous')}</Button>
-              <Button variant="outline" size="sm" disabled={!hasNextPage} onClick={() => setPage(page + 1)}>{t('common.next')}</Button>
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>{t('common.pagination.previous')}</Button>
+              <Button variant="outline" size="sm" disabled={!hasNextPage} onClick={() => setPage(page + 1)}>{t('common.pagination.next')}</Button>
             </div>
-          </div>
+          </div>}
         </>
       )}
 

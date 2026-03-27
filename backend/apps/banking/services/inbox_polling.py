@@ -83,11 +83,15 @@ class InboxPollingService:
                     if not pdf_data:
                         continue
 
+                    import hashlib
+                    content_hash = hashlib.sha256(pdf_data).hexdigest()
+
                     invoice = IncomingInvoice(
                         tenant=inbox.tenant,
                         inbox=inbox,
                         original_filename=filename,
                         file_size=len(pdf_data),
+                        content_hash=content_hash,
                         email_message_id=message_id,
                         source_email_subject=subject[:500],
                         source_email_date=email_date,
@@ -168,11 +172,15 @@ class InboxPollingService:
                         continue
                     pdf_data = base64.b64decode(content_bytes)
 
+                    import hashlib
+                    content_hash = hashlib.sha256(pdf_data).hexdigest()
+
                     invoice = IncomingInvoice(
                         tenant=inbox.tenant,
                         inbox=inbox,
                         original_filename=filename,
                         file_size=len(pdf_data),
+                        content_hash=content_hash,
                         email_message_id=msg_id,
                         source_email_subject=subject[:500],
                         source_email_date=email_date,

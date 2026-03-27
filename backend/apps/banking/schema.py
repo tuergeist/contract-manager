@@ -2267,6 +2267,7 @@ class BankingMutation:
     ) -> UploadIncomingInvoicesResult:
         """Upload PDFs or a ZIP file containing PDFs as incoming invoices."""
         import base64
+        import hashlib
         import io
         import zipfile
 
@@ -2306,17 +2307,34 @@ class BankingMutation:
 
         for filename, pdf_data in pdf_files:
             try:
+                # Skip duplicates by content hash
+                content_hash = hashlib.sha256(pdf_data).hexdigest()
+                if IncomingInvoice.objects.filter(
+                    tenant=tenant, content_hash=content_hash
+                ).exists():
+                    results.append(UploadIncomingInvoiceItemResult(
+                        filename=filename, success=True, error="duplicate_skipped"
+                    ))
+                    continue
+
                 invoice = IncomingInvoice(
                     tenant=tenant,
                     original_filename=filename,
                     file_size=len(pdf_data),
+                    content_hash=content_hash,
                     extraction_status=IncomingInvoice.ExtractionStatus.PENDING,
                 )
                 invoice.pdf_file.save(filename, ContentFile(pdf_data), save=False)
                 invoice.save()
 
                 try:
-                    run_incoming_extraction(invoice)
+                    extracted = run_incoming_extraction(invoice)
+                    if not extracted and not IncomingInvoice.objects.filter(id=invoice.id).exists():
+                        # Invoice was deleted as duplicate during extraction
+                        results.append(UploadIncomingInvoiceItemResult(
+                            filename=filename, success=True, error="duplicate_skipped"
+                        ))
+                        continue
                 except Exception:
                     pass  # extraction errors are stored on the invoice
 

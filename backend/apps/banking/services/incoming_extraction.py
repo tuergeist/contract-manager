@@ -139,6 +139,25 @@ def run_incoming_extraction(invoice: IncomingInvoice) -> bool:
     if data.get("currency"):
         invoice.currency = data["currency"][:3].upper()
 
+    # Check for duplicate by extracted fields before saving
+    if invoice.invoice_number and invoice.gross_amount is not None:
+        duplicate = IncomingInvoice.objects.filter(
+            tenant=invoice.tenant,
+            invoice_number=invoice.invoice_number,
+            gross_amount=invoice.gross_amount,
+            invoice_date=invoice.invoice_date,
+        ).exclude(id=invoice.id).first()
+        if duplicate:
+            logger.info(
+                "Duplicate incoming invoice %s matches %s (invoice_number=%s)",
+                invoice.id, duplicate.id, invoice.invoice_number,
+            )
+            # Delete the duplicate upload
+            if invoice.pdf_file:
+                invoice.pdf_file.delete(save=False)
+            invoice.delete()
+            return False
+
     invoice.extraction_status = IncomingInvoice.ExtractionStatus.EXTRACTED
     invoice.extraction_error = ""
     invoice.save()
