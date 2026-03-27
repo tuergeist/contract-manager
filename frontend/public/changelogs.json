@@ -1,5 +1,21 @@
 [
   {
+    "version": "2.25.2",
+    "date": "2026-03-27",
+    "title": "Counterparty account view and upload improvements",
+    "description": "Counterparty detail page now shows a unified account ledger with Soll/Haben columns, year selector for summary cards, and invoice action icons. Invoice upload has a progress modal with duplicate detection.",
+    "type": "feature",
+    "details": [
+      "Added Account tab to counterparty detail with unified Soll/Haben ledger and running Saldo",
+      "Year selector for counterparty summary cards (Invoiced, Paid, Outstanding, Cash Balance)",
+      "Upload progress modal with per-file status, progress bar, and non-dismissible during upload",
+      "Duplicate detection via SHA256 content hash and post-extraction field matching",
+      "Counterparty invoice tab: action icons for PDF view, details sheet, and transaction matching",
+      "Renamed Transactions tab to Bank Transactions with count badge",
+      "Fixed pagination i18n and hidden when 10 or fewer entries"
+    ]
+  },
+  {
     "version": "2.25.1",
     "date": "2026-03-27",
     "title": "Debit matching and incoming invoices redesign",
