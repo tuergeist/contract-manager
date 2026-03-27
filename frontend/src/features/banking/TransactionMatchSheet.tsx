@@ -94,6 +94,15 @@ const CREATE_PAYMENT_MATCH_FOR_RECORD = gql`
   }
 `
 
+const CREATE_PAYMENT_MATCH_FOR_INCOMING = gql`
+  mutation CreatePaymentMatchForIncomingFromSheet($incomingInvoiceId: ID!, $transactionId: Int!, $matchType: String) {
+    createPaymentMatchForIncoming(incomingInvoiceId: $incomingInvoiceId, transactionId: $transactionId, matchType: $matchType) {
+      success
+      error
+    }
+  }
+`
+
 const DELETE_PAYMENT_MATCH = gql`
   mutation DeletePaymentMatchFromSheet($matchId: Int!) {
     deletePaymentMatch(matchId: $matchId) {
@@ -132,7 +141,7 @@ interface MatchDetail {
   invoiceNumber: string
   invoiceAmount: string
   customerName: string
-  invoiceType: 'imported' | 'generated'
+  invoiceType: 'imported' | 'generated' | 'incoming'
   matchType: string
   confidence: string
   matchedAt: string
@@ -169,7 +178,7 @@ interface InvoiceSearchResult {
   invoiceNumber: string
   amount: string
   customerName: string
-  invoiceType: 'imported' | 'generated'
+  invoiceType: 'imported' | 'generated' | 'incoming'
   status: string
   invoiceDate: string | null
   isPaid: boolean
@@ -197,10 +206,12 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
   const { data: settingsData } = useQuery(BANKING_SETTINGS_FOR_MATCH)
 
   const customerId = data?.transactionMatchDetails?.customerId ?? null
+  const isDebit = data?.transactionMatchDetails ? parseFloat(data.transactionMatchDetails.amount) < 0 : false
 
   const { data: suggestionsData, loading: suggestionsLoading, refetch: refetchSuggestions } = useQuery(SUGGESTED_INVOICE_MATCHES, {
     variables: { transactionId },
-    skip: !transactionId || !open || customerId === null,
+    // For credits: need customer link. For debits: counterparty is enough (backend handles it).
+    skip: !transactionId || !open || (!isDebit && customerId === null),
     fetchPolicy: 'network-only',
   })
 
@@ -212,6 +223,7 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
 
   const [createMatch] = useMutation(CREATE_PAYMENT_MATCH)
   const [createMatchForRecord] = useMutation(CREATE_PAYMENT_MATCH_FOR_RECORD)
+  const [createMatchForIncoming] = useMutation(CREATE_PAYMENT_MATCH_FOR_INCOMING)
   const [deleteMatch] = useMutation(DELETE_PAYMENT_MATCH)
 
   const txn: TransactionMatchData | null = data?.transactionMatchDetails ?? null
@@ -223,7 +235,12 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
 
     try {
       let result
-      if (invoice.invoiceType === 'imported') {
+      if (invoice.invoiceType === 'incoming') {
+        result = await createMatchForIncoming({
+          variables: { incomingInvoiceId: invoice.id, transactionId, matchType: 'manual' },
+        })
+        result = result.data.createPaymentMatchForIncoming
+      } else if (invoice.invoiceType === 'imported') {
         result = await createMatch({
           variables: { invoiceId: invoice.id, transactionId, matchType: 'manual' },
         })
@@ -298,11 +315,11 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
   // Filter out already matched invoices from search results
   const matchedIds = new Set(
     (txn?.matches ?? []).map(m =>
-      m.invoiceType === 'imported' ? `imported-${m.invoiceId}` : `generated-${m.invoiceRecordId}`
+      `${m.invoiceType}-${m.invoiceId || m.invoiceRecordId}`
     )
   )
   const filteredResults = searchResults.filter(inv => {
-    const key = inv.invoiceType === 'imported' ? `imported-${inv.id}` : `generated-${inv.id}`
+    const key = `${inv.invoiceType}-${inv.id}`
     return !matchedIds.has(key)
   })
 
@@ -401,7 +418,9 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium truncate">{match.invoiceNumber}</span>
                           <Badge variant="outline" className="text-xs shrink-0">
-                            {match.invoiceType === 'imported'
+                            {match.invoiceType === 'incoming'
+                              ? t('banking.matchView.incoming')
+                              : match.invoiceType === 'imported'
                               ? t('banking.matchView.imported')
                               : t('banking.matchView.generated')}
                           </Badge>
@@ -426,8 +445,8 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
               )}
             </div>
 
-            {/* Suggested Matches */}
-            {customerId !== null && (
+            {/* Suggested Matches — show for credits with customer link, or debits with counterparty */}
+            {(customerId !== null || isDebit) && (
               <div>
                 <h3 className="text-sm font-medium text-gray-700 mb-2">
                   {t('banking.matchView.suggestedMatches')}
@@ -465,7 +484,9 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium truncate">{inv.invoiceNumber}</span>
                               <Badge variant="outline" className="text-xs shrink-0">
-                                {inv.invoiceType === 'imported'
+                                {inv.invoiceType === 'incoming'
+                                  ? t('banking.matchView.incoming')
+                                  : inv.invoiceType === 'imported'
                                   ? t('banking.matchView.imported')
                                   : t('banking.matchView.generated')}
                               </Badge>

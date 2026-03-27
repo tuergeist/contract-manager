@@ -643,6 +643,13 @@ class InvoicePaymentMatch(TenantModel):
         blank=True,
         related_name="payment_matches",
     )
+    incoming_invoice = models.ForeignKey(
+        "banking.IncomingInvoice",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="payment_matches",
+    )
     transaction = models.ForeignKey(
         "banking.BankTransaction",
         on_delete=models.CASCADE,
@@ -678,6 +685,11 @@ class InvoicePaymentMatch(TenantModel):
                 fields=["invoice_record", "transaction"],
                 condition=Q(invoice_record__isnull=False),
                 name="unique_record_tx_match",
+            ),
+            models.UniqueConstraint(
+                fields=["incoming_invoice", "transaction"],
+                condition=Q(incoming_invoice__isnull=False),
+                name="unique_incoming_tx_match",
             ),
         ]
 

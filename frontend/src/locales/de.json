@@ -1918,6 +1918,7 @@
       "removeMatch": "Zuordnung entfernen",
       "imported": "Importiert",
       "generated": "Generiert",
+      "incoming": "Eingangsrechnung",
       "matchButton": "Zuordnen",
       "withinTolerance": "innerhalb der Toleranz",
       "suggestedMatches": "Vorgeschlagene Zuordnungen",

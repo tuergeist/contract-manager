@@ -2313,6 +2313,61 @@ class InvoiceMutation:
         )
 
     @strawberry.mutation
+    def create_payment_match_for_incoming(
+        self,
+        info: Info[Context, None],
+        incoming_invoice_id: strawberry.ID,
+        transaction_id: int,
+        match_type: str = "manual",
+    ) -> CreatePaymentMatchResult:
+        """Create a payment match between an incoming (supplier) invoice and a debit transaction."""
+        user, err = check_perm(info, "incoming_invoices", "write")
+        if err:
+            return CreatePaymentMatchResult(success=False, error=err)
+
+        from apps.banking.models import BankTransaction, IncomingInvoice
+
+        try:
+            incoming = IncomingInvoice.objects.get(id=str(incoming_invoice_id), tenant=user.tenant)
+        except IncomingInvoice.DoesNotExist:
+            return CreatePaymentMatchResult(success=False, error="Incoming invoice not found")
+
+        try:
+            transaction_obj = BankTransaction.objects.get(id=transaction_id, tenant=user.tenant)
+        except BankTransaction.DoesNotExist:
+            return CreatePaymentMatchResult(success=False, error="Transaction not found")
+
+        if InvoicePaymentMatch.objects.filter(
+            incoming_invoice=incoming, transaction=transaction_obj
+        ).exists():
+            return CreatePaymentMatchResult(success=False, error="Match already exists")
+
+        valid_types = [c[0] for c in InvoicePaymentMatch.MatchType.choices]
+        if match_type not in valid_types:
+            match_type = InvoicePaymentMatch.MatchType.MANUAL
+
+        confidence = Decimal("1.0") if match_type == "manual" else Decimal("0.8")
+
+        match = InvoicePaymentMatch.objects.create(
+            tenant=user.tenant,
+            incoming_invoice=incoming,
+            transaction=transaction_obj,
+            match_type=match_type,
+            confidence=confidence,
+            matched_by=user if match_type == "manual" else None,
+        )
+
+        # Mark incoming invoice as matched
+        if incoming.extraction_status in ("extracted", "confirmed"):
+            incoming.extraction_status = "matched"
+            incoming.save(update_fields=["extraction_status", "updated_at"])
+
+        return CreatePaymentMatchResult(
+            success=True,
+            match=_convert_payment_match(match),
+        )
+
+    @strawberry.mutation
     def delete_payment_match(
         self, info: Info[Context, None], match_id: int
     ) -> DeleteResult:

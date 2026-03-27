@@ -1918,6 +1918,7 @@
       "removeMatch": "Remove match",
       "imported": "Imported",
       "generated": "Generated",
+      "incoming": "Incoming",
       "matchButton": "Match",
       "withinTolerance": "within tolerance",
       "suggestedMatches": "Suggested matches",

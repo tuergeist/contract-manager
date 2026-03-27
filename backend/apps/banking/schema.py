@@ -512,6 +512,17 @@ def _make_transaction_type(t, include_invoice_match: bool = True) -> BankTransac
                     customer_id=match.invoice_record.customer_id,
                     invoice_type="generated",
                 )
+            elif match.incoming_invoice_id:
+                inc = match.incoming_invoice
+                matched_invoice = InvoiceMatchInfoType(
+                    invoice_id=strawberry.ID(str(inc.id)),
+                    invoice_number=inc.invoice_number or inc.original_filename,
+                    match_type=match.match_type,
+                    confidence=match.confidence,
+                    contract_id=None,
+                    customer_id=None,
+                    invoice_type="incoming",
+                )
 
     return BankTransactionType(
         id=t.id,
@@ -965,6 +976,7 @@ class BankingQuery:
                 .prefetch_related(
                     "invoice_matches__invoice__customer",
                     "invoice_matches__invoice_record__customer",
+                    "invoice_matches__incoming_invoice__counterparty",
                 )
                 .get(id=transaction_id)
             )
@@ -1002,6 +1014,20 @@ class BankingQuery:
                     matched_at=m.matched_at.isoformat() if m.matched_at else "",
                 ))
                 total_matched += rec.total_gross or Decimal("0")
+            elif m.incoming_invoice_id:
+                inc = m.incoming_invoice
+                matches.append(MatchDetailType(
+                    id=m.id,
+                    invoice_id=strawberry.ID(str(inc.id)),
+                    invoice_number=inc.invoice_number or inc.original_filename,
+                    invoice_amount=inc.gross_amount or Decimal("0"),
+                    customer_name=inc.supplier_name or (inc.counterparty.name if inc.counterparty else ""),
+                    invoice_type="incoming",
+                    match_type=m.match_type,
+                    confidence=m.confidence,
+                    matched_at=m.matched_at.isoformat() if m.matched_at else "",
+                ))
+                total_matched += inc.gross_amount or Decimal("0")
 
         return TransactionMatchDetailsType(
             id=txn.id,
@@ -1025,9 +1051,16 @@ class BankingQuery:
         info: Info[Context, None],
         transaction_id: int,
     ) -> SuggestedMatchesResultType | None:
-        """Suggest invoice candidates based on counterparty-customer link."""
+        """Suggest invoice candidates based on counterparty link.
+
+        For credit transactions (amount > 0): suggest outgoing invoices (ImportedInvoice, InvoiceRecord)
+        matched via counterparty → customer link.
+
+        For debit transactions (amount < 0): suggest incoming invoices (IncomingInvoice)
+        matched via counterparty link, plus our credit notes (storno).
+        """
         user = require_perm(info, "banking", "read")
-        from apps.banking.models import BankTransaction
+        from apps.banking.models import BankTransaction, IncomingInvoice
         from apps.invoices.models import ImportedInvoice, InvoiceRecord, InvoicePaymentMatch
 
         try:
@@ -1039,13 +1072,15 @@ class BankingQuery:
         except BankTransaction.DoesNotExist:
             return None
 
-        if not txn.counterparty or not txn.counterparty.customer_id:
+        if not txn.counterparty:
             return None
 
-        customer = txn.counterparty.customer
         txn_amount = abs(txn.amount)
+        is_debit = txn.amount < 0
+        counterparty = txn.counterparty
+        candidates: list[SuggestedMatchType] = []
 
-        # IDs of invoices already matched to this transaction
+        # Already matched IDs
         matched_imported_ids = set(
             InvoicePaymentMatch.objects.filter(
                 transaction=txn, invoice__isnull=False
@@ -1056,57 +1091,121 @@ class BankingQuery:
                 transaction=txn, invoice_record__isnull=False
             ).values_list("invoice_record_id", flat=True)
         )
+        matched_incoming_ids = set(
+            InvoicePaymentMatch.objects.filter(
+                transaction=txn, incoming_invoice__isnull=False
+            ).values_list("incoming_invoice_id", flat=True)
+        )
 
-        candidates: list[SuggestedMatchType] = []
+        if is_debit:
+            # --- Debit: suggest incoming invoices (supplier) matched via counterparty ---
+            incoming_qs = IncomingInvoice.objects.filter(
+                tenant=user.tenant,
+                counterparty=counterparty,
+                extraction_status__in=["extracted", "confirmed", "matched"],
+            ).filter(
+                Q(invoice_date__lte=txn.entry_date) | Q(invoice_date__isnull=True)
+            ).exclude(id__in=matched_incoming_ids)
 
-        # Imported invoices
-        imported_qs = ImportedInvoice.objects.filter(
-            tenant=user.tenant,
-            customer=customer,
-            extraction_status__in=["confirmed", "sent"],
-        ).filter(
-            Q(invoice_date__lte=txn.entry_date) | Q(invoice_date__isnull=True)
-        ).exclude(id__in=matched_imported_ids)
+            for inv in incoming_qs:
+                amt = inv.gross_amount or Decimal("0")
+                candidates.append(SuggestedMatchType(
+                    id=strawberry.ID(str(inv.id)),
+                    invoice_number=inv.invoice_number or inv.original_filename,
+                    amount=amt,
+                    customer_name=inv.supplier_name or counterparty.name,
+                    invoice_type="incoming",
+                    status=inv.extraction_status,
+                    invoice_date=inv.invoice_date,
+                    is_paid=inv.payment_matches.exists(),
+                    amount_difference=amt - txn_amount,
+                ))
 
-        for inv in imported_qs:
-            amt = inv.total_amount or Decimal("0")
-            candidates.append(SuggestedMatchType(
-                id=strawberry.ID(str(inv.id)),
-                invoice_number=inv.invoice_number or "",
-                amount=amt,
-                customer_name=customer.name,
-                invoice_type="imported",
-                status=inv.extraction_status,
-                invoice_date=inv.invoice_date,
-                is_paid=False,
-                amount_difference=amt - txn_amount,
-            ))
+            # Also suggest our credit notes (storno) if counterparty is linked to a customer
+            if counterparty.customer_id:
+                storno_qs = InvoiceRecord.objects.filter(
+                    tenant=user.tenant,
+                    customer_id=counterparty.customer_id,
+                    document_type="storno",
+                ).exclude(
+                    status="voided"
+                ).filter(
+                    Q(invoice_date__lte=txn.entry_date) | Q(invoice_date__isnull=True)
+                ).exclude(id__in=matched_record_ids)
 
-        # Generated invoice records (exclude voided, paid, and credit notes)
-        record_qs = InvoiceRecord.objects.filter(
-            tenant=user.tenant,
-            customer=customer,
-        ).exclude(
-            status__in=["voided", "paid"]
-        ).exclude(
-            document_type="storno"
-        ).filter(
-            Q(invoice_date__lte=txn.entry_date) | Q(invoice_date__isnull=True)
-        ).exclude(id__in=matched_record_ids)
+                for rec in storno_qs:
+                    amt = rec.total_gross or Decimal("0")
+                    candidates.append(SuggestedMatchType(
+                        id=strawberry.ID(str(rec.id)),
+                        invoice_number=rec.invoice_number or "",
+                        amount=amt,
+                        customer_name=rec.customer.name if rec.customer else "",
+                        invoice_type="generated",
+                        status=rec.status,
+                        invoice_date=rec.invoice_date,
+                        is_paid=False,
+                        amount_difference=amt - txn_amount,
+                    ))
 
-        for rec in record_qs:
-            amt = rec.total_gross or Decimal("0")
-            candidates.append(SuggestedMatchType(
-                id=strawberry.ID(str(rec.id)),
-                invoice_number=rec.invoice_number or "",
-                amount=amt,
-                customer_name=customer.name,
-                invoice_type="generated",
-                status=rec.status,
-                invoice_date=rec.invoice_date,
-                is_paid=False,
-                amount_difference=amt - txn_amount,
-            ))
+            counterparty_label = counterparty.name
+            counterparty_id = counterparty.customer_id or 0
+        else:
+            # --- Credit: suggest outgoing invoices matched via counterparty → customer ---
+            if not counterparty.customer_id:
+                return None
+
+            customer = counterparty.customer
+            counterparty_label = customer.name
+            counterparty_id = customer.id
+
+            # Imported invoices
+            imported_qs = ImportedInvoice.objects.filter(
+                tenant=user.tenant,
+                customer=customer,
+                extraction_status__in=["confirmed", "sent"],
+            ).filter(
+                Q(invoice_date__lte=txn.entry_date) | Q(invoice_date__isnull=True)
+            ).exclude(id__in=matched_imported_ids)
+
+            for inv in imported_qs:
+                amt = inv.total_amount or Decimal("0")
+                candidates.append(SuggestedMatchType(
+                    id=strawberry.ID(str(inv.id)),
+                    invoice_number=inv.invoice_number or "",
+                    amount=amt,
+                    customer_name=customer.name,
+                    invoice_type="imported",
+                    status=inv.extraction_status,
+                    invoice_date=inv.invoice_date,
+                    is_paid=False,
+                    amount_difference=amt - txn_amount,
+                ))
+
+            # Generated invoice records (exclude voided, paid, and credit notes)
+            record_qs = InvoiceRecord.objects.filter(
+                tenant=user.tenant,
+                customer=customer,
+            ).exclude(
+                status__in=["voided", "paid"]
+            ).exclude(
+                document_type="storno"
+            ).filter(
+                Q(invoice_date__lte=txn.entry_date) | Q(invoice_date__isnull=True)
+            ).exclude(id__in=matched_record_ids)
+
+            for rec in record_qs:
+                amt = rec.total_gross or Decimal("0")
+                candidates.append(SuggestedMatchType(
+                    id=strawberry.ID(str(rec.id)),
+                    invoice_number=rec.invoice_number or "",
+                    amount=amt,
+                    customer_name=customer.name,
+                    invoice_type="generated",
+                    status=rec.status,
+                    invoice_date=rec.invoice_date,
+                    is_paid=False,
+                    amount_difference=amt - txn_amount,
+                ))
 
         # Sort by amount proximity, cap at 20
         candidates.sort(key=lambda c: abs(c.amount_difference))
@@ -1114,8 +1213,8 @@ class BankingQuery:
 
         return SuggestedMatchesResultType(
             items=candidates,
-            customer_name=customer.name,
-            customer_id=customer.id,
+            customer_name=counterparty_label,
+            customer_id=counterparty_id,
         )
 
     @strawberry.field
@@ -1169,6 +1268,7 @@ class BankingQuery:
         ).select_related("account", "counterparty", "counterparty__customer", "counterparty__default_cost_center", "cost_center").prefetch_related(
             "invoice_matches__invoice",
             "invoice_matches__invoice_record",
+            "invoice_matches__incoming_invoice",
         )
 
         # Filters
@@ -1529,7 +1629,7 @@ class BankingQuery:
         return [_make_inbox_type(i) for i in InvoiceInbox.objects.filter(tenant=user.tenant).order_by("name")]
 
     @strawberry.field
-    def incoming_invoices(self, info: Info[Context, None], status: str | None = None, counterparty_id: strawberry.ID | None = None, inbox_id: strawberry.ID | None = None, date_from: date | None = None, date_to: date | None = None, search: str | None = None, page: int = 1, page_size: int = 50) -> IncomingInvoicePage:
+    def incoming_invoices(self, info: Info[Context, None], status: str | None = None, counterparty_id: strawberry.ID | None = None, inbox_id: strawberry.ID | None = None, date_from: date | None = None, date_to: date | None = None, search: str | None = None, sort_by: str | None = None, sort_order: str | None = None, page: int = 1, page_size: int = 50) -> IncomingInvoicePage:
         user = require_perm(info, "incoming_invoices", "read")
         from apps.banking.models import IncomingInvoice
         qs = IncomingInvoice.objects.filter(tenant=user.tenant).select_related("counterparty", "inbox")
@@ -1539,6 +1639,20 @@ class BankingQuery:
         if date_from: qs = qs.filter(invoice_date__gte=date_from)
         if date_to: qs = qs.filter(invoice_date__lte=date_to)
         if search: qs = qs.filter(Q(supplier_name__icontains=search) | Q(invoice_number__icontains=search) | Q(source_email_subject__icontains=search))
+        # Sorting
+        sort_map = {
+            "invoice_date": "invoice_date",
+            "supplier_name": "supplier_name",
+            "invoice_number": "invoice_number",
+            "gross_amount": "gross_amount",
+            "extraction_status": "extraction_status",
+            "created_at": "created_at",
+        }
+        order_field = sort_map.get(sort_by or "", "created_at")
+        if (sort_order or "desc") == "asc":
+            qs = qs.order_by(order_field)
+        else:
+            qs = qs.order_by(f"-{order_field}")
         total_count = qs.count()
         offset = (page - 1) * page_size
         items = list(qs[offset:offset + page_size])
