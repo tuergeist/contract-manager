@@ -56,8 +56,8 @@ def execute_move(
     Returns (source_item, new_item).
     """
     with transaction.atomic():
-        # Re-fetch with lock
-        item = ContractItem.objects.select_related("contract", "product").select_for_update().get(pk=item.pk)
+        # Re-fetch with lock (of=self only — product is nullable so can't be locked via outer join)
+        item = ContractItem.objects.select_related("contract", "product").select_for_update(of=("self",)).get(pk=item.pk)
         target_contract = Contract.objects.select_for_update().get(pk=target_contract.pk)
 
         errors = validate_move(item, target_contract, effective_date)
