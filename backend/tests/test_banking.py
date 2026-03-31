@@ -1137,3 +1137,26 @@ class TestMT940CounterpartyCreation:
 
         # Same counterparties, no new ones created
         assert cp_ids_before == cp_ids_after
+
+
+class TestExtractCounterpartyFromDescription:
+    """Test credit card description parsing for counterparty extraction."""
+
+    @pytest.mark.parametrize(
+        "description, expected",
+        [
+            ("MIRO.COM NL AMSTERDAM EUR 200,00 Umsatz vom 24.03.2026 Visa CHRISTOPH BECKER", "MIRO.COM"),
+            ("FRESHWORKS INC US FRESHWORKS.CO USD 162,00 KURS: 1,144795 1,00. AUSLANDSUMS. 1,42Ums...", "FRESHWORKS INC"),
+            ("E.ON DRIVE GERMANY DE MUNCHEN EUR 10,68 Umsatz vom 19.03.2026 Visa CHRISTOPH BECKER", "E.ON DRIVE GERMANY"),
+            ("APOLLO.IO US APOLLO.IO USD 99,00 KURS: 1,146497 0,86Umsatz vom 18.03.2...", "APOLLO.IO"),
+            ("Hotel Central DE Frankenthal ( EUR 500,00 Umsatz vom 27.11.2025 Visa CHRISTOPH BECKER", "Hotel Central"),
+            # Settlement lines should NOT match
+            ("Abrechnung vom 27.02.2026 Visa CHRISTOPH BECKER", ""),
+            # Empty input
+            ("", ""),
+        ],
+    )
+    def test_extract(self, description, expected):
+        from apps.banking.services.mt940 import extract_counterparty_from_description
+
+        assert extract_counterparty_from_description(description) == expected

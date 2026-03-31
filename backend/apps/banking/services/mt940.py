@@ -18,6 +18,30 @@ class ImportResult:
     errors: list[str] | None = None
 
 
+# Regex to extract counterparty from credit card descriptions.
+# Matches: "<NAME> <CC> <CITY/DOMAIN> <CURRENCY> <AMOUNT>" or
+#          "<NAME> <CC> <CITY> ( <CURRENCY> <AMOUNT>"
+# where CC is a 2-letter country code and CURRENCY is a 3-letter currency code.
+_CC_DESCRIPTION_RE = re.compile(
+    r"^(.+?)\s+[A-Z]{2}\s+\S+\s+\(?\s*(?:EUR|USD|GBP|CHF|JPY|SEK|NOK|DKK|PLN|CZK)\b"
+)
+
+
+def extract_counterparty_from_description(booking_text: str) -> str:
+    """Extract counterparty name from credit card transaction descriptions.
+
+    Credit card MTA files have no applicant_name; the real counterparty is
+    embedded in the booking text before the country code + currency, e.g.:
+      "MIRO.COM NL AMSTERDAM EUR 200,00 ..."  →  "MIRO.COM"
+      "FRESHWORKS INC US FRESHWORKS.CO USD 162,00 ..."  →  "FRESHWORKS INC"
+      "Hotel Central DE Frankenthal ( EUR 500,00 ..."  →  "Hotel Central"
+
+    Returns empty string if no match (e.g. "Abrechnung vom ..." settlement lines).
+    """
+    m = _CC_DESCRIPTION_RE.match(booking_text)
+    return m.group(1).strip() if m else ""
+
+
 class MT940Service:
     """Service for parsing MT940 files and importing transactions."""
 
@@ -153,10 +177,19 @@ class MT940Service:
                 if value_date:
                     value_date = date(value_date.year, value_date.month, value_date.day)
 
+                # Extract booking text (purpose + additional_purpose)
+                purpose = data.get("purpose") or ""
+                additional = data.get("additional_purpose") or ""
+                booking_text = f"{purpose} {additional}".strip()
+
                 # Extract counterparty info
                 counterparty_name = data.get("applicant_name") or ""
                 counterparty_iban = data.get("applicant_iban") or ""
                 counterparty_bic = data.get("applicant_bin") or ""
+
+                # For credit card statements: extract counterparty from description
+                if not counterparty_name and booking_text:
+                    counterparty_name = extract_counterparty_from_description(booking_text)
 
                 # Get or create the Counterparty entity
                 counterparty = self._get_or_create_counterparty(
@@ -164,11 +197,6 @@ class MT940Service:
                     iban=counterparty_iban,
                     bic=counterparty_bic,
                 )
-
-                # Extract booking text (purpose + additional_purpose)
-                purpose = data.get("purpose") or ""
-                additional = data.get("additional_purpose") or ""
-                booking_text = f"{purpose} {additional}".strip()
 
                 # Extract references
                 eref = data.get("end_to_end_reference") or ""
