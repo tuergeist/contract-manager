@@ -433,7 +433,26 @@
       "sourceList": "Listenpreis",
       "sourceNegotiated": "Verhandelt",
       "noPricePeriods": "Keine Preisperioden definiert",
-      "priceLockedWarning": "Der Preis dieser Position ist gesperrt und kann nicht geändert werden"
+      "priceLockedWarning": "Der Preis dieser Position ist gesperrt und kann nicht geändert werden",
+      "moveToContract": "Zu anderem Vertrag verschieben",
+      "movedTo": "Verschoben nach",
+      "movedFrom": "Verschoben von"
+    },
+    "moveItem": {
+      "title": "Position zu anderem Vertrag verschieben",
+      "description": "Abrechnung für \"{{name}}\" auf dem Quellvertrag beenden und eine Kopie auf dem Zielvertrag erstellen.",
+      "targetLabel": "Zielvertrag",
+      "selectTarget": "Zielvertrag auswählen...",
+      "searchPlaceholder": "Verträge suchen...",
+      "noContracts": "Keine geeigneten Verträge gefunden.",
+      "effectiveDate": "Stichtag (letzter Abrechnungstag auf Quellvertrag)",
+      "effectiveDateHelp": "Abrechnung endet an diesem Tag. Auf dem Zielvertrag beginnt die Abrechnung am Folgetag.",
+      "preview": "Vorschau",
+      "sourceWillEnd": "Abrechnung endet: {{date}}",
+      "targetWillStart": "Abrechnung beginnt: {{date}}",
+      "confirmButton": "Position verschieben",
+      "amendmentsWillBeCreated": "Beide Verträge sind aktiv. Auf Quell- und Zielvertrag werden Amendments erstellt.",
+      "errorGeneric": "Beim Verschieben der Position ist ein Fehler aufgetreten."
     },
     "amendment": {
       "date": "Gültig ab",

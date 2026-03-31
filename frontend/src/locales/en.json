@@ -433,7 +433,26 @@
       "sourceList": "List Price",
       "sourceNegotiated": "Negotiated",
       "noPricePeriods": "No price periods defined",
-      "priceLockedWarning": "This item's price is locked and cannot be modified"
+      "priceLockedWarning": "This item's price is locked and cannot be modified",
+      "moveToContract": "Move to another contract",
+      "movedTo": "Moved to",
+      "movedFrom": "Moved from"
+    },
+    "moveItem": {
+      "title": "Move Item to Another Contract",
+      "description": "End billing for \"{{name}}\" on the source contract and create a copy on the target contract.",
+      "targetLabel": "Target Contract",
+      "selectTarget": "Select target contract...",
+      "searchPlaceholder": "Search contracts...",
+      "noContracts": "No eligible contracts found.",
+      "effectiveDate": "Effective Date (last billing day on source)",
+      "effectiveDateHelp": "Billing ends on this date. Billing starts the next day on the target contract.",
+      "preview": "Preview",
+      "sourceWillEnd": "Billing ends: {{date}}",
+      "targetWillStart": "Billing starts: {{date}}",
+      "confirmButton": "Move Item",
+      "amendmentsWillBeCreated": "Both contracts are active. Amendments will be created on source and target.",
+      "errorGeneric": "An error occurred while moving the item."
     },
     "amendment": {
       "date": "Effective Date",

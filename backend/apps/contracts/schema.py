@@ -247,6 +247,33 @@ class ContractItemType:
     effective_revenue_type: str | None = None
     # Merge traceability
     source_hubspot_deal_id: str | None = None
+    # Move traceability
+    moved_to_item_id: int | None = None
+    moved_to_contract_id: int | None = None
+    moved_to_contract_name: str | None = None
+    moved_from_item_id: int | None = None
+    moved_from_contract_id: int | None = None
+    moved_from_contract_name: str | None = None
+
+
+def _moved_fields(item) -> dict:
+    """Extract moved_to / moved_from fields for ContractItemType construction."""
+    fields: dict = {}
+    mt = getattr(item, "moved_to", None)
+    if mt:
+        fields["moved_to_item_id"] = mt.id
+        fields["moved_to_contract_id"] = mt.contract_id
+        fields["moved_to_contract_name"] = mt.contract.name if mt.contract else None
+    mf = None
+    try:
+        mf = item.moved_from
+    except ContractItem.moved_from.RelatedObjectDoesNotExist:
+        pass
+    if mf:
+        fields["moved_from_item_id"] = mf.id
+        fields["moved_from_contract_id"] = mf.contract_id
+        fields["moved_from_contract_name"] = mf.contract.name if mf.contract else None
+    return fields
 
 
 @strawberry_django.type(Contract)
@@ -375,7 +402,12 @@ class ContractType:
     @strawberry.field
     def items(self) -> List[ContractItemType]:
         """Get all contract items."""
-        items = ContractItem.objects.filter(contract=self).select_related("product", "contract", "depends_on", "depends_on__product").prefetch_related("price_periods", "dependent_items", "dependent_items__product")
+        items = ContractItem.objects.filter(contract=self).select_related(
+            "product", "contract", "depends_on", "depends_on__product",
+            "moved_to", "moved_to__contract",
+        ).prefetch_related("price_periods", "dependent_items", "dependent_items__product")
+        # Reverse moved_from is a OneToOne — use select_related via prefetch
+        # We'll handle it by catching DoesNotExist below
         result = []
         today = date.today()
         for item in items:
@@ -462,6 +494,7 @@ class ContractType:
                     revenue_type=item.revenue_type,
                     effective_revenue_type=item.get_effective_revenue_type(),
                     source_hubspot_deal_id=item.source_hubspot_deal_id,
+                    **_moved_fields(item),
                 )
             )
         return result
@@ -755,6 +788,21 @@ class ContractItemResult:
     item: ContractItemType | None = None
     success: bool = False
     error: str | None = None
+
+
+@strawberry.input
+class MoveContractItemInput:
+    item_id: strawberry.ID
+    target_contract_id: strawberry.ID
+    effective_date: date
+
+
+@strawberry.type
+class MoveContractItemResult:
+    success: bool = False
+    error: str | None = None
+    source_item: ContractItemType | None = None
+    new_item: ContractItemType | None = None
 
 
 @strawberry.type
@@ -4603,6 +4651,7 @@ class ContractMutation:
                     revenue_type=item.revenue_type,
                     effective_revenue_type=item.get_effective_revenue_type(),
                     source_hubspot_deal_id=item.source_hubspot_deal_id,
+                    **_moved_fields(item),
                 ),
                 success=True,
             )
@@ -4835,6 +4884,7 @@ class ContractMutation:
                     revenue_type=item.revenue_type,
                     effective_revenue_type=item.get_effective_revenue_type(),
                     source_hubspot_deal_id=item.source_hubspot_deal_id,
+                    **_moved_fields(item),
                 ),
                 success=True,
             )
@@ -4902,6 +4952,71 @@ class ContractMutation:
             return DeleteResult(success=True)
         except Exception as e:
             return DeleteResult(error=str(e))
+
+    @strawberry.mutation
+    def move_contract_item(
+        self, info: Info[Context, None], input: MoveContractItemInput
+    ) -> MoveContractItemResult:
+        """Move a line item from one contract to another of the same customer."""
+        from apps.contracts.services.contract_item_move import execute_move, validate_move
+
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return MoveContractItemResult(error=err)
+        if not user.tenant:
+            return MoveContractItemResult(error="No tenant assigned")
+
+        item = ContractItem.objects.filter(
+            tenant=user.tenant, id=input.item_id
+        ).select_related("contract__customer", "product").first()
+        if not item:
+            return MoveContractItemResult(error="Item not found")
+
+        target = Contract.objects.filter(
+            tenant=user.tenant, id=input.target_contract_id
+        ).select_related("customer").first()
+        if not target:
+            return MoveContractItemResult(error="Target contract not found")
+
+        errors = validate_move(item, target, input.effective_date)
+        if errors:
+            return MoveContractItemResult(error=errors[0])
+
+        try:
+            source_item, new_item = execute_move(item, target, input.effective_date)
+            # Re-fetch with relations for response
+            source_item = ContractItem.objects.select_related(
+                "product", "contract", "moved_to", "moved_to__contract",
+            ).get(pk=source_item.pk)
+            new_item = ContractItem.objects.select_related(
+                "product", "contract",
+            ).get(pk=new_item.pk)
+            today = date.today()
+            s_eff, s_ep = source_item.get_effective_price_info(today)
+            n_eff, n_ep = new_item.get_effective_price_info(today)
+            return MoveContractItemResult(
+                success=True,
+                source_item=ContractItemType(
+                    id=source_item.id, quantity=source_item.quantity,
+                    unit_price=source_item.unit_price, price_period=source_item.price_period,
+                    price_source=source_item.price_source, total_price=source_item.total_price,
+                    effective_price=s_eff, effective_price_period=s_ep,
+                    product=source_item.product, description=source_item.description,
+                    billing_end_date=source_item.billing_end_date,
+                    is_one_off=False, **_moved_fields(source_item),
+                ),
+                new_item=ContractItemType(
+                    id=new_item.id, quantity=new_item.quantity,
+                    unit_price=new_item.unit_price, price_period=new_item.price_period,
+                    price_source=new_item.price_source, total_price=new_item.total_price,
+                    effective_price=n_eff, effective_price_period=n_ep,
+                    product=new_item.product, description=new_item.description,
+                    billing_start_date=new_item.billing_start_date,
+                    is_one_off=False, **_moved_fields(new_item),
+                ),
+            )
+        except Exception as e:
+            return MoveContractItemResult(error=str(e))
 
     @strawberry.mutation
     def cancel_contract(

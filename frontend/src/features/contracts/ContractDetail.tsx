@@ -36,6 +36,7 @@ import {
   FileSignature,
   AlertTriangle,
   Mail,
+  MoveRight,
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear, formatCurrency, formatPercent } from '@/lib/utils'
 import { useDocumentTitle } from '@/lib/useDocumentTitle'
@@ -96,6 +97,7 @@ import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { OrderConfirmationDialog } from './OrderConfirmationDialog'
 import { CommentsSection } from '@/components/CommentsSection'
 import { TimeTrackingTab } from './TimeTrackingTab'
+import { MoveItemDialog } from './MoveItemDialog'
 import { PdfAnalysisPanel } from './PdfAnalysisPanel'
 import { InvoiceStatusBadge } from '@/components/InvoiceStatusBadge'
 import { ListTodo, Receipt } from 'lucide-react'
@@ -187,6 +189,12 @@ const CONTRACT_DETAIL_QUERY = gql`
           name
           sku
         }
+        movedToItemId
+        movedToContractId
+        movedToContractName
+        movedFromItemId
+        movedFromContractId
+        movedFromContractName
       }
       amendments {
         id
@@ -634,6 +642,12 @@ interface ContractItem {
     name: string
     sku: string | null
   } | null
+  movedToItemId: number | null
+  movedToContractId: number | null
+  movedToContractName: string | null
+  movedFromItemId: number | null
+  movedFromContractId: number | null
+  movedFromContractName: string | null
 }
 
 interface Amendment {
@@ -751,6 +765,7 @@ export function ContractDetail() {
   const [showAddItemModal, setShowAddItemModal] = useState(false)
   const [showPriceIncreaseModal, setShowPriceIncreaseModal] = useState(false)
   const [editingItem, setEditingItem] = useState<ContractItem | null>(null)
+  const [movingItem, setMovingItem] = useState<ContractItem | null>(null)
   const [isEditingNotes, setIsEditingNotes] = useState(false)
   const [editedNotes, setEditedNotes] = useState('')
   const [isEditingInvoiceText, setIsEditingInvoiceText] = useState(false)
@@ -1398,6 +1413,16 @@ export function ContractDetail() {
                                           {t('contracts.delivery.eta')}: {item.estimatedDeliveryDate}
                                         </div>
                                       )}
+                                      {item.movedToContractName && (
+                                        <div className="text-xs text-gray-500">
+                                          ↗ {t('contracts.item.movedTo')}: <Link to={`/contracts/${item.movedToContractId}`} className="text-blue-600 hover:underline">{item.movedToContractName}</Link>
+                                        </div>
+                                      )}
+                                      {item.movedFromContractName && (
+                                        <div className="text-xs text-gray-500">
+                                          ↙ {t('contracts.item.movedFrom')}: <Link to={`/contracts/${item.movedFromContractId}`} className="text-blue-600 hover:underline">{item.movedFromContractName}</Link>
+                                        </div>
+                                      )}
                                     </td>
                                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
                                       {item.quantity}
@@ -1466,6 +1491,15 @@ export function ContractDetail() {
                                               title={t('contracts.delivery.revertToPending')}
                                             >
                                               <Undo2 className="h-4 w-4" />
+                                            </button>
+                                          )}
+                                          {!item.isOneOff && !item.movedToItemId && (
+                                            <button
+                                              onClick={() => setMovingItem(item)}
+                                              className="text-gray-400 hover:text-purple-600"
+                                              title={t('contracts.item.moveToContract')}
+                                            >
+                                              <MoveRight className="h-4 w-4" />
                                             </button>
                                           )}
                                           <button
@@ -1965,6 +1999,19 @@ export function ContractDetail() {
           onClose={() => setEditingItem(null)}
           onSuccess={() => {
             setEditingItem(null)
+            refetch()
+          }}
+        />
+      )}
+
+      {/* Move Item Dialog */}
+      {movingItem && contract && (
+        <MoveItemDialog
+          item={movingItem}
+          sourceContract={contract}
+          onClose={() => setMovingItem(null)}
+          onSuccess={() => {
+            setMovingItem(null)
             refetch()
           }}
         />

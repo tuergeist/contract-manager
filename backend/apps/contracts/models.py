@@ -1093,6 +1093,13 @@ class ContractItem(TenantModel):
         blank=True,
         help_text="HubSpot deal ID from source contract when item was transferred via merge.",
     )
+    moved_to = models.OneToOneField(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="moved_from",
+    )
 
     class Meta:
         ordering = ["sort_order", "created_at"]
