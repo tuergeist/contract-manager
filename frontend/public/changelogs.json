@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.26.2",
+    "date": "2026-03-31",
+    "title": "Fix move item database locking error",
+    "description": "Fixed 'FOR UPDATE cannot be applied to the nullable side of an outer join' error when moving items with optional product references.",
+    "type": "bugfix",
+    "details": [
+      "Fixed select_for_update on nullable product FK by using of=(\"self\",)"
+    ]
+  },
+  {
     "version": "2.26.1",
     "date": "2026-03-31",
     "title": "Pre-fill effective date in move item dialog",
