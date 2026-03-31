@@ -1625,3 +1625,191 @@ class TestChangeContractCustomer:
         assert amendment is not None
         assert amendment.type == ContractAmendment.AmendmentType.TERMS_CHANGED
         assert "Other Customer 2" in amendment.description
+
+
+class TestMoveContractItem:
+    """Test moving line items between contracts."""
+
+    @pytest.fixture
+    def source_contract(self, tenant, customer):
+        return Contract.objects.create(
+            tenant=tenant, customer=customer, name="Source",
+            status=Contract.Status.ACTIVE, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.ANNUAL, billing_anchor_day=1,
+        )
+
+    @pytest.fixture
+    def target_contract(self, tenant, customer):
+        return Contract.objects.create(
+            tenant=tenant, customer=customer, name="Target",
+            status=Contract.Status.ACTIVE, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY, billing_anchor_day=1,
+        )
+
+    @pytest.fixture
+    def item(self, tenant, source_contract, product):
+        return ContractItem.objects.create(
+            tenant=tenant, contract=source_contract, product=product,
+            quantity=2, unit_price=Decimal("100.00"), price_period="monthly",
+        )
+
+    @pytest.mark.django_db
+    def test_move_sets_billing_end_and_creates_copy(self, item, target_contract):
+        from apps.contracts.services.contract_item_move import execute_move
+        from dateutil.relativedelta import relativedelta
+
+        effective = date.today() + relativedelta(months=3)
+        source_item, new_item = execute_move(item, target_contract, effective)
+
+        source_item.refresh_from_db()
+        new_item.refresh_from_db()
+
+        # Source ended
+        assert source_item.billing_end_date == effective
+        # New item starts next day
+        assert new_item.billing_start_date == effective + relativedelta(days=1)
+        assert new_item.start_date == effective + relativedelta(days=1)
+        assert new_item.contract == target_contract
+        assert new_item.billing_end_date is None
+
+    @pytest.mark.django_db
+    def test_move_links_items_bidirectionally(self, item, target_contract):
+        from apps.contracts.services.contract_item_move import execute_move
+        from dateutil.relativedelta import relativedelta
+
+        effective = date.today() + relativedelta(months=3)
+        source_item, new_item = execute_move(item, target_contract, effective)
+
+        source_item.refresh_from_db()
+        assert source_item.moved_to_id == new_item.id
+        assert new_item.moved_from == source_item
+
+    @pytest.mark.django_db
+    def test_move_copies_fields(self, item, target_contract, product):
+        from apps.contracts.services.contract_item_move import execute_move
+        from dateutil.relativedelta import relativedelta
+
+        effective = date.today() + relativedelta(months=3)
+        _, new_item = execute_move(item, target_contract, effective)
+
+        assert new_item.product == product
+        assert new_item.quantity == 2
+        assert new_item.unit_price == Decimal("100.00")
+        assert new_item.price_period == "monthly"
+        assert new_item.is_one_off is False
+
+    @pytest.mark.django_db
+    def test_move_creates_amendments_on_active_contracts(self, item, source_contract, target_contract):
+        from apps.contracts.services.contract_item_move import execute_move
+        from dateutil.relativedelta import relativedelta
+
+        effective = date.today() + relativedelta(months=3)
+        execute_move(item, target_contract, effective)
+
+        source_amendment = ContractAmendment.objects.filter(contract=source_contract).first()
+        target_amendment = ContractAmendment.objects.filter(contract=target_contract).first()
+
+        assert source_amendment is not None
+        assert source_amendment.type == ContractAmendment.AmendmentType.PRODUCT_REMOVED
+        assert source_amendment.arr_delta < 0
+
+        assert target_amendment is not None
+        assert target_amendment.type == ContractAmendment.AmendmentType.PRODUCT_ADDED
+        assert target_amendment.arr_delta > 0
+
+    @pytest.mark.django_db
+    def test_move_skips_amendments_on_draft_contracts(self, tenant, customer, product):
+        from apps.contracts.services.contract_item_move import execute_move
+        from dateutil.relativedelta import relativedelta
+
+        source = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Draft Source",
+            status=Contract.Status.DRAFT, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY, billing_anchor_day=1,
+        )
+        target = Contract.objects.create(
+            tenant=tenant, customer=customer, name="Draft Target",
+            status=Contract.Status.DRAFT, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY, billing_anchor_day=1,
+        )
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=source, product=product,
+            quantity=1, unit_price=Decimal("50.00"), price_period="monthly",
+        )
+
+        effective = date.today() + relativedelta(months=1)
+        execute_move(item, target, effective)
+
+        assert ContractAmendment.objects.filter(contract=source).count() == 0
+        assert ContractAmendment.objects.filter(contract=target).count() == 0
+
+    @pytest.mark.django_db
+    def test_move_rejects_one_off_item(self, tenant, source_contract, target_contract, product):
+        from apps.contracts.services.contract_item_move import validate_move
+
+        one_off = ContractItem.objects.create(
+            tenant=tenant, contract=source_contract, product=product,
+            quantity=1, unit_price=Decimal("500.00"), price_period="monthly",
+            is_one_off=True,
+        )
+        errors = validate_move(one_off, target_contract, date.today())
+        assert any("One-off" in e for e in errors)
+
+    @pytest.mark.django_db
+    def test_move_rejects_different_customer(self, tenant, item, product):
+        from apps.contracts.services.contract_item_move import validate_move
+
+        other_customer = Customer.objects.create(tenant=tenant, name="Other", is_active=True)
+        other_contract = Contract.objects.create(
+            tenant=tenant, customer=other_customer, name="Other",
+            status=Contract.Status.ACTIVE, start_date=date(2025, 1, 1),
+            billing_start_date=date(2025, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY, billing_anchor_day=1,
+        )
+        errors = validate_move(item, other_contract, date.today())
+        assert any("same customer" in e for e in errors)
+
+    @pytest.mark.django_db
+    def test_move_rejects_already_moved(self, item, target_contract):
+        from apps.contracts.services.contract_item_move import execute_move, validate_move
+        from dateutil.relativedelta import relativedelta
+
+        effective = date.today() + relativedelta(months=3)
+        execute_move(item, target_contract, effective)
+
+        item.refresh_from_db()
+        errors = validate_move(item, target_contract, effective)
+        assert any("already been moved" in e for e in errors)
+
+    @pytest.mark.django_db
+    def test_move_copies_future_price_periods(self, tenant, item, target_contract):
+        from apps.contracts.models import ContractItemPrice
+        from apps.contracts.services.contract_item_move import execute_move
+        from dateutil.relativedelta import relativedelta
+
+        effective = date.today() + relativedelta(months=3)
+        future = effective + relativedelta(months=6)
+
+        # Past period — should NOT be copied
+        ContractItemPrice.objects.create(
+            tenant=tenant, item=item,
+            valid_from=date(2024, 1, 1), valid_to=effective - relativedelta(days=1),
+            unit_price=Decimal("80.00"), price_period="monthly",
+        )
+        # Future period — should be copied
+        ContractItemPrice.objects.create(
+            tenant=tenant, item=item,
+            valid_from=future, valid_to=None,
+            unit_price=Decimal("120.00"), price_period="monthly",
+        )
+
+        _, new_item = execute_move(item, target_contract, effective)
+
+        new_prices = list(ContractItemPrice.objects.filter(item=new_item))
+        assert len(new_prices) == 1
+        assert new_prices[0].unit_price == Decimal("120.00")
+        assert new_prices[0].valid_from == future
