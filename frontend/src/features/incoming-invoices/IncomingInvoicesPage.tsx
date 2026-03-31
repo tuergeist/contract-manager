@@ -111,6 +111,14 @@ export function IncomingInvoicesPage() {
   const [showCreateCp, setShowCreateCp] = useState(false)
   const [newCpName, setNewCpName] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Bulk counterparty assign state
+  const [bulkAssignPrompt, setBulkAssignPrompt] = useState<{
+    supplierName: string
+    counterpartyId: string
+    counterpartyName: string
+    otherIds: string[]
+  } | null>(null)
+
   // Upload modal state
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
   const [uploadFiles, setUploadFiles] = useState<{ name: string; status: 'pending' | 'uploading' | 'done' | 'skipped' | 'error'; error?: string }[]>([])
@@ -237,9 +245,44 @@ export function IncomingInvoicesPage() {
   }
 
   const handleSelectCounterparty = async (invId: string, cpId: string) => {
+    // Find the invoice being edited
+    const inv = invoices.find((i: any) => i.id === invId)
+    const supplierName = inv?.supplierName || ''
+    const cpName = searchedCps.find((c: any) => c.id === cpId)?.name || ''
+
+    // Update this invoice
     await updateInvoice({ variables: { input: { id: invId, counterpartyId: cpId } } })
     setEditingInvId(null)
     setCpSearch('')
+
+    // Check if other invoices with the same supplier name have no counterparty
+    if (supplierName) {
+      const others = invoices.filter(
+        (i: any) => i.id !== invId && i.supplierName === supplierName && !i.counterpartyId
+      )
+      if (others.length > 0) {
+        setBulkAssignPrompt({
+          supplierName,
+          counterpartyId: cpId,
+          counterpartyName: cpName,
+          otherIds: others.map((i: any) => i.id),
+        })
+        return // don't refetch yet — wait for user decision
+      }
+    }
+
+    refetch()
+  }
+
+  const handleBulkAssign = async (apply: boolean) => {
+    if (apply && bulkAssignPrompt) {
+      for (const invId of bulkAssignPrompt.otherIds) {
+        await updateInvoice({
+          variables: { input: { id: invId, counterpartyId: bulkAssignPrompt.counterpartyId } },
+        })
+      }
+    }
+    setBulkAssignPrompt(null)
     refetch()
   }
 
@@ -319,6 +362,31 @@ export function IncomingInvoicesPage() {
                 <Button onClick={() => setUploadModalOpen(false)}>{t('common.close')}</Button>
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk counterparty assign prompt */}
+      <Dialog open={!!bulkAssignPrompt} onOpenChange={(open) => { if (!open) handleBulkAssign(false) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('incomingInvoices.bulkAssign.title', 'Apply to all?')}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            {t('incomingInvoices.bulkAssign.message', {
+              count: bulkAssignPrompt?.otherIds.length || 0,
+              supplier: bulkAssignPrompt?.supplierName || '',
+              counterparty: bulkAssignPrompt?.counterpartyName || '',
+              defaultValue: `${bulkAssignPrompt?.otherIds.length} other invoice(s) from "${bulkAssignPrompt?.supplierName}" have no counterparty. Assign "${bulkAssignPrompt?.counterpartyName}" to all of them?`,
+            })}
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => handleBulkAssign(false)}>
+              {t('incomingInvoices.bulkAssign.no', 'No, just this one')}
+            </Button>
+            <Button onClick={() => handleBulkAssign(true)}>
+              {t('incomingInvoices.bulkAssign.yes', 'Yes, apply to all')}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

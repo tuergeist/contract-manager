@@ -1361,16 +1361,33 @@ export function CounterpartyDetailPage() {
                             >
                               <SearchIcon className="h-4 w-4" />
                             </button>
-                            <button
-                              onClick={() => {
-                                setMatchSheetTxId(null)
-                                setMatchSheetOpen(true)
-                              }}
-                              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                              title={t('banking.matchView.matchButton', 'Match')}
-                            >
-                              <ChainIcon className="h-4 w-4" />
-                            </button>
+                            {(() => {
+                              // Find debit transactions that could match this invoice
+                              const invAmount = Math.abs(parseFloat(inv.grossAmount || '0'))
+                              // Prefer exact amount match, otherwise first unmatched debit
+                              const exactTx = transactions.find(
+                                (tx: any) => parseFloat(tx.amount) < 0 && Math.abs(Math.abs(parseFloat(tx.amount)) - invAmount) < 0.01 && !tx.matchedInvoice
+                              )
+                              const anyDebitTx = exactTx || transactions.find(
+                                (tx: any) => parseFloat(tx.amount) < 0 && !tx.matchedInvoice
+                              )
+                              const matchTxId = anyDebitTx?.id || (transactions.find((tx: any) => parseFloat(tx.amount) < 0)?.id)
+                              return matchTxId ? (
+                                <button
+                                  onClick={() => {
+                                    setMatchSheetTxId(matchTxId)
+                                    setMatchSheetOpen(true)
+                                  }}
+                                  className={`rounded p-1 hover:bg-gray-100 ${exactTx ? 'text-blue-500 hover:text-blue-700' : 'text-gray-400 hover:text-gray-600'}`}
+                                  title={exactTx
+                                    ? `${t('banking.matchView.matchButton', 'Match')} — ${formatDate(exactTx.entryDate)} ${formatCurrency(exactTx.amount)}`
+                                    : t('banking.matchView.matchButton', 'Match')
+                                  }
+                                >
+                                  <ChainIcon className="h-4 w-4" />
+                                </button>
+                              ) : null
+                            })()}
                           </div>
                         </td>
                       </tr>

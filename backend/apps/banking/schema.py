@@ -1107,20 +1107,29 @@ class BankingQuery:
                 extraction_status__in=["extracted", "confirmed", "matched"],
             ).filter(
                 Q(invoice_date__lte=txn.entry_date) | Q(invoice_date__isnull=True)
-            ).exclude(id__in=matched_incoming_ids)
+            ).exclude(id__in=matched_incoming_ids).prefetch_related("payment_matches__transaction")
 
             for inv in incoming_qs:
                 amt = inv.gross_amount or Decimal("0")
+                # Calculate how much is already covered by matched payments
+                paid_amount = sum(
+                    abs(m.transaction.amount) for m in inv.payment_matches.all()
+                )
+                is_fully_paid = paid_amount >= amt if amt > 0 else False
+                if is_fully_paid:
+                    continue  # skip fully paid invoices
+
+                remaining = amt - paid_amount
                 candidates.append(SuggestedMatchType(
                     id=strawberry.ID(str(inv.id)),
                     invoice_number=inv.invoice_number or inv.original_filename,
-                    amount=amt,
+                    amount=remaining if paid_amount > 0 else amt,
                     customer_name=inv.supplier_name or counterparty.name,
                     invoice_type="incoming",
                     status=inv.extraction_status,
                     invoice_date=inv.invoice_date,
-                    is_paid=inv.payment_matches.exists(),
-                    amount_difference=amt - txn_amount,
+                    is_paid=False,
+                    amount_difference=(remaining if paid_amount > 0 else amt) - txn_amount,
                 ))
 
             # Also suggest our credit notes (storno) if counterparty is linked to a customer
@@ -1167,20 +1176,26 @@ class BankingQuery:
                 extraction_status__in=["confirmed", "sent"],
             ).filter(
                 Q(invoice_date__lte=txn.entry_date) | Q(invoice_date__isnull=True)
-            ).exclude(id__in=matched_imported_ids)
+            ).exclude(id__in=matched_imported_ids).prefetch_related("payment_matches__transaction")
 
             for inv in imported_qs:
                 amt = inv.total_amount or Decimal("0")
+                paid_amount = sum(
+                    abs(m.transaction.amount) for m in inv.payment_matches.all()
+                )
+                if amt > 0 and paid_amount >= amt:
+                    continue  # fully paid
+                remaining = amt - paid_amount if paid_amount > 0 else amt
                 candidates.append(SuggestedMatchType(
                     id=strawberry.ID(str(inv.id)),
                     invoice_number=inv.invoice_number or "",
-                    amount=amt,
+                    amount=remaining,
                     customer_name=customer.name,
                     invoice_type="imported",
                     status=inv.extraction_status,
                     invoice_date=inv.invoice_date,
                     is_paid=False,
-                    amount_difference=amt - txn_amount,
+                    amount_difference=remaining - txn_amount,
                 ))
 
             # Generated invoice records (exclude voided, paid, and credit notes)
