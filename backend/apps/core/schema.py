@@ -226,17 +226,21 @@ class CoreQuery:
 
         groups = []
         total_count = 0
+        is_numeric = query.isdigit()
 
         # Search customers (include all, not just active)
         # Order by: customers with CUS ID first, then by name
         # Fetch limit+1 to check if there are more
         from django.db.models import Case, When, Value, IntegerField
-        customers = list(Customer.objects.filter(
-            tenant=user.tenant,
-        ).filter(
+        customer_q = (
             Q(name__icontains=query) |
             Q(netsuite_customer_number__icontains=query)
-        ).annotate(
+        )
+        if is_numeric:
+            customer_q |= Q(id=int(query))
+        customers = list(Customer.objects.filter(
+            tenant=user.tenant,
+        ).filter(customer_q).annotate(
             has_cus_id=Case(
                 When(netsuite_customer_number__isnull=False, netsuite_customer_number__gt='', then=Value(0)),
                 default=Value(1),
@@ -253,7 +257,7 @@ class CoreQuery:
                 SearchResultItem(
                     id=c.id,
                     title=c.name,
-                    subtitle=c.netsuite_customer_number or None,
+                    subtitle=c.netsuite_customer_number or f"#{c.id}",
                     url=f"/customers/{c.id}",
                 )
                 for c in customers
@@ -268,14 +272,17 @@ class CoreQuery:
 
         # Search contracts
         # Fetch limit+1 to check if there are more
-        contracts = list(Contract.objects.filter(
-            tenant=user.tenant,
-        ).filter(
+        contract_q = (
             Q(name__icontains=query) |
             Q(netsuite_sales_order_number__icontains=query) |
             Q(po_number__icontains=query) |
             Q(order_confirmation_number__icontains=query)
-        ).select_related("customer")[:limit + 1])
+        )
+        if is_numeric:
+            contract_q |= Q(id=int(query))
+        contracts = list(Contract.objects.filter(
+            tenant=user.tenant,
+        ).filter(contract_q).select_related("customer")[:limit + 1])
 
         contracts_has_more = len(contracts) > limit
         if contracts_has_more:
@@ -334,14 +341,14 @@ class CoreQuery:
 
 def _build_contract_subtitle(contract) -> str | None:
     """Build subtitle from contract metadata."""
-    parts = []
+    parts = [f"#{contract.id}"]
     if contract.customer:
         parts.append(contract.customer.name)
     if contract.netsuite_sales_order_number:
         parts.append(f"SO: {contract.netsuite_sales_order_number}")
     if contract.po_number:
         parts.append(f"PO: {contract.po_number}")
-    return " • ".join(parts) if parts else None
+    return " • ".join(parts)
 
 
 @strawberry.type
