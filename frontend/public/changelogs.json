@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.26.3",
+    "date": "2026-03-31",
+    "title": "Change customer button in contract header",
+    "description": "The existing change customer action is now accessible as a prominent button in the contract edit view header, next to Delete and Merge.",
+    "type": "feature",
+    "details": [
+      "Added Change Customer button with confirm dialog to contract edit view header"
+    ]
+  },
+  {
     "version": "2.26.2",
     "date": "2026-03-31",
     "title": "Fix move item database locking error",
