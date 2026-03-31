@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.26.0",
+    "date": "2026-03-31",
+    "title": "Move line items between contracts",
+    "description": "Recurring line items can now be moved to another contract of the same customer with an effective date. Also fixes time tracking totals, adds credit card counterparty extraction, and enables ID-based search.",
+    "type": "feature",
+    "details": [
+      "Added Move Item action to transfer recurring positions between contracts of the same customer",
+      "Move sets billing end date on source, creates copy with billing start date on target, with bidirectional links visible in the items table",
+      "Fixed time tracking monthly breakdown not summing to total hours due to inconsistent API call handling",
+      "Improved Clockodo API retry: 5 attempts with exponential backoff, Retry-After header support, and 5xx retry",
+      "Credit card MTA imports now extract counterparty names from transaction descriptions instead of showing Bank Fees / Unknown",
+      "Global search now finds contracts and customers by internal ID (e.g. searching 577)",
+      "Search result subtitles always show internal ID for quick identification",
+      "Fixed flaky liquidity forecast test on month-end dates"
+    ]
+  },
+  {
     "version": "2.25.2",
     "date": "2026-03-27",
     "title": "Counterparty account view and upload improvements",
