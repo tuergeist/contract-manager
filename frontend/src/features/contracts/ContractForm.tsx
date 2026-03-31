@@ -5,7 +5,7 @@ import { useQuery, useMutation, gql } from '@apollo/client'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2, ArrowLeft, Check, ChevronsUpDown, Edit, ExternalLink, Trash2, Plus, GitMerge } from 'lucide-react'
+import { Loader2, ArrowLeft, Check, ChevronsUpDown, Edit, ExternalLink, Trash2, Plus, GitMerge, Users } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -545,6 +545,16 @@ export function ContractForm() {
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 {t('contracts.actions.delete')}
+              </Button>
+            )}
+            {/* Change Customer Button */}
+            {contract.status !== 'deleted' && contract.status !== 'ended' && (
+              <Button
+                variant="outline"
+                onClick={() => setShowChangeCustomer(true)}
+              >
+                <Users className="mr-2 h-4 w-4" />
+                {t('contracts.actions.changeCustomer')}
               </Button>
             )}
             {/* Merge Button - only for draft/active contracts without invoices */}
