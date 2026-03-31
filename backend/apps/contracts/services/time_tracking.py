@@ -185,16 +185,11 @@ def get_cached_summary(mappings_qs) -> dict:
     # Auto-fix legacy mappings missing by_month data
     _resync_stale_mappings(mappings_list)
 
-    total_hours = 0.0
-    total_revenue = 0.0
     service_data: dict[str, dict] = defaultdict(lambda: {"hours": 0.0, "revenue": 0.0})
     month_data: dict[str, dict] = defaultdict(lambda: {"hours": 0.0, "revenue": 0.0})
     oldest_sync: datetime | None = None
 
     for m in mappings_list:
-        total_hours += m.cached_total_hours
-        total_revenue += m.cached_total_revenue
-
         for s in (m.cached_by_service or []):
             service_data[s["service_name"]]["hours"] += s["hours"]
             service_data[s["service_name"]]["revenue"] += s["revenue"]
@@ -206,6 +201,10 @@ def get_cached_summary(mappings_qs) -> dict:
         if m.last_synced:
             if oldest_sync is None or m.last_synced < oldest_sync:
                 oldest_sync = m.last_synced
+
+    # Derive totals from month breakdown so all views are always consistent
+    total_hours = sum(v["hours"] for v in month_data.values())
+    total_revenue = sum(v["revenue"] for v in month_data.values())
 
     return {
         "total_hours": round(total_hours, 2),

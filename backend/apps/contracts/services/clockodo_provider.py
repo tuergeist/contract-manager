@@ -32,29 +32,19 @@ class ClockodoProvider(TimeTrackingProvider):
             "Accept": "application/json",
         }
 
-    def _post(self, endpoint: str, data: dict) -> dict:
-        """Make a POST request to the Clockodo API with retry on 429."""
+    def _request(self, method: str, endpoint: str, **kwargs) -> dict:
+        """Make an API request with exponential backoff retry on 429 and 5xx."""
         url = f"{self.API_BASE}/{endpoint}"
-        for attempt in range(3):
-            response = httpx.post(url, headers=self._get_headers(), json=data, timeout=30)
-            if response.status_code == 429:
-                wait = 2**attempt
-                logger.warning("Clockodo 429 rate limit on POST %s, retrying in %ss", endpoint, wait)
-                time.sleep(wait)
-                continue
-            response.raise_for_status()
-            return response.json()
-        response.raise_for_status()
-        return response.json()
-
-    def _put(self, endpoint: str, data: dict) -> dict:
-        """Make a PUT request to the Clockodo API with retry on 429."""
-        url = f"{self.API_BASE}/{endpoint}"
-        for attempt in range(3):
-            response = httpx.put(url, headers=self._get_headers(), json=data, timeout=30)
-            if response.status_code == 429:
-                wait = 2**attempt
-                logger.warning("Clockodo 429 rate limit on PUT %s, retrying in %ss", endpoint, wait)
+        max_attempts = 5
+        for attempt in range(max_attempts):
+            response = httpx.request(method, url, headers=self._get_headers(), timeout=30, **kwargs)
+            if response.status_code == 429 or response.status_code >= 500:
+                if attempt == max_attempts - 1:
+                    response.raise_for_status()
+                retry_after = response.headers.get("Retry-After")
+                wait = int(retry_after) if retry_after and retry_after.isdigit() else 2 ** (attempt + 1)
+                logger.warning("Clockodo %s on %s %s, retrying in %ss (attempt %d/%d)",
+                               response.status_code, method, endpoint, wait, attempt + 1, max_attempts)
                 time.sleep(wait)
                 continue
             response.raise_for_status()
@@ -63,20 +53,13 @@ class ClockodoProvider(TimeTrackingProvider):
         return response.json()
 
     def _get(self, endpoint: str, params: dict | None = None) -> dict:
-        """Make a GET request to the Clockodo API with retry on 429."""
-        url = f"{self.API_BASE}/{endpoint}"
-        for attempt in range(3):
-            response = httpx.get(url, headers=self._get_headers(), params=params, timeout=30)
-            if response.status_code == 429:
-                wait = 2**attempt  # 1s, 2s, 4s
-                logger.warning("Clockodo 429 rate limit on %s, retrying in %ss", endpoint, wait)
-                time.sleep(wait)
-                continue
-            response.raise_for_status()
-            return response.json()
-        # Final attempt failed with 429
-        response.raise_for_status()
-        return response.json()  # unreachable but satisfies type checker
+        return self._request("GET", endpoint, params=params)
+
+    def _post(self, endpoint: str, data: dict) -> dict:
+        return self._request("POST", endpoint, json=data)
+
+    def _put(self, endpoint: str, data: dict) -> dict:
+        return self._request("PUT", endpoint, json=data)
 
     def _get_all_pages(self, endpoint: str, key: str, params: dict | None = None) -> list:
         """Fetch all pages for a paginated endpoint.
@@ -290,8 +273,6 @@ class ClockodoProvider(TimeTrackingProvider):
         else:
             time_until = f"{date.today().isoformat()}T23:59:59Z"
 
-        total_hours = 0.0
-        total_revenue = 0.0
         service_data: dict[str, dict] = defaultdict(lambda: {"hours": 0.0, "revenue": 0.0})
         month_data: dict[str, dict] = defaultdict(lambda: {"hours": 0.0, "revenue": 0.0})
 
@@ -307,26 +288,6 @@ class ClockodoProvider(TimeTrackingProvider):
         # Use entrygroups endpoint for aggregated data per project
         for project_id in project_ids:
             try:
-                # Get total for this project (grouping is required)
-                params = {
-                    "time_since": time_since,
-                    "time_until": time_until,
-                    "filter[projects_id]": project_id,
-                    "grouping[]": "projects_id",
-                }
-                data = self._get("entrygroups", params)
-                groups = data.get("groups", [])
-
-                # The response contains a single group with duration and revenue
-                for group in groups:
-                    duration_seconds = group.get("duration", 0) or 0
-                    duration_hours = duration_seconds / 3600.0
-                    revenue = float(group.get("revenue", 0) or 0)
-                    total_hours += duration_hours
-                    total_revenue += revenue
-
-                time.sleep(0.3)  # Pace API calls to avoid 429
-
                 # Get breakdown by service
                 params_by_service = {
                     "time_since": time_since,
@@ -374,6 +335,10 @@ class ClockodoProvider(TimeTrackingProvider):
             {"month": k, "hours": round(v["hours"], 2), "revenue": round(v["revenue"], 2)}
             for k, v in sorted(month_data.items())
         ]
+
+        # Derive totals from month breakdown so all views are always consistent
+        total_hours = sum(v["hours"] for v in month_data.values())
+        total_revenue = sum(v["revenue"] for v in month_data.values())
 
         return TimeTrackingSummary(
             total_hours=round(total_hours, 2),
