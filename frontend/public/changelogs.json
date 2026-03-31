@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.26.1",
+    "date": "2026-03-31",
+    "title": "Pre-fill effective date in move item dialog",
+    "description": "The move item dialog now suggests the effective date automatically based on the last invoiced period, alignment date, or current billing cycle end.",
+    "type": "feature",
+    "details": [
+      "Pre-fills effective date from last invoiced period end, alignment date minus one day, or billing period end"
+    ]
+  },
+  {
     "version": "2.26.0",
     "date": "2026-03-31",
     "title": "Move line items between contracts",
