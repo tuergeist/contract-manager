@@ -69,6 +69,8 @@ interface ContractItem {
   quantity: number
   unitPrice: string
   pricePeriod: string
+  alignToContractAt?: string | null
+  billingEndDate?: string | null
 }
 
 interface SourceContract {
@@ -76,18 +78,62 @@ interface SourceContract {
   name: string
   customer: { id: string; name: string }
   status: string
+  billingInterval: string
+  startDate: string
+  billingStartDate: string | null
 }
 
 interface MoveItemDialogProps {
   item: ContractItem
   sourceContract: SourceContract
+  invoicedUntil?: string | null
   onClose: () => void
   onSuccess: () => void
+}
+
+/**
+ * Suggest the effective date (last day before the next billing boundary).
+ * Priority: invoicedUntil > alignToContractAt - 1 day > end of current billing period.
+ */
+function suggestEffectiveDate(
+  item: ContractItem,
+  contract: SourceContract,
+  invoicedUntil?: string | null,
+): string {
+  // 1. If already invoiced, use the last invoiced day
+  if (invoicedUntil) {
+    return invoicedUntil
+  }
+
+  // 2. If alignment date exists, suggest the day before
+  if (item.alignToContractAt) {
+    const d = new Date(item.alignToContractAt)
+    d.setDate(d.getDate() - 1)
+    return d.toISOString().slice(0, 10)
+  }
+
+  // 3. Compute end of current billing period from contract
+  const intervalMonths: Record<string, number> = {
+    monthly: 1, bi_monthly: 2, quarterly: 3, semi_annual: 6, annual: 12,
+    biennial: 24, triennial: 36, quadrennial: 48, quinquennial: 60,
+  }
+  const months = intervalMonths[contract.billingInterval] || 12
+  const start = new Date(contract.billingStartDate || contract.startDate)
+  const now = new Date()
+
+  // Walk forward from billing start in interval steps until we pass today
+  while (start <= now) {
+    start.setMonth(start.getMonth() + months)
+  }
+  // start is now the next period boundary — subtract 1 day for last day of current period
+  start.setDate(start.getDate() - 1)
+  return start.toISOString().slice(0, 10)
 }
 
 export function MoveItemDialog({
   item,
   sourceContract,
+  invoicedUntil,
   onClose,
   onSuccess,
 }: MoveItemDialogProps) {
@@ -96,7 +142,9 @@ export function MoveItemDialog({
   const [targetContractId, setTargetContractId] = useState<string | null>(null)
   const [contractSearchOpen, setContractSearchOpen] = useState(false)
   const [contractSearchTerm, setContractSearchTerm] = useState('')
-  const [effectiveDate, setEffectiveDate] = useState('')
+  const [effectiveDate, setEffectiveDate] = useState(() =>
+    suggestEffectiveDate(item, sourceContract, invoicedUntil)
+  )
   const [error, setError] = useState<string | null>(null)
 
   const { data: contractsData } = useQuery(TARGET_CONTRACTS_QUERY, {

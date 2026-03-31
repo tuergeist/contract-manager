@@ -2009,6 +2009,7 @@ export function ContractDetail() {
         <MoveItemDialog
           item={movingItem}
           sourceContract={contract}
+          invoicedUntil={contract.itemInvoicedUntil?.[movingItem.id]}
           onClose={() => setMovingItem(null)}
           onSuccess={() => {
             setMovingItem(null)
