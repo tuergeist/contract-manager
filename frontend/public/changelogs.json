@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.26.4",
+    "date": "2026-04-01",
+    "title": "Change customer confirm dialog and icon",
+    "description": "Change customer button now uses a building icon and requires explicit confirmation with a warning that all contract data, invoices, and attachments will be moved.",
+    "type": "feature",
+    "details": [
+      "Building icon for change customer button",
+      "Two-step flow: pick customer, then confirm with warning about data migration",
+      "Warning explains that invoices and attachments are included in the move"
+    ]
+  },
+  {
     "version": "2.26.3",
     "date": "2026-03-31",
     "title": "Change customer button in contract header",
