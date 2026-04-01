@@ -34,6 +34,7 @@ import { OfferDetail } from './features/offers/OfferDetail'
 import { DepartmentAnalysis } from './features/contracts/DepartmentAnalysis'
 import { IncomingInvoicesPage } from './features/incoming-invoices/IncomingInvoicesPage'
 import { OrderConfirmationDetail } from './features/contracts/OrderConfirmationDetail'
+import { AttachmentPermalink } from './features/contracts/AttachmentPermalink'
 
 function App() {
   return (
@@ -79,6 +80,7 @@ function App() {
         <Route path="banking/cost-center-report" element={<CostCenterReportPage />} />
         <Route path="audit-log" element={<AuditLogPage />} />
         <Route path="todos" element={<TodoBoard />} />
+        <Route path="attachments/:id" element={<AttachmentPermalink />} />
         <Route path="about" element={<AboutPage />} />
       </Route>
     </Routes>

@@ -26,7 +26,7 @@ class AuthenticatedGraphQLView(GraphQLView):
 from apps.core.version_views import VersionView, BackendLicensesView
 from apps.invoices.views import InvoiceExportView, InvoicePreviewHtmlView, InvoicePreviewView, InvoiceRecordPdfView
 from apps.offers.views import OfferRecordPdfView
-from apps.contracts.views import AttachmentDownloadView, ContractExportView
+from apps.contracts.views import AttachmentDownloadView, AttachmentPermalinkView, ContractExportView
 from apps.customers.views import CustomerAttachmentDownloadView
 from apps.banking.views import UploadStatementView
 from apps.customers.webhooks import HubSpotWebhookView
@@ -57,6 +57,7 @@ urlpatterns = [
     path("api/offers/<int:record_id>/pdf/", OfferRecordPdfView.as_view(), name="offer-record-pdf"),
     path("api/contracts/export/", ContractExportView.as_view(), name="contract-export"),
     path("api/attachments/<int:attachment_id>/download/", AttachmentDownloadView.as_view(), name="attachment-download"),
+    path("api/attachments/<int:attachment_id>/permalink/", AttachmentPermalinkView.as_view(), name="attachment-permalink"),
     path("api/customer-attachments/<int:attachment_id>/download/", CustomerAttachmentDownloadView.as_view(), name="customer-attachment-download"),
     path("api/banking/upload/<int:account_id>/", UploadStatementView.as_view(), name="banking-upload"),
     path("api/hubspot/webhook/", HubSpotWebhookView.as_view(), name="hubspot-webhook"),

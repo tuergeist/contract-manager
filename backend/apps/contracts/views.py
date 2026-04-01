@@ -8,8 +8,42 @@ from django.views import View
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 
+from django.shortcuts import redirect
+
 from apps.core.permissions import get_current_user_from_request
 from .models import Contract, ContractAttachment
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class AttachmentPermalinkView(View):
+    def get(self, request, attachment_id):
+        user = get_current_user_from_request(request)
+        if not user:
+            return redirect(f"/?redirect=/attachments/{attachment_id}/")
+
+        if not user.tenant:
+            return JsonResponse({"error": "No tenant assigned"}, status=403)
+
+        attachment = ContractAttachment.objects.filter(
+            tenant=user.tenant,
+            id=attachment_id,
+        ).first()
+
+        if not attachment:
+            return JsonResponse({"error": "Attachment not found"}, status=404)
+
+        try:
+            response = FileResponse(
+                attachment.file.open("rb"),
+                content_type=attachment.content_type,
+            )
+            response["Content-Disposition"] = (
+                f'inline; filename="{attachment.original_filename}"'
+            )
+            response["Content-Length"] = attachment.file_size
+            return response
+        except FileNotFoundError:
+            return JsonResponse({"error": "File not found on storage"}, status=404)
 
 
 @method_decorator(csrf_exempt, name="dispatch")

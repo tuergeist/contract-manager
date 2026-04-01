@@ -36,7 +36,7 @@ import { InvoiceStatusBadge } from '@/components/InvoiceStatusBadge'
 
 type SortField = 'name' | 'status' | 'startDate' | 'endDate' | 'arr' | 'totalValue' | 'remainingMonths' | null
 type SortOrder = 'asc' | 'desc'
-type Tab = 'contracts' | 'groups' | 'invoices' | 'attachments' | 'activity' | 'todos'
+type Tab = 'contracts' | 'groups' | 'invoices' | 'attachments' | 'documents' | 'activity' | 'todos'
 
 const CUSTOMER_QUERY = gql`
   query Customer($id: ID!) {
@@ -71,6 +71,7 @@ const CUSTOMER_QUERY = gql`
         fileSize
         contentType
         description
+        category
         uploadedAt
         uploadedByName
         downloadUrl
@@ -118,6 +119,7 @@ const UPLOAD_CUSTOMER_ATTACHMENT_MUTATION = gql`
         fileSize
         contentType
         description
+        category
         uploadedAt
         uploadedByName
         downloadUrl
@@ -131,6 +133,44 @@ const DELETE_CUSTOMER_ATTACHMENT_MUTATION = gql`
     deleteCustomerAttachment(attachmentId: $attachmentId) {
       success
       error
+    }
+  }
+`
+
+const UPDATE_CUSTOMER_ATTACHMENT_META_MUTATION = gql`
+  mutation UpdateCustomerAttachmentMeta($input: UpdateCustomerAttachmentMetaInput!) {
+    updateCustomerAttachmentMeta(input: $input) {
+      success
+      error
+      attachment {
+        id
+        originalFilename
+        fileSize
+        contentType
+        description
+        category
+        uploadedAt
+        uploadedByName
+        downloadUrl
+      }
+    }
+  }
+`
+
+const CUSTOMER_DOCUMENTS_QUERY = gql`
+  query CustomerDocuments($customerId: ID!, $category: String) {
+    customerDocuments(customerId: $customerId, category: $category) {
+      id
+      originalFilename
+      fileSize
+      contentType
+      description
+      category
+      uploadedAt
+      uploadedByName
+      downloadUrl
+      contractId
+      contractName
     }
   }
 `
@@ -333,9 +373,24 @@ interface Attachment {
   fileSize: number
   contentType: string
   description: string
+  category: string
   uploadedAt: string
   uploadedByName: string | null
   downloadUrl: string
+}
+
+interface CustomerDocument {
+  id: string
+  originalFilename: string
+  fileSize: number
+  contentType: string
+  description: string
+  category: string
+  uploadedAt: string
+  uploadedByName: string | null
+  downloadUrl: string
+  contractId: number
+  contractName: string
 }
 
 interface CustomerLink {
@@ -410,6 +465,10 @@ export function CustomerDetail() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadingFile, setUploadingFile] = useState(false)
   const [attachmentDescription, setAttachmentDescription] = useState('')
+  const [attachmentCategory, setAttachmentCategory] = useState('')
+
+  // Documents tab state
+  const [docCategoryFilter, setDocCategoryFilter] = useState<string>('')
 
   // Link state
   const [newLinkName, setNewLinkName] = useState('')
@@ -463,9 +522,16 @@ export function CustomerDetail() {
     skip: !id,
   })
 
+  // Customer documents query (cross-contract)
+  const { data: docsData, refetch: refetchDocs } = useQuery(CUSTOMER_DOCUMENTS_QUERY, {
+    variables: { customerId: id, category: docCategoryFilter || null },
+    skip: !id,
+  })
+
   // Mutations
   const [uploadAttachment] = useMutation(UPLOAD_CUSTOMER_ATTACHMENT_MUTATION)
   const [deleteAttachment] = useMutation(DELETE_CUSTOMER_ATTACHMENT_MUTATION)
+  const [updateAttachmentMeta] = useMutation(UPDATE_CUSTOMER_ATTACHMENT_META_MUTATION)
   const [addLink] = useMutation(ADD_CUSTOMER_LINK_MUTATION)
   const [deleteLink] = useMutation(DELETE_CUSTOMER_LINK_MUTATION)
   const [updateCustomer] = useMutation(UPDATE_CUSTOMER_MUTATION)
@@ -591,6 +657,39 @@ export function CustomerDetail() {
     return <File className="h-4 w-4 text-gray-500" />
   }
 
+  const ATTACHMENT_CATEGORIES = [
+    { value: 'order', label: t('attachments.categoryOrder') },
+    { value: 'contract', label: t('attachments.categoryContract') },
+    { value: 'offer', label: t('attachments.categoryOffer') },
+    { value: 'other', label: t('attachments.categoryOther') },
+  ]
+
+  const getCategoryLabel = (category: string) => {
+    const cat = ATTACHMENT_CATEGORIES.find((c) => c.value === category)
+    return cat ? cat.label : ''
+  }
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'order': return 'bg-blue-100 text-blue-800'
+      case 'contract': return 'bg-green-100 text-green-800'
+      case 'offer': return 'bg-amber-100 text-amber-800'
+      case 'other': return 'bg-gray-100 text-gray-800'
+      default: return ''
+    }
+  }
+
+  const handleUpdateAttachmentMeta = async (attachmentId: string, updates: { category?: string; description?: string }) => {
+    try {
+      await updateAttachmentMeta({
+        variables: { input: { attachmentId, ...updates } },
+      })
+      refetch()
+    } catch (err) {
+      console.error('Failed to update attachment:', err)
+    }
+  }
+
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file || !id) return
@@ -608,13 +707,16 @@ export function CustomerDetail() {
               filename: file.name,
               contentType: file.type || 'application/octet-stream',
               description: attachmentDescription,
+              category: attachmentCategory,
             },
           },
         })
 
         if (result.data?.uploadCustomerAttachment?.success) {
           setAttachmentDescription('')
+          setAttachmentCategory('')
           refetch()
+          refetchDocs()
         } else {
           alert(result.data?.uploadCustomerAttachment?.error || 'Upload failed')
         }
@@ -1269,6 +1371,17 @@ export function CustomerDetail() {
             {t('attachments.title')} ({(customer.attachments?.length || 0) + (customer.links?.length || 0)})
           </button>
           <button
+            onClick={() => setActiveTab('documents')}
+            className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium ${
+              activeTab === 'documents'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            <FolderOpen className="h-4 w-4" />
+            {t('attachments.documents')} ({docsData?.customerDocuments?.length || 0})
+          </button>
+          <button
             onClick={() => setActiveTab('todos')}
             className={`inline-flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium ${
               activeTab === 'todos'
@@ -1773,6 +1886,24 @@ export function CustomerDetail() {
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('attachments.category')}
+                </label>
+                <Select value={attachmentCategory} onValueChange={setAttachmentCategory}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder={t('attachments.noCategory')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">{t('attachments.noCategory')}</SelectItem>
+                    {ATTACHMENT_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -1804,7 +1935,14 @@ export function CustomerDetail() {
                     <div className="flex items-center gap-3">
                       {getFileIcon(attachment.contentType)}
                       <div>
-                        <p className="font-medium text-sm">{attachment.originalFilename}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm">{attachment.originalFilename}</p>
+                          {attachment.category && (
+                            <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', getCategoryColor(attachment.category))}>
+                              {getCategoryLabel(attachment.category)}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500">
                           {formatFileSize(attachment.fileSize)}
                           {attachment.description && ` • ${attachment.description}`}
@@ -1813,6 +1951,22 @@ export function CustomerDetail() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Select
+                        value={attachment.category || ''}
+                        onValueChange={(value) => handleUpdateAttachmentMeta(attachment.id, { category: value })}
+                      >
+                        <SelectTrigger className="h-7 w-[120px] text-xs border-0 bg-transparent hover:bg-gray-200 focus:ring-0">
+                          <SelectValue placeholder={t('attachments.category')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">{t('attachments.noCategory')}</SelectItem>
+                          {ATTACHMENT_CATEGORIES.map((cat) => (
+                            <SelectItem key={cat.value} value={cat.value}>
+                              {cat.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <a
                         href={attachment.downloadUrl}
                         className="p-2 text-gray-500 hover:text-blue-600"
@@ -1925,6 +2079,109 @@ export function CustomerDetail() {
               </p>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Documents Tab (cross-contract) */}
+      {activeTab === 'documents' && (
+        <div data-testid="customer-documents-section">
+          {/* Filter */}
+          <div className="mb-4 rounded-lg border bg-white p-4">
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium text-gray-700">{t('attachments.category')}:</label>
+              <Select value={docCategoryFilter} onValueChange={(value) => setDocCategoryFilter(value)}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder={t('attachments.allCategories')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">{t('attachments.allCategories')}</SelectItem>
+                  {ATTACHMENT_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat.value} value={cat.value}>
+                      {cat.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Documents Table */}
+          {(docsData?.customerDocuments?.length || 0) === 0 ? (
+            <div className="rounded-lg border bg-white p-8 text-center">
+              <FolderOpen className="mx-auto h-12 w-12 text-gray-400" />
+              <p className="mt-2 text-gray-600">{t('attachments.noDocuments')}</p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-lg border">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('attachments.filename')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('attachments.contract')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('attachments.category')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {t('attachments.uploadedAt')}
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                      {/* Actions */}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {(docsData?.customerDocuments || []).map((doc: CustomerDocument) => (
+                    <tr key={doc.id}>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          {getFileIcon(doc.contentType)}
+                          <div>
+                            <span className="font-medium text-sm text-gray-900">{doc.originalFilename}</span>
+                            {doc.description && (
+                              <p className="text-xs text-gray-500">{doc.description}</p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm">
+                        <Link
+                          to={`/contracts/${doc.contractId}`}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {doc.contractName}
+                        </Link>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm">
+                        {doc.category ? (
+                          <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', getCategoryColor(doc.category))}>
+                            {getCategoryLabel(doc.category)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300 italic text-xs">{t('attachments.noCategory')}</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                        {formatDate(doc.uploadedAt)}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right">
+                        <a
+                          href={doc.downloadUrl}
+                          className="text-gray-400 hover:text-blue-600"
+                          title={t('attachments.download')}
+                        >
+                          <Download className="h-4 w-4 inline" />
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

@@ -167,6 +167,7 @@ class ContractAttachmentType:
     file_size: int
     content_type: str
     description: str
+    category: str
     uploaded_at: datetime
     uploaded_by_name: str | None
     download_url: str
@@ -529,6 +530,7 @@ class ContractType:
                 file_size=a.file_size,
                 content_type=a.content_type,
                 description=a.description,
+                category=a.category,
                 uploaded_at=a.created_at,
                 uploaded_by_name=a.uploaded_by.email if a.uploaded_by else None,
                 download_url=f"/api/attachments/{a.id}/download/",
@@ -932,6 +934,14 @@ class UploadAttachmentInput:
     filename: str
     content_type: str
     description: str = ""
+    category: str = ""
+
+
+@strawberry.input
+class UpdateAttachmentMetaInput:
+    attachment_id: strawberry.ID
+    category: str | None = None
+    description: str | None = None
 
 
 @strawberry.type
@@ -5700,6 +5710,7 @@ class ContractMutation:
                 file_size=file_size,
                 content_type=input.content_type,
                 description=input.description,
+                category=input.category,
                 uploaded_by=user,
             )
 
@@ -5714,6 +5725,7 @@ class ContractMutation:
                     file_size=attachment.file_size,
                     content_type=attachment.content_type,
                     description=attachment.description,
+                    category=attachment.category,
                     uploaded_at=attachment.created_at,
                     uploaded_by_name=user.email,
                     download_url=f"/api/attachments/{attachment.id}/download/",
@@ -5747,6 +5759,46 @@ class ContractMutation:
             return DeleteResult(success=True)
         except Exception as e:
             return DeleteResult(error=str(e))
+
+    @strawberry.mutation
+    def update_contract_attachment_meta(
+        self,
+        info: Info[Context, None],
+        input: UpdateAttachmentMetaInput,
+    ) -> AttachmentResult:
+        """Update category and/or description on an existing attachment."""
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return AttachmentResult(error=err)
+        if not user.tenant:
+            return AttachmentResult(error="No tenant assigned")
+
+        attachment = ContractAttachment.objects.filter(
+            tenant=user.tenant, id=input.attachment_id
+        ).select_related("uploaded_by").first()
+        if not attachment:
+            return AttachmentResult(error="Attachment not found")
+
+        if input.category is not None:
+            attachment.category = input.category
+        if input.description is not None:
+            attachment.description = input.description
+        attachment.save()
+
+        return AttachmentResult(
+            attachment=ContractAttachmentType(
+                id=attachment.id,
+                original_filename=attachment.original_filename,
+                file_size=attachment.file_size,
+                content_type=attachment.content_type,
+                description=attachment.description,
+                category=attachment.category,
+                uploaded_at=attachment.created_at,
+                uploaded_by_name=attachment.uploaded_by.email if attachment.uploaded_by else None,
+                download_url=f"/api/attachments/{attachment.id}/download/",
+            ),
+            success=True,
+        )
 
     # =========================================================================
     # Contract Link Mutations

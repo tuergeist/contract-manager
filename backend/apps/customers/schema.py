@@ -36,6 +36,7 @@ class CustomerAttachmentType:
     file_size: int
     content_type: str
     description: str
+    category: str
     uploaded_at: datetime
     uploaded_by_name: str | None
     download_url: str
@@ -126,6 +127,7 @@ class CustomerType:
                 file_size=a.file_size,
                 content_type=a.content_type,
                 description=a.description,
+                category=a.category,
                 uploaded_at=a.created_at,
                 uploaded_by_name=a.uploaded_by.email if a.uploaded_by else None,
                 download_url=f"/api/customer-attachments/{a.id}/download/",
@@ -206,6 +208,7 @@ class UploadCustomerAttachmentInput:
     filename: str
     content_type: str
     description: str = ""
+    category: str = ""
 
 
 @strawberry.input
@@ -377,7 +380,61 @@ class ClockodoCustomerMatch:
 
 
 @strawberry.type
+class CustomerDocumentType:
+    id: int
+    original_filename: str
+    file_size: int
+    content_type: str
+    description: str
+    category: str
+    uploaded_at: datetime
+    uploaded_by_name: str | None
+    download_url: str
+    contract_id: int
+    contract_name: str
+
+
+@strawberry.type
 class CustomerQuery:
+    @strawberry.field
+    def customer_documents(
+        self,
+        info: Info[Context, None],
+        customer_id: strawberry.ID,
+        category: str | None = None,
+    ) -> list[CustomerDocumentType]:
+        """Get all contract attachments for a customer, optionally filtered by category."""
+        from apps.contracts.models import ContractAttachment
+
+        user = require_perm(info, "customers", "read")
+        if not user.tenant:
+            return []
+
+        qs = ContractAttachment.objects.filter(
+            tenant=user.tenant,
+            contract__customer_id=customer_id,
+        ).select_related("uploaded_by", "contract")
+
+        if category:
+            qs = qs.filter(category=category)
+
+        return [
+            CustomerDocumentType(
+                id=a.id,
+                original_filename=a.original_filename,
+                file_size=a.file_size,
+                content_type=a.content_type,
+                description=a.description,
+                category=a.category,
+                uploaded_at=a.created_at,
+                uploaded_by_name=a.uploaded_by.email if a.uploaded_by else None,
+                download_url=f"/api/attachments/{a.id}/download/",
+                contract_id=a.contract_id,
+                contract_name=a.contract.name if a.contract else "",
+            )
+            for a in qs
+        ]
+
     @strawberry.field
     def auto_match_clockodo_customers(
         self, info: Info[Context, None]

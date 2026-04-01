@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams, useLocation, Link } from 'react-router-dom'
 import { useQuery, useMutation, gql } from '@apollo/client'
 import {
   Loader2,
@@ -210,6 +210,7 @@ const CONTRACT_DETAIL_QUERY = gql`
         fileSize
         contentType
         description
+        category
         uploadedAt
         uploadedByName
         downloadUrl
@@ -530,6 +531,7 @@ const UPLOAD_ATTACHMENT_MUTATION = gql`
         fileSize
         contentType
         description
+        category
         uploadedAt
         uploadedByName
         downloadUrl
@@ -543,6 +545,26 @@ const DELETE_ATTACHMENT_MUTATION = gql`
     deleteContractAttachment(attachmentId: $attachmentId) {
       success
       error
+    }
+  }
+`
+
+const UPDATE_ATTACHMENT_META_MUTATION = gql`
+  mutation UpdateContractAttachmentMeta($input: UpdateAttachmentMetaInput!) {
+    updateContractAttachmentMeta(input: $input) {
+      success
+      error
+      attachment {
+        id
+        originalFilename
+        fileSize
+        contentType
+        description
+        category
+        uploadedAt
+        uploadedByName
+        downloadUrl
+      }
     }
   }
 `
@@ -666,6 +688,7 @@ interface Attachment {
   fileSize: number
   contentType: string
   description: string
+  category: string
   uploadedAt: string
   uploadedByName: string | null
   downloadUrl: string
@@ -762,8 +785,11 @@ type Tab = 'items' | 'amendments' | 'forecast' | 'attachments' | 'invoices' | 't
 export function ContractDetail() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
   const { id } = useParams<{ id: string }>()
-  const [activeTab, setActiveTab] = useState<Tab>('items')
+  const validTabs: Tab[] = ['items', 'amendments', 'forecast', 'attachments', 'invoices', 'todos', 'timeTracking', 'activity']
+  const hashTab = location.hash.replace('#', '') as Tab
+  const [activeTab, setActiveTab] = useState<Tab>(validTabs.includes(hashTab) ? hashTab : 'items')
   const [showAddItemModal, setShowAddItemModal] = useState(false)
   const [showPriceIncreaseModal, setShowPriceIncreaseModal] = useState(false)
   const [editingItem, setEditingItem] = useState<ContractItem | null>(null)
@@ -4319,17 +4345,67 @@ function AttachmentsTab({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   const [showAddLink, setShowAddLink] = useState(false)
   const [linkName, setLinkName] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
   const [addingLink, setAddingLink] = useState(false)
 
   const [analyzingAttachmentId, setAnalyzingAttachmentId] = useState<string | null>(null)
+  const [uploadCategory, setUploadCategory] = useState('')
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [editNoteValue, setEditNoteValue] = useState('')
 
   const [uploadAttachment] = useMutation(UPLOAD_ATTACHMENT_MUTATION)
   const [deleteAttachment] = useMutation(DELETE_ATTACHMENT_MUTATION)
+  const [updateAttachmentMeta] = useMutation(UPDATE_ATTACHMENT_META_MUTATION)
   const [addLink] = useMutation(ADD_CONTRACT_LINK_MUTATION)
   const [deleteLink] = useMutation(DELETE_CONTRACT_LINK_MUTATION)
+
+  const ATTACHMENT_CATEGORIES = [
+    { value: 'order', label: t('attachments.categoryOrder') },
+    { value: 'contract', label: t('attachments.categoryContract') },
+    { value: 'offer', label: t('attachments.categoryOffer') },
+    { value: 'other', label: t('attachments.categoryOther') },
+  ]
+
+  const getCategoryLabel = (category: string) => {
+    const cat = ATTACHMENT_CATEGORIES.find((c) => c.value === category)
+    return cat ? cat.label : ''
+  }
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'order': return 'bg-blue-100 text-blue-800'
+      case 'contract': return 'bg-green-100 text-green-800'
+      case 'offer': return 'bg-amber-100 text-amber-800'
+      case 'other': return 'bg-gray-100 text-gray-800'
+      default: return ''
+    }
+  }
+
+  const handleUpdateCategory = async (attachmentId: string, category: string) => {
+    try {
+      await updateAttachmentMeta({
+        variables: { input: { attachmentId, category } },
+      })
+      onRefetch()
+    } catch (err) {
+      console.error('Failed to update category:', err)
+    }
+  }
+
+  const handleSaveNote = async (attachmentId: string) => {
+    try {
+      await updateAttachmentMeta({
+        variables: { input: { attachmentId, description: editNoteValue } },
+      })
+      setEditingNoteId(null)
+      onRefetch()
+    } catch (err) {
+      console.error('Failed to update note:', err)
+    }
+  }
 
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`
@@ -4368,11 +4444,13 @@ function AttachmentsTab({
               filename: file.name,
               contentType: file.type || 'application/octet-stream',
               description: '',
+              category: uploadCategory,
             },
           },
         })
 
         if (result.data?.uploadContractAttachment?.success) {
+          setUploadCategory('')
           onRefetch()
         } else {
           setError(result.data?.uploadContractAttachment?.error || t('attachments.uploadFailed'))
@@ -4518,35 +4596,81 @@ function AttachmentsTab({
     }
   }
 
+  const handleCopyPermalink = async (attachmentId: string) => {
+    const url = `${window.location.origin}/attachments/${attachmentId}/`
+    await navigator.clipboard.writeText(url)
+    setCopiedId(attachmentId)
+    setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  const handleCopySectionLink = async () => {
+    const url = `${window.location.origin}/contracts/${contractId}#attachments`
+    await navigator.clipboard.writeText(url)
+    setCopiedId('section')
+    setTimeout(() => setCopiedId(null), 2000)
+  }
+
   return (
     <div>
-      {/* Upload Button */}
-      {canEdit && (
-        <div className="mb-4 flex justify-end">
-          <label className="cursor-pointer">
-            <span className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
-              {uploading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {t('attachments.uploading')}
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4" />
-                  {t('attachments.uploadFile')}
-                </>
-              )}
-            </span>
-            <input
-              ref={fileInputRef}
-              type="file"
-              onChange={handleFileSelect}
-              disabled={uploading}
-              className="hidden"
-            />
-          </label>
-        </div>
-      )}
+      {/* Header with section link and upload */}
+      <div className="mb-4 flex items-center justify-between">
+        <button
+          onClick={handleCopySectionLink}
+          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700"
+          title={copiedId === 'section' ? t('attachments.linkCopied') : t('attachments.sectionLink')}
+        >
+          {copiedId === 'section' ? (
+            <>
+              <Check className="h-4 w-4 text-green-500" />
+              <span className="text-green-600">{t('attachments.linkCopied')}</span>
+            </>
+          ) : (
+            <>
+              <Link2 className="h-4 w-4" />
+              <span>{t('attachments.sectionLink')}</span>
+            </>
+          )}
+        </button>
+        {canEdit && (
+          <div className="flex items-center gap-3">
+            <Select value={uploadCategory} onValueChange={setUploadCategory}>
+              <SelectTrigger className="w-[160px] h-9">
+                <SelectValue placeholder={t('attachments.category')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">{t('attachments.noCategory')}</SelectItem>
+                {ATTACHMENT_CATEGORIES.map((cat) => (
+                  <SelectItem key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <label className="cursor-pointer">
+              <span className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+                {uploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t('attachments.uploading')}
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    {t('attachments.uploadFile')}
+                  </>
+                )}
+              </span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileSelect}
+                disabled={uploading}
+                className="hidden"
+              />
+            </label>
+          </div>
+        )}
+      </div>
 
       {/* Error Message */}
       {error && (
@@ -4568,6 +4692,9 @@ function AttachmentsTab({
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   {t('attachments.filename')}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  {t('attachments.category')}
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                   {t('attachments.size')}
@@ -4593,8 +4720,85 @@ function AttachmentsTab({
                         {attachment.originalFilename}
                       </span>
                     </div>
-                    {attachment.description && (
-                      <p className="mt-1 text-xs text-gray-500">{attachment.description}</p>
+                    {editingNoteId === attachment.id ? (
+                      <div className="mt-1 flex items-center gap-1">
+                        <Input
+                          value={editNoteValue}
+                          onChange={(e) => setEditNoteValue(e.target.value)}
+                          placeholder={t('attachments.notePlaceholder')}
+                          className="h-7 text-xs"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveNote(attachment.id)
+                            if (e.key === 'Escape') setEditingNoteId(null)
+                          }}
+                          autoFocus
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2"
+                          onClick={() => handleSaveNote(attachment.id)}
+                        >
+                          <Check className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2"
+                          onClick={() => setEditingNoteId(null)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <p
+                        className={cn(
+                          "mt-1 text-xs",
+                          attachment.description ? "text-gray-500" : "text-gray-300 italic",
+                          canEdit && "cursor-pointer hover:text-blue-600"
+                        )}
+                        onClick={() => {
+                          if (!canEdit) return
+                          setEditingNoteId(attachment.id)
+                          setEditNoteValue(attachment.description)
+                        }}
+                      >
+                        {attachment.description || (canEdit ? t('attachments.notePlaceholder') : '')}
+                      </p>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 text-sm">
+                    {canEdit ? (
+                      <Select
+                        value={attachment.category || ''}
+                        onValueChange={(value) => handleUpdateCategory(attachment.id, value)}
+                      >
+                        <SelectTrigger className="h-7 w-[130px] text-xs border-0 bg-transparent hover:bg-gray-100 focus:ring-0">
+                          <SelectValue>
+                            {attachment.category ? (
+                              <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', getCategoryColor(attachment.category))}>
+                                {getCategoryLabel(attachment.category)}
+                              </span>
+                            ) : (
+                              <span className="text-gray-300 italic">{t('attachments.noCategory')}</span>
+                            )}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">{t('attachments.noCategory')}</SelectItem>
+                          {ATTACHMENT_CATEGORIES.map((cat) => (
+                            <SelectItem key={cat.value} value={cat.value}>
+                              {cat.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      attachment.category ? (
+                        <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', getCategoryColor(attachment.category))}>
+                          {getCategoryLabel(attachment.category)}
+                        </span>
+                      ) : null
                     )}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-500">
@@ -4626,6 +4830,17 @@ function AttachmentsTab({
                         <Eye className="h-4 w-4" />
                       </button>
                     )}
+                    <button
+                      onClick={() => handleCopyPermalink(attachment.id)}
+                      className="mr-2 text-gray-400 hover:text-blue-600"
+                      title={copiedId === attachment.id ? t('attachments.linkCopied') : t('attachments.copyLink')}
+                    >
+                      {copiedId === attachment.id ? (
+                        <Check className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <Link2 className="h-4 w-4" />
+                      )}
+                    </button>
                     <button
                       onClick={() => handleDownload(attachment)}
                       className="mr-2 text-gray-400 hover:text-blue-600"

@@ -121,6 +121,12 @@ class CustomerAttachment(TenantModel):
         blank=True,
         help_text="Optional description of the attachment",
     )
+    category = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+        help_text="Document category: order, contract, offer, other",
+    )
 
     class Meta:
         ordering = ["-created_at"]
