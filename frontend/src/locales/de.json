@@ -500,6 +500,9 @@
     },
     "changeCustomer": {
       "title": "Kunde ändern",
+      "confirmTitle": "Kundenänderung bestätigen",
+      "confirmDescription": "\"{{contractName}}\" zum Kunden \"{{customerName}}\" verschieben?",
+      "warning": "Alle Daten dieses Vertrags einschließlich verknüpfter Rechnungen und Anhänge werden zum neuen Kunden verschoben.",
       "searchPlaceholder": "Kunden suchen...",
       "noResults": "Keine Kunden gefunden.",
       "selected": "Ausgewählt",

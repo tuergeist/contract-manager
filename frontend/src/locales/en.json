@@ -500,6 +500,9 @@
     },
     "changeCustomer": {
       "title": "Change Customer",
+      "confirmTitle": "Confirm Customer Change",
+      "confirmDescription": "Move \"{{contractName}}\" to customer \"{{customerName}}\"?",
+      "warning": "All data for this contract including connected invoices and attachments will be moved to the new customer.",
       "searchPlaceholder": "Search customers...",
       "noResults": "No customers found.",
       "selected": "Selected",

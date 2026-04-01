@@ -5,7 +5,7 @@ import { useQuery, useMutation, gql } from '@apollo/client'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2, ArrowLeft, Check, ChevronsUpDown, Edit, ExternalLink, Trash2, Plus, GitMerge, Users } from 'lucide-react'
+import { Loader2, ArrowLeft, Check, ChevronsUpDown, Edit, ExternalLink, Trash2, Plus, GitMerge, Building2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -42,6 +42,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -308,6 +309,7 @@ export function ContractForm() {
   const [statusTransition, setStatusTransition] = useState<StatusTransition | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showChangeCustomer, setShowChangeCustomer] = useState(false)
+  const [changeCustomerTarget, setChangeCustomerTarget] = useState<{ id: number; name: string } | null>(null)
   const [showMergeDialog, setShowMergeDialog] = useState(false)
   const [groupPopoverOpen, setGroupPopoverOpen] = useState(false)
   const [groupSearchTerm, setGroupSearchTerm] = useState('')
@@ -553,7 +555,7 @@ export function ContractForm() {
                 variant="outline"
                 onClick={() => setShowChangeCustomer(true)}
               >
-                <Users className="mr-2 h-4 w-4" />
+                <Building2 className="mr-2 h-4 w-4" />
                 {t('contracts.actions.changeCustomer')}
               </Button>
             )}
@@ -1338,24 +1340,57 @@ export function ContractForm() {
         />
       )}
 
-      {/* Change Customer Dialog */}
+      {/* Change Customer Dialog - Step 1: Pick customer */}
       {id && (
         <CustomerPickerDialog
           open={showChangeCustomer}
           onOpenChange={(open) => { if (!open) setShowChangeCustomer(false) }}
           title={t('contracts.changeCustomer.title')}
-          loading={changingCustomer}
-          onSelect={async (customerId) => {
-            const result = await changeCustomerMutation({
-              variables: { contractId: id, customerId: String(customerId) },
-            })
-            if (result.data?.changeContractCustomer.success) {
-              setShowChangeCustomer(false)
-              window.location.reload()
-            }
+          onSelect={(customerId, customerName) => {
+            setShowChangeCustomer(false)
+            setChangeCustomerTarget({ id: customerId, name: customerName || `CUS-${customerId}` })
           }}
         />
       )}
+
+      {/* Change Customer Dialog - Step 2: Confirm */}
+      <Dialog open={!!changeCustomerTarget} onOpenChange={(open) => { if (!open) setChangeCustomerTarget(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('contracts.changeCustomer.confirmTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('contracts.changeCustomer.confirmDescription', {
+                contractName: contract?.name || `Contract #${id}`,
+                customerName: changeCustomerTarget?.name,
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 text-sm text-amber-700 bg-amber-50 rounded-md p-3">
+            {t('contracts.changeCustomer.warning')}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setChangeCustomerTarget(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              disabled={changingCustomer}
+              onClick={async () => {
+                if (!changeCustomerTarget || !id) return
+                const result = await changeCustomerMutation({
+                  variables: { contractId: id, customerId: String(changeCustomerTarget.id) },
+                })
+                if (result.data?.changeContractCustomer.success) {
+                  setChangeCustomerTarget(null)
+                  window.location.reload()
+                }
+              }}
+            >
+              {changingCustomer && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {t('contracts.changeCustomer.confirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

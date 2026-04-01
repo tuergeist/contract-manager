@@ -30,7 +30,7 @@ interface CustomerPickerDialogProps {
   onOpenChange: (open: boolean) => void
   title: string
   description?: string
-  onSelect: (customerId: number) => void | Promise<void>
+  onSelect: (customerId: number, customerName?: string) => void | Promise<void>
   loading?: boolean
   children?: React.ReactNode
 }
@@ -108,7 +108,7 @@ export function CustomerPickerDialog({
                     }) => (
                       <button
                         key={customer.id}
-                        onClick={() => onSelect(customer.id)}
+                        onClick={() => onSelect(customer.id, customer.name)}
                         disabled={externalLoading}
                         className="w-full flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 text-left disabled:opacity-50"
                       >
