@@ -5313,8 +5313,8 @@ class ContractMutation:
             Contract.Status.DRAFT: [Contract.Status.ACTIVE],
             Contract.Status.ACTIVE: [Contract.Status.PAUSED, Contract.Status.CANCELLED, Contract.Status.DRAFT],
             Contract.Status.PAUSED: [Contract.Status.ACTIVE, Contract.Status.CANCELLED],
-            Contract.Status.CANCELLED: [Contract.Status.ENDED],
-            Contract.Status.ENDED: [Contract.Status.DRAFT],
+            Contract.Status.CANCELLED: [Contract.Status.ENDED, Contract.Status.ACTIVE],
+            Contract.Status.ENDED: [Contract.Status.DRAFT, Contract.Status.ACTIVE],
         }
 
         current_status = contract.status

@@ -274,8 +274,10 @@ const STATUS_TRANSITIONS: StatusTransition[] = [
   { from: 'paused', to: 'active', label: 'resume', confirmKey: 'confirmResume', isReversible: true },
   { from: 'paused', to: 'cancelled', label: 'cancel', confirmKey: 'confirmCancel', isReversible: false },
   { from: 'cancelled', to: 'ended', label: 'end', confirmKey: 'confirmEnd', isReversible: false },
+  { from: 'cancelled', to: 'active', label: 'reactivate', confirmKey: 'confirmReactivate', isReversible: false },
   { from: 'active', to: 'draft', label: 'resetToDraft', confirmKey: 'confirmResetToDraft', isReversible: false },
   { from: 'ended', to: 'draft', label: 'resetToDraft', confirmKey: 'confirmResetToDraft', isReversible: false },
+  { from: 'ended', to: 'active', label: 'reactivate', confirmKey: 'confirmReactivate', isReversible: false },
 ]
 
 const getStatusBadgeClass = (status: string) => {
