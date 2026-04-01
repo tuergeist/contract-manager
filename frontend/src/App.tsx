@@ -9,6 +9,7 @@ import { TwoFactorSetup } from './features/auth/TwoFactorSetup'
 import { SignupPage } from './features/auth/SignupPage'
 import { VerifySignup } from './features/auth/VerifySignup'
 import { Dashboard } from './features/dashboard/Dashboard'
+import { NewBusinessDetailPage } from './features/dashboard/NewBusinessDetailPage'
 import { CustomerList } from './features/customers/CustomerList'
 import { CustomerDetail } from './features/customers/CustomerDetail'
 import { ProductList } from './features/products/ProductList'
@@ -53,6 +54,7 @@ function App() {
         }
       >
         <Route index element={<Dashboard />} />
+        <Route path="dashboard/new-business/:metricType" element={<NewBusinessDetailPage />} />
         <Route path="customers" element={<CustomerList />} />
         <Route path="customers/:id" element={<CustomerDetail />} />
         <Route path="products" element={<ProductList />} />

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate, Link } from 'react-router-dom'
-import { useQuery, useLazyQuery, gql } from '@apollo/client'
+import { useNavigate } from 'react-router-dom'
+import { useQuery, gql } from '@apollo/client'
 import { Loader2, AlertCircle, Info } from 'lucide-react'
 import { KPICard } from './KPICard'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
@@ -73,32 +73,6 @@ const DASHBOARD_KPIS_QUERY = gql`
   }
 `
 
-const NEW_BUSINESS_DETAILS_QUERY = gql`
-  query NewBusinessDetails($year: Int!, $metricType: String!) {
-    newBusinessDetails(year: $year, metricType: $metricType) {
-      customerId
-      customerName
-      contractId
-      contractName
-      itemId
-      itemDescription
-      value
-      source
-    }
-  }
-`
-
-interface NewBusinessDetailItem {
-  customerId: number
-  customerName: string
-  contractId: number
-  contractName: string
-  itemId: number | null
-  itemDescription: string | null
-  value: string
-  source: string
-}
-
 interface DashboardKPIs {
   totalActiveContracts: number
   totalContractValue: string
@@ -169,11 +143,6 @@ export function Dashboard() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [showInfoModal, setShowInfoModal] = useState(false)
-  const [drilldownMetric, setDrilldownMetric] = useState<string | null>(null)
-
-  const [fetchDetails, { data: detailsData, loading: detailsLoading }] = useLazyQuery(NEW_BUSINESS_DETAILS_QUERY, {
-    fetchPolicy: 'network-only',
-  })
 
   const currentYear = new Date().getFullYear()
   const { data: kpisData, loading: kpisLoading, error: kpisError } = useQuery<DashboardKPIsData>(DASHBOARD_KPIS_QUERY, {
@@ -310,10 +279,7 @@ export function Dashboard() {
                 <div
                   key={card.key}
                   className="rounded-lg border bg-card p-4 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
-                  onClick={() => {
-                    setDrilldownMetric(card.key)
-                    fetchDetails({ variables: { year: currentYear, metricType: card.key } })
-                  }}
+                  onClick={() => navigate(`/dashboard/new-business/${card.key}?year=${currentYear}`)}
                 >
                   <p className="text-sm font-medium text-muted-foreground">{card.label}</p>
                   <p className="mt-1 text-2xl font-semibold">
@@ -456,75 +422,6 @@ export function Dashboard() {
           </div>
         </div>
       )}
-
-      {/* New Business Drill-Down Dialog */}
-      <Dialog open={!!drilldownMetric} onOpenChange={(open) => { if (!open) setDrilldownMetric(null) }}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {drilldownMetric && newBusinessCards.find(c => c.key === drilldownMetric)?.label}
-            </DialogTitle>
-          </DialogHeader>
-          {detailsLoading ? (
-            <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
-          ) : (
-            <div>
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-gray-500">
-                    <th className="pb-2 font-medium">{t('contracts.customer')}</th>
-                    <th className="pb-2 font-medium">{t('nav.contracts')}</th>
-                    <th className="pb-2 font-medium">{t('dashboard.drilldown.item')}</th>
-                    <th className="pb-2 text-right font-medium">{drilldownMetric === 'new_deal_count' ? '' : t('dashboard.drilldown.value')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(detailsData?.newBusinessDetails || []).map((row: NewBusinessDetailItem, i: number) => (
-                    <tr key={`${row.contractId}-${row.itemId}-${i}`} className="border-b last:border-0">
-                      <td className="py-2">{row.customerName}</td>
-                      <td className="py-2">
-                        <Link
-                          to={`/contracts/${row.contractId}`}
-                          className="text-blue-600 hover:underline"
-                          onClick={() => setDrilldownMetric(null)}
-                        >
-                          {row.contractName}
-                        </Link>
-                      </td>
-                      <td className="py-2 text-gray-600">
-                        {row.itemDescription || '—'}
-                        {row.source === 'expansion' && (
-                          <span className="ml-1 text-xs text-gray-400">(Expansion)</span>
-                        )}
-                      </td>
-                      <td className="py-2 text-right">
-                        {drilldownMetric !== 'new_deal_count' && formatCurrency(row.value)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                {drilldownMetric !== 'new_deal_count' && (detailsData?.newBusinessDetails || []).length > 0 && (
-                  <tfoot>
-                    <tr className="border-t font-semibold">
-                      <td colSpan={3} className="py-2">{t('common.total')}</td>
-                      <td className="py-2 text-right">
-                        {formatCurrency(
-                          (detailsData?.newBusinessDetails || [])
-                            .reduce((sum: number, r: NewBusinessDetailItem) => sum + parseFloat(r.value), 0)
-                            .toString()
-                        )}
-                      </td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-              {(detailsData?.newBusinessDetails || []).length === 0 && (
-                <p className="text-center text-gray-500 py-4">{t('common.noResults')}</p>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* Info Modal */}
       <Dialog open={showInfoModal} onOpenChange={setShowInfoModal}>
