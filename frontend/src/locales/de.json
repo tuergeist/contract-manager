@@ -120,6 +120,10 @@
   "dashboard": {
     "title": "Dashboard",
     "welcome": "Willkommen im Contract Manager",
+    "drilldown": {
+      "item": "Position",
+      "value": "ARR-Wert"
+    },
     "kpis": {
       "totalActiveContracts": "Aktive Verträge",
       "totalActiveContractsExplanation": "Anzahl der Verträge mit Status 'aktiv'",

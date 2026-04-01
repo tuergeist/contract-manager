@@ -1466,17 +1466,49 @@ class RevenueStreamDataType:
     full_year_forecast: Decimal
 
 
+def _customers_with_prior_year_revenue(tenant, year: int) -> set[int]:
+    """Return customer IDs that had invoiced revenue in year-1."""
+    from apps.invoices.models import InvoiceRecord
+
+    return set(
+        InvoiceRecord.objects.filter(
+            tenant=tenant,
+            invoice_date__year=year - 1,
+        ).exclude(
+            status=InvoiceRecord.Status.VOIDED,
+        ).exclude(
+            total_net=0,
+        ).values_list("customer_id", flat=True).distinct()
+    )
+
+
+_ARR_MULTIPLIERS = {
+    "monthly": 12,
+    "quarterly": 4,
+    "semi_annual": 2,
+    "annual": 1,
+    "biennial": Decimal("0.5"),
+    "triennial": Decimal("1") / 3,
+    "quadrennial": Decimal("0.25"),
+    "quinquennial": Decimal("0.2"),
+}
+
+
 def calculate_new_business_metrics(tenant, year: int) -> dict:
     """
     Calculate new business metrics for a given year.
 
-    Returns dict with:
-    - won_new_arr: Decimal (annualized recurring revenue from won deals)
-    - won_development_revenue: Decimal (development/training items from won deals)
-    - won_deal_count: int (number of won deals)
+    Split criterion: New Name = customer had NO invoiced revenue in year-1.
+    Back-to-Base = customer HAD invoiced revenue in year-1.
+
+    B2B additionally includes expansion/upsell items on existing contracts.
     """
     from apps.core.models import RevenueType
+    from apps.contracts.models import calculate_arr_value
 
+    existing_customers = _customers_with_prior_year_revenue(tenant, year)
+
+    # --- Won deals ---
     won_contracts = Contract.objects.filter(
         tenant=tenant,
         hubspot_deal_id__isnull=False,
@@ -1484,95 +1516,61 @@ def calculate_new_business_metrics(tenant, year: int) -> dict:
         status=Contract.Status.ACTIVE,
     ).exclude(
         hubspot_deal_id=""
-    ).prefetch_related("items", "items__product")
+    ).select_related("customer").prefetch_related("items", "items__product")
 
     won_new_arr = Decimal("0")
+    won_b2b_arr = Decimal("0")
     won_development_revenue = Decimal("0")
     won_deal_count = won_contracts.count()
 
-    # Also include effectively ended (active with end_date in past)
     for contract in won_contracts:
+        is_existing = contract.customer_id in existing_customers
         for item in contract.items.all():
             ert = item.get_effective_revenue_type()
-            annual_value = item.unit_price * item.quantity
-            # Annualize based on price period
-            period = item.price_period or "monthly"
-            multipliers = {
-                "monthly": 12,
-                "quarterly": 4,
-                "semi_annual": 2,
-                "annual": 1,
-                "biennial": Decimal("0.5"),
-                "triennial": Decimal("1") / 3,
-                "quadrennial": Decimal("0.25"),
-                "quinquennial": Decimal("0.2"),
-            }
+            face_value = item.unit_price * item.quantity
 
             if item.is_one_off:
-                # One-off items: use face value, not annualized
                 if ert in (RevenueType.ADVANCED_DEVELOPMENT, RevenueType.TRAINING_IMPLEMENTATION):
-                    won_development_revenue += annual_value
+                    won_development_revenue += face_value
             else:
-                annualized = annual_value * multipliers.get(period, 12)
-                if ert == RevenueType.RECURRING:
-                    won_new_arr += annualized
-                elif ert in (RevenueType.ADVANCED_DEVELOPMENT, RevenueType.TRAINING_IMPLEMENTATION):
+                annualized = face_value * _ARR_MULTIPLIERS.get(item.price_period or "monthly", 12)
+                if ert in (RevenueType.ADVANCED_DEVELOPMENT, RevenueType.TRAINING_IMPLEMENTATION):
                     won_development_revenue += annualized
+                elif is_existing:
+                    won_b2b_arr += annualized
                 else:
-                    # Unclassified recurring: still counts toward ARR
                     won_new_arr += annualized
 
-    return {
-        "won_new_arr": won_new_arr,
-        "won_development_revenue": won_development_revenue,
-        "won_deal_count": won_deal_count,
-    }
-
-
-def calculate_back_to_base_arr(tenant, year: int) -> Decimal:
-    """
-    Calculate Back-to-Base ARR: expansion/upsell on existing contracts.
-
-    Finds recurring line items whose effective start date (start_date or
-    billing_start_date) is after the contract's start_date and falls in the
-    given year.  Items without any start date are assumed to be original
-    contract items (start = contract start).
-
-    Excludes contracts that are New Name ARR (HubSpot deals won same year).
-    """
-    from django.db.models import Q
-    from apps.contracts.models import calculate_arr_value
-
-    contracts = Contract.objects.filter(
+    # --- Expansion/upsell on existing contracts (also B2B) ---
+    # Exclude won deals already counted above
+    won_contract_ids = set(won_contracts.values_list("id", flat=True))
+    expansion_contracts = Contract.objects.filter(
         tenant=tenant,
         status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
         start_date__isnull=False,
-    ).exclude(
-        # Exclude New Name ARR contracts (HubSpot deals won same year)
-        ~Q(hubspot_deal_id=""),
-        hubspot_deal_id__isnull=False,
-        deal_won_date__year=year,
-    ).prefetch_related("items", "items__product")
+    ).exclude(id__in=won_contract_ids).prefetch_related("items", "items__product")
 
-    total = Decimal("0")
-    for contract in contracts:
+    for contract in expansion_contracts:
         for item in contract.items.all():
             if item.is_one_off:
                 continue
             item_start = item.start_date or item.billing_start_date
-            if not item_start:
-                continue  # no date = original item
-            if item_start <= contract.start_date:
-                continue  # not an expansion
+            if not item_start or item_start <= contract.start_date:
+                continue
             if item_start.year != year:
                 continue
             arr = calculate_arr_value(
                 item.unit_price, item.quantity, item.price_period, False,
             )
             if arr > 0:
-                total += arr
+                won_b2b_arr += arr
 
-    return total
+    return {
+        "won_new_arr": won_new_arr,
+        "won_b2b_arr": won_b2b_arr,
+        "won_development_revenue": won_development_revenue,
+        "won_deal_count": won_deal_count,
+    }
 
 
 @strawberry.type
@@ -1581,6 +1579,18 @@ class NewBusinessMetricsType:
     back_to_base_arr: Decimal
     won_development_revenue: Decimal
     won_deal_count: int
+
+
+@strawberry.type
+class NewBusinessDetailItem:
+    customer_id: int
+    customer_name: str
+    contract_id: int
+    contract_name: str
+    item_id: int | None = None
+    item_description: str | None = None
+    value: Decimal = Decimal("0")
+    source: str = ""  # "won_deal" or "expansion"
 
 
 @strawberry.type
@@ -4112,10 +4122,9 @@ class ContractQuery:
                 won_deal_count=0,
             )
         metrics = calculate_new_business_metrics(user.tenant, year)
-        b2b_arr = calculate_back_to_base_arr(user.tenant, year)
         return NewBusinessMetricsType(
             won_new_arr=metrics["won_new_arr"],
-            back_to_base_arr=b2b_arr,
+            back_to_base_arr=metrics["won_b2b_arr"],
             won_development_revenue=metrics["won_development_revenue"],
             won_deal_count=metrics["won_deal_count"],
         )
@@ -4157,6 +4166,142 @@ class ContractQuery:
                 deal_won_date=str(contract.deal_won_date),
                 annual_recurring_revenue=arr,
             ))
+        return result
+
+    @strawberry.field
+    def new_business_details(
+        self, info: Info[Context, None], year: int, metric_type: str
+    ) -> list[NewBusinessDetailItem]:
+        """Return line-item-level breakdown for a specific new business metric."""
+        from apps.core.models import RevenueType
+        from apps.contracts.models import calculate_arr_value
+
+        user = require_perm(info, "contracts", "read")
+        if not user.tenant:
+            return []
+
+        existing_customers = _customers_with_prior_year_revenue(user.tenant, year)
+        result: list[NewBusinessDetailItem] = []
+
+        # --- Won deals ---
+        won_contracts = Contract.objects.filter(
+            tenant=user.tenant,
+            hubspot_deal_id__isnull=False,
+            deal_won_date__year=year,
+            status=Contract.Status.ACTIVE,
+        ).exclude(
+            hubspot_deal_id=""
+        ).select_related("customer").prefetch_related("items", "items__product")
+
+        for contract in won_contracts:
+            is_existing = contract.customer_id in existing_customers
+            cname = contract.customer.name if contract.customer else "—"
+            con_name = contract.name or f"Contract {contract.id}"
+
+            if metric_type == "new_deal_count":
+                result.append(NewBusinessDetailItem(
+                    customer_id=contract.customer_id or 0,
+                    customer_name=cname,
+                    contract_id=contract.id,
+                    contract_name=con_name,
+                    value=Decimal("0"),
+                    source="won_deal",
+                ))
+                continue
+
+            for item in contract.items.all():
+                ert = item.get_effective_revenue_type()
+                face_value = item.unit_price * item.quantity
+                item_desc = item.product.name if item.product else (item.description or "—")
+
+                if item.is_one_off:
+                    if metric_type == "new_development" and ert in (
+                        RevenueType.ADVANCED_DEVELOPMENT, RevenueType.TRAINING_IMPLEMENTATION
+                    ):
+                        result.append(NewBusinessDetailItem(
+                            customer_id=contract.customer_id or 0,
+                            customer_name=cname,
+                            contract_id=contract.id,
+                            contract_name=con_name,
+                            item_id=item.id,
+                            item_description=item_desc,
+                            value=face_value,
+                            source="won_deal",
+                        ))
+                else:
+                    annualized = face_value * _ARR_MULTIPLIERS.get(item.price_period or "monthly", 12)
+                    if ert in (RevenueType.ADVANCED_DEVELOPMENT, RevenueType.TRAINING_IMPLEMENTATION):
+                        if metric_type == "new_development":
+                            result.append(NewBusinessDetailItem(
+                                customer_id=contract.customer_id or 0,
+                                customer_name=cname,
+                                contract_id=contract.id,
+                                contract_name=con_name,
+                                item_id=item.id,
+                                item_description=item_desc,
+                                value=annualized,
+                                source="won_deal",
+                            ))
+                    elif metric_type == "new_arr" and not is_existing:
+                        result.append(NewBusinessDetailItem(
+                            customer_id=contract.customer_id or 0,
+                            customer_name=cname,
+                            contract_id=contract.id,
+                            contract_name=con_name,
+                            item_id=item.id,
+                            item_description=item_desc,
+                            value=annualized,
+                            source="won_deal",
+                        ))
+                    elif metric_type == "back_to_base_arr" and is_existing:
+                        result.append(NewBusinessDetailItem(
+                            customer_id=contract.customer_id or 0,
+                            customer_name=cname,
+                            contract_id=contract.id,
+                            contract_name=con_name,
+                            item_id=item.id,
+                            item_description=item_desc,
+                            value=annualized,
+                            source="won_deal",
+                        ))
+
+        # --- Expansion items (B2B only) ---
+        if metric_type == "back_to_base_arr":
+            won_contract_ids = set(won_contracts.values_list("id", flat=True))
+            expansion_contracts = Contract.objects.filter(
+                tenant=user.tenant,
+                status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
+                start_date__isnull=False,
+            ).exclude(
+                id__in=won_contract_ids
+            ).select_related("customer").prefetch_related("items", "items__product")
+
+            for contract in expansion_contracts:
+                cname = contract.customer.name if contract.customer else "—"
+                con_name = contract.name or f"Contract {contract.id}"
+                for item in contract.items.all():
+                    if item.is_one_off:
+                        continue
+                    item_start = item.start_date or item.billing_start_date
+                    if not item_start or item_start <= contract.start_date:
+                        continue
+                    if item_start.year != year:
+                        continue
+                    arr = calculate_arr_value(
+                        item.unit_price, item.quantity, item.price_period, False,
+                    )
+                    if arr > 0:
+                        result.append(NewBusinessDetailItem(
+                            customer_id=contract.customer_id or 0,
+                            customer_name=cname,
+                            contract_id=contract.id,
+                            contract_name=con_name,
+                            item_id=item.id,
+                            item_description=item.product.name if item.product else (item.description or "—"),
+                            value=arr,
+                            source="expansion",
+                        ))
+
         return result
 
 

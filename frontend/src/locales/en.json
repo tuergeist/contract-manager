@@ -120,6 +120,10 @@
   "dashboard": {
     "title": "Dashboard",
     "welcome": "Welcome to Contract Manager",
+    "drilldown": {
+      "item": "Line Item",
+      "value": "ARR Value"
+    },
     "kpis": {
       "totalActiveContracts": "Active Contracts",
       "totalActiveContractsExplanation": "Count of contracts with status 'active'",
