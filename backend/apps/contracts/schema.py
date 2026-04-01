@@ -1467,19 +1467,44 @@ class RevenueStreamDataType:
 
 
 def _customers_with_prior_year_revenue(tenant, year: int) -> set[int]:
-    """Return customer IDs that had invoiced revenue in year-1."""
+    """Return customer IDs that had revenue in year-1.
+
+    Checks two sources:
+    1. InvoiceRecords with invoice_date in year-1
+    2. Active contracts that started on or before Dec 31 of year-1
+       (i.e. customer was already a customer before the current year)
+    """
     from apps.invoices.models import InvoiceRecord
 
-    return set(
+    prior_year = year - 1
+
+    # Source 1: Invoiced revenue
+    from_invoices = set(
         InvoiceRecord.objects.filter(
             tenant=tenant,
-            invoice_date__year=year - 1,
+            invoice_date__year=prior_year,
         ).exclude(
             status=InvoiceRecord.Status.VOIDED,
         ).exclude(
             total_net=0,
         ).values_list("customer_id", flat=True).distinct()
     )
+
+    # Source 2: Contracts that were active/billing in the prior year
+    from datetime import date
+    year_end = date(prior_year, 12, 31)
+    from_contracts = set(
+        Contract.objects.filter(
+            tenant=tenant,
+            status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED, Contract.Status.CANCELLED],
+            start_date__lte=year_end,
+        ).exclude(
+            # Exclude zero-value contracts
+            items__isnull=True,
+        ).values_list("customer_id", flat=True).distinct()
+    )
+
+    return from_invoices | from_contracts
 
 
 _ARR_MULTIPLIERS = {
