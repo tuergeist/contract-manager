@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.27.1",
+    "date": "2026-04-01",
+    "title": "API key generation with permissions",
+    "description": "Users can now generate scoped API keys for programmatic access. Keys support X-API-Key header authentication with fine-grained permission control.",
+    "type": "feature",
+    "details": [
+      "Generate API keys with name, scoped permissions, and optional expiry",
+      "Permission checkboxes enforce same-or-fewer permissions than the creating user",
+      "Token shown once on creation, stored as SHA256 hash",
+      "X-API-Key header authentication alongside existing JWT Bearer tokens",
+      "Key management UI in Settings > Integrations > API with list, revoke, and last-used tracking"
+    ]
+  },
+  {
     "version": "2.27.0",
     "date": "2026-04-01",
     "title": "New Bookings dashboard, attachments, and more",
