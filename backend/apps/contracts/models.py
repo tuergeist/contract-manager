@@ -1093,6 +1093,11 @@ class ContractItem(TenantModel):
         blank=True,
         help_text="HubSpot deal ID from source contract when item was transferred via merge.",
     )
+    deal_won_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date this specific item was won/booked. Used for new bookings reporting when different from contract deal_won_date.",
+    )
     moved_to = models.OneToOneField(
         "self",
         on_delete=models.SET_NULL,

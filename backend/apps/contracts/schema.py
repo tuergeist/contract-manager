@@ -247,6 +247,8 @@ class ContractItemType:
     effective_revenue_type: str | None = None
     # Merge traceability
     source_hubspot_deal_id: str | None = None
+    # Item-level deal won date (overrides contract deal_won_date for bookings reporting)
+    deal_won_date: date | None = None
     # Move traceability
     moved_to_item_id: int | None = None
     moved_to_contract_id: int | None = None
@@ -494,6 +496,7 @@ class ContractType:
                     revenue_type=item.revenue_type,
                     effective_revenue_type=item.get_effective_revenue_type(),
                     source_hubspot_deal_id=item.source_hubspot_deal_id,
+                    deal_won_date=item.deal_won_date,
                     **_moved_fields(item),
                 )
             )
@@ -727,6 +730,7 @@ class ContractItemInput:
     depends_on_item_id: strawberry.ID | None = None
     estimated_delivery_date: date | None = None
     revenue_type: str | None = None
+    deal_won_date: date | None = None
 
 
 @strawberry.input
@@ -750,6 +754,7 @@ class UpdateContractItemInput:
     depends_on_item_id: strawberry.ID | None = UNSET
     estimated_delivery_date: date | None = UNSET
     revenue_type: str | None = UNSET
+    deal_won_date: date | None = UNSET
 
 
 @strawberry.input
@@ -1567,28 +1572,24 @@ def calculate_new_business_metrics(tenant, year: int) -> dict:
                     won_new_arr += annualized
 
     # --- Expansion/upsell on existing contracts (also B2B) ---
-    # Exclude won deals already counted above
+    # Only count items that have an explicit deal_won_date in the current year.
+    # Items without deal_won_date are transfers/internal moves, not real upsells.
     won_contract_ids = set(won_contracts.values_list("id", flat=True))
-    expansion_contracts = Contract.objects.filter(
+    expansion_items = ContractItem.objects.filter(
         tenant=tenant,
-        status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
-        start_date__isnull=False,
-    ).exclude(id__in=won_contract_ids).prefetch_related("items", "items__product")
+        contract__status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
+        deal_won_date__year=year,
+        is_one_off=False,
+    ).exclude(
+        contract_id__in=won_contract_ids,
+    ).select_related("contract", "product")
 
-    for contract in expansion_contracts:
-        for item in contract.items.all():
-            if item.is_one_off:
-                continue
-            item_start = item.start_date or item.billing_start_date
-            if not item_start or item_start <= contract.start_date:
-                continue
-            if item_start.year != year:
-                continue
-            arr = calculate_arr_value(
-                item.unit_price, item.quantity, item.price_period, False,
-            )
-            if arr > 0:
-                won_b2b_arr += arr
+    for item in expansion_items:
+        arr = calculate_arr_value(
+            item.unit_price, item.quantity, item.price_period, False,
+        )
+        if arr > 0:
+            won_b2b_arr += arr
 
     return {
         "won_new_arr": won_new_arr,
@@ -4293,39 +4294,31 @@ class ContractQuery:
         # --- Expansion items (B2B only) ---
         if metric_type == "back_to_base_arr":
             won_contract_ids = set(won_contracts.values_list("id", flat=True))
-            expansion_contracts = Contract.objects.filter(
+            expansion_items = ContractItem.objects.filter(
                 tenant=user.tenant,
-                status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
-                start_date__isnull=False,
+                contract__status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
+                deal_won_date__year=year,
+                is_one_off=False,
             ).exclude(
-                id__in=won_contract_ids
-            ).select_related("customer").prefetch_related("items", "items__product")
+                contract_id__in=won_contract_ids,
+            ).select_related("contract", "contract__customer", "product")
 
-            for contract in expansion_contracts:
-                cname = contract.customer.name if contract.customer else "—"
-                con_name = contract.name or f"Contract {contract.id}"
-                for item in contract.items.all():
-                    if item.is_one_off:
-                        continue
-                    item_start = item.start_date or item.billing_start_date
-                    if not item_start or item_start <= contract.start_date:
-                        continue
-                    if item_start.year != year:
-                        continue
-                    arr = calculate_arr_value(
-                        item.unit_price, item.quantity, item.price_period, False,
-                    )
-                    if arr > 0:
-                        result.append(NewBusinessDetailItem(
-                            customer_id=contract.customer_id or 0,
-                            customer_name=cname,
-                            contract_id=contract.id,
-                            contract_name=con_name,
-                            item_id=item.id,
-                            item_description=item.product.name if item.product else (item.description or "—"),
-                            value=arr,
-                            source="expansion",
-                        ))
+            for item in expansion_items:
+                arr = calculate_arr_value(
+                    item.unit_price, item.quantity, item.price_period, False,
+                )
+                if arr > 0:
+                    contract = item.contract
+                    result.append(NewBusinessDetailItem(
+                        customer_id=contract.customer_id or 0,
+                        customer_name=contract.customer.name if contract.customer else "—",
+                        contract_id=contract.id,
+                        contract_name=contract.name or f"Contract {contract.id}",
+                        item_id=item.id,
+                        item_description=item.product.name if item.product else (item.description or "—"),
+                        value=arr,
+                        source="expansion",
+                    ))
 
         return result
 
@@ -4761,6 +4754,7 @@ class ContractMutation:
                     estimated_delivery_date=input.estimated_delivery_date if input.delivery_tracking else None,
                     depends_on=depends_on_item,
                     revenue_type=input.revenue_type,
+                    deal_won_date=input.deal_won_date,
                 )
 
                 # Create amendment record only for non-draft contracts
@@ -4821,6 +4815,7 @@ class ContractMutation:
                     revenue_type=item.revenue_type,
                     effective_revenue_type=item.get_effective_revenue_type(),
                     source_hubspot_deal_id=item.source_hubspot_deal_id,
+                    deal_won_date=item.deal_won_date,
                     **_moved_fields(item),
                 ),
                 success=True,
@@ -4946,6 +4941,8 @@ class ContractMutation:
 
                 if input.revenue_type is not UNSET:
                     item.revenue_type = input.revenue_type
+                if input.deal_won_date is not UNSET:
+                    item.deal_won_date = input.deal_won_date
 
                 item.save()
 
@@ -5054,6 +5051,7 @@ class ContractMutation:
                     revenue_type=item.revenue_type,
                     effective_revenue_type=item.get_effective_revenue_type(),
                     source_hubspot_deal_id=item.source_hubspot_deal_id,
+                    deal_won_date=item.deal_won_date,
                     **_moved_fields(item),
                 ),
                 success=True,

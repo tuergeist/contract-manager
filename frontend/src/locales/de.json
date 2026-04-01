@@ -438,6 +438,8 @@
       "sourceNegotiated": "Verhandelt",
       "noPricePeriods": "Keine Preisperioden definiert",
       "priceLockedWarning": "Der Preis dieser Position ist gesperrt und kann nicht geändert werden",
+      "dealWonDate": "Deal Won Datum",
+      "dealWonDateHint": "Wann diese Position gebucht/gewonnen wurde. Wird für Buchungsreporting verwendet. Leer lassen = Vertragsdatum verwenden.",
       "moveToContract": "Zu anderem Vertrag verschieben",
       "movedTo": "Verschoben nach",
       "movedFrom": "Verschoben von"

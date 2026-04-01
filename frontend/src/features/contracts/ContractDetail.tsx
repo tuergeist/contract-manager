@@ -195,6 +195,7 @@ const CONTRACT_DETAIL_QUERY = gql`
         movedFromItemId
         movedFromContractId
         movedFromContractName
+        dealWonDate
       }
       amendments {
         id
@@ -648,6 +649,7 @@ interface ContractItem {
   movedFromItemId: number | null
   movedFromContractId: number | null
   movedFromContractName: string | null
+  dealWonDate: string | null
 }
 
 interface Amendment {
@@ -2387,6 +2389,7 @@ function AddItemModal({
   const [dependsOnItemId, setDependsOnItemId] = useState('none')
   const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState('')
   const [revenueType, setRevenueType] = useState('')
+  const [dealWonDate, setDealWonDate] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [productSearchOpen, setProductSearchOpen] = useState(false)
   const [productSearchTerm, setProductSearchTerm] = useState('')
@@ -2477,6 +2480,7 @@ function AddItemModal({
             dependsOnItemId: dependsOnItemId && dependsOnItemId !== 'none' ? dependsOnItemId : null,
             estimatedDeliveryDate: deliveryTracking && estimatedDeliveryDate ? estimatedDeliveryDate : null,
             revenueType: revenueType || null,
+            dealWonDate: dealWonDate || null,
           },
         },
       })
@@ -2813,6 +2817,19 @@ function AddItemModal({
                   )}
                 </div>
               )}
+
+              {/* Deal Won Date */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t('contracts.item.dealWonDate')}</label>
+                <Input
+                  type="date"
+                  value={dealWonDate}
+                  onChange={(e) => setDealWonDate(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t('contracts.item.dealWonDateHint')}
+                </p>
+              </div>
             </div>
           </details>
         </div>
@@ -2873,6 +2890,7 @@ function EditItemModal({
   const [dependsOnItemId, setDependsOnItemId] = useState(item.dependsOn?.id || 'none')
   const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState(item.estimatedDeliveryDate || '')
   const [revenueType, setRevenueType] = useState(item.revenueType || '')
+  const [dealWonDate, setDealWonDate] = useState(item.dealWonDate || '')
   const [error, setError] = useState<string | null>(null)
 
   const { data: productsData, loading: loadingProducts } = useQuery(PRODUCTS_FOR_SELECT_QUERY, {
@@ -3037,6 +3055,7 @@ function EditItemModal({
             dependsOnItemId: dependsOnItemId && dependsOnItemId !== 'none' ? dependsOnItemId : null,
             estimatedDeliveryDate: deliveryTracking && estimatedDeliveryDate ? estimatedDeliveryDate : null,
             revenueType: revenueType || null,
+            dealWonDate: dealWonDate || null,
           },
         },
       })
@@ -3580,7 +3599,7 @@ function EditItemModal({
           )}
 
           {/* Item-specific overrides - auto-open if any field has a value */}
-          <details className="group rounded-lg border" open={!!(orderConfirmationNumber || startDate || billingStartDate || billingEndDate || alignToContractAt) || undefined}>
+          <details className="group rounded-lg border" open={!!(orderConfirmationNumber || startDate || billingStartDate || billingEndDate || alignToContractAt || dealWonDate) || undefined}>
             <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground">
               <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-0 -rotate-90" />
               {t('contracts.item.itemOverrides')}
@@ -3687,6 +3706,27 @@ function EditItemModal({
                     </p>
                   )}
                 </div>
+              </div>
+
+              {/* Deal Won Date */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t('contracts.item.dealWonDate')}</label>
+                <div className="flex gap-1">
+                  <Input
+                    type="date"
+                    value={dealWonDate}
+                    onChange={(e) => setDealWonDate(e.target.value)}
+                    className="flex-1"
+                  />
+                  {dealWonDate && (
+                    <Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => setDealWonDate('')}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t('contracts.item.dealWonDateHint')}
+                </p>
               </div>
             </div>
           </details>

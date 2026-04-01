@@ -438,6 +438,8 @@
       "sourceNegotiated": "Negotiated",
       "noPricePeriods": "No price periods defined",
       "priceLockedWarning": "This item's price is locked and cannot be modified",
+      "dealWonDate": "Deal Won Date",
+      "dealWonDateHint": "When this item was booked/won. Used for new bookings reporting. Leave empty to use contract deal won date.",
       "moveToContract": "Move to another contract",
       "movedTo": "Moved to",
       "movedFrom": "Moved from"
