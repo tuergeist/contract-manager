@@ -798,10 +798,12 @@ export function ContractDetail() {
   const [reorderItems] = useMutation(REORDER_CONTRACT_ITEMS_MUTATION)
   const [markDelivered] = useMutation(MARK_ITEM_DELIVERED_MUTATION)
   const [revertDelivery] = useMutation(REVERT_ITEM_DELIVERY_MUTATION)
+  const [updateItemBilling] = useMutation(UPDATE_CONTRACT_ITEM_MUTATION)
   const [deliveryItem, setDeliveryItem] = useState<ContractItem | null>(null)
   const [deliveryDate, setDeliveryDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [deliveryDependents, setDeliveryDependents] = useState<{ id: number; name: string; hasBillingStartDate: boolean }[]>([])
   const [showDeliveryDependents, setShowDeliveryDependents] = useState(false)
+  const [dependentBillingDates, setDependentBillingDates] = useState<Record<number, string>>({})
 
   const contract = data?.contract as Contract | undefined
 
@@ -857,6 +859,12 @@ export function ContractDetail() {
         const needsBilling = data.dependentItems.filter((d: { hasBillingStartDate: boolean }) => !d.hasBillingStartDate)
         if (needsBilling.length > 0) {
           setDeliveryDependents(needsBilling)
+          // Pre-fill billing dates with the delivery date
+          const prefilled: Record<number, string> = {}
+          for (const d of needsBilling) {
+            prefilled[d.id] = deliveryDate
+          }
+          setDependentBillingDates(prefilled)
           setShowDeliveryDependents(true)
         }
       }
@@ -2060,17 +2068,48 @@ export function ContractDetail() {
               {t('contracts.delivery.dependentsDescription')}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 py-4">
+          <div className="space-y-3 py-4">
             {deliveryDependents.map((dep) => (
-              <div key={dep.id} className="flex items-center justify-between rounded-lg border p-3">
+              <div key={dep.id} className="rounded-lg border p-3 space-y-2">
                 <span className="text-sm font-medium">{dep.name}</span>
-                <span className="text-xs text-amber-600">{t('contracts.delivery.needsBillingStart')}</span>
+                <div>
+                  <label className="text-xs text-muted-foreground">{t('contracts.item.billingStartDate')}</label>
+                  <Input
+                    type="date"
+                    value={dependentBillingDates[dep.id] || ''}
+                    onChange={(e) => setDependentBillingDates(prev => ({ ...prev, [dep.id]: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
               </div>
             ))}
           </div>
           <DialogFooter>
-            <Button onClick={() => setShowDeliveryDependents(false)}>
+            <Button variant="outline" onClick={() => setShowDeliveryDependents(false)}>
               {t('common.close')}
+            </Button>
+            <Button
+              disabled={deliveryDependents.some(d => !dependentBillingDates[d.id])}
+              onClick={async () => {
+                for (const dep of deliveryDependents) {
+                  const billingStart = dependentBillingDates[dep.id]
+                  if (billingStart) {
+                    await updateItemBilling({
+                      variables: {
+                        input: {
+                          id: String(dep.id),
+                          billingStartDate: billingStart,
+                        },
+                      },
+                    })
+                  }
+                }
+                setShowDeliveryDependents(false)
+                setDependentBillingDates({})
+                refetch()
+              }}
+            >
+              {t('common.save')}
             </Button>
           </DialogFooter>
         </DialogContent>

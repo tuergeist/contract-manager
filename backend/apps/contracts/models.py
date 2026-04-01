@@ -389,7 +389,11 @@ class Contract(TenantModel):
                     continue
 
             # Determine item's billing period
-            item_billing_start = item.billing_start_date or self.billing_start_date
+            # For delivered one-off items without explicit billing_start, use delivered_at
+            if item.is_one_off and item.delivery_status == "delivered" and item.delivered_at and not item.billing_start_date:
+                item_billing_start = item.delivered_at
+            else:
+                item_billing_start = item.billing_start_date or self.billing_start_date
             # In forecast mode, use ETA as projected billing start for pending items
             if include_eta_items:
                 if item.delivery_status == "pending" and item.estimated_delivery_date:
