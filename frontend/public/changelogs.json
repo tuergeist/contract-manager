@@ -1,5 +1,26 @@
 [
   {
+    "version": "2.27.0",
+    "date": "2026-04-01",
+    "title": "New Bookings dashboard, attachments, and more",
+    "description": "Reworked New Bookings metrics with correct New Name vs B2B split, added attachment permalinks and categories, contract reactivation, and delivered one-off forecast fixes.",
+    "type": "feature",
+    "details": [
+      "Fixed New Name vs Back-to-Base ARR split: New Name = customer with no prior-year contracts/invoices, B2B = existing customers + expansion items with deal_won_date",
+      "Added drill-down detail page for each New Bookings card showing exact contributing items",
+      "Renamed New Business to New Bookings throughout (bookings, not invoiced revenue)",
+      "Added deal_won_date field per line item to distinguish real upsells from internal transfers",
+      "One-off items default to advanced_development revenue type",
+      "Delivered one-off items now appear in revenue forecast using delivered_at as billing date",
+      "Mark-as-delivered dialog prompts for billing start date on dependent items",
+      "Attachment permalinks with copy-link button and login-protected inline display",
+      "Attachment categories (order, contract, offer, other) with color badges and inline edit",
+      "Customer Documents tab showing all contract attachments with category filter",
+      "Contract reactivation from cancelled or ended status",
+      "Prior-year revenue check includes both invoices and active contracts"
+    ]
+  },
+  {
     "version": "2.26.4",
     "date": "2026-04-01",
     "title": "Change customer confirm dialog and icon",
