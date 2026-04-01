@@ -1119,11 +1119,13 @@ class ContractItem(TenantModel):
         return self.description[:50] if self.description else f"Item {self.id}"
 
     def get_effective_revenue_type(self) -> str | None:
-        """Resolve revenue type: explicit override → product → None."""
+        """Resolve revenue type: explicit override → product → one-off default → None."""
         if self.revenue_type:
             return self.revenue_type
         if self.product and self.product.revenue_type:
             return self.product.revenue_type
+        if self.is_one_off:
+            return "advanced_development"
         return None
 
     @property
