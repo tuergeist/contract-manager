@@ -345,3 +345,53 @@ class TwoFactorConfig(TimestampedModel):
             self.save(update_fields=["recovery_codes_hashed"])
             return True
         return False
+
+
+class APIKey(TimestampedModel):
+    """API key for programmatic access with scoped permissions."""
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="api_keys",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="api_keys",
+    )
+    name = models.CharField(max_length=100)
+    key_hash = models.CharField(max_length=128, unique=True)
+    prefix = models.CharField(max_length=8)
+    permissions = models.JSONField(default=dict)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"APIKey {self.prefix}... ({self.name}) for {self.user.email}"
+
+    @staticmethod
+    def generate():
+        """Generate a new API key. Returns (raw_key, prefix, key_hash)."""
+        raw = secrets.token_urlsafe(32)
+        prefix = raw[:8]
+        key_hash = hashlib.sha256(raw.encode()).hexdigest()
+        return raw, prefix, key_hash
+
+    @staticmethod
+    def hash_key(raw_key: str) -> str:
+        """Hash a raw API key for lookup."""
+        return hashlib.sha256(raw_key.encode()).hexdigest()
+
+    @property
+    def is_valid(self) -> bool:
+        """Check if the API key is still valid (active and not expired)."""
+        if not self.is_active:
+            return False
+        if self.expires_at and self.expires_at < timezone.now():
+            return False
+        return True

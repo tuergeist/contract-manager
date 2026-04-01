@@ -1,5 +1,5 @@
 """GraphQL schema for tenants."""
-from datetime import date
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import strawberry
@@ -22,7 +22,7 @@ from apps.core.permissions import (
     require_perm,
 )
 from apps.customers.hubspot import HubSpotService
-from .models import PasswordResetToken, Role, SignupVerification, Tenant, TwoFactorConfig, User, UserInvitation
+from .models import APIKey, PasswordResetToken, Role, SignupVerification, Tenant, TwoFactorConfig, User, UserInvitation
 
 
 @strawberry_django.type(Tenant)
@@ -537,6 +537,36 @@ class TenantSettingsType:
 
 
 @strawberry.type
+class APIKeyType:
+    """An API key for programmatic access."""
+    id: int
+    name: str
+    prefix: str
+    permissions: strawberry.scalars.JSON
+    created_at: datetime
+    expires_at: datetime | None
+    last_used_at: datetime | None
+    is_active: bool
+
+
+@strawberry.type
+class GenerateAPIKeyResult:
+    """Result of generating an API key. raw_key is only returned on creation."""
+    api_key: APIKeyType | None = None
+    raw_key: str | None = None
+    success: bool = False
+    error: str | None = None
+
+
+@strawberry.input
+class GenerateAPIKeyInput:
+    """Input for generating an API key."""
+    name: str
+    permissions: strawberry.scalars.JSON  # {"contracts.read": true, ...}
+    expires_in_days: int | None = None  # null = never expires
+
+
+@strawberry.type
 class TenantQuery:
     @strawberry.field
     def tenant_settings(self, info: Info[Context, None]) -> TenantSettingsType | None:
@@ -588,6 +618,26 @@ class TenantQuery:
         return [
             PermissionResource(resource=resource, actions=actions)
             for resource, actions in PERMISSION_REGISTRY.items()
+        ]
+
+    @strawberry.field
+    def api_keys(self, info: Info[Context, None]) -> list[APIKeyType]:
+        """List API keys for the current user. Requires settings.read."""
+        user = require_perm(info, "settings", "read")
+        if not user.tenant:
+            return []
+        return [
+            APIKeyType(
+                id=key.id,
+                name=key.name,
+                prefix=key.prefix,
+                permissions=key.permissions or {},
+                created_at=key.created_at,
+                expires_at=key.expires_at,
+                last_used_at=key.last_used_at,
+                is_active=key.is_active,
+            )
+            for key in APIKey.objects.filter(tenant=user.tenant, user=user)
         ]
 
     @strawberry.field
@@ -2553,3 +2603,94 @@ class TenantMutation:
             access_token=access_token,
             refresh_token=refresh_token,
         )
+
+    @strawberry.mutation
+    def generate_api_key(
+        self, info: Info[Context, None], input: GenerateAPIKeyInput
+    ) -> GenerateAPIKeyResult:
+        """Generate a new API key with scoped permissions."""
+        user, err = check_perm(info, "settings", "write")
+        if not user:
+            return GenerateAPIKeyResult(error=err)
+        if not user.tenant:
+            return GenerateAPIKeyResult(error="No tenant assigned")
+
+        # Validate name
+        if not input.name or not input.name.strip():
+            return GenerateAPIKeyResult(error="Name is required")
+
+        # Validate permissions are a subset of the user's own permissions
+        requested_perms = input.permissions or {}
+        user_perms = user.effective_permissions
+        for perm_key, granted in requested_perms.items():
+            if granted and perm_key not in ALL_PERMISSIONS:
+                return GenerateAPIKeyResult(
+                    error=f"Unknown permission: {perm_key}"
+                )
+            if granted and not user.is_super_admin and perm_key not in user_perms:
+                return GenerateAPIKeyResult(
+                    error=f"Cannot grant permission you don't have: {perm_key}"
+                )
+
+        # Filter to only granted permissions
+        granted_perms = {k: True for k, v in requested_perms.items() if v}
+        if not granted_perms:
+            return GenerateAPIKeyResult(error="At least one permission is required")
+
+        # Generate the key
+        raw, prefix, key_hash = APIKey.generate()
+
+        # Calculate expiry
+        from django.utils import timezone as tz
+
+        expires_at = None
+        if input.expires_in_days is not None and input.expires_in_days > 0:
+            expires_at = tz.now() + timedelta(days=input.expires_in_days)
+
+        api_key = APIKey.objects.create(
+            tenant=user.tenant,
+            user=user,
+            name=input.name.strip(),
+            key_hash=key_hash,
+            prefix=prefix,
+            permissions=granted_perms,
+            expires_at=expires_at,
+        )
+
+        return GenerateAPIKeyResult(
+            success=True,
+            raw_key=raw,
+            api_key=APIKeyType(
+                id=api_key.id,
+                name=api_key.name,
+                prefix=api_key.prefix,
+                permissions=api_key.permissions,
+                created_at=api_key.created_at,
+                expires_at=api_key.expires_at,
+                last_used_at=api_key.last_used_at,
+                is_active=api_key.is_active,
+            ),
+        )
+
+    @strawberry.mutation
+    def revoke_api_key(
+        self, info: Info[Context, None], key_id: strawberry.ID
+    ) -> OperationResult:
+        """Revoke an API key."""
+        user, err = check_perm(info, "settings", "write")
+        if not user:
+            return OperationResult(error=err)
+        if not user.tenant:
+            return OperationResult(error="No tenant assigned")
+
+        try:
+            api_key = APIKey.objects.get(
+                id=int(key_id), tenant=user.tenant, user=user
+            )
+        except APIKey.DoesNotExist:
+            return OperationResult(error="API key not found")
+
+        api_key.is_active = False
+        api_key.save(update_fields=["is_active"])
+
+        return OperationResult(success=True)

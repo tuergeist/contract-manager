@@ -155,6 +155,11 @@ def require_perm(info: Info[Context, None], resource: str, action: str):
     user = get_current_user(info)
     if not user.has_perm_check(resource, action):
         raise PermissionError(f"Permission denied: {resource}.{action}")
+    # If authenticated via API key, also check key-scoped permissions
+    if info.context.api_key:
+        perm_key = f"{resource}.{action}"
+        if not info.context.api_key.permissions.get(perm_key):
+            raise PermissionError("API key does not have this permission")
     return user
 
 
@@ -167,6 +172,11 @@ def check_perm(info: Info[Context, None], resource: str, action: str):
     user = get_current_user(info)
     if not user.has_perm_check(resource, action):
         return None, "Permission denied"
+    # If authenticated via API key, also check key-scoped permissions
+    if info.context.api_key:
+        perm_key = f"{resource}.{action}"
+        if not info.context.api_key.permissions.get(perm_key):
+            return None, "API key does not have this permission"
     return user, None
 
 
