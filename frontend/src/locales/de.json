@@ -139,9 +139,9 @@
       "nextYearForecastExplanation": "Prognostizierter Gesamtumsatz für das nächste Kalenderjahr. Ohne Verträge, die vor dem nächsten Jahr enden.",
       "inclOneOff": "inkl. {{amount}} einmalig",
       "inclDiscounts": "inkl. {{amount}} Rabatte",
-      "newNameArrExplanation": "Jährlich wiederkehrender Umsatz aus gewonnenen HubSpot-Deals dieses Jahres.",
-      "backToBaseArrExplanation": "Expansions- und Upsell-ARR aus Änderungen an bestehenden aktiven Verträgen.",
-      "wonDevelopmentExplanation": "Entwicklungs- und Schulungsumsatz aus gewonnenen HubSpot-Deals dieses Jahres.",
+      "newNameArrExplanation": "Jährlich wiederkehrender Umsatz aus Neukunden (keine Vorjahresverträge). Buchungen, kein fakturierter Umsatz.",
+      "backToBaseArrExplanation": "ARR aus gewonnenen Deals bestehender Kunden plus Expansion/Upsell auf bestehenden Verträgen. Buchungen, kein fakturierter Umsatz.",
+      "wonDevelopmentExplanation": "Entwicklungs- und Schulungsbuchungen aus gewonnenen Deals dieses Jahres.",
       "wonDealCountExplanation": "Anzahl der gewonnenen HubSpot-Deals dieses Jahres."
     },
     "revenueGoals": {
@@ -607,10 +607,10 @@
       "openContract": "Vertrag öffnen"
     },
     "newBusiness": {
-      "title": "Neugeschäft",
+      "title": "Neue Buchungen",
       "newNameArr": "Neukunden-ARR",
       "backToBaseArr": "Bestandskunden-ARR",
-      "wonDevelopment": "Gewonnener Entwicklungsumsatz",
+      "wonDevelopment": "Gewonnene Entwicklung",
       "wonDealCount": "Gewonnene Deals",
       "wonDeals": "Gewonnene Deals"
     },
@@ -1282,11 +1282,11 @@
       "noGoals": "Keine Ziele für dieses Jahr definiert"
     },
     "newBusinessGoals": {
-      "title": "Neugeschäft-Ziele",
-      "description": "Jährliche Ziele für Neugeschäft-Kennzahlen",
+      "title": "Buchungsziele",
+      "description": "Jährliche Ziele für Buchungskennzahlen",
       "newNameArr": "Neukunden-ARR",
       "backToBaseArr": "Bestandskunden-ARR",
-      "wonDevelopment": "Gewonnener Entwicklungsumsatz",
+      "wonDevelopment": "Gewonnene Entwicklung",
       "wonDealCount": "Gewonnene Deals"
     },
     "forecastCache": {

@@ -139,9 +139,9 @@
       "nextYearForecastExplanation": "Projected total revenue for the next calendar year. Excludes contracts ending before next year.",
       "inclOneOff": "incl. {{amount}} one-off",
       "inclDiscounts": "incl. {{amount}} discounts",
-      "newNameArrExplanation": "Annualized recurring revenue from HubSpot deals won this year.",
-      "backToBaseArrExplanation": "Expansion and upsell ARR from amendments on existing active contracts.",
-      "wonDevelopmentExplanation": "Development and training revenue from HubSpot deals won this year.",
+      "newNameArrExplanation": "Annualized recurring revenue from new customers (no prior-year contracts). Bookings, not invoiced revenue.",
+      "backToBaseArrExplanation": "ARR from won deals of existing customers plus expansion/upsell items on existing contracts. Bookings, not invoiced revenue.",
+      "wonDevelopmentExplanation": "Development and training bookings from won deals this year.",
       "wonDealCountExplanation": "Number of HubSpot deals won this year."
     },
     "revenueGoals": {
@@ -607,10 +607,10 @@
       "openContract": "Open contract"
     },
     "newBusiness": {
-      "title": "New Business",
+      "title": "New Bookings",
       "newNameArr": "New Name ARR",
       "backToBaseArr": "Back-to-Base ARR",
-      "wonDevelopment": "Won Development Revenue",
+      "wonDevelopment": "Won Development",
       "wonDealCount": "Won Deal Count",
       "wonDeals": "Won Deals"
     },
@@ -1282,11 +1282,11 @@
       "noGoals": "No goals defined for this year"
     },
     "newBusinessGoals": {
-      "title": "New Business Goals",
-      "description": "Set yearly targets for new business metrics",
+      "title": "New Bookings Goals",
+      "description": "Set yearly targets for new bookings metrics",
       "newNameArr": "New Name ARR",
       "backToBaseArr": "Back-to-Base ARR",
-      "wonDevelopment": "Won Development Revenue",
+      "wonDevelopment": "Won Development",
       "wonDealCount": "Won Deal Count"
     },
     "forecastCache": {
