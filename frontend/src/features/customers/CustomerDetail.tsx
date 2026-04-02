@@ -1889,12 +1889,12 @@ export function CustomerDetail() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {t('attachments.category')}
                 </label>
-                <Select value={attachmentCategory} onValueChange={setAttachmentCategory}>
+                <Select value={attachmentCategory || '__none__'} onValueChange={(v) => setAttachmentCategory(v === '__none__' ? '' : v)}>
                   <SelectTrigger className="w-[160px]">
                     <SelectValue placeholder={t('attachments.noCategory')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{t('attachments.noCategory')}</SelectItem>
+                    <SelectItem value="__none__">{t('attachments.noCategory')}</SelectItem>
                     {ATTACHMENT_CATEGORIES.map((cat) => (
                       <SelectItem key={cat.value} value={cat.value}>
                         {cat.label}
@@ -1952,14 +1952,14 @@ export function CustomerDetail() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Select
-                        value={attachment.category || ''}
-                        onValueChange={(value) => handleUpdateAttachmentMeta(attachment.id, { category: value })}
+                        value={attachment.category || '__none__'}
+                        onValueChange={(value) => handleUpdateAttachmentMeta(attachment.id, { category: value === '__none__' ? '' : value })}
                       >
                         <SelectTrigger className="h-7 w-[120px] text-xs border-0 bg-transparent hover:bg-gray-200 focus:ring-0">
                           <SelectValue placeholder={t('attachments.category')} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">{t('attachments.noCategory')}</SelectItem>
+                          <SelectItem value="__none__">{t('attachments.noCategory')}</SelectItem>
                           {ATTACHMENT_CATEGORIES.map((cat) => (
                             <SelectItem key={cat.value} value={cat.value}>
                               {cat.label}
@@ -2089,12 +2089,12 @@ export function CustomerDetail() {
           <div className="mb-4 rounded-lg border bg-white p-4">
             <div className="flex items-center gap-4">
               <label className="text-sm font-medium text-gray-700">{t('attachments.category')}:</label>
-              <Select value={docCategoryFilter} onValueChange={(value) => setDocCategoryFilter(value)}>
+              <Select value={docCategoryFilter || '__all__'} onValueChange={(value) => setDocCategoryFilter(value === '__all__' ? '' : value)}>
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder={t('attachments.allCategories')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">{t('attachments.allCategories')}</SelectItem>
+                  <SelectItem value="__all__">{t('attachments.allCategories')}</SelectItem>
                   {ATTACHMENT_CATEGORIES.map((cat) => (
                     <SelectItem key={cat.value} value={cat.value}>
                       {cat.label}

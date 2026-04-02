@@ -4633,12 +4633,12 @@ function AttachmentsTab({
         </button>
         {canEdit && (
           <div className="flex items-center gap-3">
-            <Select value={uploadCategory} onValueChange={setUploadCategory}>
+            <Select value={uploadCategory || '__none__'} onValueChange={(v) => setUploadCategory(v === '__none__' ? '' : v)}>
               <SelectTrigger className="w-[160px] h-9">
                 <SelectValue placeholder={t('attachments.category')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">{t('attachments.noCategory')}</SelectItem>
+                <SelectItem value="__none__">{t('attachments.noCategory')}</SelectItem>
                 {ATTACHMENT_CATEGORIES.map((cat) => (
                   <SelectItem key={cat.value} value={cat.value}>
                     {cat.label}
@@ -4770,8 +4770,8 @@ function AttachmentsTab({
                   <td className="whitespace-nowrap px-6 py-4 text-sm">
                     {canEdit ? (
                       <Select
-                        value={attachment.category || ''}
-                        onValueChange={(value) => handleUpdateCategory(attachment.id, value)}
+                        value={attachment.category || '__none__'}
+                        onValueChange={(value) => handleUpdateCategory(attachment.id, value === '__none__' ? '' : value)}
                       >
                         <SelectTrigger className="h-7 w-[130px] text-xs border-0 bg-transparent hover:bg-gray-100 focus:ring-0">
                           <SelectValue>
@@ -4785,7 +4785,7 @@ function AttachmentsTab({
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">{t('attachments.noCategory')}</SelectItem>
+                          <SelectItem value="__none__">{t('attachments.noCategory')}</SelectItem>
                           {ATTACHMENT_CATEGORIES.map((cat) => (
                             <SelectItem key={cat.value} value={cat.value}>
                               {cat.label}
