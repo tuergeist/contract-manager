@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.27.2",
+    "date": "2026-04-02",
+    "title": "Fix attachment category selector crash",
+    "description": "Fixed a crash in the attachment category dropdown caused by Radix Select rejecting empty string values.",
+    "type": "bugfix",
+    "details": [
+      "Fixed empty string value crash in category Select components across contract and customer attachment views"
+    ]
+  },
+  {
     "version": "2.27.1",
     "date": "2026-04-01",
     "title": "API key generation with permissions",
