@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { Loader2, FileText, Send, RefreshCw, Lock } from 'lucide-react'
+import { Loader2, FileText, Send, RefreshCw, Lock, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -69,6 +70,16 @@ const SEND_ABSENCE_REPORT = gql`
   }
 `
 
+const REPORT_SCHEDULES_QUERY = gql`
+  query ReportSchedulesAbsence {
+    reportSchedules {
+      reportType
+      enabled
+      autoFinalize
+    }
+  }
+`
+
 const ABSENCE_TYPE_LABELS: Record<string, Record<string, string>> = {
   de: {
     sick: 'Krank',
@@ -128,6 +139,13 @@ export function AbsenceReport() {
   const [showSendDialog, setShowSendDialog] = useState(false)
   const [recipients, setRecipients] = useState('')
 
+  const { data: schedulesData } = useQuery(REPORT_SCHEDULES_QUERY)
+  const absenceSchedule = schedulesData?.reportSchedules?.find(
+    (s: { reportType: string }) => s.reportType === 'absence'
+  )
+  const isAutoReportActive = absenceSchedule?.enabled === true
+  const isAutoFinalize = absenceSchedule?.autoFinalize === true
+
   const { data, loading, refetch } = useQuery(ABSENCE_REPORT_QUERY, {
     variables: { year, month },
   })
@@ -167,13 +185,17 @@ export function AbsenceReport() {
 
   const totalDays = grouped.reduce((sum, g) => sum + g.totalDays, 0)
 
-  // Month selector options
+  // Month selector options (compact short format matching DepartmentAnalysis)
   const monthOptions = useMemo(() => {
     const options: { year: number; month: number; label: string }[] = []
     const cur = new Date()
+    const currentYear = cur.getFullYear()
     for (let i = 0; i < 12; i++) {
-      const d = new Date(cur.getFullYear(), cur.getMonth() - i, 1)
-      const label = d.toLocaleDateString(lang === 'de' ? 'de-DE' : 'en-US', { month: 'long', year: 'numeric' })
+      const d = new Date(currentYear, cur.getMonth() - i, 1)
+      const shortMonth = d.toLocaleDateString(lang === 'de' ? 'de-DE' : 'en-US', { month: 'short' })
+      const label = d.getFullYear() !== currentYear
+        ? `${shortMonth} ${String(d.getFullYear()).slice(-2)}`
+        : shortMonth
       options.push({ year: d.getFullYear(), month: d.getMonth() + 1, label })
     }
     return options
@@ -183,6 +205,15 @@ export function AbsenceReport() {
 
   return (
     <div>
+      {/* Auto-report banner */}
+      {isAutoReportActive && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+          <Info className="h-4 w-4 shrink-0" />
+          <span>{t('settings.reports.autoReportActive')}</span>
+          <Link to="/settings/general/reports" className="ml-1 underline">{t('settings.reports.openSettings')}</Link>
+        </div>
+      )}
+
       {/* Month selector */}
       <div className="mb-6 flex flex-wrap items-center gap-2">
         {monthOptions.slice(0, 6).map((opt) => (
@@ -217,7 +248,8 @@ export function AbsenceReport() {
             variant="outline"
             size="sm"
             onClick={() => finalizeReport({ variables: { reportId: String(report.id) } })}
-            disabled={finalizing}
+            disabled={finalizing || isAutoFinalize}
+            title={isAutoFinalize ? t('settings.reports.autoFinalizedHint') : undefined}
           >
             <Lock className="mr-2 h-4 w-4" />
             {t('absenceReport.finalize')}

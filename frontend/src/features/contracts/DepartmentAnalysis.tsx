@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { useQuery, gql } from '@apollo/client'
-import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Download } from 'lucide-react'
+import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Download, Info } from 'lucide-react'
 import { AbsenceReport } from './AbsenceReport'
 
 const DEPARTMENT_TIME_ANALYSIS = gql`
@@ -53,6 +54,15 @@ const DEPARTMENT_TIME_ANALYSIS = gql`
 const DEPARTMENTS_QUERY = gql`
   query DepartmentsCheck {
     departments { id name }
+  }
+`
+
+const REPORT_SCHEDULES_DEPT_QUERY = gql`
+  query ReportSchedulesDept {
+    reportSchedules {
+      reportType
+      enabled
+    }
   }
 `
 
@@ -112,6 +122,12 @@ export function DepartmentAnalysis() {
   const ytdLabel = i18n.language === 'de' ? 'JzD' : 'YTD'
 
   const { data: deptsData } = useQuery(DEPARTMENTS_QUERY)
+  const { data: schedulesData } = useQuery(REPORT_SCHEDULES_DEPT_QUERY)
+  const deptSchedule = schedulesData?.reportSchedules?.find(
+    (s: { reportType: string }) => s.reportType === 'department_time'
+  )
+  const isDeptAutoReportActive = deptSchedule?.enabled === true
+
   const { data, loading } = useQuery(DEPARTMENT_TIME_ANALYSIS, {
     variables: { dateFrom, dateTo },
     skip: !dateFrom || !dateTo,
@@ -212,6 +228,15 @@ export function DepartmentAnalysis() {
       {activeTab === 'absences' && <AbsenceReport />}
 
       {activeTab === 'allocation' && <>
+      {/* Auto-report banner */}
+      {isDeptAutoReportActive && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+          <Info className="h-4 w-4 shrink-0" />
+          <span>{t('settings.reports.autoReportActive')}</span>
+          <Link to="/settings/general/reports" className="ml-1 underline">{t('settings.reports.openSettings')}</Link>
+        </div>
+      )}
+
       {/* Month shortcuts + date range picker */}
       <div className="mb-6 flex flex-wrap items-center gap-2">
         {monthShortcuts.map((s) => (

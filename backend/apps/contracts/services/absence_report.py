@@ -277,7 +277,7 @@ class AbsenceReportService:
         html = self.render_html(report, language)
         return HTML(string=html).render().write_pdf()
 
-    def finalize_report(self, report_id: int, user) -> AbsenceReport:
+    def finalize_report(self, report_id: int, user=None) -> AbsenceReport:
         """Finalize a draft report: lock it and generate PDF."""
         report = AbsenceReport.objects.get(id=report_id, tenant=self.tenant)
 
@@ -289,7 +289,8 @@ class AbsenceReportService:
 
         report.status = AbsenceReport.Status.FINALIZED
         report.finalized_at = timezone.now()
-        report.finalized_by = user
+        if user is not None:
+            report.finalized_by = user
         report.save(update_fields=["status", "finalized_at", "finalized_by", "updated_at"])
 
         filename = f"absence-report-{report.year}-{report.month:02d}.pdf"

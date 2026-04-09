@@ -22,7 +22,7 @@ from apps.core.permissions import (
     require_perm,
 )
 from apps.customers.hubspot import HubSpotService
-from .models import APIKey, PasswordResetToken, Role, SignupVerification, Tenant, TwoFactorConfig, User, UserInvitation
+from .models import APIKey, PasswordResetToken, ReportSchedule, Role, SignupVerification, Tenant, TwoFactorConfig, User, UserInvitation
 
 
 @strawberry_django.type(Tenant)
@@ -567,6 +567,25 @@ class GenerateAPIKeyInput:
 
 
 @strawberry.type
+class ReportScheduleType:
+    id: int
+    report_type: str
+    enabled: bool
+    recipients: list[str]
+    send_day_of_month: int
+    auto_finalize: bool
+
+
+@strawberry.input
+class SaveReportScheduleInput:
+    report_type: str
+    enabled: bool
+    recipients: list[str]
+    send_day_of_month: int = 5
+    auto_finalize: bool = False
+
+
+@strawberry.type
 class TenantQuery:
     @strawberry.field
     def tenant_settings(self, info: Info[Context, None]) -> TenantSettingsType | None:
@@ -1035,6 +1054,21 @@ class TenantQuery:
                 recipients=bcc_settings.get(doc_type, []),
             )
             for doc_type in DOCUMENT_BCC_TYPES
+        ]
+
+    @strawberry.field
+    def report_schedules(self, info: Info[Context, None]) -> list[ReportScheduleType]:
+        user = require_perm(info, "settings", "read")
+        return [
+            ReportScheduleType(
+                id=s.id,
+                report_type=s.report_type,
+                enabled=s.enabled,
+                recipients=s.recipients,
+                send_day_of_month=s.send_day_of_month,
+                auto_finalize=s.auto_finalize,
+            )
+            for s in ReportSchedule.objects.filter(tenant=user.tenant)
         ]
 
 
@@ -2694,3 +2728,27 @@ class TenantMutation:
         api_key.save(update_fields=["is_active"])
 
         return OperationResult(success=True)
+
+    @strawberry.mutation
+    def save_report_schedule(
+        self, info: Info[Context, None], input: SaveReportScheduleInput
+    ) -> ReportScheduleType:
+        user = require_perm(info, "settings", "write")
+        schedule, _ = ReportSchedule.objects.update_or_create(
+            tenant=user.tenant,
+            report_type=input.report_type,
+            defaults={
+                "enabled": input.enabled,
+                "recipients": input.recipients,
+                "send_day_of_month": input.send_day_of_month,
+                "auto_finalize": input.auto_finalize,
+            },
+        )
+        return ReportScheduleType(
+            id=schedule.id,
+            report_type=schedule.report_type,
+            enabled=schedule.enabled,
+            recipients=schedule.recipients,
+            send_day_of_month=schedule.send_day_of_month,
+            auto_finalize=schedule.auto_finalize,
+        )

@@ -284,4 +284,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.banking.tasks.capture_monthly_fte_snapshots",
         "schedule": 86400,  # daily (checks capture day internally)
     },
+    "send-scheduled-reports": {
+        "task": "apps.contracts.tasks.send_scheduled_reports",
+        "schedule": 86400,  # daily
+    },
 }

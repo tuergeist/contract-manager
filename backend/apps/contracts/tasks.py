@@ -187,3 +187,77 @@ def send_order_confirmation_email_task(self, order_confirmation_id: int, user_id
 
     service = OrderConfirmationService(ab.tenant)
     return service.send_order_confirmation(ab)
+
+
+@shared_task(bind=True, acks_late=True)
+def send_scheduled_reports(self):
+    from datetime import date, timedelta
+    from apps.tenants.models import ReportSchedule
+
+    today = date.today()
+    schedules = ReportSchedule.objects.filter(
+        enabled=True,
+        send_day_of_month=today.day,
+    ).select_related("tenant")
+
+    for schedule in schedules:
+        try:
+            prev_month_end = today.replace(day=1) - timedelta(days=1)
+            year, month = prev_month_end.year, prev_month_end.month
+
+            if schedule.report_type == "absence":
+                _send_scheduled_absence_report(schedule, year, month)
+            elif schedule.report_type == "department_time":
+                _send_scheduled_dept_time_report(schedule, year, month)
+        except Exception:
+            logger.exception(
+                "Failed to send scheduled %s report for tenant %s",
+                schedule.report_type, schedule.tenant_id,
+            )
+
+
+def _send_scheduled_absence_report(schedule, year, month):
+    from apps.contracts.services.absence_report import AbsenceReportService
+    from apps.contracts.models import AbsenceReport
+
+    service = AbsenceReportService(schedule.tenant)
+
+    report = AbsenceReport.objects.filter(
+        tenant=schedule.tenant, year=year, month=month
+    ).first()
+    if not report:
+        report = service.generate_report(year, month)
+
+    if schedule.auto_finalize and report.status == AbsenceReport.Status.DRAFT:
+        report = service.finalize_report(report.id)
+
+    if report.status == AbsenceReport.Status.FINALIZED:
+        service.send_report(report.id, schedule.recipients)
+    else:
+        logger.warning("Absence report %s/%s not finalized, skipping send", year, month)
+
+
+def _send_scheduled_dept_time_report(schedule, year, month):
+    from apps.contracts.services.department_time_csv import generate_department_time_csv
+    from apps.core.m365 import send_mail
+
+    csv_bytes, filename = generate_department_time_csv(schedule.tenant, year, month)
+
+    MONTH_NAMES_DE = {
+        1: "Januar", 2: "Februar", 3: "März", 4: "April",
+        5: "Mai", 6: "Juni", 7: "Juli", 8: "August",
+        9: "September", 10: "Oktober", 11: "November", 12: "Dezember",
+    }
+    month_name = MONTH_NAMES_DE.get(month, str(month))
+
+    send_mail(
+        schedule.tenant,
+        to=schedule.recipients,
+        subject=f"Abteilungs-Zeitanalyse {month_name} {year}",
+        body_html=f"<p>Abteilungs-Zeitanalyse für {month_name} {year} im Anhang.</p>",
+        attachments=[{
+            "name": filename,
+            "content_type": "text/csv",
+            "content_bytes": csv_bytes,
+        }],
+    )

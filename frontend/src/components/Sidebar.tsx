@@ -110,6 +110,7 @@ const searchablePages: SearchablePage[] = [
   { labelKey: 'settings.generalTabs.helpVideos', keywords: ['help videos', 'hilfevideos', 'video', 'tutorial'], url: '/settings/general/help-videos', permission: 'settings.read' },
   { labelKey: 'settings.generalTabs.performance', keywords: ['performance', 'leistung', 'cache'], url: '/settings/general/performance', permission: 'settings.read' },
   { labelKey: 'settings.generalTabs.security', keywords: ['security', 'sicherheit', '2fa enforce', 'two factor'], url: '/settings/general/security', permission: 'settings.read' },
+  { labelKey: 'settings.reports.title', keywords: ['reports', 'berichte', 'automation', 'automatisch', 'absence', 'fehlzeiten', 'department'], url: '/settings/general/reports', permission: 'settings.read' },
   { labelKey: 'settings.tabs.integrations', keywords: ['integrations', 'integrationen', 'hubspot'], url: '/settings/integrations', permission: 'settings.read' },
   { labelKey: 'settings.integrationTabs.timeTracking', keywords: ['clockodo', 'time tracking', 'zeiterfassung'], url: '/settings/integrations/time-tracking', permission: 'settings.read' },
   { labelKey: 'settings.integrationTabs.email', keywords: ['email', 'm365', 'smtp', 'e-mail'], url: '/settings/integrations/email', permission: 'settings.read' },

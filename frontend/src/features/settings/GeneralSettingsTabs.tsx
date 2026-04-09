@@ -5,6 +5,7 @@ import { Settings } from './Settings'
 import { TenantNameSettings } from './TenantNameSettings'
 import { ForecastCacheSettings } from './ForecastCacheSettings'
 import { TenantSecuritySettings } from './TenantSecuritySettings'
+import { ReportScheduleSettings } from './ReportScheduleSettings'
 
 export function GeneralSettingsTabs() {
   const { t } = useTranslation()
@@ -15,6 +16,7 @@ export function GeneralSettingsTabs() {
     if (location.pathname.includes('/general/help-videos')) return 'helpVideos'
     if (location.pathname.includes('/general/performance')) return 'performance'
     if (location.pathname.includes('/general/security')) return 'security'
+    if (location.pathname.includes('/general/reports')) return 'reports'
     return 'contracts'
   }
 
@@ -31,6 +33,9 @@ export function GeneralSettingsTabs() {
       case 'security':
         navigate('/settings/general/security')
         break
+      case 'reports':
+        navigate('/settings/general/reports')
+        break
       default:
         navigate('/settings/general')
     }
@@ -43,6 +48,7 @@ export function GeneralSettingsTabs() {
         <TabsTrigger value="helpVideos">{t('settings.generalTabs.helpVideos')}</TabsTrigger>
         <TabsTrigger value="performance">{t('settings.generalTabs.performance')}</TabsTrigger>
         <TabsTrigger value="security">{t('settings.generalTabs.security')}</TabsTrigger>
+        <TabsTrigger value="reports">{t('settings.generalTabs.reports')}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="contracts">
@@ -62,6 +68,10 @@ export function GeneralSettingsTabs() {
 
       <TabsContent value="security">
         <TenantSecuritySettings />
+      </TabsContent>
+
+      <TabsContent value="reports">
+        <ReportScheduleSettings />
       </TabsContent>
     </Tabs>
   )

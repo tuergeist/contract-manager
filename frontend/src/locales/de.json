@@ -1315,7 +1315,8 @@
       "helpVideos": "Hilfe-Videos",
       "performance": "Performance",
       "revenueGoals": "Umsatzziele",
-      "security": "Sicherheit"
+      "security": "Sicherheit",
+      "reports": "Reports"
     },
     "accountingTabs": {
       "revenueGoals": "Umsatzziele",
@@ -1359,6 +1360,22 @@
       "save": "Einstellungen speichern",
       "saved": "Banking-Einstellungen gespeichert",
       "saveFailed": "Banking-Einstellungen konnten nicht gespeichert werden"
+    },
+    "reports": {
+      "title": "Report-Automatisierung",
+      "absence": "Fehlzeiten-Report",
+      "departmentTime": "Abteilungs-Zeitanalyse",
+      "enabled": "Aktiviert",
+      "recipients": "Empfänger",
+      "recipientsHint": "Komma-getrennte E-Mail-Adressen",
+      "sendDay": "Versand am Tag des Monats",
+      "sendDayHint": "Tag, an dem der Report des Vormonats versendet wird",
+      "autoFinalize": "Auto-Finalisierung",
+      "autoFinalizeHint": "Fehlzeiten-Report vor dem Versand automatisch finalisieren",
+      "autoReportActive": "Automatisches Reporting ist aktiv.",
+      "autoFinalizedHint": "Wird automatisch finalisiert",
+      "openSettings": "Einstellungen öffnen",
+      "saved": "Einstellungen gespeichert"
     },
     "smtp": {
       "title": "SMTP-Benachrichtigungsdienst",

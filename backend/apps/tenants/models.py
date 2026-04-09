@@ -395,3 +395,24 @@ class APIKey(TimestampedModel):
         if self.expires_at and self.expires_at < timezone.now():
             return False
         return True
+
+
+class ReportSchedule(TimestampedModel):
+    """Automated monthly report sending configuration."""
+
+    class ReportType(models.TextChoices):
+        ABSENCE = "absence", "Absence Report"
+        DEPARTMENT_TIME = "department_time", "Department Time Analysis"
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="report_schedules")
+    report_type = models.CharField(max_length=30, choices=ReportType.choices)
+    enabled = models.BooleanField(default=False)
+    recipients = models.JSONField(default=list)
+    send_day_of_month = models.PositiveIntegerField(default=5)
+    auto_finalize = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ["tenant", "report_type"]
+
+    def __str__(self):
+        return f"{self.get_report_type_display()} ({'on' if self.enabled else 'off'})"

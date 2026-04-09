@@ -1315,7 +1315,8 @@
       "helpVideos": "Help Videos",
       "performance": "Performance",
       "revenueGoals": "Revenue Goals",
-      "security": "Security"
+      "security": "Security",
+      "reports": "Reports"
     },
     "accountingTabs": {
       "revenueGoals": "Revenue Goals",
@@ -1359,6 +1360,22 @@
       "save": "Save Settings",
       "saved": "Banking settings saved",
       "saveFailed": "Failed to save banking settings"
+    },
+    "reports": {
+      "title": "Report Automation",
+      "absence": "Absence Report",
+      "departmentTime": "Department Time Analysis",
+      "enabled": "Enabled",
+      "recipients": "Recipients",
+      "recipientsHint": "Comma-separated email addresses",
+      "sendDay": "Send on day of month",
+      "sendDayHint": "Day when the report for the previous month is sent",
+      "autoFinalize": "Auto-finalize",
+      "autoFinalizeHint": "Automatically finalize the absence report before sending",
+      "autoReportActive": "Automatic reporting is active.",
+      "autoFinalizedHint": "Will be finalized automatically",
+      "openSettings": "Open Settings",
+      "saved": "Settings saved"
     },
     "smtp": {
       "title": "SMTP Notification Service",
