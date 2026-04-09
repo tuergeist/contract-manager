@@ -1634,6 +1634,10 @@ def calculate_new_business_metrics(tenant, year: int) -> dict:
         if arr > 0:
             won_b2b_arr += arr
 
+    # --- Negotiated price increases on existing contracts = B2B bookings ---
+    price_impact = calculate_price_increase_impact(tenant, year)
+    won_b2b_arr += price_impact.negotiated_arr_impact
+
     return {
         "won_new_arr": won_new_arr,
         "won_b2b_arr": won_b2b_arr,
@@ -4376,6 +4380,43 @@ class ContractQuery:
                         value=arr,
                         source="expansion",
                     ))
+
+        # --- Negotiated price increases (B2B only) ---
+        if metric_type == "back_to_base_arr":
+            from apps.contracts.models import ContractItemPrice
+
+            jan1 = date(year, 1, 1)
+            price_increase_contracts = Contract.objects.filter(
+                tenant=user.tenant,
+                status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
+                start_date__lt=jan1,
+            ).filter(
+                Q(end_date__isnull=True) | Q(end_date__gte=jan1)
+            ).select_related("customer").prefetch_related("items__price_periods", "items__product")
+
+            for contract in price_increase_contracts:
+                for item in contract.items.all():
+                    if item.is_one_off:
+                        continue
+                    pps = list(item.price_periods.all())
+                    for pp in pps:
+                        if pp.valid_from.year != year or pp.increase_type != "negotiated":
+                            continue
+                        day_before = pp.valid_from - timedelta(days=1)
+                        prev_m = item.get_price_at_cached(day_before, pps, normalize_to_monthly=True)
+                        new_m = item.get_price_at_cached(pp.valid_from, pps, normalize_to_monthly=True)
+                        if new_m > prev_m:
+                            delta = (new_m - prev_m) * item.quantity * 12
+                            result.append(NewBusinessDetailItem(
+                                customer_id=contract.customer_id or 0,
+                                customer_name=contract.customer.name if contract.customer else "—",
+                                contract_id=contract.id,
+                                contract_name=contract.name or f"Contract {contract.id}",
+                                item_id=item.id,
+                                item_description=item.product.name if item.product else (item.description or "—"),
+                                value=delta,
+                                source="price_increase",
+                            ))
 
         return result
 
