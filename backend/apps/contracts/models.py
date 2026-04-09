@@ -822,14 +822,21 @@ class Contract(TenantModel):
         self, events, item, start_date, end_date, from_date, to_date, interval_months,
         price_periods_list=None
     ):
-        """Add recognition events for an item following the regular contract cycle."""
+        """Add recognition events for an item following the regular contract cycle.
+
+        For multi-year intervals (>12 months), revenue is recognized annually
+        (every 12 months) rather than at the billing interval.
+        """
         from decimal import Decimal
         from dateutil.relativedelta import relativedelta
+
+        # Recognition interval: annual for multi-year contracts
+        recognition_interval = min(interval_months, 12)
 
         # Find the first recognition date on or after item start
         recognition_date = self.billing_start_date
         while recognition_date < start_date:
-            recognition_date += relativedelta(months=interval_months)
+            recognition_date += relativedelta(months=recognition_interval)
 
         # Generate recognition events
         while recognition_date <= to_date:
@@ -840,8 +847,8 @@ class Contract(TenantModel):
                         price_at_date = item.get_price_at_cached(recognition_date, price_periods_list)
                     else:
                         price_at_date = item.get_price_at(recognition_date)
-                    # unit_price is monthly, multiply by interval for recognition amount
-                    amount = item.quantity * price_at_date * interval_months
+                    # unit_price is monthly, multiply by recognition interval (max 12)
+                    amount = item.quantity * price_at_date * recognition_interval
                     events[recognition_date]["items"].append({
                         "item_id": item.id,
                         "product_name": item.product.name if item.product else (item.description or "Discount"),
@@ -853,33 +860,33 @@ class Contract(TenantModel):
                         "prorate_factor": None,
                     })
                     events[recognition_date]["total"] += amount
-            recognition_date += relativedelta(months=interval_months)
+            recognition_date += relativedelta(months=recognition_interval)
 
     def _add_pre_alignment_recognition_events(
         self, events, item, start_date, align_date, from_date, to_date, interval_months,
         price_periods_list=None
     ):
-        """Add recognition events before alignment (pro-rated first period)."""
+        """Add recognition events before alignment (pro-rated first period).
+
+        For multi-year intervals, recognition is capped at annual amounts.
+        """
         from decimal import Decimal
         from dateutil.relativedelta import relativedelta
 
-        # First recognition is at start_date (pro-rated period until align_date)
-        # Skip if start_date equals align_date (no pre-alignment period)
+        recognition_interval = min(interval_months, 12)
+
         if start_date >= from_date and start_date <= to_date and start_date < align_date:
-            # Calculate proration factor using months
             months_in_period = (
                 (align_date.year - start_date.year) * 12 +
                 (align_date.month - start_date.month)
             )
-            prorate_factor = Decimal(months_in_period) / Decimal(interval_months)
+            prorate_factor = Decimal(min(months_in_period, recognition_interval)) / Decimal(recognition_interval)
 
-            # Use cached price lookup if price_periods provided, else fallback
             if price_periods_list is not None:
                 price_at_date = item.get_price_at_cached(start_date, price_periods_list)
             else:
                 price_at_date = item.get_price_at(start_date)
-            # unit_price is monthly, multiply by interval for recognition amount
-            amount = item.quantity * price_at_date * interval_months * prorate_factor
+            amount = item.quantity * price_at_date * recognition_interval * prorate_factor
             events[start_date]["items"].append({
                 "item_id": item.id,
                 "product_name": item.product.name if item.product else (item.description or "Discount"),
@@ -896,23 +903,24 @@ class Contract(TenantModel):
         self, events, item, align_date, end_date, from_date, to_date, interval_months,
         price_periods_list=None
     ):
-        """Add recognition events after alignment (synced to contract's billing cycle)."""
+        """Add recognition events after alignment (synced to contract's billing cycle).
+
+        For multi-year intervals, revenue is recognized annually.
+        """
         from decimal import Decimal
         from dateutil.relativedelta import relativedelta
 
-        # After alignment, recognition starts from the alignment date
+        recognition_interval = min(interval_months, 12)
         recognition_date = align_date
 
         while recognition_date <= to_date:
             if recognition_date >= from_date:
                 if end_date is None or recognition_date <= end_date:
-                    # Use cached price lookup if price_periods provided, else fallback
                     if price_periods_list is not None:
                         price_at_date = item.get_price_at_cached(recognition_date, price_periods_list)
                     else:
                         price_at_date = item.get_price_at(recognition_date)
-                    # unit_price is monthly, multiply by interval for recognition amount
-                    amount = item.quantity * price_at_date * interval_months
+                    amount = item.quantity * price_at_date * recognition_interval
                     events[recognition_date]["items"].append({
                         "item_id": item.id,
                         "product_name": item.product.name if item.product else (item.description or "Discount"),
@@ -924,7 +932,7 @@ class Contract(TenantModel):
                         "prorate_factor": None,
                     })
                     events[recognition_date]["total"] += amount
-            recognition_date += relativedelta(months=interval_months)
+            recognition_date += relativedelta(months=recognition_interval)
 
     def _add_one_off_recognition_event(
         self, events, item, recognition_start, from_date, to_date, price_periods_list=None
