@@ -469,7 +469,10 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
                   <div className="space-y-1">
                     {suggestions.items.map(inv => {
                       const diff = parseFloat(inv.amountDifference)
-                      const isExact = Math.abs(diff) < 0.01
+                      const amountMatch = Math.abs(diff) < 0.01
+                      const searchText = ((txn?.bookingText || '') + ' ' + (txn?.reference || '')).toLowerCase()
+                      const numberMatch = inv.invoiceNumber ? searchText.includes(inv.invoiceNumber.toLowerCase()) : false
+                      const isExact = amountMatch && numberMatch
                       return (
                         <button
                           key={`${inv.invoiceType}-${inv.id}`}
