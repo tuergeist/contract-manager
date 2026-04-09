@@ -2752,3 +2752,27 @@ class TenantMutation:
             send_day_of_month=schedule.send_day_of_month,
             auto_finalize=schedule.auto_finalize,
         )
+
+    @strawberry.mutation
+    def send_report_now(
+        self, info: Info[Context, None], report_type: str, year: int, month: int
+    ) -> OperationResult:
+        """Immediately send a report for the given month."""
+        user = require_perm(info, "settings", "write")
+        schedule = ReportSchedule.objects.filter(
+            tenant=user.tenant, report_type=report_type
+        ).first()
+        if not schedule or not schedule.recipients:
+            return OperationResult(success=False, error="No recipients configured")
+
+        try:
+            from apps.contracts.tasks import _send_scheduled_absence_report, _send_scheduled_dept_time_report
+            if report_type == "absence":
+                _send_scheduled_absence_report(schedule, year, month)
+            elif report_type == "department_time":
+                _send_scheduled_dept_time_report(schedule, year, month)
+            else:
+                return OperationResult(success=False, error="Unknown report type")
+            return OperationResult(success=True)
+        except Exception as e:
+            return OperationResult(success=False, error=str(e))

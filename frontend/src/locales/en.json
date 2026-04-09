@@ -1375,7 +1375,10 @@
       "autoReportActive": "Automatic reporting is active.",
       "autoFinalizedHint": "Will be finalized automatically",
       "openSettings": "Open Settings",
-      "saved": "Settings saved"
+      "saved": "Settings saved",
+      "sendNow": "Send Now",
+      "sendNowHint": "Send the report for the previous month now",
+      "sent": "Report sent successfully"
     },
     "smtp": {
       "title": "SMTP Notification Service",

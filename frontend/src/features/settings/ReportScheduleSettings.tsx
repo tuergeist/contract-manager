@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Send } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 
@@ -14,6 +14,15 @@ const REPORT_SCHEDULES_QUERY = gql`
       recipients
       sendDayOfMonth
       autoFinalize
+    }
+  }
+`
+
+const SEND_REPORT_NOW = gql`
+  mutation SendReportNow($reportType: String!, $year: Int!, $month: Int!) {
+    sendReportNow(reportType: $reportType, year: $year, month: $month) {
+      success
+      error
     }
   }
 `
@@ -52,7 +61,9 @@ function ScheduleCard({
   showAutoFinalize,
   onChange,
   onSave,
+  onSendNow,
   saving,
+  sending,
   message,
   t,
 }: {
@@ -62,7 +73,9 @@ function ScheduleCard({
   showAutoFinalize: boolean
   onChange: (field: keyof ScheduleState, value: string | number | boolean) => void
   onSave: () => void
+  onSendNow: () => void
   saving: boolean
+  sending: boolean
   message: { type: 'success' | 'error'; text: string } | null
   t: (key: string) => string
 }) {
@@ -140,6 +153,15 @@ function ScheduleCard({
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             {t('common.save')}
           </button>
+          <button
+            onClick={onSendNow}
+            disabled={sending || !schedule.recipients.trim()}
+            className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            title={t('settings.reports.sendNowHint')}
+          >
+            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {t('settings.reports.sendNow')}
+          </button>
           {message && (
             <span className={`text-sm ${message.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
               {message.text}
@@ -161,7 +183,9 @@ export function ReportScheduleSettings() {
 
   const { data } = useQuery(REPORT_SCHEDULES_QUERY)
   const [saveSchedule, { loading: saving }] = useMutation(SAVE_REPORT_SCHEDULE)
+  const [sendNow] = useMutation(SEND_REPORT_NOW)
   const [savingType, setSavingType] = useState<string | null>(null)
+  const [sendingType, setSendingType] = useState<string | null>(null)
 
   useEffect(() => {
     if (data?.reportSchedules) {
@@ -222,6 +246,34 @@ export function ReportScheduleSettings() {
     setDepartment((prev) => ({ ...prev, [field]: value }))
   }
 
+  const handleSendNow = async (reportType: string) => {
+    const setMessage = reportType === 'absence' ? setAbsenceMessage : setDepartmentMessage
+    setMessage(null)
+    setSendingType(reportType)
+    try {
+      // Send for previous month
+      const now = new Date()
+      const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const result = await sendNow({
+        variables: {
+          reportType,
+          year: prevMonth.getFullYear(),
+          month: prevMonth.getMonth() + 1,
+        },
+      })
+      if (result.data?.sendReportNow?.success) {
+        setMessage({ type: 'success', text: t('settings.reports.sent') })
+      } else {
+        setMessage({ type: 'error', text: result.data?.sendReportNow?.error || t('common.error') })
+      }
+      setTimeout(() => setMessage(null), 5000)
+    } catch {
+      setMessage({ type: 'error', text: t('common.error') })
+    } finally {
+      setSendingType(null)
+    }
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <ScheduleCard
@@ -231,7 +283,9 @@ export function ReportScheduleSettings() {
         showAutoFinalize={true}
         onChange={handleAbsenceChange}
         onSave={() => handleSave('absence')}
+        onSendNow={() => handleSendNow('absence')}
         saving={saving && savingType === 'absence'}
+        sending={sendingType === 'absence'}
         message={absenceMessage}
         t={t}
       />
@@ -242,7 +296,9 @@ export function ReportScheduleSettings() {
         showAutoFinalize={false}
         onChange={handleDepartmentChange}
         onSave={() => handleSave('department_time')}
+        onSendNow={() => handleSendNow('department_time')}
         saving={saving && savingType === 'department_time'}
+        sending={sendingType === 'department_time'}
         message={departmentMessage}
         t={t}
       />
