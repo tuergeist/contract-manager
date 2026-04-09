@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.27.3",
+    "date": "2026-04-09",
+    "title": "Fix imported invoices in revenue forecast",
+    "description": "Imported invoices now correctly match their billing period in the revenue forecast, using billing_date and the contract's billing interval instead of always assuming monthly.",
+    "type": "bugfix",
+    "details": [
+      "Fixed imported invoices not appearing in revenue forecast due to incorrect period matching",
+      "Adapter now uses billing_date (from forecast upload) when available, falls back to invoice_date",
+      "Period derived from contract billing interval instead of always assuming one month",
+      "Date filter includes both billing_date and invoice_date for imported invoices"
+    ]
+  },
+  {
     "version": "2.27.2",
     "date": "2026-04-02",
     "title": "Fix attachment category selector crash",
