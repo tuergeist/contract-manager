@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.27.5",
+    "date": "2026-04-09",
+    "title": "Exact match requires invoice number in text",
+    "description": "Transaction matching now only shows 'Exact match' when both the amount matches and the invoice number appears in the transaction's booking text or reference.",
+    "type": "bugfix",
+    "details": [
+      "Exact match badge now requires invoice number found in booking text or reference, not just amount match"
+    ]
+  },
+  {
     "version": "2.27.4",
     "date": "2026-04-09",
     "title": "Imported invoices appear in match suggestions",
