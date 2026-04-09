@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.27.4",
+    "date": "2026-04-09",
+    "title": "Imported invoices appear in match suggestions",
+    "description": "Imported invoices with 'extracted' status are now included in transaction matching suggestions and search, since most invoices are never manually confirmed.",
+    "type": "bugfix",
+    "details": [
+      "Included 'extracted' status in imported invoice matching suggestions and search filters"
+    ]
+  },
+  {
     "version": "2.27.3",
     "date": "2026-04-09",
     "title": "Fix imported invoices in revenue forecast",
