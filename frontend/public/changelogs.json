@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.27.6",
+    "date": "2026-04-09",
+    "title": "Fix recognition for multi-year contracts",
+    "description": "Multi-year contracts now recognize revenue annually instead of the full multi-year billing amount at once. A 120k triennial contract shows 40k/year in recognition view.",
+    "type": "bugfix",
+    "details": [
+      "Recognition schedule uses annual intervals for multi-year contracts (biennial, triennial, etc.)",
+      "Revenue recognized in 12-month increments instead of full billing period amount"
+    ]
+  },
+  {
     "version": "2.27.5",
     "date": "2026-04-09",
     "title": "Exact match requires invoice number in text",
