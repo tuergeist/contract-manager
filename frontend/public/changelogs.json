@@ -1,5 +1,21 @@
 [
   {
+    "version": "2.28.0",
+    "date": "2026-04-09",
+    "title": "Automated report sending and price increase bookings",
+    "description": "Absence Reports and Department Time Analysis can now be sent automatically on a monthly schedule. Negotiated price increases count as B2B ARR bookings.",
+    "type": "feature",
+    "details": [
+      "Automated monthly report sending for Absence Reports and Department Time Analysis CSV",
+      "Settings UI under Settings > General > Reports with recipients, send day, and auto-finalize",
+      "Blue info banner on tabs when auto-reporting is active, with link to settings",
+      "Auto-finalize option disables manual Finalize button for absence reports",
+      "Negotiated price increases now count as Back-to-Base ARR bookings",
+      "Price increase detection works for mid-year changes, not just Jan 1 vs Jan 1",
+      "Unified compact month selector buttons across Absences and Time Allocation tabs"
+    ]
+  },
+  {
     "version": "2.27.6",
     "date": "2026-04-09",
     "title": "Fix recognition for multi-year contracts",
