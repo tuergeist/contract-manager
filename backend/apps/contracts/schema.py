@@ -2071,11 +2071,21 @@ class _ImportedInvoiceAdapter:
         # Map extraction_status to InvoiceRecord-like status
         status_map = {"confirmed": "sent", "sent": "sent", "paid": "paid"}
         self.status = status_map.get(imported.extraction_status, "finalized")
-        # Use invoice_date as both billing_date and period boundaries
-        self.billing_date = imported.invoice_date
-        if imported.invoice_date:
-            self.period_start = imported.invoice_date.replace(day=1)
-            self.period_end = self.period_start + relativedelta(months=1, days=-1)
+        # Use billing_date (set from forecast upload) or fall back to invoice_date
+        ref_date = imported.billing_date or imported.invoice_date
+        self.billing_date = ref_date
+        if ref_date:
+            # Derive period from linked contract's billing interval if available
+            interval_months = 1
+            if imported.contract:
+                interval_map = {
+                    "monthly": 1, "bi_monthly": 2, "quarterly": 3,
+                    "semi_annual": 6, "annual": 12, "biennial": 24,
+                    "triennial": 36, "quadrennial": 48, "quinquennial": 60,
+                }
+                interval_months = interval_map.get(imported.contract.billing_interval, 1)
+            self.period_start = ref_date.replace(day=1)
+            self.period_end = self.period_start + relativedelta(months=interval_months, days=-1)
         else:
             self.period_start = None
             self.period_end = None
@@ -2089,13 +2099,17 @@ def _merge_imported_invoices(invoice_lookup, tenant, contract_ids, from_date, to
     """Add confirmed/sent/paid imported invoices to the invoice lookup."""
     from apps.invoices.models import ImportedInvoice
 
+    from django.db.models import Q
+
     imported_qs = ImportedInvoice.objects.filter(
         tenant=tenant,
         contract_id__in=contract_ids,
         extraction_status__in=["confirmed", "sent", "paid"],
-        invoice_date__gte=from_date,
-        invoice_date__lte=to_date,
-    ).prefetch_related("payment_matches")
+    ).filter(
+        # Match by billing_date (from forecast upload) or invoice_date
+        Q(billing_date__gte=from_date, billing_date__lte=to_date) |
+        Q(billing_date__isnull=True, invoice_date__gte=from_date, invoice_date__lte=to_date)
+    ).select_related("contract").prefetch_related("payment_matches")
 
     for imp in imported_qs:
         adapter = _ImportedInvoiceAdapter(imp)
