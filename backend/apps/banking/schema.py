@@ -1173,7 +1173,7 @@ class BankingQuery:
             imported_qs = ImportedInvoice.objects.filter(
                 tenant=user.tenant,
                 customer=customer,
-                extraction_status__in=["confirmed", "sent"],
+                extraction_status__in=["extracted", "confirmed", "sent"],
             ).filter(
                 Q(invoice_date__lte=txn.entry_date) | Q(invoice_date__isnull=True)
             ).exclude(id__in=matched_imported_ids).prefetch_related("payment_matches__transaction")

@@ -1107,7 +1107,7 @@ class InvoiceQuery:
         # Search imported invoices
         imported_qs = ImportedInvoice.objects.filter(
             tenant=user.tenant,
-            extraction_status__in=["confirmed", "sent", "paid"],
+            extraction_status__in=["extracted", "confirmed", "sent", "paid"],
         ).select_related("customer")
         if search:
             imported_qs = imported_qs.filter(
