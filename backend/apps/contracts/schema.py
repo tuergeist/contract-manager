@@ -1,6 +1,6 @@
 """GraphQL schema for contracts."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Annotated, List, Optional
 import base64
@@ -1289,6 +1289,8 @@ def calculate_price_increase_impact(tenant, year: int) -> PriceIncreaseImpactTyp
     untagged_arr_impact = Decimal("0")
     item_count = 0
 
+    dec31_current = date(year, 12, 31)
+
     for contract in contracts:
         items = list(contract.items.all())
         for item in items:
@@ -1297,36 +1299,55 @@ def calculate_price_increase_impact(tenant, year: int) -> PriceIncreaseImpactTyp
 
             price_periods_list = list(item.price_periods.all())
 
-            # Get monthly price at Jan 1 current year vs Jan 1 previous year
-            current_monthly = item.get_price_at_cached(
-                jan1_current, price_periods_list, normalize_to_monthly=True
+            # Find all price periods that start in the target year
+            # Each one represents a price change — compute delta vs previous price
+            year_periods = sorted(
+                [pp for pp in price_periods_list if pp.valid_from.year == year],
+                key=lambda pp: pp.valid_from,
             )
-            previous_monthly = item.get_price_at_cached(
-                jan1_previous, price_periods_list, normalize_to_monthly=True
-            )
 
-            if current_monthly <= previous_monthly:
-                continue
+            if year_periods:
+                # For each price period starting this year, compute delta
+                for pp in year_periods:
+                    # Price just before this period kicked in
+                    day_before = pp.valid_from - timedelta(days=1)
+                    previous_monthly = item.get_price_at_cached(
+                        day_before, price_periods_list, normalize_to_monthly=True
+                    )
+                    new_monthly = item.get_price_at_cached(
+                        pp.valid_from, price_periods_list, normalize_to_monthly=True
+                    )
 
-            delta_arr = (current_monthly - previous_monthly) * item.quantity * 12
-            total_arr_impact += delta_arr
-            item_count += 1
+                    if new_monthly <= previous_monthly:
+                        continue
 
-            # Determine increase_type from the price period active on Jan 1 current year
-            matching = None
-            for pp in price_periods_list:
-                if pp.valid_from <= jan1_current:
-                    if pp.valid_to is None or pp.valid_to >= jan1_current:
-                        if matching is None or pp.valid_from > matching.valid_from:
-                            matching = pp
+                    delta_arr = (new_monthly - previous_monthly) * item.quantity * 12
+                    total_arr_impact += delta_arr
+                    item_count += 1
 
-            increase_type = matching.increase_type if matching else None
-
-            if increase_type == "inflation":
-                inflation_arr_impact += delta_arr
-            elif increase_type == "negotiated":
-                negotiated_arr_impact += delta_arr
+                    increase_type = pp.increase_type
+                    if increase_type == "inflation":
+                        inflation_arr_impact += delta_arr
+                    elif increase_type == "negotiated":
+                        negotiated_arr_impact += delta_arr
+                    else:
+                        untagged_arr_impact += delta_arr
             else:
+                # No period-specific pricing starting this year —
+                # still check Jan 1 vs Jan 1 for base price changes
+                current_monthly = item.get_price_at_cached(
+                    jan1_current, price_periods_list, normalize_to_monthly=True
+                )
+                previous_monthly = item.get_price_at_cached(
+                    jan1_previous, price_periods_list, normalize_to_monthly=True
+                )
+
+                if current_monthly <= previous_monthly:
+                    continue
+
+                delta_arr = (current_monthly - previous_monthly) * item.quantity * 12
+                total_arr_impact += delta_arr
+                item_count += 1
                 untagged_arr_impact += delta_arr
 
     return PriceIncreaseImpactType(
@@ -1358,6 +1379,7 @@ def calculate_contract_price_increases(tenant, year: int) -> list[ContractPriceI
     ).prefetch_related("items", "items__product", "items__price_periods").select_related("customer")
 
     results = []
+    dec31_current = date(year, 12, 31)
 
     for contract in contracts:
         items = list(contract.items.all())
@@ -1372,8 +1394,9 @@ def calculate_contract_price_increases(tenant, year: int) -> list[ContractPriceI
 
             price_periods_list = list(item.price_periods.all())
 
+            # Current ARR = price at end of year, previous = price at start of year
             current_monthly = item.get_price_at_cached(
-                jan1_current, price_periods_list, normalize_to_monthly=True
+                dec31_current, price_periods_list, normalize_to_monthly=True
             )
             previous_monthly = item.get_price_at_cached(
                 jan1_previous, price_periods_list, normalize_to_monthly=True
@@ -1382,7 +1405,17 @@ def calculate_contract_price_increases(tenant, year: int) -> list[ContractPriceI
             contract_current_arr += current_monthly * item.quantity * 12
             contract_previous_arr += previous_monthly * item.quantity * 12
 
-            if current_monthly > previous_monthly:
+            # Check for price periods starting this year
+            year_periods = [pp for pp in price_periods_list if pp.valid_from.year == year]
+            if year_periods:
+                for pp in sorted(year_periods, key=lambda p: p.valid_from):
+                    day_before = pp.valid_from - timedelta(days=1)
+                    prev_m = item.get_price_at_cached(day_before, price_periods_list, normalize_to_monthly=True)
+                    new_m = item.get_price_at_cached(pp.valid_from, price_periods_list, normalize_to_monthly=True)
+                    if new_m > prev_m:
+                        increase_item_count += 1
+                        increase_impact += (new_m - prev_m) * item.quantity * 12
+            elif current_monthly > previous_monthly:
                 increase_item_count += 1
                 increase_impact += (current_monthly - previous_monthly) * item.quantity * 12
 
