@@ -308,13 +308,13 @@ export function AbsenceReport() {
                   {group.totalDays.toFixed(1)} {t('absenceReport.days')}
                 </span>
               </div>
-              <table className="w-full">
+              <table className="w-full table-fixed">
                 <thead>
                   <tr className="border-b text-left text-xs text-gray-500 uppercase">
-                    <th className="px-4 py-2">{t('absenceReport.type')}</th>
-                    <th className="px-4 py-2">{t('absenceReport.from')}</th>
-                    <th className="px-4 py-2">{t('absenceReport.to')}</th>
-                    <th className="px-4 py-2 text-right">{t('absenceReport.days')}</th>
+                    <th className="w-[30%] px-4 py-2">{t('absenceReport.type')}</th>
+                    <th className="w-[25%] px-4 py-2">{t('absenceReport.from')}</th>
+                    <th className="w-[25%] px-4 py-2">{t('absenceReport.to')}</th>
+                    <th className="w-[20%] px-4 py-2 text-right">{t('absenceReport.days')}</th>
                   </tr>
                 </thead>
                 <tbody>

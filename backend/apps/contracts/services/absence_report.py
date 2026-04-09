@@ -1,6 +1,6 @@
 """Absence report service — generation, PDF rendering, finalization, and email sending."""
 import logging
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.core.files.base import ContentFile
@@ -137,7 +137,34 @@ class AbsenceReportService:
                 "raw_data": ab,
             })
 
-        return entries
+        return self._deduplicate_entries(entries)
+
+    def _deduplicate_entries(self, entries: list[dict]) -> list[dict]:
+        """Remove entries whose date range is fully contained within another.
+
+        Clockodo returns both a multi-day record AND individual day records
+        for the same absence. Keep dates exactly as Clockodo reports them,
+        but drop entries that are fully covered by a longer one (same user+type).
+        """
+        from itertools import groupby
+
+        result = []
+        key_fn = lambda e: (e["user_id"], e["absence_type"])
+        sorted_entries = sorted(entries, key=lambda e: (e["user_id"], e["absence_type"], e["date_from"], -(e["date_to"] - e["date_from"]).days))
+
+        for (_user_id, _absence_type), group in groupby(sorted_entries, key=key_fn):
+            kept: list[dict] = []
+            for entry in group:
+                # Check if this entry is fully contained in any already-kept entry
+                is_contained = any(
+                    k["date_from"] <= entry["date_from"] and k["date_to"] >= entry["date_to"] and k is not entry
+                    for k in kept
+                )
+                if not is_contained:
+                    kept.append(entry)
+            result.extend(kept)
+
+        return result
 
     def _get_user_names(self, provider) -> dict[str, str]:
         """Build user_id -> user_name mapping from provider."""
