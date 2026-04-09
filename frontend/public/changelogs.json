@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.28.1",
+    "date": "2026-04-09",
+    "title": "Send Now button, absence dedup, column widths",
+    "description": "Report settings now have a Send Now button for immediate sending. Absence report deduplicates overlapping Clockodo entries and uses equal 25% column widths.",
+    "type": "bugfix",
+    "details": [
+      "Added Send Now button to report automation settings for immediate sending",
+      "Fixed duplicate absence entries from Clockodo (overlapping date ranges deduplicated)",
+      "Fixed inconsistent table column widths across employee sections (now 25% each)"
+    ]
+  },
+  {
     "version": "2.28.0",
     "date": "2026-04-09",
     "title": "Automated report sending and price increase bookings",
