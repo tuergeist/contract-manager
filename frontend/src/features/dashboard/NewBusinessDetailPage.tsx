@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, gql } from '@apollo/client'
-import { ArrowLeft, Loader2, ArrowUpDown } from 'lucide-react'
+import { ArrowLeft, Loader2, ArrowUpDown, Info } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -35,8 +35,15 @@ interface DetailItem {
 const METRIC_LABELS: Record<string, { en: string; de: string }> = {
   new_arr: { en: 'New Name ARR', de: 'New Name ARR' },
   back_to_base_arr: { en: 'Back-to-Base ARR', de: 'Back-to-Base ARR' },
-  new_development: { en: 'Won Development Revenue', de: 'Won Development Revenue' },
+  new_development: { en: 'Won Development', de: 'Won Development' },
   new_deal_count: { en: 'Won Deal Count', de: 'Won Deal Count' },
+}
+
+const METRIC_INFO_KEYS: Record<string, string> = {
+  new_arr: 'dashboard.kpis.newNameArrExplanation',
+  back_to_base_arr: 'dashboard.kpis.backToBaseArrExplanation',
+  new_development: 'dashboard.kpis.wonDevelopmentExplanation',
+  new_deal_count: 'dashboard.kpis.wonDealCountExplanation',
 }
 
 type SortKey = 'customerName' | 'contractName' | 'itemDescription' | 'value'
@@ -114,6 +121,13 @@ export function NewBusinessDetailPage() {
           <p className="text-sm text-muted-foreground">{year} — {items.length} {items.length === 1 ? 'item' : 'items'}{isCurrency && ` — ${t('common.total')}: ${formatCurrency(total.toString())}`}</p>
         </div>
       </div>
+
+      {metricType && METRIC_INFO_KEYS[metricType] && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+          <Info className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>{t(METRIC_INFO_KEYS[metricType])}</span>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div>

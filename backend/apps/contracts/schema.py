@@ -1614,7 +1614,7 @@ def calculate_new_business_metrics(tenant, year: int) -> dict:
                 else:
                     won_new_arr += annualized
 
-    # --- Expansion/upsell on existing contracts (also B2B) ---
+    # --- Expansion/upsell on existing contracts ---
     # Only count items that have an explicit deal_won_date in the current year.
     # Items without deal_won_date are transfers/internal moves, not real upsells.
     won_contract_ids = set(won_contracts.values_list("id", flat=True))
@@ -1622,17 +1622,24 @@ def calculate_new_business_metrics(tenant, year: int) -> dict:
         tenant=tenant,
         contract__status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
         deal_won_date__year=year,
-        is_one_off=False,
     ).exclude(
         contract_id__in=won_contract_ids,
     ).select_related("contract", "product")
 
     for item in expansion_items:
-        arr = calculate_arr_value(
-            item.unit_price, item.quantity, item.price_period, False,
-        )
-        if arr > 0:
-            won_b2b_arr += arr
+        ert = item.get_effective_revenue_type()
+        if item.is_one_off:
+            # One-off expansion items → Won Development
+            if ert in (RevenueType.ADVANCED_DEVELOPMENT, RevenueType.TRAINING_IMPLEMENTATION):
+                face_value = item.unit_price * item.quantity
+                won_development_revenue += face_value
+        else:
+            # Recurring expansion items → B2B ARR
+            arr = calculate_arr_value(
+                item.unit_price, item.quantity, item.price_period, False,
+            )
+            if arr > 0:
+                won_b2b_arr += arr
 
     # --- Negotiated price increases on existing contracts = B2B bookings ---
     price_impact = calculate_price_increase_impact(tenant, year)
@@ -4352,34 +4359,52 @@ class ContractQuery:
                             source="won_deal",
                         ))
 
-        # --- Expansion items (B2B only) ---
-        if metric_type == "back_to_base_arr":
+        # --- Expansion items ---
+        if metric_type in ("back_to_base_arr", "new_development"):
             won_contract_ids = set(won_contracts.values_list("id", flat=True))
             expansion_items = ContractItem.objects.filter(
                 tenant=user.tenant,
                 contract__status__in=[Contract.Status.ACTIVE, Contract.Status.PAUSED],
                 deal_won_date__year=year,
-                is_one_off=False,
             ).exclude(
                 contract_id__in=won_contract_ids,
             ).select_related("contract", "contract__customer", "product")
 
             for item in expansion_items:
-                arr = calculate_arr_value(
-                    item.unit_price, item.quantity, item.price_period, False,
-                )
-                if arr > 0:
-                    contract = item.contract
-                    result.append(NewBusinessDetailItem(
-                        customer_id=contract.customer_id or 0,
-                        customer_name=contract.customer.name if contract.customer else "—",
-                        contract_id=contract.id,
-                        contract_name=contract.name or f"Contract {contract.id}",
-                        item_id=item.id,
-                        item_description=item.product.name if item.product else (item.description or "—"),
-                        value=arr,
-                        source="expansion",
-                    ))
+                ert = item.get_effective_revenue_type()
+                contract = item.contract
+                item_desc = item.product.name if item.product else (item.description or "—")
+
+                if item.is_one_off:
+                    # One-off expansion → new_development
+                    if metric_type == "new_development" and ert in (RevenueType.ADVANCED_DEVELOPMENT, RevenueType.TRAINING_IMPLEMENTATION):
+                        result.append(NewBusinessDetailItem(
+                            customer_id=contract.customer_id or 0,
+                            customer_name=contract.customer.name if contract.customer else "—",
+                            contract_id=contract.id,
+                            contract_name=contract.name or f"Contract {contract.id}",
+                            item_id=item.id,
+                            item_description=item_desc,
+                            value=item.unit_price * item.quantity,
+                            source="expansion",
+                        ))
+                else:
+                    # Recurring expansion → back_to_base_arr
+                    if metric_type == "back_to_base_arr":
+                        arr = calculate_arr_value(
+                            item.unit_price, item.quantity, item.price_period, False,
+                        )
+                        if arr > 0:
+                            result.append(NewBusinessDetailItem(
+                                customer_id=contract.customer_id or 0,
+                                customer_name=contract.customer.name if contract.customer else "—",
+                                contract_id=contract.id,
+                                contract_name=contract.name or f"Contract {contract.id}",
+                                item_id=item.id,
+                                item_description=item_desc,
+                                value=arr,
+                                source="expansion",
+                            ))
 
         # --- Negotiated price increases (B2B only) ---
         if metric_type == "back_to_base_arr":

@@ -189,10 +189,10 @@ export function Dashboard() {
   ] as const
   const hasRevenueGoalsData = Object.keys(revenueGoalMap).length > 0 || Object.values(streamDataMap).some(s => s.forecast > 0)
   const newBusinessCards = nb ? [
-    { key: 'new_arr', label: t('forecasts.newBusiness.newNameArr'), actual: parseFloat(nb.wonNewArr), target: nbGoalMap['new_arr'] || 0, isCurrency: true },
-    { key: 'back_to_base_arr', label: t('forecasts.newBusiness.backToBaseArr'), actual: parseFloat(nb.backToBaseArr), target: nbGoalMap['back_to_base_arr'] || 0, isCurrency: true },
-    { key: 'new_development', label: t('forecasts.newBusiness.wonDevelopment'), actual: parseFloat(nb.wonDevelopmentRevenue), target: nbGoalMap['new_development'] || 0, isCurrency: true },
-    { key: 'new_deal_count', label: t('forecasts.newBusiness.wonDealCount'), actual: nb.wonDealCount, target: nbGoalMap['new_deal_count'] || 0, isCurrency: false },
+    { key: 'new_arr', label: t('forecasts.newBusiness.newNameArr'), info: t('dashboard.kpis.newNameArrExplanation'), actual: parseFloat(nb.wonNewArr), target: nbGoalMap['new_arr'] || 0, isCurrency: true },
+    { key: 'back_to_base_arr', label: t('forecasts.newBusiness.backToBaseArr'), info: t('dashboard.kpis.backToBaseArrExplanation'), actual: parseFloat(nb.backToBaseArr), target: nbGoalMap['back_to_base_arr'] || 0, isCurrency: true },
+    { key: 'new_development', label: t('forecasts.newBusiness.wonDevelopment'), info: t('dashboard.kpis.wonDevelopmentExplanation'), actual: parseFloat(nb.wonDevelopmentRevenue), target: nbGoalMap['new_development'] || 0, isCurrency: true },
+    { key: 'new_deal_count', label: t('forecasts.newBusiness.wonDealCount'), info: t('dashboard.kpis.wonDealCountExplanation'), actual: nb.wonDealCount, target: nbGoalMap['new_deal_count'] || 0, isCurrency: false },
   ] : []
 
   const formatForecastSubtitle = (oneOff: string | undefined, discounts: string | undefined) => {
@@ -281,7 +281,21 @@ export function Dashboard() {
                   className="rounded-lg border bg-card p-4 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
                   onClick={() => navigate(`/dashboard/new-business/${card.key}?year=${currentYear}`)}
                 >
-                  <p className="text-sm font-medium text-muted-foreground">{card.label}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-muted-foreground">{card.label}</p>
+                    {card.info && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs text-xs">
+                            {card.info}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
                   <p className="mt-1 text-2xl font-semibold">
                     {card.isCurrency ? formatCurrency(card.actual.toString()) : card.actual}
                   </p>
