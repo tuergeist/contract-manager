@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.28.3",
+    "date": "2026-04-10",
+    "title": "Regenerate finalized absence reports",
+    "description": "Finalized absence reports can now be regenerated (requires write permission). This resets the report to draft with fresh deduplicated data.",
+    "type": "feature",
+    "details": [
+      "Regenerate button enabled for finalized reports (requires contracts.write permission)",
+      "Regenerating resets to draft, deletes old PDF, fetches fresh deduplicated data"
+    ]
+  },
+  {
     "version": "2.28.2",
     "date": "2026-04-10",
     "title": "Won Development expansion, XLSX report, PDF dedup",
