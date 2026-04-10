@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.28.5",
+    "date": "2026-04-10",
+    "title": "Fix absence type mapping (vacation shown as sick)",
+    "description": "The Clockodo absence type mapping was completely wrong — vacation was shown as sick, sick as sick certificate, etc. All reports need to be regenerated.",
+    "type": "bugfix",
+    "details": [
+      "Fixed Clockodo absence type mapping: 1=vacation, 4=sick, 11=sick_certificate, etc.",
+      "Home office filter updated from type=9 to type=8 (correct Clockodo code)",
+      "All existing absence reports should be regenerated to show correct types"
+    ]
+  },
+  {
     "version": "2.28.4",
     "date": "2026-04-10",
     "title": "Department analysis permissions",
