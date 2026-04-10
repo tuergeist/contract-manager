@@ -1,9 +1,13 @@
-import csv
+"""Generate department time analysis as Excel file for email attachment."""
 import io
 from datetime import date, timedelta
 
+from openpyxl import Workbook
+from openpyxl.styles import Font, numbers
 
-def generate_department_time_csv(tenant, year: int, month: int) -> tuple[bytes, str]:
+
+def generate_department_time_xlsx(tenant, year: int, month: int) -> tuple[bytes, str]:
+    """Generate XLSX for department time analysis. Returns (xlsx_bytes, filename)."""
     from dateutil.relativedelta import relativedelta
 
     from apps.core.context import Context
@@ -43,17 +47,28 @@ def generate_department_time_csv(tenant, year: int, month: int) -> tuple[bytes, 
 
     rows = result.data["departmentTimeAnalysis"]["costDistribution"] or []
 
-    buf = io.StringIO()
-    buf.write("\ufeff")
-    writer = csv.writer(buf, delimiter=";")
-    writer.writerow(["Department", "FTEs", "%", "Cost"])
-    for r in rows:
-        writer.writerow([
-            r["departmentName"],
-            f"{r['ftes']:.2f}",
-            f"{r['percentage']:.1f}",
-            f"{r['cost']:.2f}",
-        ])
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{year}-{month:02d}"
 
-    filename = f"department-time-{year}-{month:02d}.csv"
-    return buf.getvalue().encode("utf-8"), filename
+    # Header
+    headers = ["Department", "FTEs", "%"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.font = Font(bold=True)
+
+    # Column widths
+    ws.column_dimensions["A"].width = 25
+    ws.column_dimensions["B"].width = 10
+    ws.column_dimensions["C"].width = 10
+
+    # Data
+    for i, r in enumerate(rows, 2):
+        ws.cell(row=i, column=1, value=r["departmentName"])
+        ws.cell(row=i, column=2, value=round(r["ftes"], 2))
+        ws.cell(row=i, column=3, value=round(r["percentage"], 1))
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    filename = f"department-time-{year}-{month:02d}.xlsx"
+    return buf.getvalue(), filename

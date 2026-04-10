@@ -251,12 +251,26 @@ class AbsenceReportService:
         return {"company": company, "logo_url": logo_url, "accent_color": accent_color}
 
     def _build_grouped_entries(self, report: AbsenceReport, language: str) -> list[dict]:
-        """Group entries by employee for rendering."""
+        """Group entries by employee for rendering, deduplicating overlapping ranges."""
         labels = ABSENCE_LABELS.get(language, ABSENCE_LABELS["de"])
-        entries = report.entries.all().order_by("user_name", "date_from")
+        entries = list(report.entries.all().order_by("user_name", "absence_type", "date_from"))
+
+        # Deduplicate: remove entries fully contained in a longer one (same user+type)
+        kept = []
+        for entry in entries:
+            is_contained = any(
+                k.user_name == entry.user_name
+                and k.absence_type == entry.absence_type
+                and k.date_from <= entry.date_from
+                and k.date_to >= entry.date_to
+                and k.pk != entry.pk
+                for k in kept
+            )
+            if not is_contained:
+                kept.append(entry)
 
         grouped: dict[str, list] = {}
-        for entry in entries:
+        for entry in sorted(kept, key=lambda e: (e.user_name, e.date_from)):
             if entry.user_name not in grouped:
                 grouped[entry.user_name] = []
             type_label = labels.get(f"type_{entry.absence_type}", entry.get_absence_type_display())

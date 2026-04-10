@@ -238,10 +238,10 @@ def _send_scheduled_absence_report(schedule, year, month):
 
 
 def _send_scheduled_dept_time_report(schedule, year, month):
-    from apps.contracts.services.department_time_csv import generate_department_time_csv
+    from apps.contracts.services.department_time_csv import generate_department_time_xlsx
     from apps.core.m365 import send_mail
 
-    csv_bytes, filename = generate_department_time_csv(schedule.tenant, year, month)
+    xlsx_bytes, filename = generate_department_time_xlsx(schedule.tenant, year, month)
 
     MONTH_NAMES_DE = {
         1: "Januar", 2: "Februar", 3: "März", 4: "April",
@@ -257,7 +257,7 @@ def _send_scheduled_dept_time_report(schedule, year, month):
         body_html=f"<p>Abteilungs-Zeitanalyse für {month_name} {year} im Anhang.</p>",
         attachments=[{
             "name": filename,
-            "content_type": "text/csv",
-            "content_bytes": csv_bytes,
+            "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "content_bytes": xlsx_bytes,
         }],
     )
