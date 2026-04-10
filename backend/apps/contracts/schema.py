@@ -3750,8 +3750,8 @@ class ContractQuery:
                 # status: 0=enquired, 1=approved, 2=declined, 3=approval cancelled, 4=request cancelled
                 if ab.get("status") in (2, 3, 4):
                     continue
-                # Skip home office (type=9) — user is still working
-                if ab.get("type") == 9:
+                # Skip home office (type=8) and work out of office (type=9)
+                if ab.get("type") in (8, 9):
                     continue
 
                 ab_start_str = ab.get("date_since", "")[:10]
@@ -3865,6 +3865,15 @@ class ContractQuery:
                 distribution_filled.append(DepartmentTimeEntry(department_name=dept_name, hours=h, percentage=pct))
 
         # Build reverse lookup: user_name → user_id for absence days
+        # Include users from absences even if they have no time entries
+        try:
+            for u in provider.get_users():
+                uid = str(u["id"])
+                uname = u.get("name", "")
+                if uid not in user_id_to_name and uname:
+                    user_id_to_name[uid] = uname
+        except Exception:
+            pass
         name_to_user_id: dict[str, str] = {v: k for k, v in user_id_to_name.items()}
 
         def _get_absence_days(user_name: str) -> float | None:
