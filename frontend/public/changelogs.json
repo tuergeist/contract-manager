@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.28.2",
+    "date": "2026-04-10",
+    "title": "Won Development expansion, XLSX report, PDF dedup",
+    "description": "One-off expansion items now count toward Won Development. Department time report sends as proper XLSX without cost data. Absence PDF deduplicates overlapping entries.",
+    "type": "feature",
+    "details": [
+      "One-off expansion items with deal_won_date count toward Won Development bookings",
+      "Info tooltips on each New Bookings card and info box on detail pages",
+      "Department time report sent as XLSX (not CSV), without cost column",
+      "Absence report PDF deduplicates overlapping entries at render time"
+    ]
+  },
+  {
     "version": "2.28.1",
     "date": "2026-04-09",
     "title": "Send Now button, absence dedup, column widths",
