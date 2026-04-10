@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.28.6",
+    "date": "2026-04-10",
+    "title": "Fix absent days for users without time entries",
+    "description": "Users who had no logged hours (e.g. full vacation month) now correctly show their absent days in the department time analysis.",
+    "type": "bugfix",
+    "details": [
+      "Fixed absent days showing 0 for users without time entries in the period",
+      "Fixed home office filter in department analysis (type 8+9 instead of just 9)"
+    ]
+  },
+  {
     "version": "2.28.5",
     "date": "2026-04-10",
     "title": "Fix absence type mapping (vacation shown as sick)",
