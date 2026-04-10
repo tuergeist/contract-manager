@@ -3706,7 +3706,7 @@ class ContractQuery:
         from django.core.cache import cache
         from apps.contracts.services.time_tracking import get_provider
 
-        user = require_perm(info, "contracts", "read")
+        user = require_perm(info, "department_analysis", "read")
         if not user.tenant:
             return DepartmentTimeAnalysisType(distribution=[], user_matrix=[], total_hours=0)
 
@@ -4153,7 +4153,7 @@ class ContractQuery:
         month: int,
     ) -> AbsenceReportType | None:
         """Get an existing absence report for the given month."""
-        user = require_perm(info, "contracts", "read")
+        user = require_perm(info, "department_analysis", "read")
         if not user.tenant:
             return None
 
@@ -4554,18 +4554,14 @@ class ContractMutation:
         month: int,
     ) -> AbsenceReportType:
         """Generate or regenerate a draft absence report."""
-        user = require_perm(info, "contracts", "read")
+        user = require_perm(info, "department_analysis", "regenerate")
         from apps.contracts.models import AbsenceReport as AbsenceReportModel
         from apps.contracts.services.absence_report import AbsenceReportService
 
-        # Check if resetting a finalized report — requires write permission
         existing = AbsenceReportModel.objects.filter(
             tenant=user.tenant, year=year, month=month
         ).first()
-        allow_reset = False
-        if existing and existing.status == AbsenceReportModel.Status.FINALIZED:
-            require_perm(info, "contracts", "write")
-            allow_reset = True
+        allow_reset = existing and existing.status == AbsenceReportModel.Status.FINALIZED
 
         service = AbsenceReportService(user.tenant)
         report = service.generate_report(year, month, allow_reset_finalized=allow_reset)
@@ -4598,7 +4594,7 @@ class ContractMutation:
         report_id: strawberry.ID,
     ) -> AbsenceReportType:
         """Finalize a draft absence report."""
-        user = require_perm(info, "contracts", "read")
+        user = require_perm(info, "department_analysis", "finalize")
         from apps.contracts.services.absence_report import AbsenceReportService
 
         service = AbsenceReportService(user.tenant)
@@ -4632,7 +4628,7 @@ class ContractMutation:
         recipients: list[str],
     ) -> bool:
         """Send a finalized absence report via email."""
-        user = require_perm(info, "contracts", "read")
+        user = require_perm(info, "department_analysis", "send")
         from apps.contracts.services.absence_report import AbsenceReportService
 
         service = AbsenceReportService(user.tenant)

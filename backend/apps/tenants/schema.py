@@ -2758,7 +2758,7 @@ class TenantMutation:
         self, info: Info[Context, None], report_type: str, year: int, month: int
     ) -> OperationResult:
         """Immediately send a report for the given month."""
-        user = require_perm(info, "settings", "write")
+        user = require_perm(info, "department_analysis", "send")
         schedule = ReportSchedule.objects.filter(
             tenant=user.tenant, report_type=report_type
         ).first()

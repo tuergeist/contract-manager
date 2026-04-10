@@ -23,6 +23,7 @@ PERMISSION_REGISTRY = {
     "banking": ["read", "write"],
     "incoming_invoices": ["read", "write", "config"],
     "cost_centers": ["read", "write", "config"],
+    "department_analysis": ["read", "send", "regenerate", "finalize"],
     "assistant": ["use"],
 }
 
@@ -57,6 +58,7 @@ DEFAULT_ROLES = {
         "invoices.read": True,
         "incoming_invoices.read": True,
         "cost_centers.read": True,
+        "department_analysis.read": True,
     },
 }
 
