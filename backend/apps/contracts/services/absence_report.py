@@ -95,8 +95,8 @@ class AbsenceReportService:
             # Exclude declined/cancelled
             if ab.get("status") in (2, 3, 4):
                 continue
-            # Exclude home office (Clockodo type=9)
-            if ab.get("type") == 9:
+            # Exclude home office (type=8) and work out of office (type=9)
+            if ab.get("type") in (8, 9):
                 continue
 
             ab_start_str = ab.get("date_since", "")[:10]

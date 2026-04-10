@@ -31,33 +31,39 @@ class TestAbsenceTypeNormalization:
         provider = ClockodoProvider({"api_user": "x", "api_key": "y"})
         assert provider.normalize_absence_type(1) == "sick"
 
-    def test_clockodo_sick_child(self):
-        provider = ClockodoProvider({"api_user": "x", "api_key": "y"})
-        assert provider.normalize_absence_type(6) == "sick_child"
-
-    def test_clockodo_sick_certificate(self):
-        provider = ClockodoProvider({"api_user": "x", "api_key": "y"})
-        assert provider.normalize_absence_type(3) == "sick_certificate"
-        assert provider.normalize_absence_type(4) == "sick_certificate"
-
     def test_clockodo_vacation(self):
         provider = ClockodoProvider({"api_user": "x", "api_key": "y"})
-        assert provider.normalize_absence_type(0) == "vacation"
+        assert provider.normalize_absence_type(1) == "vacation"
 
     def test_clockodo_special_leave(self):
         provider = ClockodoProvider({"api_user": "x", "api_key": "y"})
-        assert provider.normalize_absence_type(5) == "special_leave"
-
-    def test_clockodo_education(self):
-        provider = ClockodoProvider({"api_user": "x", "api_key": "y"})
-        assert provider.normalize_absence_type(8) == "education"
+        assert provider.normalize_absence_type(2) == "special_leave"
+        assert provider.normalize_absence_type(10) == "special_leave"
 
     def test_clockodo_overtime_reduction(self):
         provider = ClockodoProvider({"api_user": "x", "api_key": "y"})
-        assert provider.normalize_absence_type(7) == "overtime_reduction"
+        assert provider.normalize_absence_type(3) == "overtime_reduction"
+
+    def test_clockodo_sick(self):
+        provider = ClockodoProvider({"api_user": "x", "api_key": "y"})
+        assert provider.normalize_absence_type(4) == "sick"
+        assert provider.normalize_absence_type(12) == "sick"
+
+    def test_clockodo_sick_child(self):
+        provider = ClockodoProvider({"api_user": "x", "api_key": "y"})
+        assert provider.normalize_absence_type(5) == "sick_child"
+
+    def test_clockodo_sick_certificate(self):
+        provider = ClockodoProvider({"api_user": "x", "api_key": "y"})
+        assert provider.normalize_absence_type(11) == "sick_certificate"
+
+    def test_clockodo_education(self):
+        provider = ClockodoProvider({"api_user": "x", "api_key": "y"})
+        assert provider.normalize_absence_type(6) == "education"
 
     def test_clockodo_home_office(self):
         provider = ClockodoProvider({"api_user": "x", "api_key": "y"})
+        assert provider.normalize_absence_type(8) == "other"
         assert provider.normalize_absence_type(9) == "other"
 
     def test_clockodo_unknown_type(self):
@@ -121,7 +127,7 @@ class TestAbsenceReportService:
                 "date_since": "2026-02-03",
                 "date_until": "2026-02-05",
                 "count_days": 3,
-                "type": 1,  # sick
+                "type": 4,  # sick
                 "status": 1,  # approved
             }],
             users=[{"id": "1", "name": "Alice"}],
@@ -161,14 +167,14 @@ class TestAbsenceReportService:
         assert report.entries.count() == 0
 
     def test_generate_excludes_home_office(self, db, tenant):
-        """Home office (type=9) is excluded."""
+        """Home office (type=8) is excluded."""
         provider = _make_mock_provider(
             absences=[{
                 "user_id": "1",
                 "date_since": "2026-02-03",
                 "date_until": "2026-02-05",
                 "count_days": 3,
-                "type": 9,  # home office
+                "type": 8,  # home office
                 "status": 1,
             }],
             users=[{"id": "1", "name": "Alice"}],
