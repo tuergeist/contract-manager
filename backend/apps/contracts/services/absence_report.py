@@ -174,7 +174,7 @@ class AbsenceReportService:
         except Exception:
             return {}
 
-    def generate_report(self, year: int, month: int) -> AbsenceReport:
+    def generate_report(self, year: int, month: int, allow_reset_finalized: bool = False) -> AbsenceReport:
         """Generate or regenerate a draft absence report for the given month."""
         # Check for existing finalized report
         existing = AbsenceReport.objects.filter(
@@ -182,7 +182,13 @@ class AbsenceReportService:
         ).first()
 
         if existing and existing.status == AbsenceReport.Status.FINALIZED:
-            raise ValueError(f"Report for {year}-{month:02d} is already finalized")
+            if not allow_reset_finalized:
+                raise ValueError(f"Report for {year}-{month:02d} is already finalized")
+            existing.status = AbsenceReport.Status.DRAFT
+            existing.finalized_at = None
+            existing.finalized_by = None
+            existing.pdf_file.delete(save=False)
+            existing.save(update_fields=["status", "finalized_at", "finalized_by", "pdf_file"])
 
         provider = self._get_provider()
         if not provider:

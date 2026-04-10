@@ -205,8 +205,8 @@ class TestAbsenceReportService:
         assert entry.date_from == date(2026, 2, 1)
         assert entry.date_to == date(2026, 2, 3)
 
-    def test_cannot_regenerate_finalized(self, db, tenant):
-        """Cannot regenerate a finalized report."""
+    def test_cannot_regenerate_finalized_without_permission(self, db, tenant):
+        """Cannot regenerate a finalized report without allow_reset_finalized."""
         AbsenceReport.objects.create(
             tenant=tenant, year=2026, month=2,
             status=AbsenceReport.Status.FINALIZED,
@@ -215,6 +215,26 @@ class TestAbsenceReportService:
         service = AbsenceReportService(tenant)
         with pytest.raises(ValueError, match="already finalized"):
             service.generate_report(2026, 2)
+
+    def test_regenerate_finalized_with_permission_resets_status(self, db, tenant):
+        """Regenerating a finalized report with allow_reset_finalized resets to draft."""
+        report = AbsenceReport.objects.create(
+            tenant=tenant, year=2026, month=2,
+            status=AbsenceReport.Status.FINALIZED,
+        )
+
+        service = AbsenceReportService(tenant)
+        # Will reset to draft, then fail on provider — but status should be reset
+        try:
+            service.generate_report(2026, 2, allow_reset_finalized=True)
+        except ValueError as e:
+            if "provider" in str(e):
+                pass  # Expected — no provider in test
+            else:
+                raise
+
+        report.refresh_from_db()
+        assert report.status == AbsenceReport.Status.DRAFT
 
     def test_regenerate_draft_replaces_entries(self, db, tenant):
         """Regenerating a draft replaces old entries."""

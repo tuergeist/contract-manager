@@ -237,7 +237,7 @@ export function AbsenceReport() {
           variant="outline"
           size="sm"
           onClick={() => generateReport({ variables: { year, month } })}
-          disabled={generating || isFinalized}
+          disabled={generating}
         >
           <RefreshCw className={`mr-2 h-4 w-4 ${generating ? 'animate-spin' : ''}`} />
           {report ? t('absenceReport.regenerate') : t('absenceReport.generate')}

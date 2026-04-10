@@ -4555,10 +4555,20 @@ class ContractMutation:
     ) -> AbsenceReportType:
         """Generate or regenerate a draft absence report."""
         user = require_perm(info, "contracts", "read")
+        from apps.contracts.models import AbsenceReport as AbsenceReportModel
         from apps.contracts.services.absence_report import AbsenceReportService
 
+        # Check if resetting a finalized report — requires write permission
+        existing = AbsenceReportModel.objects.filter(
+            tenant=user.tenant, year=year, month=month
+        ).first()
+        allow_reset = False
+        if existing and existing.status == AbsenceReportModel.Status.FINALIZED:
+            require_perm(info, "contracts", "write")
+            allow_reset = True
+
         service = AbsenceReportService(user.tenant)
-        report = service.generate_report(year, month)
+        report = service.generate_report(year, month, allow_reset_finalized=allow_reset)
         report.refresh_from_db()
 
         return AbsenceReportType(
