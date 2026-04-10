@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.28.4",
+    "date": "2026-04-10",
+    "title": "Department analysis permissions",
+    "description": "New department_analysis permission resource with read, send, regenerate, and finalize actions. Regenerating finalized absence reports now works with proper permission.",
+    "type": "feature",
+    "details": [
+      "New department_analysis permission with read, send, regenerate, finalize actions",
+      "Regenerating finalized absence reports requires department_analysis.regenerate",
+      "Send, finalize actions properly gated instead of using contracts permissions"
+    ]
+  },
+  {
     "version": "2.28.3",
     "date": "2026-04-10",
     "title": "Regenerate finalized absence reports",
