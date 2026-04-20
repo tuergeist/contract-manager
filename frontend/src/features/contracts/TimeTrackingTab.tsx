@@ -136,9 +136,17 @@ export interface DeliveryItem {
   name: string
 }
 
+export interface ContractItemRef {
+  id: string
+  name: string
+  isOneOff: boolean
+}
+
 interface TimeTrackingTabProps {
   contractId: string
   customerName: string
+  clockodoCustomerId?: string | null
+  allItems?: ContractItemRef[]
   deliveryItems?: DeliveryItem[]
 }
 
@@ -177,7 +185,7 @@ interface ExternalProject {
   active: boolean
 }
 
-export function TimeTrackingTab({ contractId, customerName, deliveryItems = [] }: TimeTrackingTabProps) {
+export function TimeTrackingTab({ contractId, customerName, clockodoCustomerId, allItems = [], deliveryItems = [] }: TimeTrackingTabProps) {
   const { t } = useTranslation()
   const [showLinkDialog, setShowLinkDialog] = useState(false)
   const [showAddRuleDialog, setShowAddRuleDialog] = useState(false)
@@ -466,7 +474,10 @@ export function TimeTrackingTab({ contractId, customerName, deliveryItems = [] }
         <LinkProjectDialog
           contractId={contractId}
           customerName={customerName}
+          clockodoCustomerId={clockodoCustomerId}
           linkedProjectIds={mappings.map((m) => m.externalProjectId)}
+          hasMaintenance={mappings.some((m) => m.contractItemId == null)}
+          allItems={allItems}
           deliveryItems={deliveryItems}
           onClose={() => setShowLinkDialog(false)}
           onLinked={() => {
@@ -492,10 +503,30 @@ export function TimeTrackingTab({ contractId, customerName, deliveryItems = [] }
   )
 }
 
+const CREATE_CLOCKODO_PROJECT_MUTATION = gql`
+  mutation CreateClockodoProjectForContract(
+    $contractId: ID!
+    $projectName: String!
+    $contractItemId: ID
+  ) {
+    createClockodoProjectForContract(
+      contractId: $contractId
+      projectName: $projectName
+      contractItemId: $contractItemId
+    ) {
+      success
+      error
+    }
+  }
+`
+
 interface LinkProjectDialogProps {
   contractId: string
   customerName: string
+  clockodoCustomerId?: string | null
   linkedProjectIds: string[]
+  hasMaintenance: boolean
+  allItems: ContractItemRef[]
   deliveryItems: DeliveryItem[]
   onClose: () => void
   onLinked: () => void
@@ -504,7 +535,10 @@ interface LinkProjectDialogProps {
 function LinkProjectDialog({
   contractId,
   customerName,
+  clockodoCustomerId,
   linkedProjectIds,
+  hasMaintenance,
+  allItems,
   deliveryItems,
   onClose,
   onLinked,
@@ -512,6 +546,10 @@ function LinkProjectDialog({
   const { t } = useTranslation()
   const [search, setSearch] = useState(customerName)
   const [selectedItemId, setSelectedItemId] = useState('none')
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [newProjectName, setNewProjectName] = useState('')
+  const [createItemId, setCreateItemId] = useState('none')
+  const [createError, setCreateError] = useState<string | null>(null)
 
   const { data, loading } = useQuery(TIME_TRACKING_PROJECTS_QUERY, {
     variables: { search },
@@ -519,6 +557,7 @@ function LinkProjectDialog({
   })
 
   const [mapProject, { loading: mapping }] = useMutation(MAP_PROJECT_MUTATION)
+  const [createProject, { loading: creating }] = useMutation(CREATE_CLOCKODO_PROJECT_MUTATION)
 
   const projects: ExternalProject[] = data?.timeTrackingProjects || []
 
@@ -537,6 +576,31 @@ function LinkProjectDialog({
     }
   }
 
+  const handleCreate = async () => {
+    if (!newProjectName.trim()) return
+    setCreateError(null)
+
+    if (hasMaintenance && createItemId === 'none') {
+      setCreateError(t('timeTracking.createProject.itemRequired'))
+      return
+    }
+
+    const result = await createProject({
+      variables: {
+        contractId,
+        projectName: newProjectName.trim(),
+        contractItemId: createItemId !== 'none' ? createItemId : null,
+      },
+    })
+
+    const response = result.data?.createClockodoProjectForContract
+    if (response?.success) {
+      onLinked()
+    } else if (response?.error) {
+      setCreateError(response.error)
+    }
+  }
+
   return (
     <Dialog open onOpenChange={() => onClose()}>
       <DialogContent className="max-w-2xl">
@@ -545,6 +609,85 @@ function LinkProjectDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Create new project section */}
+          {clockodoCustomerId && (
+            <div className="rounded-lg border border-dashed border-gray-300 p-4">
+              {!showCreateForm ? (
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  <Plus className="h-4 w-4" />
+                  {t('timeTracking.createProject.button')}
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-900">
+                    {t('timeTracking.createProject.title')}
+                  </h4>
+                  <input
+                    type="text"
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    placeholder={t('timeTracking.createProject.namePlaceholder')}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    autoFocus
+                  />
+                  <div className="flex items-center gap-3">
+                    <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                      {t('timeTracking.linkToItem')}
+                      {hasMaintenance && <span className="ml-1 text-red-500">*</span>}
+                    </label>
+                    <Select value={createItemId} onValueChange={setCreateItemId}>
+                      <SelectTrigger className="flex-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {!hasMaintenance && (
+                          <SelectItem value="none">{t('timeTracking.noItemLink')}</SelectItem>
+                        )}
+                        {allItems.map((item) => (
+                          <SelectItem key={item.id} value={item.id}>
+                            {item.name}
+                            {item.isOneOff ? '' : ' (recurring)'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {hasMaintenance && (
+                    <p className="text-xs text-amber-600">
+                      {t('timeTracking.createProject.maintenanceHint')}
+                    </p>
+                  )}
+                  {createError && (
+                    <p className="text-xs text-red-600">{createError}</p>
+                  )}
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => {
+                        setShowCreateForm(false)
+                        setCreateError(null)
+                      }}
+                      className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      {t('common.cancel')}
+                    </button>
+                    <button
+                      onClick={handleCreate}
+                      disabled={creating || !newProjectName.trim()}
+                      className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {creating && <Loader2 className="h-3 w-3 animate-spin" />}
+                      {t('timeTracking.createProject.submit')}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Search existing projects */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
@@ -553,7 +696,6 @@ function LinkProjectDialog({
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t('timeTracking.searchProjects')}
               className="w-full rounded-md border border-gray-300 py-2 pl-10 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              autoFocus
             />
           </div>
 

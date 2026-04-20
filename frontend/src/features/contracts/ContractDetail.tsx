@@ -133,6 +133,7 @@ const CONTRACT_DETAIL_QUERY = gql`
       customer {
         id
         name
+        clockodoCustomerId
       }
       items {
         id
@@ -731,6 +732,7 @@ interface Contract {
   customer: {
     id: string
     name: string
+    clockodoCustomerId: string | null
   }
   items: ContractItem[]
   amendments: Amendment[]
@@ -1990,6 +1992,12 @@ export function ContractDetail() {
         <TimeTrackingTab
           contractId={id!}
           customerName={contract.customer.name}
+          clockodoCustomerId={contract.customer.clockodoCustomerId}
+          allItems={contract.items.map(item => ({
+            id: item.id,
+            name: item.product?.name || item.description || '-',
+            isOneOff: item.isOneOff,
+          }))}
           deliveryItems={contract.items
             .filter(item => item.deliveryStatus != null)
             .map(item => ({ id: item.id, name: item.product?.name || item.description || '-' }))
