@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.28.8",
+    "date": "2026-04-20",
+    "title": "Fix Forecast customer_number field ordering",
+    "description": "Fixes GraphQL schema error for customer_number field in forecast queries.",
+    "type": "bugfix",
+    "details": [
+      "Fixed dataclass field ordering: optional customer_number moved after required fields"
+    ]
+  },
+  {
     "version": "2.28.7",
     "date": "2026-04-20",
     "title": "Forecast Customer-Gruppierung & Clockodo-Projekte",
