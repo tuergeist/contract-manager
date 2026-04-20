@@ -1116,9 +1116,9 @@ class ContractRevenueRow:
     contract_name: str
     customer_id: int
     customer_name: str
-    customer_number: str | None = None
     months: List[RevenueMonthData]
     total: Decimal
+    customer_number: str | None = None
 
 
 @strawberry.type
