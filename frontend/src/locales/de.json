@@ -648,6 +648,7 @@
     "quarters": "Quartale",
     "proRata": "Pro-rata",
     "arrOnly": "Nur ARR",
+    "groupBy": "Gruppierung",
     "contract": "Vertrag",
     "customer": "Kunde",
     "total": "Gesamt",
@@ -1820,6 +1821,14 @@
       "noMatches": "Keine passenden unverknüpften Projekte gefunden",
       "matchCount": "{{count}} passende(s) Projekt(e)",
       "create": "Regel erstellen"
+    },
+    "createProject": {
+      "button": "Neues Clockodo-Projekt anlegen",
+      "title": "Neues Projekt in Clockodo erstellen",
+      "namePlaceholder": "Projektname...",
+      "submit": "Projekt erstellen",
+      "itemRequired": "Ein Wartungsprojekt existiert bereits. Neue Projekte müssen mit einer Position verknüpft werden.",
+      "maintenanceHint": "Ein Wartungsprojekt existiert bereits. Neue Projekte müssen zwingend mit einer Position verknüpft werden."
     }
   },
   "todos": {

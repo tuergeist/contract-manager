@@ -27,6 +27,7 @@ const REVENUE_FORECAST_QUERY = gql`
         contractName
         customerId
         customerName
+        customerNumber
         months {
           month
           amount
@@ -53,6 +54,7 @@ const RECOGNITION_FORECAST_QUERY = gql`
         contractName
         customerId
         customerName
+        customerNumber
         months {
           month
           amount
@@ -77,8 +79,17 @@ interface ContractRevenueRow {
   contractName: string
   customerId: number
   customerName: string
+  customerNumber: string | null
   months: RevenueMonthData[]
   total: string
+}
+
+interface CustomerConsolidatedRow {
+  customerId: number
+  customerName: string
+  customerNumber: string | null
+  months: RevenueMonthData[]
+  total: number
 }
 
 interface RevenueForecastResult {
@@ -91,6 +102,7 @@ interface RevenueForecastResult {
 
 type ViewType = 'monthly' | 'quarterly'
 type ForecastType = 'billing' | 'recognition'
+type GroupBy = 'contract' | 'customer'
 type SortField = 'contract' | 'customer' | null
 type SortOrder = 'asc' | 'desc'
 
@@ -101,6 +113,7 @@ export function RevenueForecast() {
   const [periods, setPeriods] = useState('12')
   const [proRata, setProRata] = useState(false)
   const [excludeOneOff, setExcludeOneOff] = useState(false)
+  const [groupBy, setGroupBy] = useState<GroupBy>('contract')
   const [sortField, setSortField] = useState<SortField>(null)
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
   const [refreshing, setRefreshing] = useState(false)
@@ -162,6 +175,47 @@ export function RevenueForecast() {
       }
       return sortOrder === 'asc' ? comparison : -comparison
     })
+  }, [forecast?.contracts, sortField, sortOrder, i18n.language])
+
+  // Consolidate by customer
+  const customerRows = useMemo(() => {
+    if (!forecast?.contracts) return []
+
+    const map = new Map<number, CustomerConsolidatedRow>()
+
+    for (const contract of forecast.contracts) {
+      const existing = map.get(contract.customerId)
+      if (existing) {
+        existing.total += parseFloat(contract.total)
+        for (let i = 0; i < contract.months.length; i++) {
+          const prev = parseFloat(existing.months[i].amount)
+          const add = parseFloat(contract.months[i].amount)
+          existing.months[i] = {
+            ...existing.months[i],
+            amount: String(prev + add),
+          }
+        }
+      } else {
+        map.set(contract.customerId, {
+          customerId: contract.customerId,
+          customerName: contract.customerName,
+          customerNumber: contract.customerNumber,
+          months: contract.months.map((m) => ({ ...m, invoiceStatus: null })),
+          total: parseFloat(contract.total),
+        })
+      }
+    }
+
+    const rows = Array.from(map.values())
+
+    if (sortField === 'customer') {
+      rows.sort((a, b) => {
+        const cmp = a.customerName.localeCompare(b.customerName, i18n.language)
+        return sortOrder === 'asc' ? cmp : -cmp
+      })
+    }
+
+    return rows
   }, [forecast?.contracts, sortField, sortOrder, i18n.language])
 
   const handleSort = (field: SortField) => {
@@ -324,6 +378,19 @@ export function RevenueForecast() {
               {t('forecast.arrOnly')}
             </label>
           </div>
+          {/* Group By Toggle */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium">{t('forecast.groupBy')}:</label>
+            <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="contract">{t('forecast.contract')}</SelectItem>
+                <SelectItem value="customer">{t('forecast.customer')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <HelpVideoButton />
           <button
             onClick={handleRefresh}
@@ -366,7 +433,85 @@ export function RevenueForecast() {
           <TrendingUp className="mx-auto h-12 w-12 text-gray-400" />
           <p className="mt-2 text-gray-600">{t('forecast.noData')}</p>
         </div>
+      ) : groupBy === 'customer' ? (
+        /* Customer-consolidated view */
+        <div className="overflow-x-auto rounded-lg border bg-white">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th
+                  className="sticky left-0 z-10 min-w-[260px] cursor-pointer bg-gray-50 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                  onClick={() => handleSort('customer')}
+                >
+                  {t('forecast.customer')}
+                  {getSortIcon('customer')}
+                </th>
+                {forecast.monthColumns.map((period) => (
+                  <th
+                    key={period}
+                    className="whitespace-nowrap px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500"
+                  >
+                    {formatPeriod(period)}
+                  </th>
+                ))}
+                <th className="whitespace-nowrap px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                  {t('forecast.total')}
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {/* Period Totals Row */}
+              <tr className="bg-blue-50 font-semibold">
+                <td
+                  className="sticky left-0 z-10 bg-blue-50 px-4 py-3 text-sm text-blue-900"
+                >
+                  {view === 'monthly' ? t('forecast.monthlyTotal') : t('forecast.quarterlyTotal')}
+                </td>
+                {forecast.monthlyTotals.map((periodData) => (
+                  <td
+                    key={periodData.month}
+                    className="whitespace-nowrap px-3 py-3 text-right text-sm text-blue-900"
+                  >
+                    {formatCurrencyCompact(periodData.amount)}
+                  </td>
+                ))}
+                <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-bold text-blue-900">
+                  {formatCurrencyFull(forecast.grandTotal)}
+                </td>
+              </tr>
+
+              {/* Customer Rows */}
+              {customerRows.map((customer) => (
+                <tr key={customer.customerId} className="hover:bg-gray-50">
+                  <td className="sticky left-0 z-10 min-w-[260px] bg-white px-4 py-3 text-sm group-hover:bg-gray-50">
+                    <Link
+                      to={`/customers/${customer.customerId}`}
+                      className="font-medium text-blue-600 hover:underline"
+                    >
+                      {customer.customerName}
+                    </Link>
+                    {customer.customerNumber && (
+                      <span className="ml-2 text-xs text-gray-400">{customer.customerNumber}</span>
+                    )}
+                  </td>
+                  {customer.months.map((periodData) => (
+                    <td
+                      key={periodData.month}
+                      className="whitespace-nowrap px-3 py-3 text-right text-sm text-gray-900"
+                    >
+                      {formatCurrencyCompact(periodData.amount)}
+                    </td>
+                  ))}
+                  <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900">
+                    {formatCurrencyFull(String(customer.total))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
+        /* Contract-level view (default) */
         <div className="overflow-x-auto rounded-lg border bg-white">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">

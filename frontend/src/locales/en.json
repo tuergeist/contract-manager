@@ -648,6 +648,7 @@
     "quarters": "Quarters",
     "proRata": "Pro-rata",
     "arrOnly": "ARR only",
+    "groupBy": "Group by",
     "contract": "Contract",
     "customer": "Customer",
     "total": "Total",
@@ -1820,6 +1821,14 @@
       "noMatches": "No matching unlinked projects found",
       "matchCount": "{{count}} matching project(s)",
       "create": "Create Rule"
+    },
+    "createProject": {
+      "button": "Create new Clockodo project",
+      "title": "Create new project in Clockodo",
+      "namePlaceholder": "Project name...",
+      "submit": "Create Project",
+      "itemRequired": "A maintenance project already exists. New projects must be linked to a line item.",
+      "maintenanceHint": "A maintenance project already exists. New projects must be linked to a line item."
     }
   },
   "todos": {

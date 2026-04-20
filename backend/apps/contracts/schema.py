@@ -1116,6 +1116,7 @@ class ContractRevenueRow:
     contract_name: str
     customer_id: int
     customer_name: str
+    customer_number: str | None = None
     months: List[RevenueMonthData]
     total: Decimal
 
@@ -2975,6 +2976,7 @@ class ContractQuery:
                         contract_name=contract_name,
                         customer_id=contract.customer.id,
                         customer_name=contract.customer.name,
+                        customer_number=contract.customer.netsuite_customer_number,
                         months=contract_periods,
                         total=contract_total,
                     )
@@ -3227,6 +3229,7 @@ class ContractQuery:
                         contract_name=contract_name,
                         customer_id=contract.customer.id,
                         customer_name=contract.customer.name,
+                        customer_number=contract.customer.netsuite_customer_number,
                         months=contract_periods,
                         total=contract_total,
                     )
@@ -6092,6 +6095,103 @@ class ContractMutation:
 
         mapping.delete()
         return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def create_clockodo_project_for_contract(
+        self,
+        info: Info[Context, None],
+        contract_id: strawberry.ID,
+        project_name: str,
+        contract_item_id: strawberry.ID | None = None,
+    ) -> TimeTrackingMappingResult:
+        """Create a new Clockodo project and map it to a contract."""
+        from apps.contracts.services.time_tracking import get_provider
+
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return TimeTrackingMappingResult(success=False, error=err)
+        if not user.tenant:
+            return TimeTrackingMappingResult(success=False, error="No tenant assigned")
+
+        contract = Contract.objects.select_related("customer").filter(
+            tenant=user.tenant, id=contract_id
+        ).first()
+        if not contract:
+            return TimeTrackingMappingResult(success=False, error="Contract not found")
+
+        customer = contract.customer
+        if not customer.clockodo_customer_id:
+            return TimeTrackingMappingResult(
+                success=False, error="Customer is not linked to Clockodo"
+            )
+
+        # If a maintenance mapping already exists, require a contract item
+        has_maintenance = TimeTrackingProjectMapping.objects.filter(
+            tenant=user.tenant,
+            contract=contract,
+            contract_item__isnull=True,
+        ).exists()
+        if has_maintenance and not contract_item_id:
+            return TimeTrackingMappingResult(
+                success=False,
+                error="A maintenance project already exists. New projects must be linked to a line item.",
+            )
+
+        # Validate contract_item belongs to this contract
+        contract_item = None
+        if contract_item_id:
+            contract_item = ContractItem.objects.filter(
+                contract=contract, id=contract_item_id
+            ).first()
+            if not contract_item:
+                return TimeTrackingMappingResult(
+                    success=False, error="Item not found in this contract"
+                )
+
+        provider = get_provider(user.tenant)
+        if not provider:
+            return TimeTrackingMappingResult(
+                success=False, error="No time tracking provider configured"
+            )
+
+        try:
+            result = provider.create_project(
+                customer.clockodo_customer_id, project_name.strip()
+            )
+        except Exception as e:
+            return TimeTrackingMappingResult(
+                success=False, error=f"Failed to create Clockodo project: {e}"
+            )
+
+        mapping = TimeTrackingProjectMapping.objects.create(
+            tenant=user.tenant,
+            contract=contract,
+            contract_item=contract_item,
+            external_project_id=result["id"],
+            external_project_name=result["name"],
+            external_customer_name=customer.name,
+            link_source=TimeTrackingProjectMapping.LinkSource.MANUAL,
+        )
+
+        from apps.contracts.tasks import sync_time_tracking_mapping_task
+        sync_time_tracking_mapping_task.delay(mapping.id)
+
+        return TimeTrackingMappingResult(
+            success=True,
+            mapping=TimeTrackingMappingType(
+                id=mapping.id,
+                external_project_id=mapping.external_project_id,
+                external_project_name=mapping.external_project_name,
+                external_customer_name=mapping.external_customer_name,
+                contract_item_id=mapping.contract_item_id,
+                contract_item_name=(
+                    contract_item.product.name if contract_item and contract_item.product
+                    else contract_item.description[:50] if contract_item
+                    else None
+                ),
+                cached_total_hours=mapping.cached_total_hours,
+            ),
+        )
 
     @strawberry.mutation
     def create_auto_link_rule(

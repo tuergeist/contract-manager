@@ -131,6 +131,7 @@ def forecast_result_to_dict(result) -> dict:
                 "contract_name": c.contract_name,
                 "customer_id": c.customer_id,
                 "customer_name": c.customer_name,
+                "customer_number": c.customer_number,
                 "months": [
                     {
                         "month": m.month,
@@ -172,6 +173,7 @@ def dict_to_forecast_result(data: dict):
                 contract_name=c["contract_name"],
                 customer_id=c["customer_id"],
                 customer_name=c["customer_name"],
+                customer_number=c.get("customer_number"),
                 months=[
                     RevenueMonthData(
                         month=m["month"],
