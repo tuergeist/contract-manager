@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, gql } from '@apollo/client'
 import { Link } from 'react-router-dom'
-import { Loader2, TrendingUp, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react'
+import { Loader2, TrendingUp, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, Download } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import {
   Select,
   SelectContent,
@@ -275,6 +276,60 @@ export function RevenueForecast() {
     }
   }
 
+  const handleExportExcel = () => {
+    if (!forecast) return
+
+    const headers: string[] = []
+    const periodHeaders = forecast.monthColumns.map(formatPeriod)
+
+    if (groupBy === 'customer') {
+      headers.push(t('forecast.customer'), 'ID', ...periodHeaders, t('forecast.total'))
+    } else {
+      headers.push(t('forecast.contract'), t('forecast.customer'), ...periodHeaders, t('forecast.total'))
+    }
+
+    const rows: (string | number)[][] = []
+
+    // Totals row
+    const totalsLabel = view === 'monthly' ? t('forecast.monthlyTotal') : t('forecast.quarterlyTotal')
+    const totalsRow: (string | number)[] = groupBy === 'customer'
+      ? [totalsLabel, '']
+      : [totalsLabel, '']
+    forecast.monthlyTotals.forEach((p) => totalsRow.push(parseFloat(p.amount)))
+    totalsRow.push(parseFloat(forecast.grandTotal))
+    rows.push(totalsRow)
+
+    // Data rows
+    if (groupBy === 'customer') {
+      customerRows.forEach((c) => {
+        const row: (string | number)[] = [c.customerName, c.customerNumber || '']
+        c.months.forEach((m) => row.push(parseFloat(m.amount)))
+        row.push(c.total)
+        rows.push(row)
+      })
+    } else {
+      sortedContracts.forEach((c) => {
+        const row: (string | number)[] = [c.contractName, c.customerName]
+        c.months.forEach((m) => row.push(parseFloat(m.amount)))
+        row.push(parseFloat(c.total))
+        rows.push(row)
+      })
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+
+    // Set column widths
+    ws['!cols'] = headers.map((_, i) => ({ wch: i < 2 ? 30 : 14 }))
+
+    const wb = XLSX.utils.book_new()
+    const sheetName = forecastType === 'billing' ? t('forecast.billing') : t('forecast.recognition')
+    XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31))
+
+    const typeSuffix = forecastType === 'billing' ? 'billing' : 'recognition'
+    const groupSuffix = groupBy === 'customer' ? 'by-customer' : 'by-contract'
+    XLSX.writeFile(wb, `forecast-${typeSuffix}-${groupSuffix}.xlsx`)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -403,6 +458,14 @@ export function RevenueForecast() {
               <RefreshCw className="h-4 w-4" />
             )}
             {t('forecast.refresh')}
+          </button>
+          <button
+            onClick={handleExportExcel}
+            disabled={!forecast?.contracts?.length}
+            className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" />
+            {t('forecast.exportExcel')}
           </button>
         </div>
       </div>
