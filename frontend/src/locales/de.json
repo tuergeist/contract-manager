@@ -249,6 +249,7 @@
     "remainingMonths": "Restlaufzeit",
     "exportExcel": "Excel exportieren",
     "exporting": "Exportieren...",
+    "exportNoPermission": "Keine Berechtigung zum Exportieren",
     "tableOverflowWarning": "Einige Spalten sind möglicherweise nicht sichtbar. Zoomen Sie heraus oder verbreitern Sie Ihr Browserfenster.",
     "showDates": "Datum",
     "priceIncreaseBadge": "Preiserhöhung",
@@ -659,7 +660,8 @@
     "statusSent": "Versendet",
     "statusPaid": "Bezahlt",
     "statusOverdue": "Überfällig (60+ Tage)",
-    "refresh": "Aktualisieren"
+    "refresh": "Aktualisieren",
+    "exportExcel": "Excel"
   },
   "import": {
     "title": "Vertragsimport",

@@ -14,8 +14,10 @@ import {
   Filter,
   FileSpreadsheet,
   AlertTriangle,
+  Lock,
 } from 'lucide-react'
 import { usePersistedState } from '@/lib/usePersistedState'
+import { useAuth } from '@/lib/auth'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 
@@ -128,6 +130,8 @@ const CONTRACT_STATUSES = ['draft', 'active', 'paused', 'cancelled', 'ended', 'd
 
 export function ContractList() {
   const { t, i18n } = useTranslation()
+  const { hasPermission } = useAuth()
+  const canExport = hasPermission('contracts', 'export')
   const [searchParams, setSearchParams] = useSearchParams()
   const [searchTerm, setSearchTerm] = useState('')
   const [searchInput, setSearchInput] = useState('')
@@ -320,11 +324,14 @@ export function ContractList() {
           <HelpVideoButton />
           <button
             onClick={handleExport}
-            disabled={exporting}
+            disabled={exporting || !canExport}
+            title={!canExport ? t('contracts.exportNoPermission') : undefined}
             className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             data-testid="export-contracts-button"
           >
-            {exporting ? (
+            {!canExport ? (
+              <Lock className="h-4 w-4" />
+            ) : exporting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <FileSpreadsheet className="h-4 w-4" />

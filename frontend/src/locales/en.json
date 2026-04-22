@@ -249,6 +249,7 @@
     "remainingMonths": "Remaining",
     "exportExcel": "Export Excel",
     "exporting": "Exporting...",
+    "exportNoPermission": "No permission to export",
     "tableOverflowWarning": "Some columns may be hidden. Zoom out or widen your browser window to see all columns.",
     "showDates": "Dates",
     "priceIncreaseBadge": "Price Increase",
@@ -659,7 +660,8 @@
     "statusSent": "Sent",
     "statusPaid": "Paid",
     "statusOverdue": "Overdue (60+ days)",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "exportExcel": "Excel"
   },
   "import": {
     "title": "Contract Import",
