@@ -729,6 +729,7 @@ class CustomerMutation:
                 file_size=file_size,
                 content_type=input.content_type,
                 description=input.description,
+                category=input.category,
                 uploaded_by=user,
             )
 
@@ -743,6 +744,7 @@ class CustomerMutation:
                     file_size=attachment.file_size,
                     content_type=attachment.content_type,
                     description=attachment.description,
+                    category=attachment.category,
                     uploaded_at=attachment.created_at,
                     uploaded_by_name=user.email,
                     download_url=f"/api/customer-attachments/{attachment.id}/download/",
