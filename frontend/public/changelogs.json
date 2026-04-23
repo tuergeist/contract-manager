@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.29.0",
+    "date": "2026-04-23",
+    "title": "Lieferverfolgung mit unabhängiger Abrechnung",
+    "description": "Positionen mit Lieferverfolgung können jetzt unabhängig vom Lieferstatus abgerechnet werden — ideal für Vorauszahlungen, bei denen die Lieferung nur zur Dokumentation getrackt wird.",
+    "type": "feature",
+    "details": [
+      "Neue Option 'Unabhängig abrechnen' im Position-Dialog neben ETA",
+      "Billing- und Recognition-Schedule berücksichtigen das Flag: Position wird abgerechnet trotz pending delivery",
+      "Auch Positionen mit Abhängigkeit zu einer pending-Position werden entsperrt, wenn unabhängig markiert",
+      "Closes #8"
+    ]
+  },
+  {
     "version": "2.28.12",
     "date": "2026-04-23",
     "title": "Auto-Link-Regeln werden sofort angewendet",
