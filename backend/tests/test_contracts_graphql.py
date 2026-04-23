@@ -2116,6 +2116,60 @@ class TestDeliverableEta:
         )
         assert len(schedule) == 0
 
+    def test_invoice_independent_pending_item_is_billed(self, db, tenant, active_contract, product):
+        """Pending item flagged as invoice_independent is billed anyway (e.g. upfront payment)."""
+        ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("10000"), is_one_off=True,
+            billing_start_date=date(2025, 6, 1),
+            delivery_status="pending",
+            invoice_independent=True,
+        )
+        schedule = active_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2025, 12, 31),
+        )
+        assert len(schedule) == 1
+        assert schedule[0]["total"] == Decimal("10000")
+
+    def test_invoice_independent_dependent_not_blocked_by_pending_dependency(
+        self, db, tenant, active_contract, product
+    ):
+        """invoice_independent bypasses dependency blocking too."""
+        one_off = ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("5000"), is_one_off=True,
+            billing_start_date=date(2025, 3, 1),
+            delivery_status="pending",
+        )
+        ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("100"),
+            billing_start_date=date(2025, 1, 1),
+            depends_on=one_off,
+            invoice_independent=True,
+        )
+        schedule = active_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2025, 12, 31),
+        )
+        # recurring is billed every month (12 entries) despite pending dependency
+        assert len(schedule) == 12
+
+    def test_invoice_independent_included_in_recognition_schedule(
+        self, db, tenant, active_contract, product
+    ):
+        """Recognition schedule also honors invoice_independent flag."""
+        ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("10000"), is_one_off=True,
+            billing_start_date=date(2025, 6, 1),
+            delivery_status="pending",
+            invoice_independent=True,
+        )
+        schedule = active_contract.get_recognition_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2025, 12, 31),
+        )
+        assert len(schedule) >= 1
+
     def test_dependent_item_included_when_dependency_has_eta(self, db, tenant, active_contract, product):
         """Recurring item with pending dependency included when dependency has ETA."""
         one_off = ContractItem.objects.create(

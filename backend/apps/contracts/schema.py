@@ -239,6 +239,7 @@ class ContractItemType:
     delivery_status: str | None = None
     delivered_at: date | None = None
     estimated_delivery_date: date | None = None
+    invoice_independent: bool = False
     depends_on: "ContractItemType | None" = None
     dependent_items: List["ContractItemType"] = strawberry.field(default_factory=list)
     # Year-specific pricing
@@ -454,6 +455,7 @@ class ContractType:
                     delivery_status=item.delivery_status,
                     delivered_at=item.delivered_at,
                     estimated_delivery_date=item.estimated_delivery_date,
+                    invoice_independent=item.invoice_independent,
                     depends_on=ContractItemType(
                         id=item.depends_on.id,
                         quantity=item.depends_on.quantity,
@@ -469,6 +471,7 @@ class ContractType:
                         delivery_status=item.depends_on.delivery_status,
                         delivered_at=item.depends_on.delivered_at,
                         estimated_delivery_date=item.depends_on.estimated_delivery_date,
+                        invoice_independent=item.depends_on.invoice_independent,
                         revenue_type=item.depends_on.revenue_type,
                         effective_revenue_type=item.depends_on.get_effective_revenue_type(),
                     ) if item.depends_on else None,
@@ -731,6 +734,7 @@ class ContractItemInput:
     delivery_tracking: bool = False
     depends_on_item_id: strawberry.ID | None = None
     estimated_delivery_date: date | None = None
+    invoice_independent: bool = False
     revenue_type: str | None = None
     deal_won_date: date | None = None
 
@@ -755,6 +759,7 @@ class UpdateContractItemInput:
     delivery_tracking: bool | None = None
     depends_on_item_id: strawberry.ID | None = UNSET
     estimated_delivery_date: date | None = UNSET
+    invoice_independent: bool | None = None
     revenue_type: str | None = UNSET
     deal_won_date: date | None = UNSET
 
@@ -890,6 +895,7 @@ class DeliverableItemType:
     delivery_status: str | None
     delivered_at: date | None
     estimated_delivery_date: date | None
+    invoice_independent: bool = False
     contract_id: int
     contract_name: str
     customer_name: str
@@ -4052,6 +4058,7 @@ class ContractQuery:
                 delivery_status=item.delivery_status,
                 delivered_at=item.delivered_at,
                 estimated_delivery_date=item.estimated_delivery_date,
+                invoice_independent=item.invoice_independent,
                 contract_id=item.contract_id,
                 contract_name=item.contract.name or "",
                 customer_name=item.contract.customer.name,
@@ -4893,6 +4900,7 @@ class ContractMutation:
                     order_confirmation_number=input.order_confirmation_number,
                     delivery_status="pending" if input.delivery_tracking else None,
                     estimated_delivery_date=input.estimated_delivery_date if input.delivery_tracking else None,
+                    invoice_independent=input.invoice_independent if input.delivery_tracking else False,
                     depends_on=depends_on_item,
                     revenue_type=input.revenue_type,
                     deal_won_date=input.deal_won_date,
@@ -4950,6 +4958,7 @@ class ContractMutation:
                     delivery_status=item.delivery_status,
                     delivered_at=item.delivered_at,
                     estimated_delivery_date=item.estimated_delivery_date,
+                    invoice_independent=item.invoice_independent,
                     depends_on=None,
                     dependent_items=[],
                     price_periods=[],  # Newly created items have no price periods
@@ -5061,6 +5070,11 @@ class ContractMutation:
                         item.delivery_status = None
                         item.delivered_at = None
                         item.estimated_delivery_date = None
+                        item.invoice_independent = False
+                if input.invoice_independent is not None:
+                    # Only meaningful on items with delivery tracking enabled
+                    if item.delivery_status:
+                        item.invoice_independent = input.invoice_independent
                 if input.estimated_delivery_date is not UNSET:
                     # Only set ETA on pending deliverable items
                     if item.delivery_status == "pending":
@@ -5186,6 +5200,7 @@ class ContractMutation:
                     delivery_status=item.delivery_status,
                     delivered_at=item.delivered_at,
                     estimated_delivery_date=item.estimated_delivery_date,
+                    invoice_independent=item.invoice_independent,
                     depends_on=None,
                     dependent_items=[],
                     price_periods=price_periods,

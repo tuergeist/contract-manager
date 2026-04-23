@@ -488,7 +488,9 @@
       "noDependency": "Keine Abhängigkeit",
       "estimatedDeliveryDate": "Voraussichtliches Lieferdatum",
       "estimatedDeliveryDatePlaceholder": "Voraussichtliches Lieferdatum auswählen",
-      "eta": "ETA"
+      "eta": "ETA",
+      "invoiceIndependent": "Unabhängig abrechnen (z.B. Vorauszahlung)",
+      "invoiceIndependentHint": "Wenn aktiviert, wird die Position unabhängig vom Lieferstatus abgerechnet. Die Lieferverfolgung dient nur der Dokumentation."
     },
     "revenueType": {
       "label": "Umsatzart",

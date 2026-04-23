@@ -488,7 +488,9 @@
       "noDependency": "No dependency",
       "estimatedDeliveryDate": "Estimated Delivery Date",
       "estimatedDeliveryDatePlaceholder": "Select estimated delivery date",
-      "eta": "ETA"
+      "eta": "ETA",
+      "invoiceIndependent": "Invoice independently (e.g. upfront payment)",
+      "invoiceIndependentHint": "If enabled, this item is invoiced regardless of delivery status. Delivery tracking is kept for documentation only."
     },
     "revenueType": {
       "label": "Revenue Type",

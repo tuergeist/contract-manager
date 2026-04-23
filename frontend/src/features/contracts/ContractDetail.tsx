@@ -159,6 +159,7 @@ const CONTRACT_DETAIL_QUERY = gql`
         deliveryStatus
         deliveredAt
         estimatedDeliveryDate
+        invoiceIndependent
         revenueType
         effectiveRevenueType
         dependsOn {
@@ -649,6 +650,7 @@ interface ContractItem {
   deliveryStatus: string | null
   deliveredAt: string | null
   estimatedDeliveryDate: string | null
+  invoiceIndependent: boolean
   dependsOn: {
     id: string
     product: { id: string; name: string } | null
@@ -2462,6 +2464,7 @@ function AddItemModal({
   const [deliveryTracking, setDeliveryTracking] = useState(false)
   const [dependsOnItemId, setDependsOnItemId] = useState('none')
   const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState('')
+  const [invoiceIndependent, setInvoiceIndependent] = useState(false)
   const [revenueType, setRevenueType] = useState('')
   const [dealWonDate, setDealWonDate] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -2553,6 +2556,7 @@ function AddItemModal({
             deliveryTracking,
             dependsOnItemId: dependsOnItemId && dependsOnItemId !== 'none' ? dependsOnItemId : null,
             estimatedDeliveryDate: deliveryTracking && estimatedDeliveryDate ? estimatedDeliveryDate : null,
+            invoiceIndependent: deliveryTracking ? invoiceIndependent : false,
             revenueType: revenueType || null,
             dealWonDate: dealWonDate || null,
           },
@@ -2821,6 +2825,19 @@ function AddItemModal({
                     onChange={(e) => setEstimatedDeliveryDate(e.target.value)}
                     placeholder={t('contracts.delivery.estimatedDeliveryDatePlaceholder')}
                   />
+                  <div className="flex items-center space-x-2 pt-1">
+                    <Switch
+                      id="invoice-independent"
+                      checked={invoiceIndependent}
+                      onCheckedChange={setInvoiceIndependent}
+                    />
+                    <Label htmlFor="invoice-independent" className="text-sm">
+                      {t('contracts.delivery.invoiceIndependent')}
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t('contracts.delivery.invoiceIndependentHint')}
+                  </p>
                 </div>
               )}
 
@@ -2963,6 +2980,7 @@ function EditItemModal({
   const [deliveryTracking, setDeliveryTracking] = useState(!!item.deliveryStatus)
   const [dependsOnItemId, setDependsOnItemId] = useState(item.dependsOn?.id || 'none')
   const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState(item.estimatedDeliveryDate || '')
+  const [invoiceIndependent, setInvoiceIndependent] = useState(item.invoiceIndependent || false)
   const [revenueType, setRevenueType] = useState(item.revenueType || '')
   const [dealWonDate, setDealWonDate] = useState(item.dealWonDate || '')
   const [error, setError] = useState<string | null>(null)
@@ -3128,6 +3146,7 @@ function EditItemModal({
             deliveryTracking,
             dependsOnItemId: dependsOnItemId && dependsOnItemId !== 'none' ? dependsOnItemId : null,
             estimatedDeliveryDate: deliveryTracking && estimatedDeliveryDate ? estimatedDeliveryDate : null,
+            invoiceIndependent: deliveryTracking ? invoiceIndependent : false,
             revenueType: revenueType || null,
             dealWonDate: dealWonDate || null,
           },
@@ -3642,6 +3661,19 @@ function EditItemModal({
                 value={estimatedDeliveryDate}
                 onChange={(e) => setEstimatedDeliveryDate(e.target.value)}
               />
+              <div className="flex items-center space-x-2 pt-1">
+                <Switch
+                  id={`invoice-independent-${item.id}`}
+                  checked={invoiceIndependent}
+                  onCheckedChange={setInvoiceIndependent}
+                />
+                <Label htmlFor={`invoice-independent-${item.id}`} className="text-sm">
+                  {t('contracts.delivery.invoiceIndependent')}
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t('contracts.delivery.invoiceIndependentHint')}
+              </p>
             </div>
           )}
 

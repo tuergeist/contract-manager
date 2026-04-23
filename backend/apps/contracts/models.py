@@ -374,15 +374,21 @@ class Contract(TenantModel):
             if not item.product and not item.unit_price and not item_price_periods:
                 continue
 
-            # Skip items with pending delivery (unless forecast mode with ETA)
-            if item.delivery_status == "pending":
+            # Skip items with pending delivery (unless forecast mode with ETA,
+            # or item is flagged as invoice_independent)
+            if item.delivery_status == "pending" and not item.invoice_independent:
                 if include_eta_items and item.estimated_delivery_date:
                     pass  # Include in forecast using ETA as projected billing date
                 else:
                     continue
 
             # Skip items whose dependency is not yet delivered
-            if item.depends_on and item.depends_on.delivery_status == "pending":
+            # (invoice_independent items bypass dependency blocking too)
+            if (
+                not item.invoice_independent
+                and item.depends_on
+                and item.depends_on.delivery_status == "pending"
+            ):
                 if include_eta_items and item.depends_on.estimated_delivery_date:
                     pass  # Include in forecast using dependency's ETA
                 else:
@@ -396,7 +402,7 @@ class Contract(TenantModel):
                 item_billing_start = item.billing_start_date or self.billing_start_date
             # In forecast mode, use ETA as projected billing start for pending items
             if include_eta_items:
-                if item.delivery_status == "pending" and item.estimated_delivery_date:
+                if item.delivery_status == "pending" and not item.invoice_independent and item.estimated_delivery_date:
                     item_billing_start = item.estimated_delivery_date
                 elif item.depends_on and item.depends_on.delivery_status == "pending" and item.depends_on.estimated_delivery_date:
                     item_billing_start = max(item_billing_start, item.depends_on.estimated_delivery_date)
@@ -737,15 +743,21 @@ class Contract(TenantModel):
             if not item.product and not item.unit_price and not item_price_periods:
                 continue
 
-            # Skip items with pending delivery (unless forecast mode with ETA)
-            if item.delivery_status == "pending":
+            # Skip items with pending delivery (unless forecast mode with ETA,
+            # or item is flagged as invoice_independent)
+            if item.delivery_status == "pending" and not item.invoice_independent:
                 if include_eta_items and item.estimated_delivery_date:
                     pass  # Include in forecast using ETA
                 else:
                     continue
 
             # Skip items whose dependency is not yet delivered
-            if item.depends_on and item.depends_on.delivery_status == "pending":
+            # (invoice_independent items bypass dependency blocking too)
+            if (
+                not item.invoice_independent
+                and item.depends_on
+                and item.depends_on.delivery_status == "pending"
+            ):
                 if include_eta_items and item.depends_on.estimated_delivery_date:
                     pass  # Include in forecast using dependency's ETA
                 else:
@@ -755,7 +767,7 @@ class Contract(TenantModel):
             item_recognition_start = item.start_date or item.billing_start_date or self.billing_start_date
             # In forecast mode, use ETA as projected recognition start for pending items
             if include_eta_items:
-                if item.delivery_status == "pending" and item.estimated_delivery_date:
+                if item.delivery_status == "pending" and not item.invoice_independent and item.estimated_delivery_date:
                     item_recognition_start = item.estimated_delivery_date
                 elif item.depends_on and item.depends_on.delivery_status == "pending" and item.depends_on.estimated_delivery_date:
                     item_recognition_start = max(item_recognition_start, item.depends_on.estimated_delivery_date)
@@ -1090,6 +1102,10 @@ class ContractItem(TenantModel):
         null=True,
         blank=True,
         help_text="Estimated delivery date for pending deliverable items. Used for revenue forecasting.",
+    )
+    invoice_independent = models.BooleanField(
+        default=False,
+        help_text="If True, this item is billed regardless of delivery status (e.g. upfront payment). Delivery tracking is kept for documentation only.",
     )
     depends_on = models.ForeignKey(
         "self",
