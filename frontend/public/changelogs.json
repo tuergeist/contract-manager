@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.28.12",
+    "date": "2026-04-23",
+    "title": "Auto-Link-Regeln werden sofort angewendet",
+    "description": "Nach dem Erstellen einer Auto-Link-Regel werden passende Clockodo-Projekte sofort verknüpft — nicht erst nach bis zu 24 Stunden.",
+    "type": "bugfix",
+    "details": [
+      "Fixed: Auto-Link-Regeln scannen beim Anlegen sofort die vorhandenen Projekte und legen Mappings an",
+      "Fehler beim Provider-Zugriff lassen die Regel trotzdem speichern — der nächtliche Task greift dann",
+      "Closes #7"
+    ]
+  },
+  {
     "version": "2.28.11",
     "date": "2026-04-23",
     "title": "Drag&Drop und Multi-File-Upload für Anhänge",
