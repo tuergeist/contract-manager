@@ -89,6 +89,19 @@ def refresh_all_time_tracking_data() -> int:
     return total_synced
 
 
+@shared_task(acks_late=True)
+def apply_auto_link_rule_task(rule_id: int) -> int:
+    """Celery wrapper: apply a single auto-link rule by id."""
+    from apps.contracts.models import AutoLinkRule
+    try:
+        rule = AutoLinkRule.objects.select_related(
+            "tenant", "contract", "contract_item"
+        ).get(pk=rule_id)
+    except AutoLinkRule.DoesNotExist:
+        return 0
+    return apply_auto_link_rule(rule)
+
+
 def apply_auto_link_rule(rule) -> int:
     """Apply a single auto-link rule immediately.
 

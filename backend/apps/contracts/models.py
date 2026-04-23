@@ -398,6 +398,18 @@ class Contract(TenantModel):
             # For delivered one-off items without explicit billing_start, use delivered_at
             if item.is_one_off and item.delivery_status == "delivered" and item.delivered_at and not item.billing_start_date:
                 item_billing_start = item.delivered_at
+            elif (
+                item.is_one_off
+                and item.invoice_independent
+                and item.delivery_status == "pending"
+                and not item.billing_start_date
+            ):
+                # Upfront-invoiced pending one-off: prefer ETA, else skip to avoid
+                # billing at a stale contract.billing_start_date.
+                if item.estimated_delivery_date:
+                    item_billing_start = item.estimated_delivery_date
+                else:
+                    continue
             else:
                 item_billing_start = item.billing_start_date or self.billing_start_date
             # In forecast mode, use ETA as projected billing start for pending items
@@ -763,8 +775,22 @@ class Contract(TenantModel):
                 else:
                     continue
 
-            # Use start_date for recognition, fall back to billing_start_date
-            item_recognition_start = item.start_date or item.billing_start_date or self.billing_start_date
+            # For upfront-invoiced pending one-off items with no dates, prefer ETA
+            # to avoid recognizing revenue at a stale contract start date.
+            if (
+                item.is_one_off
+                and item.invoice_independent
+                and item.delivery_status == "pending"
+                and not item.start_date
+                and not item.billing_start_date
+            ):
+                if item.estimated_delivery_date:
+                    item_recognition_start = item.estimated_delivery_date
+                else:
+                    continue
+            else:
+                # Use start_date for recognition, fall back to billing_start_date
+                item_recognition_start = item.start_date or item.billing_start_date or self.billing_start_date
             # In forecast mode, use ETA as projected recognition start for pending items
             if include_eta_items:
                 if item.delivery_status == "pending" and not item.invoice_independent and item.estimated_delivery_date:

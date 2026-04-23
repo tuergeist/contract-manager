@@ -270,11 +270,12 @@ class TestCreateAutoLinkRule:
         assert result.data["createAutoLinkRule"]["success"] is False
         assert "empty" in result.data["createAutoLinkRule"]["error"].lower()
 
+    @pytest.mark.django_db(transaction=True)
     @patch("apps.contracts.tasks.sync_time_tracking_mapping_task")
-    def test_applies_rule_immediately_creating_mappings(
+    def test_applies_rule_async_on_commit(
         self, mock_sync, user, tenant, contract
     ):
-        """Creating a rule must match existing projects right away, not wait 24h."""
+        """Creating a rule dispatches an async task that links matching projects."""
         with patch("apps.contracts.services.time_tracking.get_provider") as mock_provider:
             provider = Mock()
             provider.get_projects.return_value = MOCK_PROJECTS
@@ -287,17 +288,20 @@ class TestCreateAutoLinkRule:
             }, make_context(user))
 
         assert result.data["createAutoLinkRule"]["success"] is True
-        # p1 and p2 match and should be linked immediately
+        # p1 and p2 match and should be linked by the dispatched task
+        # (CELERY_TASK_ALWAYS_EAGER=True means the task runs synchronously
+        # inside the on_commit callback).
         mappings = TimeTrackingProjectMapping.objects.filter(tenant=tenant)
         assert mappings.count() == 2
         assert {m.external_project_id for m in mappings} == {"p1", "p2"}
         assert all(m.link_source == "auto" for m in mappings)
 
+    @pytest.mark.django_db(transaction=True)
     @patch("apps.contracts.tasks.sync_time_tracking_mapping_task")
-    def test_immediate_apply_uses_contract_item(
+    def test_async_apply_uses_contract_item(
         self, mock_sync, user, tenant, contract
     ):
-        """Rule with contract_item_id passes it through to created mappings."""
+        """Rule with contract_item_id passes it through to async-created mappings."""
         item = ContractItem.objects.create(
             tenant=tenant, contract=contract, description="Wartung",
             quantity=1, unit_price=Decimal("100"), price_period="monthly",
@@ -319,11 +323,12 @@ class TestCreateAutoLinkRule:
         assert mappings.count() == 2
         assert all(m.contract_item_id == item.id for m in mappings)
 
+    @pytest.mark.django_db(transaction=True)
     @patch("apps.contracts.tasks.sync_time_tracking_mapping_task")
-    def test_immediate_apply_failure_does_not_fail_mutation(
+    def test_async_apply_failure_does_not_fail_mutation(
         self, mock_sync, user, tenant, contract
     ):
-        """If the provider call fails, the rule is still saved for the daily task."""
+        """If the provider call fails inside the task, the rule is still saved."""
         with patch("apps.contracts.services.time_tracking.get_provider") as mock_provider:
             provider = Mock()
             provider.get_projects.side_effect = Exception("Clockodo down")

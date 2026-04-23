@@ -662,8 +662,13 @@ class TodoMutation:
                 author=user,
             )
 
-            # Notify mentioned users (@email or @firstname.lastname)
-            _notify_mentioned_users(comment, user, todo)
+            # Notify mentioned users (@email or @firstname.lastname) after
+            # the comment is committed, so SMTP delivery does not block the
+            # mutation and a rollback doesn't leave phantom notifications.
+            from django.db import transaction
+            transaction.on_commit(
+                lambda: _notify_mentioned_users(comment, user, todo)
+            )
 
             return TodoCommentResult(success=True, comment=comment_to_type(comment))
         except TodoItem.DoesNotExist:

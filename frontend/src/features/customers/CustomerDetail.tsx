@@ -464,6 +464,7 @@ export function CustomerDetail() {
 
   // Attachment state
   const [uploadingFile, setUploadingFile] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [attachmentDescription, setAttachmentDescription] = useState('')
   const [attachmentCategory, setAttachmentCategory] = useState('')
 
@@ -707,6 +708,7 @@ export function CustomerDetail() {
     if (!id || files.length === 0) return
 
     setUploadingFile(true)
+    setUploadError(null)
     const errors: string[] = []
 
     for (const file of files) {
@@ -733,7 +735,7 @@ export function CustomerDetail() {
     }
 
     if (errors.length > 0) {
-      alert(errors.join('\n'))
+      setUploadError(errors.join('\n'))
     }
     if (errors.length < files.length) {
       setAttachmentDescription('')
@@ -1883,6 +1885,12 @@ export function CustomerDetail() {
                 ({customer.attachments?.length || 0})
               </span>
             </div>
+
+            {uploadError && (
+              <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600 whitespace-pre-line">
+                {uploadError}
+              </div>
+            )}
 
             {/* Upload Form */}
             <div className="flex items-end gap-4 mb-6">

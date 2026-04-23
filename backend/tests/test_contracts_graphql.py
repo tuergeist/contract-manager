@@ -2154,6 +2154,40 @@ class TestDeliverableEta:
         # recurring is billed every month (12 entries) despite pending dependency
         assert len(schedule) == 12
 
+    def test_invoice_independent_one_off_without_dates_uses_eta(
+        self, db, tenant, active_contract, product
+    ):
+        """Upfront-invoiced pending one-off with no billing_start_date uses ETA, not stale contract start."""
+        ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("10000"), is_one_off=True,
+            delivery_status="pending",
+            invoice_independent=True,
+            estimated_delivery_date=date(2025, 6, 15),
+            # no billing_start_date
+        )
+        schedule = active_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2025, 12, 31),
+        )
+        assert len(schedule) == 1
+        assert schedule[0]["date"] == date(2025, 6, 15)
+
+    def test_invoice_independent_one_off_without_dates_is_skipped(
+        self, db, tenant, active_contract, product
+    ):
+        """Upfront-invoiced pending one-off with NO dates at all is skipped, not billed at contract start."""
+        ContractItem.objects.create(
+            tenant=tenant, contract=active_contract, product=product,
+            quantity=1, unit_price=Decimal("10000"), is_one_off=True,
+            delivery_status="pending",
+            invoice_independent=True,
+            # no billing_start_date, no estimated_delivery_date
+        )
+        schedule = active_contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2025, 12, 31),
+        )
+        assert len(schedule) == 0
+
     def test_invoice_independent_included_in_recognition_schedule(
         self, db, tenant, active_contract, product
     ):

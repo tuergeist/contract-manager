@@ -6252,16 +6252,12 @@ class ContractMutation:
             match_type=match_type,
         )
 
-        # Apply rule immediately so projects get linked without waiting for daily task
-        from apps.contracts.tasks import apply_auto_link_rule
-        try:
-            apply_auto_link_rule(rule)
-        except Exception:
-            # Rule is already saved — daily task will retry. Don't fail the mutation.
-            import logging
-            logging.getLogger(__name__).exception(
-                "Failed to apply auto-link rule %s immediately", rule.id
-            )
+        # Apply rule asynchronously so projects get linked without waiting for
+        # the daily task, and without blocking the GraphQL request on a slow
+        # Clockodo API call. Dispatch after the current transaction commits so
+        # the worker can always find the rule row.
+        from apps.contracts.tasks import apply_auto_link_rule_task
+        transaction.on_commit(lambda: apply_auto_link_rule_task.delay(rule.id))
 
         return DeleteResult(success=True)
 
