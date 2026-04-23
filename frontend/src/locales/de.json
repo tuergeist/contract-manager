@@ -1153,6 +1153,8 @@
     "title": "Anhänge",
     "files": "Dateien",
     "noAttachments": "Keine Anhänge",
+    "dropHint": "Oder Dateien hierher ziehen",
+    "dropHere": "Dateien hier ablegen",
     "upload": "Hochladen",
     "uploadFile": "Datei hochladen",
     "uploading": "Wird hochgeladen...",

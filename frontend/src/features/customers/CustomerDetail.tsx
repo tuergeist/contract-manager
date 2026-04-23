@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { usePersistedState } from '@/lib/usePersistedState'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -33,6 +33,7 @@ import { useAuditLogs, AuditLogTable } from '@/features/audit'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { CommentsSection } from '@/components/CommentsSection'
 import { InvoiceStatusBadge } from '@/components/InvoiceStatusBadge'
+import { FileDropZone } from '@/components/FileDropZone'
 
 type SortField = 'name' | 'status' | 'startDate' | 'endDate' | 'arr' | 'totalValue' | 'remainingMonths' | null
 type SortOrder = 'asc' | 'desc'
@@ -462,7 +463,6 @@ export function CustomerDetail() {
   const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('cm:customerDetail:sortOrder', 'asc')
 
   // Attachment state
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadingFile, setUploadingFile] = useState(false)
   const [attachmentDescription, setAttachmentDescription] = useState('')
   const [attachmentCategory, setAttachmentCategory] = useState('')
@@ -690,15 +690,28 @@ export function CustomerDetail() {
     }
   }
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file || !id) return
+  const readFileAsBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1]
+        if (base64) resolve(base64)
+        else reject(new Error('read failed'))
+      }
+      reader.onerror = () => reject(new Error('read failed'))
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const uploadFiles = async (files: File[]) => {
+    if (!id || files.length === 0) return
 
     setUploadingFile(true)
-    try {
-      const reader = new FileReader()
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(',')[1]
+    const errors: string[] = []
+
+    for (const file of files) {
+      try {
+        const base64 = await readFileAsBase64(file)
         const result = await uploadAttachment({
           variables: {
             input: {
@@ -711,26 +724,24 @@ export function CustomerDetail() {
             },
           },
         })
-
-        if (result.data?.uploadCustomerAttachment?.success) {
-          setAttachmentDescription('')
-          setAttachmentCategory('')
-          refetch()
-          refetchDocs()
-        } else {
-          alert(result.data?.uploadCustomerAttachment?.error || 'Upload failed')
+        if (!result.data?.uploadCustomerAttachment?.success) {
+          errors.push(`${file.name}: ${result.data?.uploadCustomerAttachment?.error || 'Upload failed'}`)
         }
-      }
-      reader.readAsDataURL(file)
-    } catch (err) {
-      console.error('Upload error:', err)
-      alert('Upload failed')
-    } finally {
-      setUploadingFile(false)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
+      } catch (err) {
+        errors.push(`${file.name}: Upload failed`)
       }
     }
+
+    if (errors.length > 0) {
+      alert(errors.join('\n'))
+    }
+    if (errors.length < files.length) {
+      setAttachmentDescription('')
+      setAttachmentCategory('')
+      refetch()
+      refetchDocs()
+    }
+    setUploadingFile(false)
   }
 
   const handleDeleteAttachment = async (attachmentId: string) => {
@@ -1904,23 +1915,21 @@ export function CustomerDetail() {
                 </Select>
               </div>
               <div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-                <Button
-                  onClick={() => fileInputRef.current?.click()}
+                <FileDropZone
+                  onFilesSelected={uploadFiles}
                   disabled={uploadingFile}
+                  multiple
+                  className="inline-block rounded-md"
                 >
-                  {uploadingFile ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Upload className="h-4 w-4 mr-2" />
-                  )}
-                  {t('attachments.upload')}
-                </Button>
+                  <span className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+                    {uploadingFile ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                    {t('attachments.upload')}
+                  </span>
+                </FileDropZone>
               </div>
             </div>
 
@@ -1986,9 +1995,23 @@ export function CustomerDetail() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-gray-500 text-center py-4">
-                {t('attachments.noAttachments')}
-              </p>
+              <FileDropZone
+                onFilesSelected={uploadFiles}
+                disabled={uploadingFile}
+                multiple
+                className="rounded-lg border-2 border-dashed p-6 text-center"
+                activeContent={
+                  <>
+                    <Upload className="mx-auto h-10 w-10 text-blue-500" />
+                    <p className="mt-2 text-blue-600 font-medium">{t('attachments.dropHere')}</p>
+                  </>
+                }
+              >
+                <p className="text-sm text-gray-500">
+                  {t('attachments.noAttachments')}
+                </p>
+                <p className="mt-1 text-xs text-gray-400">{t('attachments.dropHint')}</p>
+              </FileDropZone>
             )}
           </div>
 

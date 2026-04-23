@@ -96,6 +96,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { OrderConfirmationDialog } from './OrderConfirmationDialog'
 import { CommentsSection } from '@/components/CommentsSection'
+import { FileDropZone } from '@/components/FileDropZone'
 import { TimeTrackingTab } from './TimeTrackingTab'
 import { MoveItemDialog } from './MoveItemDialog'
 import { PdfAnalysisPanel } from './PdfAnalysisPanel'
@@ -4350,7 +4351,6 @@ function AttachmentsTab({
   onRefetch: () => void
 }) {
   const { t } = useTranslation()
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -4427,23 +4427,29 @@ function AttachmentsTab({
     return <File className="h-5 w-5" />
   }
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+  const readFileAsBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const base64 = (e.target?.result as string)?.split(',')[1]
+        if (base64) resolve(base64)
+        else reject(new Error('read failed'))
+      }
+      reader.onerror = () => reject(new Error('read failed'))
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const uploadFiles = async (files: File[]) => {
+    if (files.length === 0) return
 
     setError(null)
     setUploading(true)
 
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      const base64 = (e.target?.result as string)?.split(',')[1]
-      if (!base64) {
-        setError(t('attachments.readError'))
-        setUploading(false)
-        return
-      }
-
+    const errors: string[] = []
+    for (const file of files) {
       try {
+        const base64 = await readFileAsBase64(file)
         const result = await uploadAttachment({
           variables: {
             input: {
@@ -4456,23 +4462,22 @@ function AttachmentsTab({
             },
           },
         })
-
-        if (result.data?.uploadContractAttachment?.success) {
-          setUploadCategory('')
-          onRefetch()
-        } else {
-          setError(result.data?.uploadContractAttachment?.error || t('attachments.uploadFailed'))
+        if (!result.data?.uploadContractAttachment?.success) {
+          errors.push(`${file.name}: ${result.data?.uploadContractAttachment?.error || t('attachments.uploadFailed')}`)
         }
       } catch (err) {
-        setError(t('attachments.uploadFailed'))
-      } finally {
-        setUploading(false)
+        errors.push(`${file.name}: ${t('attachments.uploadFailed')}`)
       }
     }
-    reader.readAsDataURL(file)
 
-    // Reset input
-    event.target.value = ''
+    if (errors.length > 0) {
+      setError(errors.join('\n'))
+    }
+    if (errors.length < files.length) {
+      setUploadCategory('')
+      onRefetch()
+    }
+    setUploading(false)
   }
 
   const handleDelete = async (attachment: Attachment) => {
@@ -4654,7 +4659,12 @@ function AttachmentsTab({
                 ))}
               </SelectContent>
             </Select>
-            <label className="cursor-pointer">
+            <FileDropZone
+              onFilesSelected={uploadFiles}
+              disabled={uploading}
+              multiple
+              className="inline-block rounded-md"
+            >
               <span className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
                 {uploading ? (
                   <>
@@ -4668,14 +4678,7 @@ function AttachmentsTab({
                   </>
                 )}
               </span>
-              <input
-                ref={fileInputRef}
-                type="file"
-                onChange={handleFileSelect}
-                disabled={uploading}
-                className="hidden"
-              />
-            </label>
+            </FileDropZone>
           </div>
         )}
       </div>
@@ -4689,10 +4692,29 @@ function AttachmentsTab({
 
       {/* Attachments List */}
       {attachments.length === 0 ? (
-        <div className="rounded-lg border bg-white p-8 text-center">
-          <Paperclip className="mx-auto h-12 w-12 text-gray-400" />
-          <p className="mt-2 text-gray-600">{t('attachments.noAttachments')}</p>
-        </div>
+        canEdit ? (
+          <FileDropZone
+            onFilesSelected={uploadFiles}
+            disabled={uploading}
+            multiple
+            className="rounded-lg border-2 border-dashed bg-white p-8 text-center"
+            activeContent={
+              <>
+                <Upload className="mx-auto h-12 w-12 text-blue-500" />
+                <p className="mt-2 text-blue-600 font-medium">{t('attachments.dropHere')}</p>
+              </>
+            }
+          >
+            <Paperclip className="mx-auto h-12 w-12 text-gray-400" />
+            <p className="mt-2 text-gray-600">{t('attachments.noAttachments')}</p>
+            <p className="mt-1 text-sm text-gray-400">{t('attachments.dropHint')}</p>
+          </FileDropZone>
+        ) : (
+          <div className="rounded-lg border bg-white p-8 text-center">
+            <Paperclip className="mx-auto h-12 w-12 text-gray-400" />
+            <p className="mt-2 text-gray-600">{t('attachments.noAttachments')}</p>
+          </div>
+        )
       ) : (
         <div className="overflow-hidden rounded-lg border">
           <table className="min-w-full divide-y divide-gray-200">

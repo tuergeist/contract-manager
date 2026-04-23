@@ -1153,6 +1153,8 @@
     "title": "Attachments",
     "files": "Files",
     "noAttachments": "No attachments",
+    "dropHint": "Or drag files here",
+    "dropHere": "Drop files here",
     "upload": "Upload",
     "uploadFile": "Upload File",
     "uploading": "Uploading...",
