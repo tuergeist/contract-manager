@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.29.2",
+    "date": "2026-04-23",
+    "title": "Code-Review-Fixes für 2.29.1",
+    "description": "Mehrere Review-Findings behoben: blockierende Requests, potenziell rückdatierte Invoices und inkonsistente Fehleranzeige.",
+    "type": "bugfix",
+    "details": [
+      "Auto-Link-Regeln: Matching läuft jetzt asynchron via Celery — GraphQL-Request blockiert nicht mehr auf Clockodo-API",
+      "@-Mention-Benachrichtigungen: werden nach DB-Commit via Celery verschickt, nicht mehr synchron im Request",
+      "Invoice-unabhängige One-Off-Items ohne Datum: werden geskippt (statt am alten Vertragsstart abgerechnet)",
+      "Customer-Attachment-Upload: Fehler als Banner statt blockierendem alert()"
+    ]
+  },
+  {
     "version": "2.29.1",
     "date": "2026-04-23",
     "title": "@-Mentions in Todo-Kommentaren",
