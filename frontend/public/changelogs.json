@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.28.11",
+    "date": "2026-04-23",
+    "title": "Drag&Drop und Multi-File-Upload für Anhänge",
+    "description": "Anhänge lassen sich jetzt per Drag&Drop hochladen; mehrere Dateien in einem Schritt möglich — bei Verträgen und Kunden.",
+    "type": "feature",
+    "details": [
+      "Drag&Drop: Dateien direkt auf den Upload-Button oder die Anhangsliste ziehen",
+      "Multi-File: mehrere Dateien auf einmal auswählen oder droppen",
+      "Teilweise Fehler werden pro Datei angezeigt; erfolgreiche Uploads aktualisieren die Liste",
+      "Closes #11, #12, #13"
+    ]
+  },
+  {
     "version": "2.28.10",
     "date": "2026-04-22",
     "title": "Fix Attachment-Upload (fehlende Kategorie)",
