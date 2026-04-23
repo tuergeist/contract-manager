@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.29.1",
+    "date": "2026-04-23",
+    "title": "@-Mentions in Todo-Kommentaren",
+    "description": "Tippe @ im Kommentarfeld, um Team-Mitglieder zu erwähnen. Erwähnte Nutzer erhalten eine E-Mail-Benachrichtigung.",
+    "type": "feature",
+    "details": [
+      "Autocomplete-Dropdown beim Tippen von @ im Kommentarfeld",
+      "Unterstützte Formate: @firstname.lastname, @email-local-part, @vollständige@email",
+      "Erwähnte Nutzer erhalten E-Mail-Benachrichtigung (neuer Notification-Type todo_mention)",
+      "Self-Mentions und Cross-Tenant-Mentions werden ignoriert",
+      "Closes #10 (Assignee-Wechsel per Dropdown und Drag&Drop im Board waren bereits vorhanden)"
+    ]
+  },
+  {
     "version": "2.29.0",
     "date": "2026-04-23",
     "title": "Lieferverfolgung mit unabhängiger Abrechnung",
