@@ -270,6 +270,75 @@ class TestCreateAutoLinkRule:
         assert result.data["createAutoLinkRule"]["success"] is False
         assert "empty" in result.data["createAutoLinkRule"]["error"].lower()
 
+    @patch("apps.contracts.tasks.sync_time_tracking_mapping_task")
+    def test_applies_rule_immediately_creating_mappings(
+        self, mock_sync, user, tenant, contract
+    ):
+        """Creating a rule must match existing projects right away, not wait 24h."""
+        with patch("apps.contracts.services.time_tracking.get_provider") as mock_provider:
+            provider = Mock()
+            provider.get_projects.return_value = MOCK_PROJECTS
+            mock_provider.return_value = provider
+
+            result = run_graphql(CREATE_RULE_MUTATION, {
+                "contractId": str(contract.id),
+                "pattern": "[KSB DL-Vertrag]",
+                "matchType": "contains",
+            }, make_context(user))
+
+        assert result.data["createAutoLinkRule"]["success"] is True
+        # p1 and p2 match and should be linked immediately
+        mappings = TimeTrackingProjectMapping.objects.filter(tenant=tenant)
+        assert mappings.count() == 2
+        assert {m.external_project_id for m in mappings} == {"p1", "p2"}
+        assert all(m.link_source == "auto" for m in mappings)
+
+    @patch("apps.contracts.tasks.sync_time_tracking_mapping_task")
+    def test_immediate_apply_uses_contract_item(
+        self, mock_sync, user, tenant, contract
+    ):
+        """Rule with contract_item_id passes it through to created mappings."""
+        item = ContractItem.objects.create(
+            tenant=tenant, contract=contract, description="Wartung",
+            quantity=1, unit_price=Decimal("100"), price_period="monthly",
+        )
+
+        with patch("apps.contracts.services.time_tracking.get_provider") as mock_provider:
+            provider = Mock()
+            provider.get_projects.return_value = MOCK_PROJECTS
+            mock_provider.return_value = provider
+
+            run_graphql(CREATE_RULE_MUTATION, {
+                "contractId": str(contract.id),
+                "pattern": "[KSB DL-Vertrag]",
+                "matchType": "contains",
+                "contractItemId": str(item.id),
+            }, make_context(user))
+
+        mappings = TimeTrackingProjectMapping.objects.filter(tenant=tenant)
+        assert mappings.count() == 2
+        assert all(m.contract_item_id == item.id for m in mappings)
+
+    @patch("apps.contracts.tasks.sync_time_tracking_mapping_task")
+    def test_immediate_apply_failure_does_not_fail_mutation(
+        self, mock_sync, user, tenant, contract
+    ):
+        """If the provider call fails, the rule is still saved for the daily task."""
+        with patch("apps.contracts.services.time_tracking.get_provider") as mock_provider:
+            provider = Mock()
+            provider.get_projects.side_effect = Exception("Clockodo down")
+            mock_provider.return_value = provider
+
+            result = run_graphql(CREATE_RULE_MUTATION, {
+                "contractId": str(contract.id),
+                "pattern": "[KSB DL-Vertrag]",
+                "matchType": "contains",
+            }, make_context(user))
+
+        assert result.data["createAutoLinkRule"]["success"] is True
+        assert AutoLinkRule.objects.filter(contract=contract).count() == 1
+        assert TimeTrackingProjectMapping.objects.filter(tenant=tenant).count() == 0
+
 
 @pytest.mark.django_db
 class TestDeleteAutoLinkRule:

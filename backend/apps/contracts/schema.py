@@ -6229,13 +6229,25 @@ class ContractMutation:
             if not contract_item:
                 return DeleteResult(error="Item not found in this contract")
 
-        AutoLinkRule.objects.create(
+        rule = AutoLinkRule.objects.create(
             tenant=user.tenant,
             contract=contract,
             contract_item=contract_item,
             pattern=pattern.strip(),
             match_type=match_type,
         )
+
+        # Apply rule immediately so projects get linked without waiting for daily task
+        from apps.contracts.tasks import apply_auto_link_rule
+        try:
+            apply_auto_link_rule(rule)
+        except Exception:
+            # Rule is already saved — daily task will retry. Don't fail the mutation.
+            import logging
+            logging.getLogger(__name__).exception(
+                "Failed to apply auto-link rule %s immediately", rule.id
+            )
+
         return DeleteResult(success=True)
 
     @strawberry.mutation
