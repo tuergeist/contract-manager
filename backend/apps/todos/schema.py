@@ -73,6 +73,64 @@ class TodoItemType:
     comments: List[TodoCommentType]
 
 
+def _notify_mentioned_users(comment, author, todo):
+    """Parse @mentions in a comment and fire todo_mention notifications.
+
+    Supported mention formats (case-insensitive):
+    - @firstname.lastname
+    - @email-local-part (part before @ in email address)
+    - @full-email-address
+
+    Only mentions users of the same tenant. Excludes the author themselves.
+    """
+    import re
+    from django.contrib.auth import get_user_model
+    from apps.core.notifications import notify
+
+    User = get_user_model()
+    text = comment.text or ""
+
+    # Match @token where token can contain letters, digits, dots, hyphens, underscores, @
+    tokens = set(re.findall(r"@([\w.\-]+(?:@[\w.\-]+)?)", text))
+    if not tokens:
+        return
+
+    tokens_lower = {t.lower() for t in tokens}
+    users = User.objects.filter(
+        tenant=author.tenant,
+        is_active=True,
+    ).exclude(pk=author.pk)
+
+    mentioned = []
+    for u in users:
+        full_email = (u.email or "").lower()
+        email_local = full_email.split("@", 1)[0] if full_email else ""
+        firstlast = (
+            f"{(u.first_name or '').lower()}.{(u.last_name or '').lower()}"
+            if u.first_name and u.last_name else ""
+        )
+        if full_email in tokens_lower or (email_local and email_local in tokens_lower) or (firstlast and firstlast in tokens_lower):
+            mentioned.append(u)
+
+    if not mentioned:
+        return
+
+    try:
+        notify(
+            author.tenant,
+            "todo_mention",
+            recipients=mentioned,
+            todo=todo,
+            mentioner=author,
+            comment_text=comment.text,
+        )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "Failed to send todo_mention notifications"
+        )
+
+
 def _get_customer_name(todo: TodoItem) -> str | None:
     """Get the customer name for a todo's linked entity."""
     if todo.contract and todo.contract.customer:
@@ -603,6 +661,9 @@ class TodoMutation:
                 text=text,
                 author=user,
             )
+
+            # Notify mentioned users (@email or @firstname.lastname)
+            _notify_mentioned_users(comment, user, todo)
 
             return TodoCommentResult(success=True, comment=comment_to_type(comment))
         except TodoItem.DoesNotExist:

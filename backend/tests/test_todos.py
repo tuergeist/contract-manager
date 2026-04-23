@@ -509,3 +509,120 @@ class TestCustomerTodosAggregation:
         assert own_todo in visible_todos
         assert public_todo in visible_todos
         assert private_todo not in visible_todos
+
+
+class TestMentionNotifications:
+    """Test @-mention parsing and notification firing in comments."""
+
+    def test_mention_by_firstname_lastname_notifies_user(self, db, tenant, user, contract):
+        from unittest.mock import patch
+
+        mentioned = User.objects.create_user(
+            email="alice@example.com", password="x", tenant=tenant,
+            first_name="Alice", last_name="Smith",
+        )
+        todo = TodoItem.objects.create(
+            tenant=tenant, created_by=user, contract=contract, text="t",
+        )
+        comment = TodoComment.objects.create(
+            tenant=tenant, todo=todo, author=user, text="Hey @alice.smith please review",
+        )
+
+        from apps.todos.schema import _notify_mentioned_users
+        with patch("apps.core.notifications.notify") as mock_notify:
+            _notify_mentioned_users(comment, user, todo)
+
+        assert mock_notify.called
+        call = mock_notify.call_args
+        assert mentioned in call.kwargs["recipients"]
+
+    def test_mention_by_email_local_part(self, db, tenant, user, contract):
+        from unittest.mock import patch
+
+        mentioned = User.objects.create_user(
+            email="bob@example.com", password="x", tenant=tenant,
+        )
+        todo = TodoItem.objects.create(
+            tenant=tenant, created_by=user, contract=contract, text="t",
+        )
+        comment = TodoComment.objects.create(
+            tenant=tenant, todo=todo, author=user, text="@bob take a look",
+        )
+
+        from apps.todos.schema import _notify_mentioned_users
+        with patch("apps.core.notifications.notify") as mock_notify:
+            _notify_mentioned_users(comment, user, todo)
+
+        assert mentioned in mock_notify.call_args.kwargs["recipients"]
+
+    def test_mention_by_full_email(self, db, tenant, user, contract):
+        from unittest.mock import patch
+
+        mentioned = User.objects.create_user(
+            email="charlie@example.com", password="x", tenant=tenant,
+        )
+        todo = TodoItem.objects.create(
+            tenant=tenant, created_by=user, contract=contract, text="t",
+        )
+        comment = TodoComment.objects.create(
+            tenant=tenant, todo=todo, author=user, text="pls help @charlie@example.com",
+        )
+
+        from apps.todos.schema import _notify_mentioned_users
+        with patch("apps.core.notifications.notify") as mock_notify:
+            _notify_mentioned_users(comment, user, todo)
+
+        assert mentioned in mock_notify.call_args.kwargs["recipients"]
+
+    def test_mention_excludes_self(self, db, tenant, user, contract):
+        from unittest.mock import patch
+
+        todo = TodoItem.objects.create(
+            tenant=tenant, created_by=user, contract=contract, text="t",
+        )
+        # Self-mention via own email
+        comment = TodoComment.objects.create(
+            tenant=tenant, todo=todo, author=user, text=f"note to self @{user.email}",
+        )
+
+        from apps.todos.schema import _notify_mentioned_users
+        with patch("apps.core.notifications.notify") as mock_notify:
+            _notify_mentioned_users(comment, user, todo)
+
+        assert not mock_notify.called
+
+    def test_no_mentions_no_notify(self, db, tenant, user, contract):
+        from unittest.mock import patch
+
+        todo = TodoItem.objects.create(
+            tenant=tenant, created_by=user, contract=contract, text="t",
+        )
+        comment = TodoComment.objects.create(
+            tenant=tenant, todo=todo, author=user, text="plain comment, no mentions",
+        )
+
+        from apps.todos.schema import _notify_mentioned_users
+        with patch("apps.core.notifications.notify") as mock_notify:
+            _notify_mentioned_users(comment, user, todo)
+
+        assert not mock_notify.called
+
+    def test_mentions_isolated_by_tenant(self, db, tenant, user, other_tenant, contract):
+        from unittest.mock import patch
+
+        # User in another tenant with matching email local-part
+        User.objects.create_user(
+            email="alice@example.com", password="x", tenant=other_tenant,
+        )
+        todo = TodoItem.objects.create(
+            tenant=tenant, created_by=user, contract=contract, text="t",
+        )
+        comment = TodoComment.objects.create(
+            tenant=tenant, todo=todo, author=user, text="hey @alice",
+        )
+
+        from apps.todos.schema import _notify_mentioned_users
+        with patch("apps.core.notifications.notify") as mock_notify:
+            _notify_mentioned_users(comment, user, todo)
+
+        assert not mock_notify.called

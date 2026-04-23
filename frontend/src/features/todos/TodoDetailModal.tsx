@@ -5,6 +5,7 @@ import { useQuery, useLazyQuery, useMutation, gql } from '@apollo/client'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { MentionInput } from '@/components/MentionInput'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -160,7 +161,7 @@ export function TodoDetailModal({ todoId, open, onOpenChange, canEdit, canReassi
   const [assignedToId, setAssignedToId] = useState<string>('')
   const [newComment, setNewComment] = useState('')
 
-  const { data: usersData } = useQuery(USERS_QUERY, { skip: !open || !canChangeAssignee })
+  const { data: usersData } = useQuery(USERS_QUERY, { skip: !open })
   const users = (usersData?.users || []).filter(
     (u: { id: string; isActive: boolean }) => u.isActive
   )
@@ -352,16 +353,12 @@ export function TodoDetailModal({ todoId, open, onOpenChange, canEdit, canReassi
 
                 {/* Add comment */}
                 <div className="flex gap-2 mt-3">
-                  <Input
+                  <MentionInput
                     value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
+                    onChange={setNewComment}
+                    onSubmit={handleSubmitComment}
                     placeholder={t('todos.addCommentPlaceholder')}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault()
-                        handleSubmitComment()
-                      }
-                    }}
+                    users={users}
                   />
                   <Button onClick={handleSubmitComment} disabled={!newComment.trim()}>
                     <Send className="h-4 w-4" />

@@ -55,6 +55,25 @@ def _build_todo_assigned_email(*, todo, assigner, base_url="", **kwargs):
     return subject, body_html
 
 
+def _build_todo_mention_email(*, todo, mentioner, comment_text, base_url="", **kwargs):
+    """Build subject and body for @-mention notification."""
+    mentioner_name = mentioner.get_full_name() or mentioner.email
+    subject = f"{mentioner_name} mentioned you in a todo"
+
+    lines = [
+        f"<p><strong>{mentioner_name}</strong> mentioned you in a comment:</p>",
+        f"<p style='padding: 12px; background: #f5f5f5; border-radius: 4px;'>{comment_text}</p>",
+        f"<p>On todo: <em>{todo.text}</em></p>",
+    ]
+
+    if base_url:
+        todo_url = f"{base_url}/todos"
+        lines.append(f"<p><a href=\"{todo_url}\">Open Todos</a></p>")
+
+    body_html = "\n".join(lines)
+    return subject, body_html
+
+
 def _build_hubspot_new_contract_email(*, contract_name, customer_name, **kwargs):
     """Build subject and body for new HubSpot contract notification."""
     subject = f"New contract from HubSpot: {contract_name}"
@@ -111,6 +130,10 @@ NOTIFICATION_TYPES = {
     "todo_assigned": {
         "description": "Todo assigned to me",
         "build_email": _build_todo_assigned_email,
+    },
+    "todo_mention": {
+        "description": "Mentioned in a todo comment",
+        "build_email": _build_todo_mention_email,
     },
     "hubspot_new_contract": {
         "description": "New contract from HubSpot",
