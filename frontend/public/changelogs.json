@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.29.3",
+    "date": "2026-04-26",
+    "title": "@-Mentions: Eindeutige Tokens bei Namens-Kollisionen",
+    "description": "Falls zwei User denselben Vor- und Nachnamen haben oder Namensfelder leer sind, hätte ein @-Mention die falsche Person benachrichtigen können. Jetzt wird der vollständige Email-String genutzt, wenn der Kurz-Token nicht eindeutig ist; mehrdeutige Mentions werden serverseitig verworfen.",
+    "type": "bugfix",
+    "details": [
+      "Frontend: Token fällt auf vollständige Email zurück, wenn firstname.lastname kollidiert oder fehlt",
+      "Backend: Bei mehrdeutigen Token-Matches wird die Notification verworfen (Warnung im Log) statt alle Treffer zu benachrichtigen",
+      "+5 neue Tests (3 Backend Edge-Cases, 2 Frontend Kollisions-Cases)"
+    ]
+  },
+  {
     "version": "2.29.2",
     "date": "2026-04-23",
     "title": "Code-Review-Fixes für 2.29.1",
