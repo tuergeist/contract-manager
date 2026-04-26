@@ -81,6 +81,37 @@ describe('MentionInput', () => {
     expect(onChange).toHaveBeenLastCalledWith('@alice.smith ')
   })
 
+  it('falls back to full email when names collide', () => {
+    const onChange = vi.fn()
+    const colliding: MentionUser[] = [
+      { id: '1', email: 'alice@a.com', firstName: 'Alice', lastName: 'Smith' },
+      { id: '2', email: 'alice@b.com', firstName: 'Alice', lastName: 'Smith' },
+    ]
+    render(<MentionInput value="" onChange={onChange} users={colliding} />)
+
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: '@a' } })
+
+    // Both options should show full email as token (unambiguous)
+    expect(screen.getAllByText('Alice Smith')).toHaveLength(2)
+    expect(screen.getByText('@alice@a.com')).toBeInTheDocument()
+    expect(screen.getByText('@alice@b.com')).toBeInTheDocument()
+  })
+
+  it('falls back to full email when first/last names are missing', () => {
+    const onChange = vi.fn()
+    const noNames: MentionUser[] = [
+      { id: '1', email: 'alice@example.com', firstName: null, lastName: null },
+    ]
+    render(<MentionInput value="" onChange={onChange} users={noNames} />)
+
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: '@' } })
+
+    // Token is the full email, not just the local-part
+    expect(screen.getByText('@alice@example.com')).toBeInTheDocument()
+  })
+
   it('arrow keys navigate the dropdown', () => {
     const onChange = vi.fn()
     render(<MentionInput value="" onChange={onChange} users={USERS} />)

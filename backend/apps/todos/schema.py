@@ -96,24 +96,40 @@ def _notify_mentioned_users(comment, author, todo):
         return
 
     tokens_lower = {t.lower() for t in tokens}
-    users = User.objects.filter(
+    users = list(User.objects.filter(
         tenant=author.tenant,
         is_active=True,
-    ).exclude(pk=author.pk)
+    ).exclude(pk=author.pk))
 
-    mentioned = []
-    for u in users:
-        full_email = (u.email or "").lower()
-        email_local = full_email.split("@", 1)[0] if full_email else ""
-        firstlast = (
-            f"{(u.first_name or '').lower()}.{(u.last_name or '').lower()}"
-            if u.first_name and u.last_name else ""
-        )
-        if full_email in tokens_lower or (email_local and email_local in tokens_lower) or (firstlast and firstlast in tokens_lower):
-            mentioned.append(u)
+    # For each token, collect all users that match. If a token is ambiguous
+    # (matches multiple users), skip it — better silent than notifying the
+    # wrong person.
+    mentioned_ids: set[int] = set()
+    for token in tokens_lower:
+        candidates = []
+        for u in users:
+            full_email = (u.email or "").lower()
+            email_local = full_email.split("@", 1)[0] if full_email else ""
+            firstlast = (
+                f"{(u.first_name or '').lower()}.{(u.last_name or '').lower()}"
+                if u.first_name and u.last_name else ""
+            )
+            if full_email == token or (email_local and email_local == token) or (firstlast and firstlast == token):
+                candidates.append(u)
 
-    if not mentioned:
+        if len(candidates) == 1:
+            mentioned_ids.add(candidates[0].pk)
+        elif len(candidates) > 1:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Ambiguous mention token %r matched %d users in tenant %s; skipping",
+                token, len(candidates), author.tenant_id,
+            )
+
+    if not mentioned_ids:
         return
+
+    mentioned = [u for u in users if u.pk in mentioned_ids]
 
     try:
         notify(

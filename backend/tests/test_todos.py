@@ -607,6 +607,79 @@ class TestMentionNotifications:
 
         assert not mock_notify.called
 
+    def test_ambiguous_email_local_skipped(self, db, tenant, user, contract):
+        """Two users with same email-local part — ambiguous @local skips notification."""
+        from unittest.mock import patch
+
+        User.objects.create_user(
+            email="alice@a.com", password="x", tenant=tenant,
+        )
+        User.objects.create_user(
+            email="alice@b.com", password="x", tenant=tenant,
+        )
+        todo = TodoItem.objects.create(
+            tenant=tenant, created_by=user, contract=contract, text="t",
+        )
+        comment = TodoComment.objects.create(
+            tenant=tenant, todo=todo, author=user, text="hey @alice",
+        )
+
+        from apps.todos.schema import _notify_mentioned_users
+        with patch("apps.core.notifications.notify") as mock_notify:
+            _notify_mentioned_users(comment, user, todo)
+
+        # Ambiguous — neither user should be notified
+        assert not mock_notify.called
+
+    def test_unambiguous_full_email_resolves_correctly(self, db, tenant, user, contract):
+        """Even when local-parts collide, full email disambiguates."""
+        from unittest.mock import patch
+
+        target = User.objects.create_user(
+            email="alice@a.com", password="x", tenant=tenant,
+        )
+        User.objects.create_user(
+            email="alice@b.com", password="x", tenant=tenant,
+        )
+        todo = TodoItem.objects.create(
+            tenant=tenant, created_by=user, contract=contract, text="t",
+        )
+        comment = TodoComment.objects.create(
+            tenant=tenant, todo=todo, author=user, text="hey @alice@a.com",
+        )
+
+        from apps.todos.schema import _notify_mentioned_users
+        with patch("apps.core.notifications.notify") as mock_notify:
+            _notify_mentioned_users(comment, user, todo)
+
+        recipients = mock_notify.call_args.kwargs["recipients"]
+        assert recipients == [target]
+
+    def test_ambiguous_firstname_lastname_skipped(self, db, tenant, user, contract):
+        """Two users with identical first.last — token is ambiguous, skip."""
+        from unittest.mock import patch
+
+        User.objects.create_user(
+            email="alice1@x.com", password="x", tenant=tenant,
+            first_name="Alice", last_name="Smith",
+        )
+        User.objects.create_user(
+            email="alice2@x.com", password="x", tenant=tenant,
+            first_name="Alice", last_name="Smith",
+        )
+        todo = TodoItem.objects.create(
+            tenant=tenant, created_by=user, contract=contract, text="t",
+        )
+        comment = TodoComment.objects.create(
+            tenant=tenant, todo=todo, author=user, text="@alice.smith",
+        )
+
+        from apps.todos.schema import _notify_mentioned_users
+        with patch("apps.core.notifications.notify") as mock_notify:
+            _notify_mentioned_users(comment, user, todo)
+
+        assert not mock_notify.called
+
     def test_mentions_isolated_by_tenant(self, db, tenant, user, other_tenant, contract):
         from unittest.mock import patch
 

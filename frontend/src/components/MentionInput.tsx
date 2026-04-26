@@ -17,11 +17,25 @@ interface MentionInputProps {
   disabled?: boolean
 }
 
-function getMentionToken(user: MentionUser): string {
+/**
+ * Build a stable token for a mention. Always includes the full email so
+ * the backend can resolve the user unambiguously, even when names collide
+ * or are missing. The `firstname.lastname` form alone is not safe (two
+ * users with identical names would collide).
+ */
+function getMentionToken(user: MentionUser, allUsers: MentionUser[]): string {
   if (user.firstName && user.lastName) {
-    return `${user.firstName}.${user.lastName}`.toLowerCase()
+    const candidate = `${user.firstName}.${user.lastName}`.toLowerCase()
+    const collisions = allUsers.filter(
+      (u) =>
+        u.firstName &&
+        u.lastName &&
+        `${u.firstName}.${u.lastName}`.toLowerCase() === candidate,
+    )
+    if (collisions.length === 1) return candidate
   }
-  return user.email.split('@')[0]
+  // Fall back to full email — globally unique
+  return user.email.toLowerCase()
 }
 
 function userLabel(user: MentionUser): string {
@@ -50,7 +64,7 @@ export function MentionInput({
     const q = mentionQuery.toLowerCase()
     return (
       !q ||
-      getMentionToken(u).includes(q) ||
+      getMentionToken(u, users).includes(q) ||
       u.email.toLowerCase().includes(q) ||
       userLabel(u).toLowerCase().includes(q)
     )
@@ -96,7 +110,7 @@ export function MentionInput({
     const before = value.slice(0, mentionStart)
     const caret = inputRef.current?.selectionStart ?? value.length
     const after = value.slice(caret)
-    const token = getMentionToken(user)
+    const token = getMentionToken(user, users)
     const newText = `${before}@${token} ${after}`
     onChange(newText)
     setShowMentions(false)
@@ -167,7 +181,7 @@ export function MentionInput({
               className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent ${i === activeIndex ? 'bg-accent' : ''}`}
             >
               <span className="font-medium">{userLabel(user)}</span>
-              <span className="text-xs text-muted-foreground">@{getMentionToken(user)}</span>
+              <span className="text-xs text-muted-foreground">@{getMentionToken(user, users)}</span>
             </button>
           ))}
         </div>
