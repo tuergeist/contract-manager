@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.29.4",
+    "date": "2026-04-27",
+    "title": "Lange Pre-Alignment-Phasen korrekt aufteilen",
+    "description": "Bei jährlicher Abrechnung mit Alignment-Datum mehr als 12 Monate nach dem ersten Abrechnungstag wurde bisher eine einzelne übergroße Rechnung erzeugt. Jetzt entstehen volle Jahres-Rechnungen plus eine pro-ratierte Stub-Periode bis zum Alignment.",
+    "type": "bugfix",
+    "details": [
+      "Beispiel 1.5.2025 → Alignment 1.1.2027: 1.5.2025 (volle 12 Monate) + 1.5.2026 (8 Monate Stub) + ab 1.1.2027 reguläre Jahres-Rechnungen",
+      "Gleiche Korrektur für den Recognition Schedule",
+      "Kurze Pre-Alignment-Perioden (< 1 Intervall) bleiben unverändert"
+    ]
+  },
+  {
     "version": "2.29.3",
     "date": "2026-04-26",
     "title": "@-Mentions: Eindeutige Tokens bei Namens-Kollisionen",
