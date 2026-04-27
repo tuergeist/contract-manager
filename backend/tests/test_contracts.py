@@ -621,6 +621,134 @@ class TestBillingScheduleWithPricePeriods:
         assert event["total"] == Decimal("600.00")
 
 
+class TestBillingAlignmentLongPreAlignment:
+    """Pre-alignment period > one billing interval must split into full + stub."""
+
+    def test_annual_alignment_20_months_out_creates_full_year_then_stub(
+        self, tenant, customer, product
+    ):
+        """1.5.2025 → 1.1.2027 (20 months) on annual billing must produce
+        a full-year invoice on 1.5.2025 and an 8-month stub on 1.5.2026."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="C",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 5, 1),
+            billing_start_date=date(2025, 5, 1),
+            billing_interval=Contract.BillingInterval.ANNUAL,
+            billing_anchor_day=1,
+            billing_alignment_date=date(2027, 1, 1),
+        )
+        ContractItem.objects.create(
+            tenant=tenant, contract=contract, product=product,
+            quantity=1, unit_price=Decimal("100"),
+            billing_start_date=date(2025, 5, 1),
+        )
+
+        schedule = contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2028, 12, 31),
+        )
+        dates = [s["date"] for s in schedule]
+
+        # First full year invoice on billing_start
+        assert date(2025, 5, 1) in dates
+        # Stub period 1.5.2026 → 1.1.2027 (8 months)
+        assert date(2026, 5, 1) in dates
+        # Post-alignment cycle starts at align_date
+        assert date(2027, 1, 1) in dates
+        # Next regular yearly cycle
+        assert date(2028, 1, 1) in dates
+        # No invoice between billing_start and stub (full year fits)
+        assert all(d < date(2025, 5, 1) or d >= date(2025, 5, 1) for d in dates)
+
+    def test_full_year_invoice_amount_not_prorated(
+        self, tenant, customer, product
+    ):
+        """The full-year pre-alignment invoice must be billed at 100%, not pro-rated."""
+        contract = Contract.objects.create(
+            tenant=tenant, customer=customer, name="C",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 5, 1),
+            billing_start_date=date(2025, 5, 1),
+            billing_interval=Contract.BillingInterval.ANNUAL,
+            billing_anchor_day=1,
+            billing_alignment_date=date(2027, 1, 1),
+        )
+        ContractItem.objects.create(
+            tenant=tenant, contract=contract, product=product,
+            quantity=1, unit_price=Decimal("100"),
+            billing_start_date=date(2025, 5, 1),
+        )
+
+        schedule = contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2028, 12, 31),
+        )
+        first = next(s for s in schedule if s["date"] == date(2025, 5, 1))
+        assert first["items"][0]["is_prorated"] is False
+        assert first["total"] == Decimal("1200.00")  # 12 × 100
+
+        stub = next(s for s in schedule if s["date"] == date(2026, 5, 1))
+        assert stub["items"][0]["is_prorated"] is True
+        # 8 months of €100 = €800
+        assert stub["total"] == Decimal("800.00")
+
+    def test_short_pre_alignment_unchanged(
+        self, tenant, customer, product
+    ):
+        """A pre-alignment period < interval must still yield a single pro-rated invoice."""
+        contract = Contract.objects.create(
+            tenant=tenant, customer=customer, name="C",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 5, 1),
+            billing_start_date=date(2025, 5, 1),
+            billing_interval=Contract.BillingInterval.ANNUAL,
+            billing_anchor_day=1,
+            billing_alignment_date=date(2026, 1, 1),  # only 8 months out
+        )
+        ContractItem.objects.create(
+            tenant=tenant, contract=contract, product=product,
+            quantity=1, unit_price=Decimal("100"),
+            billing_start_date=date(2025, 5, 1),
+        )
+
+        schedule = contract.get_billing_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2026, 12, 31),
+        )
+        pre = [s for s in schedule if s["date"] < date(2026, 1, 1)]
+        assert len(pre) == 1
+        assert pre[0]["items"][0]["is_prorated"] is True
+        # 8 months of €100 = €800
+        assert pre[0]["total"] == Decimal("800.00")
+
+    def test_recognition_schedule_splits_long_pre_alignment(
+        self, tenant, customer, product
+    ):
+        """Recognition schedule should also split full-year + stub for 20-month pre-alignment."""
+        contract = Contract.objects.create(
+            tenant=tenant, customer=customer, name="C",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 5, 1),
+            billing_start_date=date(2025, 5, 1),
+            billing_interval=Contract.BillingInterval.ANNUAL,
+            billing_anchor_day=1,
+            billing_alignment_date=date(2027, 1, 1),
+        )
+        ContractItem.objects.create(
+            tenant=tenant, contract=contract, product=product,
+            quantity=1, unit_price=Decimal("100"),
+            billing_start_date=date(2025, 5, 1),
+        )
+
+        schedule = contract.get_recognition_schedule(
+            from_date=date(2025, 1, 1), to_date=date(2028, 12, 31),
+        )
+        dates = [s["date"] for s in schedule]
+        assert date(2025, 5, 1) in dates
+        assert date(2026, 5, 1) in dates
+        assert date(2027, 1, 1) in dates
+
+
 class TestOneOffItemBillingSchedule:
     """Test that one-off items use the full stated price, not monthly-normalized."""
 

@@ -590,41 +590,73 @@ class Contract(TenantModel):
         self, events, item, start_date, align_date, from_date, to_date, interval_months,
         price_periods_list=None
     ):
-        """Add billing events before alignment (pro-rated first period)."""
+        """Add billing events before alignment.
+
+        If the gap between start_date and align_date exceeds one billing
+        interval, generate full-interval invoices first and only pro-rate
+        the final stub period that ends at align_date. Otherwise produce a
+        single pro-rated invoice from start_date to align_date.
+        """
         from decimal import Decimal
         from dateutil.relativedelta import relativedelta
 
-        # First billing is at start_date (pro-rated period until align_date)
-        # Skip if start_date equals align_date (no pre-alignment period)
-        if start_date >= from_date and start_date <= to_date and start_date < align_date:
-            # Calculate proration factor using months
-            # Count full months between start_date and align_date
+        if start_date >= align_date:
+            return
+
+        # Generate full-interval invoices for as long as a complete interval
+        # fits before the alignment date.
+        cycle_start = start_date
+        while True:
+            next_cycle = cycle_start + relativedelta(months=interval_months)
+            if next_cycle > align_date:
+                break
+
+            if cycle_start >= from_date and cycle_start <= to_date:
+                if price_periods_list is not None:
+                    price_at_date = item.get_price_at_cached(cycle_start, price_periods_list)
+                else:
+                    price_at_date = item.get_price_at(cycle_start)
+                amount = (item.quantity * price_at_date * interval_months).quantize(Decimal("0.01"))
+                events[cycle_start]["items"].append({
+                    "item_id": item.id,
+                    "product_name": item.product.name if item.product else (item.description or "Discount"),
+                    "description": item.description if item.product else "",
+                    "quantity": item.quantity,
+                    "unit_price": price_at_date,
+                    "amount": amount,
+                    "is_prorated": False,
+                    "prorate_factor": Decimal("1.0000"),
+                })
+                events[cycle_start]["total"] += amount
+
+            cycle_start = next_cycle
+
+        # Stub period: cycle_start → align_date, pro-rated.
+        if cycle_start < align_date and cycle_start >= from_date and cycle_start <= to_date:
             months_in_period = (
-                (align_date.year - start_date.year) * 12 +
-                (align_date.month - start_date.month)
+                (align_date.year - cycle_start.year) * 12 +
+                (align_date.month - cycle_start.month)
             )
-            # If align_date.day < start_date.day, we have a partial month less
-            # But for billing alignment, we typically bill for whole months
+            if months_in_period <= 0:
+                return
             prorate_factor = Decimal(months_in_period) / Decimal(interval_months)
 
-            # Use cached price lookup if price_periods provided, else fallback
             if price_periods_list is not None:
-                price_at_date = item.get_price_at_cached(start_date, price_periods_list)
+                price_at_date = item.get_price_at_cached(cycle_start, price_periods_list)
             else:
-                price_at_date = item.get_price_at(start_date)
-            # unit_price is monthly, multiply by interval for billing amount
-            amount = item.quantity * price_at_date * interval_months * prorate_factor
-            events[start_date]["items"].append({
+                price_at_date = item.get_price_at(cycle_start)
+            amount = (item.quantity * price_at_date * interval_months * prorate_factor).quantize(Decimal("0.01"))
+            events[cycle_start]["items"].append({
                 "item_id": item.id,
                 "product_name": item.product.name if item.product else (item.description or "Discount"),
                 "description": item.description if item.product else "",
                 "quantity": item.quantity,
                 "unit_price": price_at_date,
-                "amount": amount.quantize(Decimal("0.01")),
+                "amount": amount,
                 "is_prorated": True,
                 "prorate_factor": prorate_factor.quantize(Decimal("0.0001")),
             })
-            events[start_date]["total"] += amount.quantize(Decimal("0.01"))
+            events[cycle_start]["total"] += amount
 
     def _add_post_alignment_events(
         self, events, item, align_date, end_date, from_date, to_date, interval_months,
@@ -904,38 +936,73 @@ class Contract(TenantModel):
         self, events, item, start_date, align_date, from_date, to_date, interval_months,
         price_periods_list=None
     ):
-        """Add recognition events before alignment (pro-rated first period).
+        """Add recognition events before alignment.
 
         For multi-year intervals, recognition is capped at annual amounts.
+        If the pre-alignment gap exceeds one recognition interval, generate
+        full-interval recognition events first and only pro-rate the final
+        stub period.
         """
         from decimal import Decimal
         from dateutil.relativedelta import relativedelta
 
         recognition_interval = min(interval_months, 12)
 
-        if start_date >= from_date and start_date <= to_date and start_date < align_date:
+        if start_date >= align_date:
+            return
+
+        cycle_start = start_date
+        while True:
+            next_cycle = cycle_start + relativedelta(months=recognition_interval)
+            if next_cycle > align_date:
+                break
+
+            if cycle_start >= from_date and cycle_start <= to_date:
+                if price_periods_list is not None:
+                    price_at_date = item.get_price_at_cached(cycle_start, price_periods_list)
+                else:
+                    price_at_date = item.get_price_at(cycle_start)
+                amount = (item.quantity * price_at_date * recognition_interval).quantize(Decimal("0.01"))
+                events[cycle_start]["items"].append({
+                    "item_id": item.id,
+                    "product_name": item.product.name if item.product else (item.description or "Discount"),
+                    "description": item.description if item.product else "",
+                    "quantity": item.quantity,
+                    "unit_price": price_at_date,
+                    "amount": amount,
+                    "is_prorated": False,
+                    "prorate_factor": None,
+                })
+                events[cycle_start]["total"] += amount
+
+            cycle_start = next_cycle
+
+        # Stub period: cycle_start → align_date, pro-rated.
+        if cycle_start < align_date and cycle_start >= from_date and cycle_start <= to_date:
             months_in_period = (
-                (align_date.year - start_date.year) * 12 +
-                (align_date.month - start_date.month)
+                (align_date.year - cycle_start.year) * 12 +
+                (align_date.month - cycle_start.month)
             )
-            prorate_factor = Decimal(min(months_in_period, recognition_interval)) / Decimal(recognition_interval)
+            if months_in_period <= 0:
+                return
+            prorate_factor = Decimal(months_in_period) / Decimal(recognition_interval)
 
             if price_periods_list is not None:
-                price_at_date = item.get_price_at_cached(start_date, price_periods_list)
+                price_at_date = item.get_price_at_cached(cycle_start, price_periods_list)
             else:
-                price_at_date = item.get_price_at(start_date)
-            amount = item.quantity * price_at_date * recognition_interval * prorate_factor
-            events[start_date]["items"].append({
+                price_at_date = item.get_price_at(cycle_start)
+            amount = (item.quantity * price_at_date * recognition_interval * prorate_factor).quantize(Decimal("0.01"))
+            events[cycle_start]["items"].append({
                 "item_id": item.id,
                 "product_name": item.product.name if item.product else (item.description or "Discount"),
                 "description": item.description if item.product else "",
                 "quantity": item.quantity,
                 "unit_price": price_at_date,
-                "amount": amount.quantize(Decimal("0.01")),
+                "amount": amount,
                 "is_prorated": True,
                 "prorate_factor": prorate_factor.quantize(Decimal("0.0001")),
             })
-            events[start_date]["total"] += amount.quantize(Decimal("0.01"))
+            events[cycle_start]["total"] += amount
 
     def _add_post_alignment_recognition_events(
         self, events, item, align_date, end_date, from_date, to_date, interval_months,
