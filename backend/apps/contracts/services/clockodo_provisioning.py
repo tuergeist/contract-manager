@@ -20,17 +20,52 @@ def get_naming_templates(tenant) -> dict:
 def render_template(template: str, **kwargs) -> str:
     """Render a naming template with placeholders (case-insensitive).
 
-    Unmatched placeholders are removed and excess whitespace is collapsed.
+    Supports three forms inside ``{...}`` blocks:
+
+    - ``{name}``: simple substitution. Unmatched names render as empty.
+    - ``{a|b|c}``: fallback chain — uses the first non-empty value among
+      ``a``, ``b``, ``c``. Useful e.g. ``{contract_name|item_name}`` when
+      a per-item project should fall back to the item description if no
+      contract name is set.
+    - ``{a|b:30}``: length limit applied to the resolved value. The limit
+      must come after the *last* alternative. Truncates without ellipsis.
+
+    Whitespace is collapsed and the result is trimmed.
     """
     import re
-    result = template
-    for key, value in kwargs.items():
-        pattern = re.compile(re.escape(f"{{{key}}}"), re.IGNORECASE)
-        result = pattern.sub(str(value), result)
-    result = re.sub(r"\{year\}", str(date.today().year), result, flags=re.IGNORECASE)
-    # Remove any remaining unmatched placeholders
-    result = re.sub(r"\{[a-zA-Z_]+\}", "", result)
-    # Collapse whitespace and strip
+
+    lookup: dict[str, str] = {
+        k.lower(): "" if v is None else str(v).strip()
+        for k, v in kwargs.items()
+    }
+    lookup.setdefault("year", str(date.today().year))
+
+    def resolve(match: re.Match) -> str:
+        body = match.group(1).strip()
+        # Length limit only counts when after the last alternative segment.
+        # `a|b:30` → spec='a|b', limit=30. `a:bad` → not numeric → no limit.
+        limit: int | None = None
+        if ":" in body:
+            spec, _, tail = body.rpartition(":")
+            try:
+                limit = int(tail.strip())
+            except ValueError:
+                spec = body  # treat the colon as part of the key (rare)
+        else:
+            spec = body
+
+        value = ""
+        for alt in spec.split("|"):
+            v = lookup.get(alt.strip().lower(), "")
+            if v:
+                value = v
+                break
+
+        if limit is not None and limit > 0 and len(value) > limit:
+            value = value[:limit].rstrip()
+        return value
+
+    result = re.sub(r"\{([^{}]+)\}", resolve, template)
     result = re.sub(r"\s+", " ", result).strip()
     return result
 

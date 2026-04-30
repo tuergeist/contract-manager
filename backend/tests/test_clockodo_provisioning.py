@@ -81,6 +81,62 @@ class TestRenderTemplate:
         result = render_template("{customer_name} {year}", customer_name="Acme")
         assert str(date.today().year) in result
 
+    def test_fallback_uses_first_non_empty(self):
+        # contract_name set → use it, ignore item_name
+        assert render_template(
+            "{contract_name|item_name}",
+            contract_name="Wartung Q1", item_name="Item A",
+        ) == "Wartung Q1"
+
+    def test_fallback_falls_through_when_first_empty(self):
+        assert render_template(
+            "{contract_name|item_name}",
+            contract_name="", item_name="Item A",
+        ) == "Item A"
+
+    def test_fallback_chain_three_alternatives(self):
+        assert render_template(
+            "{contract_name|item_name|customer_name}",
+            contract_name="", item_name="", customer_name="Acme",
+        ) == "Acme"
+
+    def test_fallback_all_empty(self):
+        assert render_template(
+            "{contract_name|item_name}",
+            contract_name="", item_name="",
+        ) == ""
+
+    def test_length_limit_truncates(self):
+        long_name = "A very very very long contract name that exceeds thirty chars"
+        assert render_template(
+            "{contract_name:30}", contract_name=long_name,
+        ) == long_name[:30].rstrip()
+
+    def test_length_limit_short_value_unchanged(self):
+        assert render_template(
+            "{contract_name:30}", contract_name="Short",
+        ) == "Short"
+
+    def test_fallback_with_length_limit(self):
+        assert render_template(
+            "{contract_name|item_name:30}",
+            contract_name="", item_name="A" * 50,
+        ) == "A" * 30
+
+    def test_invalid_length_specifier_treated_literal(self):
+        # "abc" is not numeric → no truncation, key "missing:abc" not found → empty
+        result = render_template("{missing:abc}", missing="value")
+        assert result == ""
+
+    def test_combined_realistic_template(self):
+        # Per-Item one-off project name, falling back to item description, max 30 chars
+        item = "Implementierung neuer Modulbaustein"
+        result = render_template(
+            "{customer_name} - {contract_name|item_name:30}",
+            customer_name="Acme GmbH", contract_name="", item_name=item,
+        )
+        assert result == f"Acme GmbH - {item[:30].rstrip()}"
+
 
 class TestPreviewActivation:
     @patch("apps.contracts.services.clockodo_provisioning.get_provider")

@@ -2107,6 +2107,23 @@ export function Settings({ showHeader = true, section }: SettingsProps) {
                     </span>
                   ))}
                 </div>
+                <div className="mt-3 space-y-1 text-xs text-gray-500">
+                  <p>
+                    <span className="font-mono text-gray-700">{'{a|b}'}</span>
+                    {' — '}
+                    {t('settings.timeTracking.templateFallbackHint', 'Fallback: nimm a, sonst b')}
+                  </p>
+                  <p>
+                    <span className="font-mono text-gray-700">{'{a:30}'}</span>
+                    {' — '}
+                    {t('settings.timeTracking.templateLengthHint', 'Auf 30 Zeichen begrenzen')}
+                  </p>
+                  <p>
+                    <span className="font-mono text-gray-700">{'{contract_name|item_name:30}'}</span>
+                    {' — '}
+                    {t('settings.timeTracking.templateComboHint', 'Beides kombiniert')}
+                  </p>
+                </div>
               </div>
 
               <div className="flex items-center gap-3">
