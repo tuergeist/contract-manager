@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -73,6 +74,7 @@ const CONTRACT_QUERY = gql`
       netsuiteUrl
       poNumber
       orderConfirmationNumber
+      offerNumber
       status
       startDate
       endDate
@@ -214,6 +216,7 @@ interface Contract {
   netsuiteUrl: string | null
   poNumber: string | null
   orderConfirmationNumber: string | null
+  offerNumber: string | null
   status: string
   startDate: string
   endDate: string | null
@@ -239,6 +242,7 @@ const formSchema = z.object({
   netsuiteUrl: z.string().optional().nullable(),
   poNumber: z.string().optional().nullable(),
   orderConfirmationNumber: z.string().optional().nullable(),
+  offerNumber: z.string().optional().nullable(),
   groupId: z.coerce.string().optional().nullable(),
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().optional(),
@@ -326,6 +330,7 @@ export function ContractForm() {
       netsuiteUrl: '',
       poNumber: '',
       orderConfirmationNumber: '',
+      offerNumber: '',
       groupId: null,
       startDate: '',
       endDate: '',
@@ -379,6 +384,7 @@ export function ContractForm() {
         netsuiteUrl: c.netsuiteUrl || '',
         poNumber: c.poNumber || '',
         orderConfirmationNumber: c.orderConfirmationNumber || '',
+        offerNumber: c.offerNumber || '',
         groupId: c.group?.id || null,
         startDate: c.startDate,
         endDate: c.endDate || '',
@@ -417,6 +423,7 @@ export function ContractForm() {
               netsuiteUrl: data.netsuiteUrl || null,
               poNumber: data.poNumber || null,
               orderConfirmationNumber: data.orderConfirmationNumber || null,
+              offerNumber: data.offerNumber || null,
               groupId: data.groupId || null,
               startDate: data.startDate,
               billingStartDate: data.billingStartDate || data.startDate,
@@ -448,6 +455,7 @@ export function ContractForm() {
               netsuiteUrl: data.netsuiteUrl || null,
               poNumber: data.poNumber || null,
               orderConfirmationNumber: data.orderConfirmationNumber || null,
+              offerNumber: data.offerNumber || null,
               groupId: data.groupId || null,
               startDate: data.startDate,
               endDate: data.endDate || null,
@@ -807,17 +815,48 @@ export function ContractForm() {
               <FormField
                 control={form.control}
                 name="orderConfirmationNumber"
+                render={({ field }) => {
+                  const isManualEdit = isEditing && !!field.value
+                  return (
+                    <FormItem>
+                      <FormLabel>{t('contracts.form.orderConfirmationNumber')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder={t('contracts.form.orderConfirmationNumberPlaceholder')}
+                          disabled={!isEditing}
+                          {...field}
+                          value={field.value || ''}
+                        />
+                      </FormControl>
+                      <FormDescription className={isManualEdit ? 'text-amber-700' : undefined}>
+                        {t('contracts.form.orderConfirmationNumberHint',
+                          'Wird bei Aktivierung automatisch erzeugt, wenn das Feld leer ist. Nur manuell ändern, wenn du genau weißt was du tust.')}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )
+                }}
+              />
+
+              {/* Offer Number (VSX) */}
+              <FormField
+                control={form.control}
+                name="offerNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('contracts.form.orderConfirmationNumber')}</FormLabel>
+                    <FormLabel>{t('contracts.form.offerNumber', 'Offer Number (VSX)')}</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder={t('contracts.form.orderConfirmationNumberPlaceholder')}
+                        placeholder={t('contracts.form.offerNumberPlaceholder', 'z.B. AN-2026-00123')}
                         disabled={!isEditing}
                         {...field}
                         value={field.value || ''}
                       />
                     </FormControl>
+                    <FormDescription>
+                      {t('contracts.form.offerNumberHint',
+                        'Optional. Übernimmt typischerweise die Angebotsnummer aus dem zugehörigen Deal/Angebot.')}
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

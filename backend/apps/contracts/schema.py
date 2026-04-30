@@ -306,6 +306,7 @@ class ContractType:
     netsuite_url: auto
     po_number: auto
     order_confirmation_number: auto
+    offer_number: auto
     notes: auto
 
     @strawberry.field(name="orderConfirmations")
@@ -680,6 +681,7 @@ class CreateContractInput:
     netsuite_url: str | None = None
     po_number: str | None = None
     order_confirmation_number: str | None = None
+    offer_number: str | None = None
     notes: str | None = None
     start_date: date
     end_date: date | None = None
@@ -702,6 +704,7 @@ class UpdateContractInput:
     netsuite_url: str | None = None
     po_number: str | None = None
     order_confirmation_number: str | None = None
+    offer_number: str | None = None
     notes: str | None = None
     invoice_text: str | None = None
     start_date: date | None = None
@@ -4752,6 +4755,7 @@ class ContractMutation:
                 netsuite_url=input.netsuite_url or "",
                 po_number=input.po_number,
                 order_confirmation_number=input.order_confirmation_number,
+                offer_number=input.offer_number,
                 notes=input.notes or "",
                 status=Contract.Status.DRAFT,
                 start_date=input.start_date,
@@ -4798,6 +4802,8 @@ class ContractMutation:
                 contract.po_number = input.po_number
             if input.order_confirmation_number is not None:
                 contract.order_confirmation_number = input.order_confirmation_number
+            if input.offer_number is not None:
+                contract.offer_number = input.offer_number
             if input.notes is not None:
                 contract.notes = input.notes
             if input.invoice_text is not None:

@@ -104,6 +104,12 @@ class Contract(TenantModel):
         null=True,
         help_text="Order Confirmation number (AB Nummer)",
     )
+    offer_number = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Offer number (VSX) — usually copied from the related deal/offer when the contract is created",
+    )
     name = models.CharField(max_length=255, blank=True)
     notes = models.TextField(
         blank=True,
