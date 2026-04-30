@@ -33,24 +33,44 @@ class ClockodoProvider(TimeTrackingProvider):
         }
 
     def _request(self, method: str, endpoint: str, **kwargs) -> dict:
-        """Make an API request with exponential backoff retry on 429 and 5xx."""
+        """Make an API request with exponential backoff retry on 429 and 5xx.
+
+        On 4xx errors, the response body is logged and embedded in the raised
+        exception so callers can surface a meaningful message to the user.
+        """
         url = f"{self.API_BASE}/{endpoint}"
         max_attempts = 5
         for attempt in range(max_attempts):
             response = httpx.request(method, url, headers=self._get_headers(), timeout=30, **kwargs)
             if response.status_code == 429 or response.status_code >= 500:
                 if attempt == max_attempts - 1:
-                    response.raise_for_status()
+                    self._raise_with_body(response, method, endpoint)
                 retry_after = response.headers.get("Retry-After")
                 wait = int(retry_after) if retry_after and retry_after.isdigit() else 2 ** (attempt + 1)
                 logger.warning("Clockodo %s on %s %s, retrying in %ss (attempt %d/%d)",
                                response.status_code, method, endpoint, wait, attempt + 1, max_attempts)
                 time.sleep(wait)
                 continue
-            response.raise_for_status()
+            if response.status_code >= 400:
+                self._raise_with_body(response, method, endpoint)
             return response.json()
-        response.raise_for_status()
+        self._raise_with_body(response, method, endpoint)
         return response.json()
+
+    def _raise_with_body(self, response, method: str, endpoint: str):
+        """Log Clockodo response body and raise HTTPStatusError with body in message."""
+        try:
+            body = response.json()
+        except Exception:
+            body = response.text[:500]
+        logger.error(
+            "Clockodo %s %s -> %s: %r",
+            method, endpoint, response.status_code, body,
+        )
+        # Build an HTTPStatusError whose str() includes the body so callers
+        # using str(e) (e.g. UI error display) see the actual reason.
+        message = f"Clockodo {method} /{endpoint} returned {response.status_code}: {body}"
+        raise httpx.HTTPStatusError(message, request=response.request, response=response)
 
     def _get(self, endpoint: str, params: dict | None = None) -> dict:
         return self._request("GET", endpoint, params=params)

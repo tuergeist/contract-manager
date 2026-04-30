@@ -184,6 +184,25 @@ def provision_projects(
 
         oneoff_items = list(oneoff_items)
 
+        # Fetch existing projects once for all one-off lookups (Clockodo rejects
+        # duplicate names per customer with a 400, so we must link instead of
+        # re-create).
+        existing_projects_for_oneoff = []
+        if oneoff_items:
+            try:
+                existing_projects_for_oneoff = provider.get_customer_projects(
+                    customer.clockodo_customer_id
+                )
+            except Exception as e:
+                logger.warning("Failed to list existing projects for one-off check: %s", e)
+
+        def _find_existing(name: str):
+            target = name.lower().strip()
+            return next(
+                (p for p in existing_projects_for_oneoff if p.name.lower().strip() == target),
+                None,
+            )
+
         if oneoff_strategy == "combined" and oneoff_items:
             project_name = render_template(
                 templates["oneoff"],
@@ -191,14 +210,26 @@ def provision_projects(
                 contract_name=contract.name,
                 ab_number=contract.order_confirmation_number or "",
             )
-            try:
-                result = provider.create_project(customer.clockodo_customer_id, project_name)
-                mapping = _create_mapping_if_needed(
-                    tenant, contract, result["id"], result["name"], customer.name
-                )
-                created.append({"name": result["name"], "action": "created"})
-            except Exception as e:
-                errors.append(f"Failed to create one-off project: {e}")
+            if not project_name:
+                errors.append("Generated one-off project name is empty — check naming template")
+            else:
+                existing = _find_existing(project_name)
+                if existing:
+                    _create_mapping_if_needed(
+                        tenant, contract, existing.id, existing.name, customer.name
+                    )
+                    created.append({"name": existing.name, "action": "linked"})
+                else:
+                    try:
+                        result = provider.create_project(
+                            customer.clockodo_customer_id, project_name
+                        )
+                        _create_mapping_if_needed(
+                            tenant, contract, result["id"], result["name"], customer.name
+                        )
+                        created.append({"name": result["name"], "action": "created"})
+                    except Exception as e:
+                        errors.append(f"Failed to create one-off project '{project_name}': {e}")
 
         elif oneoff_strategy == "per_item":
             for item in oneoff_items:
@@ -209,6 +240,19 @@ def provision_projects(
                     item_name=item.description,
                     ab_number=item.order_confirmation_number or contract.order_confirmation_number or "",
                 )
+                if not project_name:
+                    errors.append(
+                        f"Generated project name for '{item.description}' is empty — check naming template"
+                    )
+                    continue
+                existing = _find_existing(project_name)
+                if existing:
+                    _create_mapping_if_needed(
+                        tenant, contract, existing.id, existing.name, customer.name,
+                        contract_item=item,
+                    )
+                    created.append({"name": existing.name, "action": "linked"})
+                    continue
                 try:
                     result = provider.create_project(customer.clockodo_customer_id, project_name)
                     _create_mapping_if_needed(
@@ -217,7 +261,9 @@ def provision_projects(
                     )
                     created.append({"name": result["name"], "action": "created"})
                 except Exception as e:
-                    errors.append(f"Failed to create project for '{item.description}': {e}")
+                    errors.append(
+                        f"Failed to create project for '{item.description}' (name='{project_name}'): {e}"
+                    )
 
     return {
         "success": len(errors) == 0,
