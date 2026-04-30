@@ -75,6 +75,10 @@ MIDDLEWARE = [
     "apps.mcp.middleware.McpResourceMetadataMiddleware",
 ]
 
+# Allow same-origin iframes so the SPA can embed its own PDFs (incoming
+# invoices, generated invoices, etc.). Django's middleware default is DENY.
+X_FRAME_OPTIONS = "SAMEORIGIN"
+
 ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [

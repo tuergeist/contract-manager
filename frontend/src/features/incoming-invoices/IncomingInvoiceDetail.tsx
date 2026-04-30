@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useLazyQuery, useMutation, gql } from '@apollo/client'
-import { Loader2, Check, ExternalLink, ChevronsUpDown } from 'lucide-react'
+import { Loader2, Check, ExternalLink, ChevronsUpDown, PanelTopOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -169,13 +169,29 @@ export function IncomingInvoiceDetail({ id, open, onClose, onUpdate }: Props) {
           <div className="space-y-6 mt-4">
             {inv.pdfUrl && (
               <div className="border rounded-lg overflow-hidden">
-                <div className="flex items-center justify-between p-2 bg-muted">
-                  <span className="text-sm font-medium">{inv.originalFilename}</span>
-                  <a href={inv.pdfUrl} target="_blank" rel="noopener noreferrer">
-                    <Button variant="ghost" size="sm"><ExternalLink className="h-4 w-4" /></Button>
-                  </a>
+                <div className="flex items-center justify-between p-2 bg-muted gap-2">
+                  <span className="text-sm font-medium truncate">{inv.originalFilename}</span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      type="button"
+                      title={t('incomingInvoices.detail.openPopup', 'In Popup öffnen')}
+                      onClick={() => window.open(
+                        inv.pdfUrl!,
+                        'incoming-invoice-pdf',
+                        'width=900,height=1100,resizable=yes,scrollbars=yes',
+                      )}
+                    >
+                      <PanelTopOpen className="h-4 w-4" />
+                    </Button>
+                    <a href={inv.pdfUrl} target="_blank" rel="noopener noreferrer"
+                       title={t('incomingInvoices.detail.openTab', 'In neuem Tab öffnen')}>
+                      <Button variant="ghost" size="sm" type="button"><ExternalLink className="h-4 w-4" /></Button>
+                    </a>
+                  </div>
                 </div>
-                <iframe src={inv.pdfUrl} className="w-full h-[300px]" title="PDF Preview" />
+                <iframe src={inv.pdfUrl} className="w-full h-[600px] bg-white" title="PDF Preview" />
               </div>
             )}
 
