@@ -26,13 +26,22 @@ def _get_config(tenant) -> dict:
 
 
 def _connect(config: dict) -> smtplib.SMTP:
-    """Create an authenticated SMTP connection."""
+    """Create an authenticated SMTP connection.
+
+    Port 465 uses implicit TLS (SMTPS); other ports use plain SMTP with
+    optional STARTTLS upgrade when ``use_tls`` is set.
+    """
     try:
-        server = smtplib.SMTP(config["host"], config["port"], timeout=15)
-        server.ehlo()
-        if config.get("use_tls", True):
-            server.starttls()
+        port = int(config["port"])
+        if port == 465:
+            server = smtplib.SMTP_SSL(config["host"], port, timeout=15)
             server.ehlo()
+        else:
+            server = smtplib.SMTP(config["host"], port, timeout=15)
+            server.ehlo()
+            if config.get("use_tls", True):
+                server.starttls()
+                server.ehlo()
         server.login(config["username"], config["password"])
         return server
     except smtplib.SMTPException as e:

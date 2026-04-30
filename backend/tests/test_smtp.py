@@ -112,6 +112,22 @@ class TestTestConnection:
         with pytest.raises(SmtpError, match="SMTP connection failed"):
             smtp_test_connection(smtp_tenant)
 
+    @patch("apps.core.smtp.smtplib.SMTP_SSL")
+    @patch("apps.core.smtp.smtplib.SMTP")
+    def test_port_465_uses_implicit_tls(self, mock_smtp_class, mock_smtp_ssl_class, tenant):
+        tenant.settings = {"smtp": {**SMTP_CONFIG, "port": 465}}
+        tenant.save()
+
+        mock_server = MagicMock()
+        mock_smtp_ssl_class.return_value = mock_server
+
+        smtp_test_connection(tenant)
+
+        mock_smtp_ssl_class.assert_called_once_with("smtp.example.com", 465, timeout=15)
+        mock_smtp_class.assert_not_called()
+        mock_server.starttls.assert_not_called()
+        mock_server.login.assert_called_once_with("user@example.com", "secret123")
+
 
 class TestSendNotification:
     @patch("apps.core.smtp.smtplib.SMTP")
