@@ -1218,7 +1218,9 @@ export function CounterpartyDetailPage() {
                           {tx.matchedInvoice && (
                             <Link
                               to={
-                                tx.matchedInvoice.invoiceType === 'imported'
+                                tx.matchedInvoice.invoiceType === 'incoming'
+                                  ? `/incoming-invoices?id=${tx.matchedInvoice.invoiceId}`
+                                  : tx.matchedInvoice.invoiceType === 'imported'
                                   ? `/invoices/${tx.matchedInvoice.invoiceId}?type=imported`
                                   : `/invoices/${tx.matchedInvoice.invoiceId}`
                               }

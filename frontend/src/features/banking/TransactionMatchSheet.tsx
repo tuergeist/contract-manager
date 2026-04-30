@@ -254,7 +254,9 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
 
       if (result.success) {
         refetch()
-        if (customerId !== null) refetchSuggestions()
+        // Suggestions are also fetched for debits without a customer link
+        // (counterparty-based matching), so always refetch them.
+        refetchSuggestions()
         onMatchChanged?.()
       } else {
         setError(result.error || 'Failed to create match')
@@ -270,6 +272,7 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
       const { data: result } = await deleteMatch({ variables: { matchId } })
       if (result.deletePaymentMatch.success) {
         refetch()
+        refetchSuggestions()
         onMatchChanged?.()
       } else {
         setError(result.deletePaymentMatch.error || 'Failed to remove match')

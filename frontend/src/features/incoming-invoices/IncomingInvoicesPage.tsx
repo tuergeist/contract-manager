@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   Loader2, FileText, Upload, X, Pencil, Plus,
   ArrowUp, ArrowDown, ArrowUpDown,
@@ -104,7 +104,8 @@ export function IncomingInvoicesPage() {
   const [sortOrder, setSortOrder] = usePersistedState('cm:incoming:sortOrder', 'desc')
 
   // UI state
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('id'))
   const [editingInvId, setEditingInvId] = useState<string | null>(null)
   const [cpSearch, setCpSearch] = useState('')
   const [cpSearchDebounced, setCpSearchDebounced] = useState('')
@@ -632,7 +633,19 @@ export function IncomingInvoicesPage() {
 
       {/* Detail sheet */}
       {selectedId && (
-        <IncomingInvoiceDetail id={selectedId} open={!!selectedId} onClose={() => setSelectedId(null)} onUpdate={() => refetch()} />
+        <IncomingInvoiceDetail
+          id={selectedId}
+          open={!!selectedId}
+          onClose={() => {
+            setSelectedId(null)
+            if (searchParams.get('id')) {
+              const next = new URLSearchParams(searchParams)
+              next.delete('id')
+              setSearchParams(next, { replace: true })
+            }
+          }}
+          onUpdate={() => refetch()}
+        />
       )}
     </div>
   )
