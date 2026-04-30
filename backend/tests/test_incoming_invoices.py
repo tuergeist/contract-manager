@@ -213,6 +213,124 @@ class TestCounterpartyAssignment:
         incoming_invoice.refresh_from_db()
         assert incoming_invoice.counterparty is None
 
+    def test_excludes_tenant_company_name(self, db, tenant, incoming_invoice):
+        """Counterparty whose name matches the tenant's legal name must never be matched."""
+        from apps.invoices.models import CompanyLegalData
+        CompanyLegalData.objects.create(tenant=tenant, company_name="VSX Test GmbH")
+        Counterparty.objects.create(tenant=tenant, name="VSX-Test GmbH")  # punctuation differs
+        incoming_invoice.supplier_name = "VSX Test GmbH"
+        incoming_invoice.save()
+
+        _auto_assign_counterparty(incoming_invoice)
+
+        incoming_invoice.refresh_from_db()
+        assert incoming_invoice.counterparty is None
+
+    def test_payment_hint_links_counterparty(self, db, tenant, incoming_invoice):
+        """A single outgoing tx on/after invoice date with matching amount links its counterparty."""
+        import datetime
+        from apps.banking.models import BankAccount, BankTransaction
+        cp = Counterparty.objects.create(tenant=tenant, name="Real Vendor")
+        account = BankAccount.objects.create(tenant=tenant, iban="DE12345678901234567890", name="Main")
+        BankTransaction.objects.create(
+            tenant=tenant, account=account, entry_date=datetime.date(2026, 4, 5),
+            amount=Decimal("-123.45"), currency="EUR", counterparty=cp,
+            import_hash="hash1",
+        )
+
+        incoming_invoice.supplier_name = "Garbage From LLM"
+        incoming_invoice.invoice_date = datetime.date(2026, 4, 1)
+        incoming_invoice.gross_amount = Decimal("123.45")
+        incoming_invoice.save()
+
+        _auto_assign_counterparty(incoming_invoice)
+
+        incoming_invoice.refresh_from_db()
+        assert incoming_invoice.counterparty == cp
+
+    def test_payment_hint_skips_when_ambiguous(self, db, tenant, incoming_invoice):
+        """Two different counterparties with the same amount → don't auto-link."""
+        import datetime
+        from apps.banking.models import BankAccount, BankTransaction
+        cp1 = Counterparty.objects.create(tenant=tenant, name="Vendor One")
+        cp2 = Counterparty.objects.create(tenant=tenant, name="Vendor Two")
+        account = BankAccount.objects.create(tenant=tenant, iban="DE12345678901234567891", name="Main")
+        BankTransaction.objects.create(
+            tenant=tenant, account=account, entry_date=datetime.date(2026, 4, 5),
+            amount=Decimal("-50.00"), currency="EUR", counterparty=cp1, import_hash="h1",
+        )
+        BankTransaction.objects.create(
+            tenant=tenant, account=account, entry_date=datetime.date(2026, 4, 6),
+            amount=Decimal("-50.00"), currency="EUR", counterparty=cp2, import_hash="h2",
+        )
+
+        incoming_invoice.supplier_name = "Unknown"
+        incoming_invoice.invoice_date = datetime.date(2026, 4, 1)
+        incoming_invoice.gross_amount = Decimal("50.00")
+        incoming_invoice.save()
+
+        _auto_assign_counterparty(incoming_invoice)
+
+        incoming_invoice.refresh_from_db()
+        assert incoming_invoice.counterparty is None
+
+    def test_payment_hint_ignores_pre_invoice_payments(self, db, tenant, incoming_invoice):
+        """Payments before the invoice date are not the same invoice."""
+        import datetime
+        from apps.banking.models import BankAccount, BankTransaction
+        cp = Counterparty.objects.create(tenant=tenant, name="Vendor")
+        account = BankAccount.objects.create(tenant=tenant, iban="DE12345678901234567892", name="Main")
+        BankTransaction.objects.create(
+            tenant=tenant, account=account, entry_date=datetime.date(2026, 3, 31),
+            amount=Decimal("-99.00"), currency="EUR", counterparty=cp, import_hash="h3",
+        )
+
+        incoming_invoice.supplier_name = "Unknown"
+        incoming_invoice.invoice_date = datetime.date(2026, 4, 1)
+        incoming_invoice.gross_amount = Decimal("99.00")
+        incoming_invoice.save()
+
+        _auto_assign_counterparty(incoming_invoice)
+
+        incoming_invoice.refresh_from_db()
+        assert incoming_invoice.counterparty is None
+
+
+# === Tenant-self extraction guard ===
+
+class TestTenantSelfGuard:
+    @patch("apps.banking.services.incoming_extraction.extract_incoming_invoice_metadata")
+    def test_supplier_matching_tenant_is_cleared(self, mock_extract, db, tenant, incoming_invoice):
+        from django.conf import settings
+        from apps.invoices.models import CompanyLegalData
+        settings.ANTHROPIC_API_KEY = "test-key"
+        CompanyLegalData.objects.create(tenant=tenant, company_name="VSX - Vogel Software GmbH")
+        mock_extract.return_value = {
+            "supplier_name": "VSX-Vogel Software GmbH",  # punctuation differs from CompanyLegalData
+            "invoice_number": "RE-001",
+            "invoice_date": "2026-04-01",
+            "due_date": None,
+            "net_amount": "100.00", "vat_amount": "19.00", "gross_amount": "119.00",
+            "currency": "EUR", "iban": None,
+        }
+
+        assert run_incoming_extraction(incoming_invoice) is True
+
+        incoming_invoice.refresh_from_db()
+        assert incoming_invoice.supplier_name == ""  # cleared by guard
+        assert incoming_invoice.invoice_number == "RE-001"  # other fields kept
+
+    def test_extraction_prompt_includes_recipient(self):
+        from apps.banking.services.incoming_extraction import _build_extraction_prompt
+        prompt = _build_extraction_prompt("VSX - Vogel Software GmbH")
+        assert "VSX - Vogel Software GmbH" in prompt
+        assert "RECIPIENT" in prompt
+
+    def test_extraction_prompt_no_recipient(self):
+        from apps.banking.services.incoming_extraction import _build_extraction_prompt
+        prompt = _build_extraction_prompt(None)
+        assert "RECIPIENT" not in prompt
+
 
 # === GraphQL Queries ===
 

@@ -3,6 +3,7 @@
 import base64
 import json
 import logging
+import uuid  # noqa: F401  (used in type annotations as string literal)
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
@@ -12,11 +13,11 @@ from apps.banking.models import Counterparty, IncomingInvoice
 
 logger = logging.getLogger(__name__)
 
-INCOMING_INVOICE_EXTRACTION_PROMPT = """\
+INCOMING_INVOICE_EXTRACTION_PROMPT_TEMPLATE = """\
 Analyze this incoming (supplier) invoice PDF and extract the key metadata fields.
 
 Return a JSON object with exactly this structure:
-{
+{{
   "supplier_name": "The name of the supplier/vendor who issued this invoice",
   "invoice_number": "The invoice number/reference",
   "invoice_date": "The invoice date in ISO format YYYY-MM-DD",
@@ -26,10 +27,10 @@ Return a JSON object with exactly this structure:
   "gross_amount": "Total gross amount including tax as decimal string",
   "currency": "Three-letter currency code (e.g., 'EUR', 'USD')",
   "iban": "Supplier's IBAN if visible (null if not found)"
-}
+}}
 
 Rules:
-- supplier_name is the ISSUER of the invoice (the vendor sending the bill)
+- supplier_name is the ISSUER of the invoice (the vendor sending the bill){recipient_rule}
 - Extract the invoice number exactly as shown
 - All dates must be ISO YYYY-MM-DD
 - All amounts as strings without currency symbols
@@ -39,8 +40,30 @@ Rules:
 """
 
 
-def extract_incoming_invoice_metadata(pdf_data: bytes) -> dict:
-    """Send incoming invoice PDF to Claude API and return parsed JSON."""
+def _build_extraction_prompt(recipient_name: str | None) -> str:
+    if recipient_name:
+        rule = (
+            f"\n- CRITICAL: \"{recipient_name}\" is the RECIPIENT of this invoice "
+            f"(the bill is addressed TO them). They CANNOT be the supplier_name. "
+            f"If the only company name you can find on the invoice is \"{recipient_name}\", "
+            f"return null for supplier_name."
+        )
+    else:
+        rule = ""
+    return INCOMING_INVOICE_EXTRACTION_PROMPT_TEMPLATE.format(recipient_rule=rule)
+
+
+# Kept for backwards compatibility / tests that import the original constant.
+INCOMING_INVOICE_EXTRACTION_PROMPT = _build_extraction_prompt(None)
+
+
+def extract_incoming_invoice_metadata(pdf_data: bytes, recipient_name: str | None = None) -> dict:
+    """Send incoming invoice PDF to Claude API and return parsed JSON.
+
+    ``recipient_name`` is the tenant's own company name; passed into the prompt so
+    the model never confuses recipient and issuer (a common failure mode on
+    invoices where the recipient block is more visually prominent).
+    """
     import anthropic
 
     pdf_base64 = base64.standard_b64encode(pdf_data).decode("utf-8")
@@ -60,7 +83,7 @@ def extract_incoming_invoice_metadata(pdf_data: bytes) -> dict:
                             "data": pdf_base64,
                         },
                     },
-                    {"type": "text", "text": INCOMING_INVOICE_EXTRACTION_PROMPT},
+                    {"type": "text", "text": _build_extraction_prompt(recipient_name)},
                 ],
             }
         ],
@@ -71,6 +94,26 @@ def extract_incoming_invoice_metadata(pdf_data: bytes) -> dict:
         lines = response_text.split("\n")
         response_text = "\n".join(lines[1:-1])
     return json.loads(response_text)
+
+
+def _normalize_company_name(name: str | None) -> str:
+    """Lowercase and strip whitespace/punctuation for loose comparison."""
+    if not name:
+        return ""
+    out = []
+    for ch in name.lower():
+        if ch.isalnum():
+            out.append(ch)
+    return "".join(out)
+
+
+def _get_tenant_company_name(tenant) -> str | None:
+    from apps.invoices.models import CompanyLegalData
+    return (
+        CompanyLegalData.objects.filter(tenant=tenant)
+        .values_list("company_name", flat=True)
+        .first()
+    )
 
 
 def _parse_amount(value) -> Decimal | None:
@@ -118,14 +161,27 @@ def run_incoming_extraction(invoice: IncomingInvoice) -> bool:
         invoice.save(update_fields=["extraction_status", "extraction_error", "updated_at"])
         return False
 
+    tenant_name = _get_tenant_company_name(invoice.tenant)
     try:
-        data = extract_incoming_invoice_metadata(pdf_data)
+        data = extract_incoming_invoice_metadata(pdf_data, recipient_name=tenant_name)
     except Exception as e:
         logger.error("Extraction error for incoming invoice %s: %s", invoice.id, e)
         invoice.extraction_status = IncomingInvoice.ExtractionStatus.EXTRACTION_FAILED
         invoice.extraction_error = f"Extraction error: {e}"
         invoice.save(update_fields=["extraction_status", "extraction_error", "updated_at"])
         return False
+
+    # Defensive: never accept the tenant's own legal name as supplier — VSX
+    # cannot be the issuer of an invoice it received. The extraction prompt
+    # already warns the model, but this guards against any remaining slip-ups.
+    extracted_supplier = data.get("supplier_name")
+    if extracted_supplier and tenant_name:
+        if _normalize_company_name(extracted_supplier) == _normalize_company_name(tenant_name):
+            logger.warning(
+                "Discarding supplier_name '%s' for incoming invoice %s — matches tenant name",
+                extracted_supplier, invoice.id,
+            )
+            data["supplier_name"] = None
 
     if data.get("supplier_name"):
         invoice.supplier_name = data["supplier_name"]
@@ -168,22 +224,43 @@ def run_incoming_extraction(invoice: IncomingInvoice) -> bool:
 
 
 def _auto_assign_counterparty(invoice: IncomingInvoice, iban: str | None = None):
-    """Try to match supplier to an existing counterparty."""
+    """Try to match supplier to an existing counterparty.
+
+    The tenant's own company is excluded from candidates — even if a
+    counterparty record exists for it (e.g. payroll-related self-transfers),
+    the tenant cannot be the issuer of an invoice it received.
+    """
     if not invoice.supplier_name and not iban:
         return
 
     tenant = invoice.tenant
+    tenant_name_norm = _normalize_company_name(_get_tenant_company_name(tenant))
+
+    candidates = Counterparty.objects.filter(tenant=tenant)
+    if tenant_name_norm:
+        candidates = [
+            cp for cp in candidates
+            if _normalize_company_name(cp.name) != tenant_name_norm
+        ]
+
     match = None
 
     if iban:
         iban_clean = iban.replace(" ", "").upper()
-        match = Counterparty.objects.filter(tenant=tenant, iban__iexact=iban_clean).first()
+        for cp in candidates:
+            if cp.iban and cp.iban.upper() == iban_clean:
+                match = cp
+                break
 
     if not match and invoice.supplier_name:
-        match = Counterparty.objects.filter(tenant=tenant, name__icontains=invoice.supplier_name).first()
+        supplier_lower = invoice.supplier_name.lower()
+        for cp in candidates:
+            if invoice.supplier_name.lower() in cp.name.lower():
+                match = cp
+                break
         if not match:
-            for cp in Counterparty.objects.filter(tenant=tenant):
-                if cp.name.lower() in invoice.supplier_name.lower():
+            for cp in candidates:
+                if cp.name.lower() in supplier_lower:
                     match = cp
                     break
 
@@ -200,9 +277,65 @@ def _auto_assign_counterparty(invoice: IncomingInvoice, iban: str | None = None)
             .select_related("counterparty")
             .first()
         )
-        if previous:
+        if previous and (
+            not tenant_name_norm
+            or _normalize_company_name(previous.counterparty.name) != tenant_name_norm
+        ):
             match = previous.counterparty
+
+    # Final fallback: payment-based hint. If a single outgoing bank transaction
+    # exists on or after the invoice date with the exact gross amount, its
+    # counterparty is a strong candidate — this catches cases where the LLM
+    # got the supplier name wrong but the bookkeeping already paid the bill.
+    if not match and invoice.gross_amount and invoice.invoice_date:
+        cp_id = _payment_match_counterparty(invoice, tenant_name_norm)
+        if cp_id:
+            match = Counterparty.objects.filter(tenant=tenant, id=cp_id).first()
 
     if match:
         invoice.counterparty = match
         invoice.save(update_fields=["counterparty", "updated_at"])
+
+
+def _payment_match_counterparty(invoice: IncomingInvoice, tenant_name_norm: str) -> "uuid.UUID | None":
+    """Return a counterparty id when exactly one outgoing payment matches the invoice.
+
+    Searches BankTransactions belonging to the invoice's tenant where:
+      - entry_date is on or after invoice_date (payment cannot precede invoice)
+      - amount equals -gross_amount (outgoing payment matches invoice total)
+      - currency aligns
+      - within 365 days after invoice_date (don't pull arbitrarily old matches)
+
+    Returns the counterparty id only when all matching transactions point to
+    the same counterparty (and that counterparty is not the tenant itself).
+    """
+    from datetime import timedelta
+    from apps.banking.models import BankTransaction
+
+    if not invoice.gross_amount or not invoice.invoice_date:
+        return None
+
+    window_end = invoice.invoice_date + timedelta(days=365)
+    txs = (
+        BankTransaction.objects.filter(
+            tenant=invoice.tenant,
+            entry_date__gte=invoice.invoice_date,
+            entry_date__lte=window_end,
+            amount=-invoice.gross_amount,
+            counterparty__isnull=False,
+        )
+        .select_related("counterparty")
+    )
+
+    cp_ids = set()
+    for tx in txs:
+        cp = tx.counterparty
+        if tenant_name_norm and _normalize_company_name(cp.name) == tenant_name_norm:
+            continue
+        cp_ids.add(cp.id)
+        if len(cp_ids) > 1:
+            return None  # ambiguous
+
+    if len(cp_ids) == 1:
+        return cp_ids.pop()
+    return None
