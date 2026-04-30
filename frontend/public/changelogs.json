@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.29.5",
+    "date": "2026-04-30",
+    "title": "Clockodo-Aktivierung, SMTP-465, PDF-Vorschau & Lieferanten-Erkennung",
+    "description": "Sammelpaket aus 5 Bugfixes rund um Vertrag-Aktivierung, eingehende Rechnungen und Banking-UI. Wichtigster Hot-Fix: One-off-Clockodo-Projekte mit existierendem Namen wurden nicht mehr verlinkt sondern abgewiesen — jetzt korrekt erkannt und gemappt.",
+    "type": "bugfix",
+    "details": [
+      "Clockodo: One-off-Projekt-Anlage prüft jetzt vor Create, ob Name beim Customer schon existiert (linkt statt zu duplizieren) — vorher 400 Bad Request",
+      "Clockodo: 4xx-Response-Bodies werden geloggt und in Fehlermeldungen sichtbar (vorher nur 'Bad Request')",
+      "SMTP: Port 465 nutzt jetzt automatisch implicit TLS (smtplib.SMTP_SSL) statt STARTTLS — behebt 'unexpected response: 220 ESMTP' bei df.eu, ispgateway u.a.",
+      "Eingangsrechnungen: PDF-Vorschau im Detail-Sheet funktioniert jetzt (X-Frame-Options: SAMEORIGIN), iframe 600px hoch + Buttons 'In Popup öffnen' / 'In neuem Tab öffnen'",
+      "Eingangsrechnungen: AI-Extraktion zieht den Tenant nicht mehr fälschlich als Lieferant ('VSX' war Empfänger, nicht Aussteller); Tenant-Counterparty wird beim Auto-Match übersprungen",
+      "Eingangsrechnungen: Wenn nur eine Bank-Tx mit passendem Betrag ab Rechnungsdatum existiert, wird deren Counterparty als Hint verlinkt",
+      "Banking: Bereits gematchte Rechnungen verschwinden jetzt korrekt aus den 'Suggested matches' (Frontend-Cache-Refresh war für Lieferanten-Counterparties gated)",
+      "Banking: 'Matched invoice'-Icon einer Eingangsrechnung führt zu /incoming-invoices?id=<uuid> (war fälschlich auf Outgoing-Route gemappt)"
+    ]
+  },
+  {
     "version": "2.29.4",
     "date": "2026-04-27",
     "title": "Lange Pre-Alignment-Phasen korrekt aufteilen",
