@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.29.6",
+    "date": "2026-04-30",
+    "title": "Clockodo-Templates: Fallback-Chains und Längen-Limit",
+    "description": "Project-Naming-Templates unterstützen jetzt Fallback-Ketten und Zeichen-Limits — nützlich wenn ein Vertrag keinen Namen hat aber eine Item-Description, oder wenn Clockodo-Projektnamen zu lang werden.",
+    "type": "feature",
+    "details": [
+      "{a|b|c} — Fallback-Kette: nimm a, sonst b, sonst c (erster nicht-leerer Wert gewinnt)",
+      "{a:30} — Auf 30 Zeichen begrenzen",
+      "{a|b:30} — Beides kombiniert: erst Fallback, dann Limit",
+      "Beispiel: {customer_name} - {contract_name|item_name:30} — Vertrag oder Item-Beschreibung als Projekt-Name, max 30 Zeichen für den variablen Teil",
+      "Settings-UI zeigt die neue Syntax neben den Placeholder-Pills"
+    ]
+  },
+  {
     "version": "2.29.5",
     "date": "2026-04-30",
     "title": "Clockodo-Aktivierung, SMTP-465, PDF-Vorschau & Lieferanten-Erkennung",
