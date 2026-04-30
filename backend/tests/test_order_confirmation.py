@@ -187,6 +187,40 @@ class TestOrderConfirmationService:
         assert ab.personal_message == "Hello!"
         assert ab.additional_emails == ["extra@acme.com"]
         assert ab.pdf_file
+        # Contract should now hold the same number (fix: persist before PDF render)
+        contract_with_items.refresh_from_db()
+        assert contract_with_items.order_confirmation_number == "AB-2026-0001"
+
+    def test_create_order_confirmation_reuses_existing_contract_number(
+        self, tenant, user, contract_with_items
+    ):
+        """Second OC creation should reuse the contract's number, not allocate a new one."""
+        contract_with_items.order_confirmation_number = "AB-MANUAL-007"
+        contract_with_items.save()
+
+        service = OrderConfirmationService(tenant)
+        with patch.object(service, 'generate_pdf', return_value=b'%PDF-fake'):
+            ab = service.create_order_confirmation(
+                contract=contract_with_items, user=user,
+            )
+        assert ab.order_confirmation_number == "AB-MANUAL-007"
+        contract_with_items.refresh_from_db()
+        assert contract_with_items.order_confirmation_number == "AB-MANUAL-007"
+
+    def test_two_consecutive_oc_creations_share_number(
+        self, tenant, user, contract_with_items
+    ):
+        """Re-creating an OC for the same contract uses the same number."""
+        service = OrderConfirmationService(tenant)
+        with patch.object(service, 'generate_pdf', return_value=b'%PDF-fake'):
+            first = service.create_order_confirmation(
+                contract=contract_with_items, user=user,
+            )
+            contract_with_items.refresh_from_db()
+            second = service.create_order_confirmation(
+                contract=contract_with_items, user=user,
+            )
+        assert first.order_confirmation_number == second.order_confirmation_number
 
     def test_get_email_template_default(self, tenant):
         service = OrderConfirmationService(tenant)

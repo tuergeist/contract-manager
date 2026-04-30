@@ -322,7 +322,14 @@ class OrderConfirmationService:
         include_message_in_email: bool = True,
         additional_emails: list[str] | None = None,
     ):
-        """Create an OrderConfirmation record with generated number and PDF."""
+        """Create an OrderConfirmation record with generated number and PDF.
+
+        The OC number is allocated only once per contract: on first activation
+        (or if the field was set via automation/manually). Subsequent OC
+        records for the same contract reuse the contract's
+        ``order_confirmation_number`` so the PDF body, file name, and email
+        subject all match the number stored on the contract.
+        """
         from django.core.files.base import ContentFile
 
         from apps.contracts.order_confirmation_models import OrderConfirmation
@@ -333,9 +340,19 @@ class OrderConfirmationService:
         if language not in AB_LABELS:
             language = "de"
 
-        # Generate number
-        numbering = OrderConfirmationNumberService(self.tenant)
-        ab_number = numbering.get_next_number(date.today())
+        # Reuse the contract's existing number if set (manual entry, automation,
+        # or a previous activation). Only allocate a fresh number when the
+        # contract has none yet.
+        if contract.order_confirmation_number:
+            ab_number = contract.order_confirmation_number
+        else:
+            numbering = OrderConfirmationNumberService(self.tenant)
+            ab_number = numbering.get_next_number(date.today())
+            # Persist immediately so the PDF template (which reads
+            # contract.order_confirmation_number) renders the same number we
+            # use here as ab_number.
+            contract.order_confirmation_number = ab_number
+            contract.save(update_fields=["order_confirmation_number", "updated_at"])
 
         # Create record
         ab = OrderConfirmation.objects.create(
