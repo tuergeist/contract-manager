@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.29.7",
+    "date": "2026-04-30",
+    "title": "Offer Number-Feld + AB-Nummer-Konsistenz",
+    "description": "Neues optionales Feld 'Offer Number (VSX)' auf Verträgen für die Angebotsnummer aus Deal/Angebot. Außerdem behebt dieser Release einen Bug, bei dem beim mehrfachen Erstellen einer AB für denselben Vertrag PDF-Inhalt, Dateiname und Email-Betreff unterschiedliche AB-Nummern zeigten.",
+    "type": "feature",
+    "details": [
+      "Neues Feld Contract.offer_number (max 100 Zeichen) im Vertragsformular zwischen OC-Number und Gruppe",
+      "Hinweistext unter OC-Number: wird bei Aktivierung automatisch erzeugt — manuelle Änderung gewarnt (bernsteinfarbig)",
+      "Bugfix: AB-Nummer wird jetzt nur einmal pro Vertrag erzeugt; weitere AB-Records für denselben Vertrag verwenden die bestehende Nummer aus contract.order_confirmation_number",
+      "Frische AB-Nummern werden vor PDF-Render auf den Vertrag persistiert, damit Dateiname, Email-Betreff und PDF-Body immer denselben Wert zeigen",
+      "Manuell oder per Automation gesetzte Nummern werden respektiert und nicht überschrieben",
+      "+3 neue Backend-Tests für die OC-Konsistenz"
+    ]
+  },
+  {
     "version": "2.29.6",
     "date": "2026-04-30",
     "title": "Clockodo-Templates: Fallback-Chains und Längen-Limit",
