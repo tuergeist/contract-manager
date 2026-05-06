@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.29.8",
+    "date": "2026-05-06",
+    "title": "Clockodo-Sync stabilisiert + Permission-Gate für Abteilungs-Auswertung",
+    "description": "Behebt zwei Probleme: das tägliche Clockodo-Time-Tracking-Sync rannte regelmäßig in Rate-Limits (429), und User ohne 'department_analysis.read' sahen den Sidebar-Link und bekamen statt einer Permission-Meldung 'Keine Zeiterfassungsdaten gefunden' angezeigt.",
+    "type": "bugfix",
+    "details": [
+      "Clockodo: statt 2 API-Calls pro Projekt nur noch 2 Sammel-Calls pro Chunk à 25 Projekten — 50 Projekte brauchen jetzt 4 Calls statt 100",
+      "Clockodo: längeres Pacing zwischen Calls (2s) und Initial-Backoff bei 429 von 2s auf 30s erhöht; Max-Retries 5 → 6",
+      "Department-Analyse: Sidebar-Link und Page-Suche respektieren jetzt department_analysis.read",
+      "Department-Analyse: Klare Fehlermeldung 'Keine Berechtigung' mit Hinweis auf benötigte Permission, statt verwirrendem 'Keine Zeiterfassungsdaten'",
+      "+7 neue Backend-Tests für die Clockodo-Sammel-Logik und das Backoff-Verhalten"
+    ]
+  },
+  {
     "version": "2.29.7",
     "date": "2026-04-30",
     "title": "Offer Number-Feld + AB-Nummer-Konsistenz",
