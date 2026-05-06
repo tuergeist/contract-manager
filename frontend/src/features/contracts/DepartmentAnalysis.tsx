@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useQuery, gql } from '@apollo/client'
-import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Download, Info } from 'lucide-react'
+import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Download, Info, ShieldAlert } from 'lucide-react'
+import { useAuth } from '@/lib/auth'
 import { AbsenceReport } from './AbsenceReport'
 
 const DEPARTMENT_TIME_ANALYSIS = gql`
@@ -100,6 +101,35 @@ const COLORS = [
 ]
 
 export function DepartmentAnalysis() {
+  const { t } = useTranslation()
+  const { hasPermission } = useAuth()
+
+  if (!hasPermission('department_analysis', 'read')) {
+    return (
+      <div className="max-w-2xl">
+        <h1 className="text-2xl font-bold">{t('departmentAnalysis.title')}</h1>
+        <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-6">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
+            <div>
+              <h2 className="font-medium text-amber-900">
+                {t('departmentAnalysis.permissionDenied.title', 'Keine Berechtigung')}
+              </h2>
+              <p className="mt-1 text-sm text-amber-800">
+                {t('departmentAnalysis.permissionDenied.body',
+                  'Für die Abteilungs-Auswertung wird die Berechtigung "department_analysis.read" benötigt. Bitte wende dich an einen Administrator deines Tenants, falls du Zugriff brauchst.')}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return <DepartmentAnalysisContent />
+}
+
+function DepartmentAnalysisContent() {
   const { t, i18n } = useTranslation()
   const now = new Date()
   // Default to last full month

@@ -76,7 +76,7 @@ const navItems: NavItem[] = [
   { to: '/incoming-invoices', icon: Inbox, labelKey: 'nav.incomingInvoices', permission: 'incoming_invoices.read' },
   { to: '/banking', icon: Landmark, labelKey: 'nav.banking', permission: 'banking.read' },
   { to: '/forecasts', icon: TrendingUp, labelKey: 'nav.forecasts' },
-  { to: '/department-analysis', icon: PieChart, labelKey: 'nav.departmentAnalysis' },
+  { to: '/department-analysis', icon: PieChart, labelKey: 'nav.departmentAnalysis', permission: 'department_analysis.read' },
   { to: '/audit-log', icon: History, labelKey: 'nav.auditLog' },
   { to: '/about', icon: Info, labelKey: 'nav.about' },
   { to: '/settings', icon: Settings, labelKey: 'nav.settings', end: true },
@@ -102,7 +102,7 @@ const searchablePages: SearchablePage[] = [
   { labelKey: 'nav.banking', keywords: ['banking', 'bankkonten', 'bank'], url: '/banking', permission: 'banking.read' },
   { labelKey: 'nav.forecasts', keywords: ['forecasts', 'vorschauen', 'prognose'], url: '/forecasts' },
   { labelKey: 'forecasts.liquidityTab', keywords: ['liquidity', 'liquidität', 'liquiditätsanalyse', 'cash flow', 'balance'], url: '/forecasts?tab=liquidity', permission: 'banking.read' },
-  { labelKey: 'nav.departmentAnalysis', keywords: ['department', 'abteilung', 'analyse', 'analysis'], url: '/department-analysis' },
+  { labelKey: 'nav.departmentAnalysis', keywords: ['department', 'abteilung', 'analyse', 'analysis'], url: '/department-analysis', permission: 'department_analysis.read' },
   { labelKey: 'nav.auditLog', keywords: ['audit', 'auditlog', 'log', 'history'], url: '/audit-log' },
   // Settings pages
   { labelKey: 'settings.tabs.user', keywords: ['user', 'benutzer', 'profile', 'profil', 'security', 'sicherheit', '2fa'], url: '/settings' },
