@@ -35,18 +35,26 @@ class ClockodoProvider(TimeTrackingProvider):
     def _request(self, method: str, endpoint: str, **kwargs) -> dict:
         """Make an API request with exponential backoff retry on 429 and 5xx.
 
+        Clockodo's quota window is on the order of minutes, so the initial
+        backoff starts high (30s) and doubles on each retry. Total worst-case
+        wait across 6 attempts: 30+60+120+240+480 = 15.5 minutes.
+
         On 4xx errors, the response body is logged and embedded in the raised
         exception so callers can surface a meaningful message to the user.
         """
         url = f"{self.API_BASE}/{endpoint}"
-        max_attempts = 5
+        max_attempts = 6
+        initial_wait = 30  # seconds — Clockodo recovers slowly from 429
         for attempt in range(max_attempts):
             response = httpx.request(method, url, headers=self._get_headers(), timeout=30, **kwargs)
             if response.status_code == 429 or response.status_code >= 500:
                 if attempt == max_attempts - 1:
                     self._raise_with_body(response, method, endpoint)
                 retry_after = response.headers.get("Retry-After")
-                wait = int(retry_after) if retry_after and retry_after.isdigit() else 2 ** (attempt + 1)
+                if retry_after and retry_after.isdigit():
+                    wait = int(retry_after)
+                else:
+                    wait = initial_wait * (2 ** attempt)
                 logger.warning("Clockodo %s on %s %s, retrying in %ss (attempt %d/%d)",
                                response.status_code, method, endpoint, wait, attempt + 1, max_attempts)
                 time.sleep(wait)
@@ -280,8 +288,11 @@ class ClockodoProvider(TimeTrackingProvider):
     ) -> TimeTrackingSummary:
         """Get aggregated time data from Clockodo for the given projects.
 
-        Uses the entrygroups endpoint for efficient aggregation instead of
-        fetching individual entries.
+        Uses the entrygroups endpoint with a comma-separated project filter
+        and chunking — fetches data for *all* projects in just two calls per
+        chunk (one grouped by service, one by month) instead of two calls
+        per project. Clockodo's API documentation explicitly recommends this
+        pattern over per-project polling, which is what was producing 429s.
         """
         if not project_ids:
             return TimeTrackingSummary(total_hours=0, total_revenue=0)
@@ -306,46 +317,61 @@ class ClockodoProvider(TimeTrackingProvider):
         except Exception as e:
             logger.warning("Failed to fetch Clockodo services: %s", e)
 
-        # Use entrygroups endpoint for aggregated data per project
-        for project_id in project_ids:
+        # Chunk project IDs to keep URLs reasonable (~25 IDs ≈ 250 chars in
+        # query string). Clockodo accepts comma-separated values for filters.
+        CHUNK_SIZE = 25
+        SLEEP_BETWEEN_CALLS = 2.0  # seconds — paces the calls without holding the worker too long
+
+        chunks = [
+            project_ids[i:i + CHUNK_SIZE]
+            for i in range(0, len(project_ids), CHUNK_SIZE)
+        ]
+
+        for chunk_idx, chunk in enumerate(chunks):
+            project_filter = ",".join(str(p) for p in chunk)
             try:
-                # Get breakdown by service
-                params_by_service = {
+                # 1. Breakdown by service (across all projects in this chunk)
+                data_by_service = self._get("entrygroups", {
                     "time_since": time_since,
                     "time_until": time_until,
-                    "filter[projects_id]": project_id,
+                    "filter[projects_id]": project_filter,
                     "grouping[]": "services_id",
-                }
-                data_by_service = self._get("entrygroups", params_by_service)
+                })
                 for group in data_by_service.get("groups", []):
-                    service_id = group.get("group")  # The group value is the service ID
-                    service_name = services_by_id.get(int(service_id) if service_id else 0, "") or group.get("name", "") or "Other"
-                    duration_seconds = group.get("duration", 0) or 0
-                    duration_hours = duration_seconds / 3600.0
+                    service_id = group.get("group")
+                    service_name = services_by_id.get(
+                        int(service_id) if service_id else 0, ""
+                    ) or group.get("name", "") or "Other"
+                    duration_hours = (group.get("duration", 0) or 0) / 3600.0
                     revenue = float(group.get("revenue", 0) or 0)
                     service_data[service_name]["hours"] += duration_hours
                     service_data[service_name]["revenue"] += revenue
 
-                time.sleep(0.3)  # Pace API calls to avoid 429
+                time.sleep(SLEEP_BETWEEN_CALLS)
 
-                # Get breakdown by month
-                params_by_month = {
+                # 2. Breakdown by month (across all projects in this chunk)
+                data_by_month = self._get("entrygroups", {
                     "time_since": time_since,
                     "time_until": time_until,
-                    "filter[projects_id]": project_id,
+                    "filter[projects_id]": project_filter,
                     "grouping[]": "month",
-                }
-                data_by_month = self._get("entrygroups", params_by_month)
+                })
                 for group in data_by_month.get("groups", []):
-                    month_key = group.get("group", "")  # e.g., "2024-03"
-                    duration_seconds = group.get("duration", 0) or 0
-                    duration_hours = duration_seconds / 3600.0
+                    month_key = group.get("group", "")
+                    duration_hours = (group.get("duration", 0) or 0) / 3600.0
                     revenue = float(group.get("revenue", 0) or 0)
                     month_data[month_key]["hours"] += duration_hours
                     month_data[month_key]["revenue"] += revenue
 
+                # Pace before next chunk
+                if chunk_idx < len(chunks) - 1:
+                    time.sleep(SLEEP_BETWEEN_CALLS)
+
             except Exception as e:
-                logger.error("Failed to fetch entrygroups for project %s: %s", project_id, e)
+                logger.error(
+                    "Failed to fetch entrygroups for project chunk %s: %s",
+                    project_filter, e,
+                )
                 continue
 
         by_service = [
