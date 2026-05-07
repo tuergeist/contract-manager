@@ -2938,20 +2938,35 @@ class ContractQuery:
                     event_total = event["total"]
                     event_date = event["date"]
 
-                    # Actual months this event covers: the billing interval, capped at
-                    # the contract's effective end. This matters for contracts that run
-                    # shorter than the billing cycle (e.g. biennial billed once for 13
-                    # months). Use explicit end_date first, then min_duration as fallback.
-                    next_billing = date(event_date.year, event_date.month, 1) + relativedelta(months=billing_months)
-                    contract_effective_end = contract.end_date
-                    if not contract_effective_end and contract.min_duration_months:
-                        contract_effective_end = contract.start_date + relativedelta(months=contract.min_duration_months)
-                    if contract_effective_end:
-                        actual_end = min(next_billing, contract_effective_end)
+                    # Determine actual months this billing event covers.
+                    #
+                    # Priority 1 – event is explicitly pro-rated (pre-alignment stub
+                    # or contract-end stub): derive directly from the stored
+                    # prorate_factor so the distribution window matches the billing
+                    # amount exactly.
+                    #
+                    # Priority 2 – event is NOT pro-rated but the contract runs
+                    # shorter than the full billing interval (e.g. biennial with
+                    # min_duration_months=13 and no end_date): cap at the contract's
+                    # effective end derived from end_date or min_duration_months.
+                    event_items = event.get("items", [])
+                    prorated_item = next(
+                        (i for i in event_items if i.get("is_prorated") and i.get("prorate_factor")),
+                        None,
+                    )
+                    if prorated_item:
+                        actual_months = max(1, round(billing_months * float(prorated_item["prorate_factor"])))
                     else:
-                        actual_end = next_billing
-                    actual_months = (actual_end.year - event_date.year) * 12 + (actual_end.month - event_date.month)
-                    actual_months = max(1, actual_months)
+                        next_billing = date(event_date.year, event_date.month, 1) + relativedelta(months=billing_months)
+                        contract_effective_end = contract.end_date
+                        if not contract_effective_end and contract.min_duration_months:
+                            contract_effective_end = contract.start_date + relativedelta(months=contract.min_duration_months)
+                        if contract_effective_end:
+                            actual_end = min(next_billing, contract_effective_end)
+                        else:
+                            actual_end = next_billing
+                        actual_months = (actual_end.year - event_date.year) * 12 + (actual_end.month - event_date.month)
+                        actual_months = max(1, actual_months)
 
                     if is_quarterly:
                         # For quarterly view, distribute across quarters

@@ -1369,3 +1369,58 @@ class TestProRataDistribution:
         # Pro-rata over full 24 months → 24 000 / 24 = 1 000 €/month
         jan_2026 = next(m for m in row["months"] if m["month"] == "2026-01")
         assert Decimal(jan_2026["amount"]) == Decimal("1000.00")
+
+    def test_pre_alignment_pro_rated_event_uses_stub_months_not_full_interval(
+        self, user, tenant, customer, product, db
+    ):
+        """Annual contract starting 2026-05-01, aligned to 2027-01-01 (8-month stub).
+
+        The pre-alignment billing event on 2026-05-01 covers 8 months (May–Dec 2026)
+        and is already pro-rated to 8/12 of the annual amount. The pro-rata forecast
+        must distribute it over 8 months, not 12 — otherwise each month gets 8/12 of
+        the correct value and Jan 2027 wrongly receives a share.
+        """
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Pre-Alignment Annual",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2026, 5, 1),
+            billing_start_date=date(2026, 5, 1),
+            billing_alignment_date=date(2027, 1, 1),
+            billing_interval=Contract.BillingInterval.ANNUAL,
+            billing_anchor_day=1,
+        )
+        # unit_price 1200 €/month → annual = 14 400 €; 8-month stub = 9 600 €
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("1200.00"),
+            price_period="monthly",
+            billing_start_date=date(2026, 5, 1),
+        )
+
+        result = run_graphql(
+            REVENUE_FORECAST_QUERY,
+            {"view": "monthly", "months": 13, "proRata": True, "refresh": True},
+            make_context(user),
+        )
+
+        assert result.errors is None
+        data = result.data["revenueForecast"]
+        row = next(c for c in data["contracts"] if c["contractId"] == contract.id)
+
+        # Stub event (9 600 €) distributed over 8 months → 1 200 €/month
+        may_2026 = next(m for m in row["months"] if m["month"] == "2026-05")
+        assert Decimal(may_2026["amount"]) == Decimal("1200.00")
+        dec_2026 = next(m for m in row["months"] if m["month"] == "2026-12")
+        assert Decimal(dec_2026["amount"]) == Decimal("1200.00")
+
+        # Jan 2027 is the alignment month — the post-alignment full-year event starts
+        # there, NOT a share of the stub event
+        jan_2027 = next((m for m in row["months"] if m["month"] == "2027-01"), None)
+        if jan_2027:
+            # The post-alignment annual event (Jan 2027) also distributes 1 200 €/month
+            assert Decimal(jan_2027["amount"]) == Decimal("1200.00")

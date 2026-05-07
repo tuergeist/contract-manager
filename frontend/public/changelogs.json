@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.29.10",
+    "date": "2026-05-07",
+    "title": "Forecast Pro-Rata: korrekte Monatsverteilung für Pre-Alignment-Stubs",
+    "description": "Ergänzt 2.29.9: Ein auf ein Billing-Datum ausgerichteter Vertrag (z.B. Start 1.5.26, Ausrichtung 1.1.27) erzeugt einen 8-Monats-Stub. Der Pro-Rata-Forecast teilte diesen bislang durch 12 (volles Jahresintervall) statt durch 8. Fix: der im Billing-Event gespeicherte prorate_factor wird direkt zur Bestimmung der Verteilungsmonate genutzt.",
+    "type": "bugfix",
+    "details": [
+      "Pro-Rata: für explizit pro-ratierte Billing-Events (Pre-Alignment-Stub, Contract-End-Stub) wird jetzt prorate_factor × interval als Divisor und Verteilungsfenster verwendet",
+      "Betrifft alle Billing-Intervalle mit Ausrichtungsdatum (annual, biennial, quarterly …)",
+      "+1 neuer Backend-Test für den 8-Monats-Alignment-Stub-Fall"
+    ]
+  },
+  {
     "version": "2.29.9",
     "date": "2026-05-06",
     "title": "Forecast Pro-Rata: korrekte Monatsverteilung für kürzere Vertragslaufzeiten",
