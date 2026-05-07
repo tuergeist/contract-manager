@@ -1777,6 +1777,11 @@
       "numbering": "Nummernkreise",
       "emailTemplatesHint": "E-Mail-Vorlagen werden konfiguriert unter",
       "emailTemplates": "E-Mail-Vorlagen"
+    },
+    "user": {
+      "autoCloseMatchSheet": "Match-Sheet automatisch schließen",
+      "autoCloseMatchSheetDescription": "Schließt das Match-Sheet automatisch, wenn eine Transaktion vollständig zugeordnet ist.",
+      "bankingWorkflow": "Banking-Workflow"
     }
   },
   "timeTracking": {
@@ -2035,7 +2040,9 @@
       "withinTolerance": "innerhalb der Toleranz",
       "suggestedMatches": "Vorgeschlagene Zuordnungen",
       "exactMatch": "Exakte Übereinstimmung",
-      "allSuggestionsMatched": "Alle Rechnungen dieses Kunden sind zugeordnet"
+      "allSuggestionsMatched": "Alle Rechnungen dieses Kunden sind zugeordnet",
+      "autoClosed": "Match gespeichert",
+      "undo": "Rückgängig"
     }
   },
   "liquidity": {
@@ -2413,12 +2420,25 @@
       "extracted": "Analysiert",
       "extractionFailed": "Fehlgeschlagen",
       "confirmed": "Bestätigt",
-      "matched": "Zugeordnet"
+      "matched": "Zugeordnet",
+      "review": "Prüfen",
+      "ready": "Bereit",
+      "done": "Erledigt",
+      "error": "Fehler"
     },
     "detail": {
       "title": "Eingangsrechnung",
       "emailSubject": "E-Mail-Betreff",
-      "confirm": "Bestätigen"
+      "confirm": "Bestätigen",
+      "confirmAndNext": "Bestätigen + Weiter",
+      "confirmAndDone": "Bestätigen + Fertig",
+      "allConfirmed": "Alle eingehenden Rechnungen bearbeitet ✓",
+      "openPopup": "In Popup öffnen",
+      "openTab": "In neuem Tab öffnen",
+      "resizeHint": "Höhe anpassen",
+      "lowConfidence": "AI ist unsicher — bitte prüfen ({{c}}%)",
+      "confirmAndMatch": "Bestätigen + Match",
+      "confirmAndMatchHint": "Bestätigen und passende Banktransaktion zuordnen"
     },
     "inboxes": {
       "title": "Rechnungspostfächer",
@@ -2438,7 +2458,14 @@
       "lastPolled": "Zuletzt abgefragt",
       "deleteConfirmTitle": "Postfach löschen",
       "deleteConfirmDescription": "Bereits importierte Rechnungen werden nicht gelöscht."
-    }
+    },
+    "filter": {
+      "review": "Prüfen",
+      "ready": "Bereit",
+      "done": "Erledigt",
+      "showErrors": "Auch fehlerhafte zeigen"
+    },
+    "retryExtraction": "Nochmals analysieren"
   },
   "splitRules": {
     "title": "Aufteilungsregeln",

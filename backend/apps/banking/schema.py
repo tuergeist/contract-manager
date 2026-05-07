@@ -8,11 +8,12 @@ from uuid import UUID
 import strawberry
 from django.db.models import Count, Max, Min, Q, Sum
 from django.db.models.functions import Abs
+from strawberry.scalars import JSON
 from strawberry.types import Info
 
 from apps.core.context import Context
 from apps.core.permissions import check_perm, require_perm
-from apps.core.schema import DeleteResult
+from apps.core.schema import DeleteResult, OperationResult
 from apps.banking.services.forecast import (
     get_current_balance,
     get_liquidity_analysis,
@@ -699,6 +700,7 @@ class IncomingInvoiceType:
     file_size: int
     extraction_status: str
     extraction_error: str
+    extraction_confidence: JSON | None = None
     email_message_id: str
     source_email_subject: str
     source_email_date: str | None
@@ -723,6 +725,14 @@ class IncomingInvoiceResult:
     success: bool
     error: str | None = None
     invoice: IncomingInvoiceType | None = None
+
+
+@strawberry.type
+class ConfirmAndMatchResult:
+    success: bool
+    error: str | None = None
+    invoice: IncomingInvoiceType | None = None
+    match_id: int | None = None
 
 
 @strawberry.input
@@ -794,6 +804,7 @@ def _make_incoming_invoice_type(inv) -> IncomingInvoiceType:
         file_size=inv.file_size,
         extraction_status=inv.extraction_status,
         extraction_error=inv.extraction_error,
+        extraction_confidence=inv.extraction_confidence or None,
         email_message_id=inv.email_message_id,
         source_email_subject=inv.source_email_subject,
         source_email_date=inv.source_email_date.isoformat() if inv.source_email_date else None,
@@ -1701,6 +1712,40 @@ class BankingQuery:
             return None
         return _make_incoming_invoice_type(inv)
 
+    @strawberry.field
+    def incoming_invoice_match_suggestion(
+        self, info: Info[Context, None], invoice_id: strawberry.ID
+    ) -> BankTransactionType | None:
+        """Return the unique unmatched debit transaction matching this incoming invoice, or None.
+
+        Match criteria: same counterparty, amount = -gross_amount, entry_date >= invoice_date.
+        Returns None on ambiguity (>1 candidate) or no candidate.
+        """
+        user = require_perm(info, "incoming_invoices", "read")
+        from apps.banking.models import BankTransaction, IncomingInvoice
+        from apps.invoices.models import InvoicePaymentMatch
+        try:
+            inv = IncomingInvoice.objects.get(id=str(invoice_id), tenant=user.tenant)
+        except IncomingInvoice.DoesNotExist:
+            return None
+        if not inv.counterparty_id or inv.gross_amount is None:
+            return None
+        qs = BankTransaction.objects.filter(
+            tenant=user.tenant,
+            counterparty_id=inv.counterparty_id,
+            amount=-inv.gross_amount,
+        )
+        if inv.invoice_date:
+            qs = qs.filter(entry_date__gte=inv.invoice_date)
+        matched_tx_ids = InvoicePaymentMatch.objects.filter(
+            tenant=user.tenant,
+        ).values_list("transaction_id", flat=True)
+        qs = qs.exclude(id__in=matched_tx_ids).select_related("counterparty", "account")
+        candidates = list(qs[:2])
+        if len(candidates) != 1:
+            return None
+        return _make_transaction_type(candidates[0], include_invoice_match=False)
+
 
 # --- Mutations ---
 
@@ -2263,6 +2308,88 @@ class BankingMutation:
         return IncomingInvoiceResult(success=True, invoice=_make_incoming_invoice_type(inv))
 
     @strawberry.mutation
+    def confirm_and_match_incoming(
+        self,
+        info: Info[Context, None],
+        invoice_id: strawberry.ID,
+        transaction_id: int | None = None,
+    ) -> ConfirmAndMatchResult:
+        """Confirm an incoming invoice and optionally match it to a bank transaction.
+
+        If transaction_id is None, the resolver auto-detects a unique candidate
+        (counterparty + amount + entry_date >= invoice_date). On ambiguity
+        (>1 candidate or 0), only the confirm step runs.
+        """
+        from django.db import transaction as db_tx
+        user, err = check_perm(info, "incoming_invoices", "write")
+        if err:
+            return ConfirmAndMatchResult(success=False, error=err)
+        from apps.banking.models import BankTransaction, IncomingInvoice
+        from apps.invoices.models import InvoicePaymentMatch
+        try:
+            inv = IncomingInvoice.objects.select_related("counterparty").get(
+                id=str(invoice_id), tenant=user.tenant
+            )
+        except IncomingInvoice.DoesNotExist:
+            return ConfirmAndMatchResult(success=False, error="Invoice not found")
+
+        with db_tx.atomic():
+            tx = None
+            if transaction_id is not None:
+                try:
+                    tx = BankTransaction.objects.get(id=transaction_id, tenant=user.tenant)
+                except BankTransaction.DoesNotExist:
+                    return ConfirmAndMatchResult(success=False, error="Transaction not found")
+            elif inv.counterparty_id and inv.gross_amount is not None:
+                qs = BankTransaction.objects.filter(
+                    tenant=user.tenant,
+                    counterparty_id=inv.counterparty_id,
+                    amount=-inv.gross_amount,
+                )
+                if inv.invoice_date:
+                    qs = qs.filter(entry_date__gte=inv.invoice_date)
+                matched_tx_ids = InvoicePaymentMatch.objects.filter(
+                    tenant=user.tenant,
+                ).values_list("transaction_id", flat=True)
+                qs = qs.exclude(id__in=matched_tx_ids)
+                candidates = list(qs[:2])
+                if len(candidates) == 1:
+                    tx = candidates[0]
+
+            # Confirm step: only if not already confirmed/matched
+            if inv.extraction_status in (
+                IncomingInvoice.ExtractionStatus.EXTRACTED,
+                IncomingInvoice.ExtractionStatus.EXTRACTION_FAILED,
+            ):
+                inv.extraction_status = IncomingInvoice.ExtractionStatus.CONFIRMED
+
+            match = None
+            if tx is not None:
+                existing = InvoicePaymentMatch.objects.filter(
+                    incoming_invoice=inv, transaction=tx,
+                ).first()
+                if existing:
+                    match = existing
+                else:
+                    match = InvoicePaymentMatch.objects.create(
+                        tenant=user.tenant,
+                        incoming_invoice=inv,
+                        transaction=tx,
+                        match_type=InvoicePaymentMatch.MatchType.MANUAL,
+                        confidence=Decimal("1.0"),
+                        matched_by=user,
+                    )
+                inv.extraction_status = IncomingInvoice.ExtractionStatus.MATCHED
+
+            inv.save(update_fields=["extraction_status", "updated_at"])
+
+        return ConfirmAndMatchResult(
+            success=True,
+            invoice=_make_incoming_invoice_type(inv),
+            match_id=match.id if match else None,
+        )
+
+    @strawberry.mutation
     def delete_incoming_invoice(self, info: Info[Context, None], id: strawberry.ID) -> DeleteResult:
         user, err = check_perm(info, "incoming_invoices", "write")
         if err: return DeleteResult(success=False, error=err)
@@ -2275,6 +2402,31 @@ class BankingMutation:
             inv.pdf_file.delete(save=False)
         inv.delete()
         return DeleteResult(success=True)
+
+    @strawberry.mutation
+    def retrigger_incoming_invoice_extraction(
+        self, info: Info[Context, None], id: strawberry.ID
+    ) -> OperationResult:
+        """Reset extraction status and re-run AI extraction for an invoice."""
+        user, err = check_perm(info, "incoming_invoices", "write")
+        if err:
+            return OperationResult(success=False, error=err)
+        from apps.banking.models import IncomingInvoice
+        from apps.banking.services.incoming_extraction import run_incoming_extraction
+        try:
+            inv = IncomingInvoice.objects.get(id=str(id), tenant=user.tenant)
+        except IncomingInvoice.DoesNotExist:
+            return OperationResult(success=False, error="Invoice not found.")
+        if not inv.pdf_file:
+            return OperationResult(success=False, error="No PDF file attached.")
+        inv.extraction_status = IncomingInvoice.ExtractionStatus.PENDING
+        inv.extraction_error = ""
+        inv.save(update_fields=["extraction_status", "extraction_error", "updated_at"])
+        try:
+            run_incoming_extraction(inv)
+        except Exception as e:
+            return OperationResult(success=False, error=str(e))
+        return OperationResult(success=True)
 
     @strawberry.mutation
     def upload_incoming_invoices(

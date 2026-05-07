@@ -4,7 +4,7 @@ import { useQuery, useMutation, gql } from '@apollo/client'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Loader2, FileText, Upload, X, Pencil, Plus,
-  ArrowUp, ArrowDown, ArrowUpDown,
+  ArrowUp, ArrowDown, ArrowUpDown, RefreshCw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +14,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover'
@@ -23,6 +24,7 @@ import {
 import { usePersistedState } from '@/lib/usePersistedState'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { IncomingInvoiceDetail } from './IncomingInvoiceDetail'
+import { mapStatus, displayStatusColor, filterToBackendStatus, backendStatusToFilter } from './statusMapping'
 
 // --- GraphQL ---
 
@@ -75,16 +77,11 @@ const UPDATE_INCOMING_INVOICE = gql`
   }
 `
 
-// --- Status badge config ---
-
-const statusColors: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  extracting: 'bg-blue-100 text-blue-800',
-  extracted: 'bg-green-100 text-green-800',
-  extraction_failed: 'bg-red-100 text-red-800',
-  confirmed: 'bg-emerald-100 text-emerald-800',
-  matched: 'bg-purple-100 text-purple-800',
-}
+const RETRIGGER_EXTRACTION = gql`
+  mutation RetriggerIncomingInvoiceExtraction($id: ID!) {
+    retriggerIncomingInvoiceExtraction(id: $id) { success error }
+  }
+`
 
 // --- Component ---
 
@@ -94,7 +91,11 @@ export function IncomingInvoicesPage() {
   // Filters
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [status, setStatus] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>(() => {
+    const urlStatus = new URLSearchParams(window.location.search).get('status')
+    return urlStatus ? backendStatusToFilter(urlStatus) : 'all'
+  })
+  const [showErrors, setShowErrors] = useState(true)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [page, setPage] = useState(1)
@@ -106,6 +107,7 @@ export function IncomingInvoicesPage() {
   // UI state
   const [searchParams, setSearchParams] = useSearchParams()
   const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('id'))
+  const [allDoneToast, setAllDoneToast] = useState(false)
   const [editingInvId, setEditingInvId] = useState<string | null>(null)
   const [cpSearch, setCpSearch] = useState('')
   const [cpSearchDebounced, setCpSearchDebounced] = useState('')
@@ -140,7 +142,7 @@ export function IncomingInvoicesPage() {
   // Queries
   const { data, loading, refetch } = useQuery(INCOMING_INVOICES, {
     variables: {
-      status: status === 'all' ? undefined : status,
+      status: filterToBackendStatus(statusFilter),
       search: debouncedSearch || undefined,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
@@ -160,12 +162,25 @@ export function IncomingInvoicesPage() {
   // Mutations
   const [uploadIncoming] = useMutation(UPLOAD_INCOMING)
   const [updateInvoice, { loading: updatingCp }] = useMutation(UPDATE_INCOMING_INVOICE)
+  const [retriggerExtraction] = useMutation(RETRIGGER_EXTRACTION)
 
-  const invoices = data?.incomingInvoices?.items || []
+  const invoicesRaw = data?.incomingInvoices?.items || []
+  // Client-side error filter when "Alle" is selected and showErrors is off
+  const invoices = (!showErrors && statusFilter === 'all')
+    ? invoicesRaw.filter((inv: any) => inv.extractionStatus !== 'extraction_failed')
+    : invoicesRaw
   const totalCount = data?.incomingInvoices?.totalCount || 0
   const hasNextPage = data?.incomingInvoices?.hasNextPage || false
 
-  const hasActiveFilters = search || status !== 'all' || dateFrom || dateTo
+  const hasActiveFilters = search || statusFilter !== 'all' || dateFrom || dateTo
+
+  // IDs that still need user action: extracted (needs confirm) or confirmed without CP
+  const pendingIds: string[] = invoices
+    .filter((inv: any) =>
+      inv.extractionStatus === 'extracted' ||
+      (inv.extractionStatus === 'confirmed' && !inv.counterpartyId)
+    )
+    .map((inv: any) => inv.id)
 
   // --- Handlers ---
 
@@ -188,11 +203,19 @@ export function IncomingInvoicesPage() {
 
   const clearFilters = () => {
     setSearch('')
-    setStatus('all')
+    setStatusFilter('all')
+    setShowErrors(true)
     setDateFrom('')
     setDateTo('')
     setPage(1)
   }
+
+  // Auto-dismiss "all done" toast
+  useEffect(() => {
+    if (!allDoneToast) return
+    const t = setTimeout(() => setAllDoneToast(false), 4000)
+    return () => clearTimeout(t)
+  }, [allDoneToast])
 
   const handleFileUpload = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return
@@ -392,6 +415,14 @@ export function IncomingInvoicesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* "All done" toast */}
+      {allDoneToast && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          <span>✓</span>
+          <span>{t('incomingInvoices.detail.allConfirmed')}</span>
+        </div>
+      )}
+
       {/* Filter card */}
       <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-gray-50 p-3 mb-4">
         <div className="min-w-[200px] flex-1">
@@ -406,21 +437,30 @@ export function IncomingInvoicesPage() {
         </div>
         <div className="w-[150px]">
           <label className="mb-1 block text-xs font-medium text-gray-500">{t('incomingInvoices.statusLabel')}</label>
-          <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1) }}>
+          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1) }}>
             <SelectTrigger className="h-8 text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t('incomingInvoices.allStatuses')}</SelectItem>
-              <SelectItem value="pending">{t('incomingInvoices.status.pending')}</SelectItem>
-              <SelectItem value="extracting">{t('incomingInvoices.status.extracting')}</SelectItem>
-              <SelectItem value="extracted">{t('incomingInvoices.status.extracted')}</SelectItem>
-              <SelectItem value="extraction_failed">{t('incomingInvoices.status.extractionFailed')}</SelectItem>
-              <SelectItem value="confirmed">{t('incomingInvoices.status.confirmed')}</SelectItem>
-              <SelectItem value="matched">{t('incomingInvoices.status.matched')}</SelectItem>
+              <SelectItem value="review">{t('incomingInvoices.filter.review')}</SelectItem>
+              <SelectItem value="ready">{t('incomingInvoices.filter.ready')}</SelectItem>
+              <SelectItem value="done">{t('incomingInvoices.filter.done')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
+        {statusFilter === 'all' && (
+          <div className="flex items-center gap-2">
+            <Switch
+              id="show-errors"
+              checked={showErrors}
+              onCheckedChange={setShowErrors}
+            />
+            <label htmlFor="show-errors" className="text-xs text-gray-600 cursor-pointer whitespace-nowrap">
+              {t('incomingInvoices.filter.showErrors')}
+            </label>
+          </div>
+        )}
         <div className="w-[130px]">
           <label className="mb-1 block text-xs font-medium text-gray-500">{t('incomingInvoices.dateFrom', 'From')}</label>
           <input
@@ -608,9 +648,36 @@ export function IncomingInvoicesPage() {
                       {formatCurrency(inv.grossAmount, { currency: inv.currency })}
                     </td>
                     <td className="px-4 py-2.5">
-                      <Badge variant="secondary" className={statusColors[inv.extractionStatus] || ''}>
-                        {t(`incomingInvoices.status.${inv.extractionStatus === 'extraction_failed' ? 'extractionFailed' : inv.extractionStatus}`)}
-                      </Badge>
+                      {(() => {
+                        const ds = mapStatus(inv.extractionStatus)
+                        if (ds === 'inProgress') {
+                          return <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                        }
+                        if (ds === 'error') {
+                          return (
+                            <div className="flex items-center gap-1">
+                              <Badge variant="secondary" className={displayStatusColor.error}>
+                                {t('incomingInvoices.status.error')}
+                              </Badge>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  retriggerExtraction({ variables: { id: inv.id } }).then(() => refetch())
+                                }}
+                                className="rounded p-0.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                                title={t('incomingInvoices.retryExtraction', 'Nochmals analysieren')}
+                              >
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          )
+                        }
+                        return (
+                          <Badge variant="secondary" className={displayStatusColor[ds]}>
+                            {t(`incomingInvoices.status.${ds}`)}
+                          </Badge>
+                        )
+                      })()}
                     </td>
                   </tr>
                 ))}
@@ -636,6 +703,7 @@ export function IncomingInvoicesPage() {
         <IncomingInvoiceDetail
           id={selectedId}
           open={!!selectedId}
+          pendingIds={pendingIds}
           onClose={() => {
             setSelectedId(null)
             if (searchParams.get('id')) {
@@ -645,6 +713,11 @@ export function IncomingInvoicesPage() {
             }
           }}
           onUpdate={() => refetch()}
+          onAllDone={() => {
+            setSelectedId(null)
+            refetch()
+            setAllDoneToast(true)
+          }}
         />
       )}
     </div>

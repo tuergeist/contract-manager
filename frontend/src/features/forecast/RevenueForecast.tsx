@@ -411,17 +411,20 @@ export function RevenueForecast() {
               </SelectContent>
             </Select>
           </div>
-          {/* Pro-rata Toggle */}
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="proRata"
-              checked={proRata}
-              onCheckedChange={(checked) => setProRata(checked === true)}
-            />
-            <label htmlFor="proRata" className="text-sm font-medium cursor-pointer">
-              {t('forecast.proRata')}
-            </label>
-          </div>
+          {/* Pro-rata Toggle: only visible for billing forecast.
+              Recognition forecast is always pro-rated by accounting principle. */}
+          {forecastType === 'billing' && (
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="proRata"
+                checked={proRata}
+                onCheckedChange={(checked) => setProRata(checked === true)}
+              />
+              <label htmlFor="proRata" className="text-sm font-medium cursor-pointer">
+                {t('forecast.proRata')}
+              </label>
+            </div>
+          )}
           {/* ARR Only Toggle */}
           <div className="flex items-center gap-2">
             <Checkbox

@@ -19,14 +19,23 @@ Analyze this incoming (supplier) invoice PDF and extract the key metadata fields
 Return a JSON object with exactly this structure:
 {{
   "supplier_name": "The name of the supplier/vendor who issued this invoice",
+  "supplier_name_confidence": 0.95,
   "invoice_number": "The invoice number/reference",
+  "invoice_number_confidence": 0.95,
   "invoice_date": "The invoice date in ISO format YYYY-MM-DD",
+  "invoice_date_confidence": 0.95,
   "due_date": "The payment due date in ISO format YYYY-MM-DD (null if not stated)",
+  "due_date_confidence": 0.95,
   "net_amount": "Net amount before tax as decimal string (e.g., '1234.56')",
+  "net_amount_confidence": 0.95,
   "vat_amount": "VAT/tax amount as decimal string",
+  "vat_amount_confidence": 0.95,
   "gross_amount": "Total gross amount including tax as decimal string",
+  "gross_amount_confidence": 0.95,
   "currency": "Three-letter currency code (e.g., 'EUR', 'USD')",
-  "iban": "Supplier's IBAN if visible (null if not found)"
+  "currency_confidence": 0.95,
+  "iban": "Supplier's IBAN if visible (null if not found)",
+  "iban_confidence": 0.95
 }}
 
 Rules:
@@ -36,6 +45,11 @@ Rules:
 - All amounts as strings without currency symbols
 - Handle German number format (1.234,56) by converting to 1234.56
 - If a field cannot be determined, use null
+- Each *_confidence is a float 0.0–1.0 indicating how certain you are about the corresponding value:
+  - 1.0 = field clearly visible and unambiguous
+  - 0.7–0.9 = confident but slight ambiguity (e.g. handwritten, unusual layout)
+  - 0.4–0.7 = guessed from context, please verify
+  - <0.4 = highly uncertain or null value
 - Return ONLY valid JSON, no markdown formatting or explanations
 """
 
@@ -194,6 +208,18 @@ def run_incoming_extraction(invoice: IncomingInvoice) -> bool:
     invoice.gross_amount = _parse_amount(data.get("gross_amount"))
     if data.get("currency"):
         invoice.currency = data["currency"][:3].upper()
+
+    # Pull confidence values into a separate JSON dict
+    confidence: dict = {}
+    for field in ("supplier_name", "invoice_number", "invoice_date", "due_date",
+                  "net_amount", "vat_amount", "gross_amount", "currency", "iban"):
+        c = data.get(f"{field}_confidence")
+        if c is not None:
+            try:
+                confidence[field] = float(c)
+            except (TypeError, ValueError):
+                pass
+    invoice.extraction_confidence = confidence
 
     # Check for duplicate by extracted fields before saving
     if invoice.invoice_number and invoice.gross_amount is not None:

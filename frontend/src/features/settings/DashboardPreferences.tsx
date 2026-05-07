@@ -10,13 +10,14 @@ const DASHBOARD_PREFERENCES = gql`
       showRevenueGoals
       showNewBusiness
       showPriceIncreaseImpact
+      autoCloseMatchSheet
     }
   }
 `
 
 const UPDATE_DASHBOARD_PREFERENCES = gql`
-  mutation UpdateDashboardPreferences($showContracts: Boolean, $showRevenueGoals: Boolean, $showNewBusiness: Boolean, $showPriceIncreaseImpact: Boolean) {
-    updateDashboardPreferences(showContracts: $showContracts, showRevenueGoals: $showRevenueGoals, showNewBusiness: $showNewBusiness, showPriceIncreaseImpact: $showPriceIncreaseImpact) {
+  mutation UpdateDashboardPreferences($showContracts: Boolean, $showRevenueGoals: Boolean, $showNewBusiness: Boolean, $showPriceIncreaseImpact: Boolean, $autoCloseMatchSheet: Boolean) {
+    updateDashboardPreferences(showContracts: $showContracts, showRevenueGoals: $showRevenueGoals, showNewBusiness: $showNewBusiness, showPriceIncreaseImpact: $showPriceIncreaseImpact, autoCloseMatchSheet: $autoCloseMatchSheet) {
       success
       error
     }
@@ -98,6 +99,20 @@ export function DashboardPreferences() {
           <Switch
             checked={prefs?.showRevenueGoals ?? true}
             onCheckedChange={() => togglePreference('showRevenueGoals', prefs?.showRevenueGoals ?? true)}
+          />
+        </div>
+      </div>
+
+      <div className="mt-6 border-t pt-6">
+        <h3 className="text-sm font-medium text-gray-900">{t('settings.user.bankingWorkflow', 'Banking-Workflow')}</h3>
+        <div className="mt-3 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">{t('settings.user.autoCloseMatchSheet')}</p>
+            <p className="text-sm text-gray-500">{t('settings.user.autoCloseMatchSheetDescription')}</p>
+          </div>
+          <Switch
+            checked={prefs?.autoCloseMatchSheet ?? true}
+            onCheckedChange={() => togglePreference('autoCloseMatchSheet', prefs?.autoCloseMatchSheet ?? true)}
           />
         </div>
       </div>

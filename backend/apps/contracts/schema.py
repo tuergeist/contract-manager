@@ -3202,11 +3202,19 @@ class ContractQuery:
                     continue
                 items_arg = items
 
-            # Use get_recognition_schedule instead of get_billing_schedule
+            # Look back one full recognition interval so events that started
+            # before the forecast window but distribute INTO it (e.g. an annual
+            # contract that started 2025-05 distributes into Jan–Apr 2026) are
+            # included. Months outside the window are filtered by
+            # period_column_set during distribution.
+            contract_billing_months = interval_months.get(contract.billing_interval, 1)
+            recognition_lookback = min(contract_billing_months, 12)
+            sched_from_date = from_date - relativedelta(months=recognition_lookback)
+
             schedule = contract.get_recognition_schedule(
-                from_date=from_date,
+                from_date=sched_from_date,
                 to_date=to_date,
-                include_history=False,
+                include_history=True,
                 items=items_arg,
                 include_eta_items=True,
             )
@@ -3214,46 +3222,72 @@ class ContractQuery:
             # Group by period
             period_amounts = defaultdict(Decimal)
 
-            if pro_rata:
-                # Pro-rata: distribute each recognition event across the months it covers
-                billing_months = interval_months.get(contract.billing_interval, 1)
+            # Revenue recognition is *always* pro-rated by accounting principle
+            # (monthly recognition for ongoing services, regardless of billing
+            # cadence). The pro_rata flag is kept on the API for symmetry with
+            # revenue_forecast but is effectively always-on here.
+            #
+            # Per-month amount comes directly from each item's monthly unit_price
+            # (× quantity). This avoids dividing aggregated event totals back
+            # into months and the rounding artifacts that come with it.
+            #
+            # For multi-year intervals, recognition_schedule emits annual events
+            # (recognition_interval = min(interval_months, 12)).
+            base_distribution_months = min(contract_billing_months, 12)
 
-                for event in schedule:
-                    event_total = event["total"]
-                    event_date = event["date"]
+            for event in schedule:
+                event_date = event["date"]
+                event_items = event.get("items", [])
 
-                    if is_quarterly:
-                        # For quarterly view, distribute across quarters
-                        quarters_covered = max(1, billing_months // 3)
-                        amount_per_quarter = event_total / quarters_covered
+                # Honor prorate_factor for explicitly pro-rated events
+                # (pre-alignment stub, contract-end stub) so the distribution
+                # window matches the billing amount exactly. Falls back to the
+                # full recognition interval for non-prorated events.
+                prorated_item = next(
+                    (i for i in event_items if i.get("is_prorated") and i.get("prorate_factor")),
+                    None,
+                )
+                if prorated_item:
+                    distribution_months = max(1, round(base_distribution_months * float(prorated_item["prorate_factor"])))
+                else:
+                    distribution_months = base_distribution_months
 
-                        # Start from the recognition quarter and go forward
-                        q = (event_date.month - 1) // 3 + 1
-                        y = event_date.year
-                        for _ in range(quarters_covered):
-                            period_key = f"{y}-Q{q}"
-                            if period_key in period_column_set:
-                                period_amounts[period_key] += amount_per_quarter
-                            q += 1
-                            if q > 4:
-                                q = 1
-                                y += 1
+                # Sum monthly amounts from regular items (monthly unit_price × qty).
+                # One-off items are recognized in full on the event date instead.
+                monthly_total = Decimal("0")
+                one_off_total = Decimal("0")
+                for it in event_items:
+                    if it.get("is_one_off"):
+                        one_off_total += Decimal(it["amount"])
                     else:
-                        # For monthly view, distribute across months
-                        amount_per_month = event_total / billing_months
+                        monthly_total += Decimal(it["unit_price"]) * Decimal(it["quantity"])
 
-                        # Start from the recognition month and go forward
-                        dist_date = date(event_date.year, event_date.month, 1)
-                        for _ in range(billing_months):
-                            period_key = dist_date.strftime("%Y-%m")
-                            if period_key in period_column_set:
-                                period_amounts[period_key] += amount_per_month
-                            dist_date += relativedelta(months=1)
-            else:
-                # Standard: show full amount in recognition period
-                for event in schedule:
-                    period_key = get_period_key(event["date"])
-                    period_amounts[period_key] += event["total"]
+                if is_quarterly:
+                    # Distribute monthly_total over months, then group into quarters.
+                    dist_date = date(event_date.year, event_date.month, 1)
+                    for _ in range(distribution_months):
+                        q = (dist_date.month - 1) // 3 + 1
+                        period_key = f"{dist_date.year}-Q{q}"
+                        if period_key in period_column_set:
+                            period_amounts[period_key] += monthly_total
+                        dist_date += relativedelta(months=1)
+                    # One-off in the event's quarter
+                    if one_off_total:
+                        q = (event_date.month - 1) // 3 + 1
+                        ok = f"{event_date.year}-Q{q}"
+                        if ok in period_column_set:
+                            period_amounts[ok] += one_off_total
+                else:
+                    dist_date = date(event_date.year, event_date.month, 1)
+                    for _ in range(distribution_months):
+                        period_key = dist_date.strftime("%Y-%m")
+                        if period_key in period_column_set:
+                            period_amounts[period_key] += monthly_total
+                        dist_date += relativedelta(months=1)
+                    if one_off_total:
+                        ok = event_date.strftime("%Y-%m")
+                        if ok in period_column_set:
+                            period_amounts[ok] += one_off_total
 
             # Build period data for this contract
             contract_invoices = invoice_lookup.get(contract.id, [])

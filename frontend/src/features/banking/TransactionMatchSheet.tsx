@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { Loader2, Search, Unlink, FileText, CheckCircle2 } from 'lucide-react'
+import { Loader2, Search, Unlink, FileText, CheckCircle2, Undo2 } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -54,6 +54,9 @@ const BANKING_SETTINGS_FOR_MATCH = gql`
     bankingSettings {
       feeToleranceFixed
       feeTolerancePercent
+    }
+    dashboardPreferences {
+      autoCloseMatchSheet
     }
   }
 `
@@ -196,6 +199,9 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
   const [searchText, setSearchText] = useState('')
   const [unmatchedOnly, setUnmatchedOnly] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [undoMatchId, setUndoMatchId] = useState<number | null>(null)
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { data, loading, refetch } = useQuery(TRANSACTION_MATCH_DETAILS, {
     variables: { transactionId },
@@ -204,6 +210,7 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
   })
 
   const { data: settingsData } = useQuery(BANKING_SETTINGS_FOR_MATCH)
+  const autoCloseEnabled = settingsData?.dashboardPreferences?.autoCloseMatchSheet !== false
 
   const customerId = data?.transactionMatchDetails?.customerId ?? null
   const isDebit = data?.transactionMatchDetails ? parseFloat(data.transactionMatchDetails.amount) < 0 : false
@@ -253,17 +260,61 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
       }
 
       if (result.success) {
-        refetch()
-        // Suggestions are also fetched for debits without a customer link
-        // (counterparty-based matching), so always refetch them.
-        refetchSuggestions()
+        const [freshData] = await Promise.all([refetch(), refetchSuggestions()])
         onMatchChanged?.()
+
+        if (autoCloseEnabled) {
+          const freshTxn = freshData?.data?.transactionMatchDetails
+          if (freshTxn) {
+            const diff = parseFloat(freshTxn.difference)
+            const totalMatched = parseFloat(freshTxn.totalMatched)
+            const tolFixed = parseFloat(settingsData?.bankingSettings?.feeToleranceFixed ?? '0')
+            const tolPercent = parseFloat(settingsData?.bankingSettings?.feeTolerancePercent ?? '0')
+            const tolerance = tolFixed + (totalMatched * tolPercent / 100)
+            const isFullyMatched = Math.abs(diff) <= Math.max(0.01, tolerance)
+
+            if (isFullyMatched) {
+              // Capture the newest match id for undo
+              const latestMatch = freshTxn.matches?.[freshTxn.matches.length - 1]
+              const matchId = latestMatch?.id ?? null
+
+              closeTimerRef.current = setTimeout(() => {
+                onOpenChange(false)
+                if (matchId) {
+                  setUndoMatchId(matchId)
+                  undoTimerRef.current = setTimeout(() => setUndoMatchId(null), 5000)
+                }
+              }, 400)
+            }
+          }
+        }
       } else {
         setError(result.error || 'Failed to create match')
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create match')
     }
+  }
+
+  // Clear timers when sheet reopens or unmounts
+  useEffect(() => {
+    if (open) {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    }
+  }, [open])
+
+  useEffect(() => () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
+  }, [])
+
+  const handleUndo = async () => {
+    if (!undoMatchId) return
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
+    setUndoMatchId(null)
+    await deleteMatch({ variables: { matchId: undoMatchId } })
+    onMatchChanged?.()
+    onOpenChange(true)
   }
 
   const handleRemoveMatch = async (matchId: number) => {
@@ -327,6 +378,20 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
   })
 
   return (
+    <>
+    {/* Undo banner shown outside the sheet after auto-close */}
+    {undoMatchId && (
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-lg border border-green-200 bg-white px-4 py-3 shadow-lg text-sm">
+        <span className="text-green-700">✓ {t('banking.matchView.autoClosed')}</span>
+        <button
+          onClick={handleUndo}
+          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium"
+        >
+          <Undo2 className="h-3.5 w-3.5" />
+          {t('banking.matchView.undo')}
+        </button>
+      </div>
+    )}
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="sm:max-w-xl overflow-y-auto">
         <SheetHeader>
@@ -605,5 +670,6 @@ export function TransactionMatchSheet({ transactionId, open, onOpenChange, onMat
         )}
       </SheetContent>
     </Sheet>
+    </>
   )
 }

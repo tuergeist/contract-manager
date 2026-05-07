@@ -1777,6 +1777,11 @@
       "numbering": "Numbering",
       "emailTemplatesHint": "Email templates are configured under",
       "emailTemplates": "Email Templates"
+    },
+    "user": {
+      "autoCloseMatchSheet": "Auto-close match sheet",
+      "autoCloseMatchSheetDescription": "Automatically close the match sheet when a transaction is fully matched.",
+      "bankingWorkflow": "Banking Workflow"
     }
   },
   "timeTracking": {
@@ -2035,7 +2040,9 @@
       "withinTolerance": "within tolerance",
       "suggestedMatches": "Suggested matches",
       "exactMatch": "Exact match",
-      "allSuggestionsMatched": "All invoices from this customer are matched"
+      "allSuggestionsMatched": "All invoices from this customer are matched",
+      "autoClosed": "Match saved",
+      "undo": "Undo"
     }
   },
   "liquidity": {
@@ -2413,12 +2420,25 @@
       "extracted": "Extracted",
       "extractionFailed": "Failed",
       "confirmed": "Confirmed",
-      "matched": "Matched"
+      "matched": "Matched",
+      "review": "Review",
+      "ready": "Ready",
+      "done": "Done",
+      "error": "Error"
     },
     "detail": {
       "title": "Incoming Invoice",
       "emailSubject": "Email Subject",
-      "confirm": "Confirm"
+      "confirm": "Confirm",
+      "confirmAndNext": "Confirm + Next",
+      "confirmAndDone": "Confirm + Done",
+      "allConfirmed": "All incoming invoices processed ✓",
+      "openPopup": "Open in popup",
+      "openTab": "Open in new tab",
+      "resizeHint": "Resize height",
+      "lowConfidence": "AI uncertain — please verify ({{c}}%)",
+      "confirmAndMatch": "Confirm + Match",
+      "confirmAndMatchHint": "Confirm and match to bank transaction"
     },
     "inboxes": {
       "title": "Invoice Inboxes",
@@ -2438,7 +2458,14 @@
       "lastPolled": "Last polled",
       "deleteConfirmTitle": "Delete Inbox",
       "deleteConfirmDescription": "Are you sure? Already imported invoices won't be deleted."
-    }
+    },
+    "filter": {
+      "review": "Review",
+      "ready": "Ready",
+      "done": "Done",
+      "showErrors": "Show errors"
+    },
+    "retryExtraction": "Re-analyze"
   },
   "splitRules": {
     "title": "Split Rules",

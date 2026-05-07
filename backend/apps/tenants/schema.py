@@ -458,6 +458,7 @@ class DashboardPreferencesType:
     show_revenue_goals: bool = True
     show_new_business: bool = True
     show_price_increase_impact: bool = True
+    auto_close_match_sheet: bool = True
 
 
 @strawberry.type
@@ -988,6 +989,7 @@ class TenantQuery:
             show_revenue_goals=prefs.get("show_revenue_goals", True) is not False,
             show_new_business=prefs.get("show_new_business", True) is not False,
             show_price_increase_impact=prefs.get("show_price_increase_impact", True) is not False,
+            auto_close_match_sheet=prefs.get("auto_close_match_sheet", True) is not False,
         )
 
     @strawberry.field
@@ -2428,6 +2430,7 @@ class TenantMutation:
         show_revenue_goals: bool | None = None,
         show_new_business: bool | None = None,
         show_price_increase_impact: bool | None = None,
+        auto_close_match_sheet: bool | None = None,
     ) -> OperationResult:
         """Update the current user's dashboard section visibility preferences."""
         user = get_current_user(info)
@@ -2441,6 +2444,8 @@ class TenantMutation:
             prefs["show_new_business"] = show_new_business
         if show_price_increase_impact is not None:
             prefs["show_price_increase_impact"] = show_price_increase_impact
+        if auto_close_match_sheet is not None:
+            prefs["auto_close_match_sheet"] = auto_close_match_sheet
 
         user.dashboard_preferences = prefs
         user.save(update_fields=["dashboard_preferences"])

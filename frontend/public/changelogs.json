@@ -1,5 +1,26 @@
 [
   {
+    "version": "2.30.0",
+    "date": "2026-05-07",
+    "title": "Eingangsrechnungen-Update + Recognition Forecast Bugfixes",
+    "description": "6 Eingangsrechnungen-Features + 3 zusammenhängende Bugfixes am Recognition Forecast.",
+    "type": "feature",
+    "details": [
+      "Eingangsrechnungen: Bestätigen+Weiter-Button (Cmd/Ctrl+Enter) lädt nächste offene Rechnung im selben Sheet",
+      "Eingangsrechnungen: Bestätigen+Match-Button für einklickige Bank-Tx-Zuordnung wenn eindeutiger Kandidat existiert",
+      "Eingangsrechnungen: Status-Badges 6→3 (Prüfen/Bereit/Erledigt) + Spinner für laufende Extraktion + Retry bei Fehler",
+      "Eingangsrechnungen: Filter-Dropdown vereinfacht + Toggle für fehlerhafte Rechnungen",
+      "Eingangsrechnungen: AI-Confidence pro Feld. Felder mit Confidence < 0.8 mit gelbem Border + Tooltip",
+      "Eingangsrechnungen: PDF-Preview responsiv (70vh-90vh) mit vertikalem Resize-Grip, Höhe pro User persistiert",
+      "Banking: Match-Sheet schließt 400ms nach vollständiger Zuordnung automatisch (per User-Setting) + 5s Undo-Banner",
+      "Backend: Migration 0015 (extraction_confidence JSON), neue Mutationen confirmAndMatchIncoming + retriggerIncomingInvoiceExtraction",
+      "Recognition Forecast Bugfix: immer monatliche Verteilung nach Accounting-Prinzip (Pro-Rata-Toggle aus Recognition-View entfernt)",
+      "Recognition Forecast Bugfix: Lookback um eine Recognition-Periode → Carryover aus Vorjahr wird korrekt erkannt",
+      "Recognition Forecast Bugfix: prorate_factor wird für Pre-Alignment-Stubs geehrt",
+      "Recognition Forecast Bugfix: rundungsfreie Verteilung über unit_price × quantity statt event_total / months"
+    ]
+  },
+  {
     "version": "2.29.10",
     "date": "2026-05-07",
     "title": "Forecast Pro-Rata: korrekte Monatsverteilung für Pre-Alignment-Stubs",
