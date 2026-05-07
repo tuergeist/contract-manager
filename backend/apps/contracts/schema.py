@@ -2909,8 +2909,18 @@ class ContractQuery:
                     continue
                 items_arg = items
 
+            # For pro-rata mode we need billing events that started before from_date
+            # but whose period extends into the forecast window (e.g. an annual
+            # billing on 2025-04-01 that covers Apr 2025 – Mar 2026 must contribute
+            # to Jan–Mar 2026). Look back by one full billing interval.
+            if pro_rata:
+                contract_billing_months = interval_months.get(contract.billing_interval, 1)
+                sched_from_date = from_date - relativedelta(months=contract_billing_months)
+            else:
+                sched_from_date = from_date
+
             schedule = contract.get_billing_schedule(
-                from_date=from_date,
+                from_date=sched_from_date,
                 to_date=to_date,
                 include_history=False,
                 items=items_arg,
@@ -2922,21 +2932,36 @@ class ContractQuery:
 
             if pro_rata:
                 # Pro-rata: distribute each billing event across the months it covers
-                billing_months = interval_months.get(contract.billing_interval, 1)
+                billing_months = contract_billing_months
 
                 for event in schedule:
                     event_total = event["total"]
                     event_date = event["date"]
 
+                    # Actual months this event covers: the billing interval, capped at
+                    # the contract's effective end. This matters for contracts that run
+                    # shorter than the billing cycle (e.g. biennial billed once for 13
+                    # months). Use explicit end_date first, then min_duration as fallback.
+                    next_billing = date(event_date.year, event_date.month, 1) + relativedelta(months=billing_months)
+                    contract_effective_end = contract.end_date
+                    if not contract_effective_end and contract.min_duration_months:
+                        contract_effective_end = contract.start_date + relativedelta(months=contract.min_duration_months)
+                    if contract_effective_end:
+                        actual_end = min(next_billing, contract_effective_end)
+                    else:
+                        actual_end = next_billing
+                    actual_months = (actual_end.year - event_date.year) * 12 + (actual_end.month - event_date.month)
+                    actual_months = max(1, actual_months)
+
                     if is_quarterly:
                         # For quarterly view, distribute across quarters
-                        quarters_covered = max(1, billing_months // 3)
-                        amount_per_quarter = event_total / quarters_covered
+                        actual_quarters = max(1, (actual_months + 2) // 3)
+                        amount_per_quarter = event_total / actual_quarters
 
                         # Start from the billing quarter and go forward
                         q = (event_date.month - 1) // 3 + 1
                         y = event_date.year
-                        for _ in range(quarters_covered):
+                        for _ in range(actual_quarters):
                             period_key = f"{y}-Q{q}"
                             if period_key in period_column_set:
                                 period_amounts[period_key] += amount_per_quarter
@@ -2945,12 +2970,12 @@ class ContractQuery:
                                 q = 1
                                 y += 1
                     else:
-                        # For monthly view, distribute across months
-                        amount_per_month = event_total / billing_months
+                        # For monthly view, distribute across the actual covered months
+                        amount_per_month = event_total / actual_months
 
                         # Start from the billing month and go forward
                         dist_date = date(event_date.year, event_date.month, 1)
-                        for _ in range(billing_months):
+                        for _ in range(actual_months):
                             period_key = dist_date.strftime("%Y-%m")
                             if period_key in period_column_set:
                                 period_amounts[period_key] += amount_per_month

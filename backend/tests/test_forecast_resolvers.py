@@ -1219,3 +1219,153 @@ class TestForecastMultipleContracts:
 
         # Two contracts in the result
         assert len(data["contracts"]) == 2
+
+
+class TestProRataDistribution:
+    """Pro-rata distribution respects the contract end_date as the upper bound.
+
+    Regression for: biennial contract running only 13 months showed 766 €/month
+    (18384/24) instead of 1414 €/month (18384/13) because the divisor was the
+    full billing interval (24) rather than the actual covered months (13).
+    """
+
+    def test_biennial_contract_short_run_distributes_over_actual_months(
+        self, user, tenant, customer, product, db
+    ):
+        """Biennial contract with min_duration of 12 months: pro-rata uses 12 not 24.
+
+        Replicates production bug: contract billed every 2 years but only running
+        12 months. Without explicit end_date, _calc_end_prorate does not pro-rate
+        the billing event, so the full 24-month amount (24 000 €) is billed.
+        The pro-rata forecast must then distribute that amount over the actual
+        12 months (2 000 €/month), not the full 24 months (1 000 €/month).
+        """
+        # No end_date — only min_duration_months. _calc_end_prorate will NOT pro-rate
+        # the billing event because self.end_date is None. The full 24 000 € is billed.
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Biennial Short",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            min_duration_months=12,  # 12-month term, no explicit end_date
+            billing_interval=Contract.BillingInterval.BIENNIAL,
+            billing_anchor_day=1,
+        )
+        # unit_price 1000 €/month → full 2-year billing event = 24 000 €
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("1000.00"),
+            price_period="monthly",
+            billing_start_date=date(2026, 1, 1),
+        )
+
+        result = run_graphql(
+            REVENUE_FORECAST_QUERY,
+            {"view": "monthly", "months": 13, "proRata": True, "refresh": True},
+            make_context(user),
+        )
+
+        assert result.errors is None
+        data = result.data["revenueForecast"]
+        row = next(c for c in data["contracts"] if c["contractId"] == contract.id)
+
+        # Pro-rata over actual 12 months → 24 000 / 12 = 2 000 €/month
+        jan_2026 = next(m for m in row["months"] if m["month"] == "2026-01")
+        assert Decimal(jan_2026["amount"]) == Decimal("2000.00")
+
+        # Total across forecast = full billing event (24 000 €), spread over 12 months
+        assert Decimal(row["total"]) == Decimal("24000.00")
+
+    def test_annual_billing_crossing_year_boundary_included(
+        self, user, tenant, customer, product, db
+    ):
+        """Annual billing event on 2025-04-01 must appear in Jan–Mar 2026 (pro-rata).
+
+        The billing event falls before the forecast window (Jan 2026) but its
+        period extends into the window. Without the lookback fix the event is
+        silently skipped and Jan–Mar 2026 show zero revenue.
+        """
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Annual Cross-Year",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 4, 1),
+            billing_start_date=date(2025, 4, 1),
+            billing_interval=Contract.BillingInterval.ANNUAL,
+            billing_anchor_day=1,
+        )
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("1000.00"),
+            price_period="monthly",
+            billing_start_date=date(2025, 4, 1),
+        )
+
+        result = run_graphql(
+            REVENUE_FORECAST_QUERY,
+            {"view": "monthly", "months": 13, "proRata": True, "refresh": True},
+            make_context(user),
+        )
+
+        assert result.errors is None
+        data = result.data["revenueForecast"]
+        row = next(c for c in data["contracts"] if c["contractId"] == contract.id)
+
+        # Apr 2025 billing event = 12 000 €, distributed over 12 months.
+        # Jan–Mar 2026 are the last 3 months of that period → each 1 000 €.
+        jan_2026 = next(m for m in row["months"] if m["month"] == "2026-01")
+        assert Decimal(jan_2026["amount"]) == Decimal("1000.00")
+        mar_2026 = next(m for m in row["months"] if m["month"] == "2026-03")
+        assert Decimal(mar_2026["amount"]) == Decimal("1000.00")
+
+        # Apr 2026 billing event starts the next cycle — also 1 000 €/month
+        apr_2026 = next(m for m in row["months"] if m["month"] == "2026-04")
+        assert Decimal(apr_2026["amount"]) == Decimal("1000.00")
+
+    def test_biennial_contract_full_run_keeps_24_month_divisor(
+        self, user, tenant, customer, product, db
+    ):
+        """Open-ended biennial contract: divisor stays at 24 (no effective end)."""
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Biennial Full",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            # No end_date, no min_duration → open-ended → divisor = full interval
+            billing_interval=Contract.BillingInterval.BIENNIAL,
+            billing_anchor_day=1,
+        )
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            product=product,
+            quantity=1,
+            unit_price=Decimal("1000.00"),
+            price_period="monthly",
+            billing_start_date=date(2026, 1, 1),
+        )
+
+        result = run_graphql(
+            REVENUE_FORECAST_QUERY,
+            {"view": "monthly", "months": 13, "proRata": True, "refresh": True},
+            make_context(user),
+        )
+
+        assert result.errors is None
+        data = result.data["revenueForecast"]
+        row = next(c for c in data["contracts"] if c["contractId"] == contract.id)
+
+        # Pro-rata over full 24 months → 24 000 / 24 = 1 000 €/month
+        jan_2026 = next(m for m in row["months"] if m["month"] == "2026-01")
+        assert Decimal(jan_2026["amount"]) == Decimal("1000.00")

@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.29.9",
+    "date": "2026-05-06",
+    "title": "Forecast Pro-Rata: korrekte Monatsverteilung für kürzere Vertragslaufzeiten",
+    "description": "Behebt zwei Fehler im Pro-Rata-Modus des Revenue Forecasts: 1) Ein Vertrag mit 2-Jahres-Billing-Intervall aber nur 13 Monaten Laufzeit wurde durch 24 statt durch 13 geteilt (z.B. 766 €/Monat statt 1.414 €). 2) Ein Vertrag, dessen Billing-Event vor dem Jahresanfang liegt (z.B. April 2025 für 12 Monate), fehlte komplett in Jan–März.",
+    "type": "bugfix",
+    "details": [
+      "Pro-Rata: Divisor richtet sich jetzt nach der tatsächlichen Vertragslaufzeit (end_date oder min_duration_months), nicht nach dem vollen Billing-Intervall",
+      "Pro-Rata: Billing-Events, die vor dem Forecast-Fenster beginnen aber in es hineinragen, werden jetzt korrekt einbezogen (lookback = 1 Billing-Intervall)",
+      "+3 neue Backend-Tests: kurze biennial-Laufzeit, jahresübergreifendes Annual-Event, volle biennial-Laufzeit"
+    ]
+  },
+  {
     "version": "2.29.8",
     "date": "2026-05-06",
     "title": "Clockodo-Sync stabilisiert + Permission-Gate für Abteilungs-Auswertung",
