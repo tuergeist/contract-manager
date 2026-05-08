@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useQuery, gql } from '@apollo/client'
-import { ArrowLeft, Loader2, FileText, Mail, User, Calendar, Hash } from 'lucide-react'
+import { useQuery, useMutation, gql } from '@apollo/client'
+import { ArrowLeft, Loader2, FileText, Mail, User, Calendar, Hash, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDateTime } from '@/lib/utils'
@@ -28,6 +29,20 @@ const ORDER_CONFIRMATION_QUERY = gql`
   }
 `
 
+const REGENERATE_PDF = gql`
+  mutation RegenerateOrderConfirmationPdf($id: ID!) {
+    regenerateOrderConfirmationPdf(orderConfirmationId: $id) {
+      success
+      error
+      orderConfirmation {
+        id
+        language
+        pdfUrl
+      }
+    }
+  }
+`
+
 export function OrderConfirmationDetail() {
   const { t } = useTranslation()
   const { id, abId } = useParams<{ id: string; abId: string }>()
@@ -35,12 +50,30 @@ export function OrderConfirmationDetail() {
 
   useDocumentTitle(t('orderConfirmation.detail.title'))
 
-  const { data, loading } = useQuery(ORDER_CONFIRMATION_QUERY, {
+  const { data, loading, refetch } = useQuery(ORDER_CONFIRMATION_QUERY, {
     variables: { id: abId },
     skip: !abId,
   })
+  const [regenerate, { loading: regenerating }] = useMutation(REGENERATE_PDF)
+  const [regenError, setRegenError] = useState<string | null>(null)
 
   const ab = data?.orderConfirmation
+
+  const handleRegenerate = async () => {
+    if (!abId) return
+    setRegenError(null)
+    try {
+      const res = await regenerate({ variables: { id: abId } })
+      const result = res.data?.regenerateOrderConfirmationPdf
+      if (!result?.success) {
+        setRegenError(result?.error || t('common.error'))
+        return
+      }
+      await refetch()
+    } catch (e) {
+      setRegenError(e instanceof Error ? e.message : t('common.error'))
+    }
+  }
 
   if (loading) {
     return (
@@ -75,15 +108,32 @@ export function OrderConfirmationDetail() {
             {t('orderConfirmation.detail.title')} {ab.orderConfirmationNumber}
           </h1>
         </div>
-        {ab.pdfUrl && (
-          <a href={ab.pdfUrl} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline">
-              <FileText className="mr-2 h-4 w-4" />
-              PDF
-            </Button>
-          </a>
-        )}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleRegenerate}
+            disabled={regenerating}
+            title={t('orderConfirmation.detail.regenerateHint', 'PDF mit aktuellen Kundendaten + Sprache neu erzeugen')}
+          >
+            {regenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            {t('orderConfirmation.detail.regenerate', 'PDF neu erzeugen')}
+          </Button>
+          {ab.pdfUrl && (
+            <a href={ab.pdfUrl} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline">
+                <FileText className="mr-2 h-4 w-4" />
+                PDF
+              </Button>
+            </a>
+          )}
+        </div>
       </div>
+
+      {regenError && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {regenError}
+        </div>
+      )}
 
       {/* Metadata Cards */}
       <div className="grid gap-4 md:grid-cols-4">

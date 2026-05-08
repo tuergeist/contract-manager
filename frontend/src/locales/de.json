@@ -2326,7 +2326,9 @@
       "sentTo": "Versendet an",
       "sentDate": "Versanddatum",
       "number": "AB-Nr.",
-      "createdBy": "Erstellt von"
+      "createdBy": "Erstellt von",
+      "regenerate": "PDF neu erzeugen",
+      "regenerateHint": "PDF mit aktuellen Kundendaten + Sprache neu erzeugen"
     },
     "numberScheme": {
       "title": "AB-Nummernschema",

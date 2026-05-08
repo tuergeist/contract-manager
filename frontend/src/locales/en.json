@@ -2326,7 +2326,9 @@
       "sentTo": "Sent to",
       "sentDate": "Sent Date",
       "number": "OC No.",
-      "createdBy": "Created by"
+      "createdBy": "Created by",
+      "regenerate": "Regenerate PDF",
+      "regenerateHint": "Regenerate PDF with current customer data + language"
     },
     "numberScheme": {
       "title": "OC Number Scheme",

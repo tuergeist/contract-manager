@@ -361,7 +361,13 @@ class OrderConfirmationMutation:
         info: Info[Context, None],
         order_confirmation_id: strawberry.ID,
     ) -> OrderConfirmationResult:
-        """Regenerate the PDF for an order confirmation (e.g. after a failed generation)."""
+        """Regenerate the PDF for an order confirmation.
+
+        Refreshes the AB language from the customer's current effective
+        language (explicit invoice_language or derived from country) so a
+        previously German-rendered AB for an English-speaking customer
+        comes out in English on regenerate.
+        """
         user, err = check_perm(info, "contracts", "write")
         if err:
             return OrderConfirmationResult(error=err)
@@ -370,12 +376,20 @@ class OrderConfirmationMutation:
 
         ab = OrderConfirmation.objects.filter(
             tenant=user.tenant, id=order_confirmation_id
-        ).select_related("contract").first()
+        ).select_related("contract__customer").first()
         if not ab:
             return OrderConfirmationResult(error="Order confirmation not found")
 
         from django.core.files.base import ContentFile
-        from apps.contracts.services.order_confirmation import OrderConfirmationService
+        from apps.contracts.services.order_confirmation import OrderConfirmationService, AB_LABELS
+
+        # Refresh language from current customer state
+        customer = ab.contract.customer
+        if customer:
+            effective = customer.get_effective_invoice_language()
+            if effective in AB_LABELS and effective != ab.language:
+                ab.language = effective
+                ab.save(update_fields=["language", "updated_at"])
 
         service = OrderConfirmationService(user.tenant)
         try:
