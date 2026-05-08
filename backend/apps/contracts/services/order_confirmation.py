@@ -336,7 +336,7 @@ class OrderConfirmationService:
         from apps.contracts.order_confirmation_numbering import OrderConfirmationNumberService
 
         customer = contract.customer
-        language = getattr(customer, "invoice_language", "") or "de"
+        language = customer.get_effective_invoice_language() if customer else "de"
         if language not in AB_LABELS:
             language = "de"
 

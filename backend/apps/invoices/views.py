@@ -13,13 +13,13 @@ from apps.invoices.services import InvoiceService, _get_company_language
 def _resolve_invoice_language(tenant, customer_id, fallback="en"):
     """Resolve the invoice language for a customer.
 
-    Uses the customer's invoice_language if set, otherwise falls back.
+    Uses the customer's explicit invoice_language if set, otherwise derives
+    from the customer's country, otherwise falls back.
     """
     if customer_id:
         try:
             customer = Customer.objects.get(tenant=tenant, id=customer_id)
-            if customer.invoice_language:
-                return customer.invoice_language
+            return customer.get_effective_invoice_language(default=fallback)
         except Customer.DoesNotExist:
             pass
     return fallback
@@ -243,14 +243,13 @@ class InvoiceExportView(View):
             if num:
                 inv.invoice_number = num
 
-        # Build per-customer language map
+        # Build per-customer language map (explicit field → derive from country)
         customer_ids = {inv.customer_id for inv in invoices}
         customer_languages = {}
         for cust in Customer.objects.filter(
             tenant=user.tenant, id__in=customer_ids
-        ).only("id", "invoice_language"):
-            if cust.invoice_language:
-                customer_languages[cust.id] = cust.invoice_language
+        ).only("id", "invoice_language", "address"):
+            customer_languages[cust.id] = cust.get_effective_invoice_language(default=language)
 
         # Generate export
         if export_format == "pdf":
@@ -338,14 +337,13 @@ class InvoiceExportView(View):
                     status=404,
                 )
 
-            # Build per-customer language map for batch export
+            # Build per-customer language map for batch export (explicit field → derive from country)
             customer_ids = {r.customer_id for r in records if r.customer_id}
             customer_languages = {}
             for cust in Customer.objects.filter(
                 tenant=user.tenant, id__in=customer_ids
-            ).only("id", "invoice_language"):
-                if cust.invoice_language:
-                    customer_languages[cust.id] = cust.invoice_language
+            ).only("id", "invoice_language", "address"):
+                customer_languages[cust.id] = cust.get_effective_invoice_language(default=language)
 
             content = service.generate_individual_zugferd_pdfs(
                 records, year, month, language, customer_languages=customer_languages

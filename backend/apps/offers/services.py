@@ -223,7 +223,7 @@ class OfferService:
             )
 
         # Generate PDF synchronously (offers are single-page, fast)
-        language = getattr(contract.customer, "invoice_language", "") or "en"
+        language = contract.customer.get_effective_invoice_language(default="en") if contract.customer else "en"
         self._generate_and_save_pdf(record, language)
 
         return record

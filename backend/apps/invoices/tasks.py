@@ -111,10 +111,12 @@ def generate_invoice_pdf_task(self, record_id: int) -> bool:
     try:
         from apps.invoices.services import InvoiceService, _get_company_language
 
-        # Resolve language: customer preference > company default
-        language = _get_company_language(record.tenant)
-        if record.customer and getattr(record.customer, "invoice_language", None):
-            language = record.customer.invoice_language
+        # Resolve language: customer preference (with country fallback) > company default
+        company_language = _get_company_language(record.tenant)
+        if record.customer:
+            language = record.customer.get_effective_invoice_language(default=company_language)
+        else:
+            language = company_language
 
         service = InvoiceService(record.tenant)
         pdf_bytes = service.generate_zugferd_pdf_for_record(record, language=language)
@@ -175,10 +177,12 @@ def generate_storno_pdf_task(self, record_id: int) -> bool:
     try:
         from apps.invoices.services import InvoiceService, _get_company_language
 
-        # Resolve language: customer preference > company default
-        language = _get_company_language(record.tenant)
-        if record.customer and getattr(record.customer, "invoice_language", None):
-            language = record.customer.invoice_language
+        # Resolve language: customer preference (with country fallback) > company default
+        company_language = _get_company_language(record.tenant)
+        if record.customer:
+            language = record.customer.get_effective_invoice_language(default=company_language)
+        else:
+            language = company_language
 
         service = InvoiceService(record.tenant)
         pdf_bytes = service.generate_pdf_for_storno(record, language=language)
@@ -268,8 +272,8 @@ def send_invoice_email_task(self, record_id: int, user_id: int | None = None) ->
         logger.error("InvoiceRecord %s has no PDF file", record_id)
         return False
 
-    # Determine language
-    lang = getattr(customer, "invoice_language", "") or "en"
+    # Determine language (explicit field → derive from country → fallback)
+    lang = customer.get_effective_invoice_language(default="en") if customer else "en"
     if lang not in EMAIL_TEMPLATES:
         lang = "de"
 

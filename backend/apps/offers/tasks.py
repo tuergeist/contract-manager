@@ -58,10 +58,10 @@ def send_offer_email_task(
         logger.error("No recipients for OfferRecord %s", offer_id)
         return False
 
-    # Determine language
+    # Determine language (explicit field → derive from country → fallback)
     lang = "en"
     if record.customer:
-        lang = getattr(record.customer, "invoice_language", "") or "en"
+        lang = record.customer.get_effective_invoice_language(default="en")
     if lang not in EMAIL_TEMPLATES:
         lang = "en"
 

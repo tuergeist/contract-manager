@@ -68,6 +68,30 @@ class Customer(TenantModel):
     def __str__(self):
         return self.name
 
+    def get_effective_invoice_language(self, default: str = "de") -> str:
+        """Return the effective document language for this customer.
+
+        Priority: explicit ``invoice_language`` field → derived from address
+        country → ``default``. Used for invoices, order confirmations, and
+        offers so a customer in the UK or Italy automatically gets English
+        documents even when no language was explicitly assigned.
+        """
+        if self.invoice_language:
+            return self.invoice_language
+        country = (self.address or {}).get("country", "").strip().lower()
+        de_countries = {
+            "germany", "deutschland",
+            "austria", "österreich", "osterreich",
+            "switzerland", "schweiz",
+            "liechtenstein",
+            "luxembourg", "luxemburg",
+        }
+        if country in de_countries:
+            return "de"
+        if country:
+            return "en"
+        return default
+
 
 class CustomerNote(TenantModel):
     """Notes attached to a customer."""

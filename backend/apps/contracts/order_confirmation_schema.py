@@ -279,7 +279,7 @@ class OrderConfirmationMutation:
             return OrderConfirmationPreviewResult(error="Contract not found")
 
         customer = contract.customer
-        language = getattr(customer, "invoice_language", "") or "de"
+        language = customer.get_effective_invoice_language() if customer else "de"
 
         service = OrderConfirmationService(user.tenant)
         html = service.render_html(
