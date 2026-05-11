@@ -349,6 +349,8 @@ export function CounterpartyDetailPage() {
   const currentYear = new Date().getFullYear()
   // Default to 'total' (all years) — proper default gets set once availableYears loads
   const [summaryYear, setSummaryYear] = useState<string>('total')
+  // Filter mode: 'invoice' = year applies to invoice_date (default), 'payment' = year applies to payment date only
+  const [yearScope, setYearScope] = useState<'invoice' | 'payment'>('invoice')
   const summaryDateFrom = summaryYear === 'total' ? null : `${summaryYear}-01-01`
   const summaryDateTo = summaryYear === 'total' ? null : `${summaryYear}-12-31`
 
@@ -961,7 +963,7 @@ export function CounterpartyDetailPage() {
 
         return (
         <>
-        <div className="mt-6 mb-3 flex items-center gap-2">
+        <div className="mt-6 mb-3 flex items-center gap-2 flex-wrap">
           {years.map(y => (
             <button
               key={y}
@@ -985,6 +987,26 @@ export function CounterpartyDetailPage() {
           >
             {t('common.total', 'Total')}
           </button>
+          {summaryYear !== 'total' && (
+            <div className="ml-3 inline-flex rounded-md border border-gray-300 overflow-hidden" title={t('banking.yearScopeHint', 'Welches Datum filtert: Rechnungsdatum oder Zahlungsdatum')}>
+              <button
+                onClick={() => setYearScope('invoice')}
+                className={`px-3 py-1 text-xs font-medium transition-colors ${
+                  yearScope === 'invoice' ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {t('banking.scopeInvoiceDate', 'Rechnungsdatum')}
+              </button>
+              <button
+                onClick={() => setYearScope('payment')}
+                className={`border-l border-gray-300 px-3 py-1 text-xs font-medium transition-colors ${
+                  yearScope === 'payment' ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {t('banking.scopePaymentDate', 'Zahlungsdatum')}
+              </button>
+            </div>
+          )}
         </div>
         {(() => {
           const inYear = (iso?: string) => {
@@ -1136,13 +1158,30 @@ export function CounterpartyDetailPage() {
 
       {/* Account Tab — type-aware ledger */}
       {activeTab === 'account' && (() => {
-        // Filter ledger entries by the selected year so it stays consistent
-        // with the year-scoped summary cards above. Bank transactions are
-        // already server-filtered via summaryDateFrom/To.
+        // Filter ledger entries by the selected year. Bank transactions
+        // are already server-filtered via summaryDateFrom/To.
+        // yearScope decides which date-attribute the year applies to:
+        //   'invoice' (default): year ∼ invoice_date (issued in that year)
+        //   'payment': only show invoices that have a payment in that year
         const ledgerInYear = (iso?: string | null) => {
           if (summaryYear === 'total') return true
           if (!iso) return false
           return iso.startsWith(summaryYear)
+        }
+        // For 'payment' mode: collect IDs of invoices paid by any tx in window
+        const paidInvoiceIds = new Set<string>()
+        if (summaryYear !== 'total' && yearScope === 'payment') {
+          for (const tx of transactions) {
+            const matches = tx.matchedInvoices && tx.matchedInvoices.length > 0
+              ? tx.matchedInvoices
+              : tx.matchedInvoice ? [tx.matchedInvoice] : []
+            for (const m of matches) paidInvoiceIds.add(String(m.invoiceId))
+          }
+        }
+        const invoiceVisible = (inv: { id: string; invoiceDate: string | null }) => {
+          if (summaryYear === 'total') return true
+          if (yearScope === 'payment') return paidInvoiceIds.has(String(inv.id))
+          return ledgerInYear(inv.invoiceDate)
         }
         // Debitor ledger (customer account): balance > 0 = they owe us
         //   outgoing invoice  → Soll  +gross
@@ -1170,7 +1209,7 @@ export function CounterpartyDetailPage() {
           // Final saldo < 0  →  they owe us  →  rot
           // Final saldo > 0  →  they overpaid →  grün
           for (const inv of allOutInvoices) {
-            if (!ledgerInYear(inv.invoiceDate)) continue
+            if (!invoiceVisible(inv)) continue
             const isStorno = inv.documentType === 'storno'
             const gross = parseFloat(inv.totalGross || '0')
             entries.push({
@@ -1209,7 +1248,9 @@ export function CounterpartyDetailPage() {
           // Creditor: incoming invoices + payments sent
           for (const inv of cpInvoices) {
             const invDate = inv.invoiceDate || inv.createdAt?.split('T')[0] || ''
-            if (!ledgerInYear(invDate)) continue
+            if (summaryYear !== 'total' && yearScope === 'payment') {
+              if (!paidInvoiceIds.has(String(inv.id))) continue
+            } else if (!ledgerInYear(invDate)) continue
             entries.push({
               date: inv.invoiceDate || inv.createdAt?.split('T')[0] || '',
               description: `${t('incomingInvoices.invoiceNumber')}: ${inv.invoiceNumber || inv.originalFilename}`,
@@ -1249,11 +1290,26 @@ export function CounterpartyDetailPage() {
         // Apply display sort order
         if (ledgerSortOrder === 'desc') ledgerRows.reverse()
 
+        const finalBalance = ledgerRows.length > 0
+          ? (ledgerSortOrder === 'desc' ? ledgerRows[0].balance : ledgerRows[ledgerRows.length - 1].balance)
+          : 0
+        const creditorOverpaid = accountType === 'creditor' && finalBalance < -0.01
         return (
         <div className="space-y-4">
           {summaryYear !== 'total' && (
             <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-              {t('banking.yearScopedHint', 'Showing entries for {{year}} only — switch to "Total" to see all years', { year: summaryYear })}
+              {yearScope === 'payment'
+                ? t('banking.yearScopedHintPayment', 'Showing only payments in {{year}} and their matched invoices', { year: summaryYear })
+                : t('banking.yearScopedHint', 'Showing entries for {{year}} only — switch to "Total" to see all years', { year: summaryYear })
+              }
+            </div>
+          )}
+          {creditorOverpaid && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              ⚠ {t('banking.creditorOverpaidWarning', 'Saldo ist überzahlt — möglicherweise fehlen Eingangsrechnungen.')}{' '}
+              <Link to="/incoming-invoices" className="underline font-medium hover:text-amber-700">
+                {t('navigation.incomingInvoices', 'Eingangsrechnungen')} →
+              </Link>
             </div>
           )}
           {ledgerRows.length === 0 ? (

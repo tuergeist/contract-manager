@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.31.5",
+    "date": "2026-05-11",
+    "title": "Counterparty: Year-Scope-Toggle + Kreditor-Überzahlung-Hinweis",
+    "description": "Year-Selector erhält Toggle für Filter-Datum (Rechnungs- vs. Zahlungsdatum). Kreditor-Konten warnen bei Überzahlung mit Link zu Eingangsrechnungen.",
+    "type": "feature",
+    "details": [
+      "Toggle Rechnungsdatum/Zahlungsdatum neben den Jahres-Buttons (nur sichtbar wenn Jahr aktiv)",
+      "Rechnungsdatum-Modus (Default): Rechnungen und Zahlungen werden nach ihrem eigenen Datum gefiltert",
+      "Zahlungsdatum-Modus: nur Zahlungen aus dem Jahr + die dazu gematchten Rechnungen (Rechnungs-Issue-Datum egal)",
+      "Kreditor mit negativem Saldo (= überzahlt) zeigt amber Warnung mit Link zu Eingangsrechnungen — vermutlich fehlt eine Rechnung"
+    ]
+  },
+  {
     "version": "2.31.4",
     "date": "2026-05-11",
     "title": "Debitor-Saldo: korrekte Vorzeichen-Konvention",

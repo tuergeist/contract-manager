@@ -2068,7 +2068,12 @@
     "imported": "importiert",
     "showingFirst": "Zeige erste",
     "yearScopedHint": "Zeigt nur Einträge aus {{year}} — Total wählen für alle Jahre",
-    "ourReceivable": "unsere Forderung"
+    "ourReceivable": "unsere Forderung",
+    "yearScopeHint": "Welches Datum filtert: Rechnungsdatum oder Zahlungsdatum",
+    "scopeInvoiceDate": "Rechnungsdatum",
+    "scopePaymentDate": "Zahlungsdatum",
+    "yearScopedHintPayment": "Zeigt nur Zahlungen aus {{year}} und die zugehörigen Rechnungen",
+    "creditorOverpaidWarning": "Saldo ist überzahlt — möglicherweise fehlen Eingangsrechnungen."
   },
   "liquidity": {
     "title": "Liquiditätsvorschau",

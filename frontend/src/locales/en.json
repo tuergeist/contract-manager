@@ -2068,7 +2068,12 @@
     "imported": "imported",
     "showingFirst": "Showing first",
     "yearScopedHint": "Showing entries for {{year}} only — switch to Total for all years",
-    "ourReceivable": "our receivable"
+    "ourReceivable": "our receivable",
+    "yearScopeHint": "Which date filters: invoice date or payment date",
+    "scopeInvoiceDate": "Invoice date",
+    "scopePaymentDate": "Payment date",
+    "yearScopedHintPayment": "Showing only payments in {{year}} and their matched invoices",
+    "creditorOverpaidWarning": "Balance is overpaid — incoming invoices may be missing."
   },
   "liquidity": {
     "title": "Liquidity Forecast",
