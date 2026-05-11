@@ -244,6 +244,25 @@ const COUNTERPARTY_INVOICES = gql`
   }
 `
 
+const COUNTERPARTY_OUTGOING_INVOICES = gql`
+  query CounterpartyOutgoingInvoices($customerId: Int!, $sortBy: String, $sortOrder: String, $offset: Int, $limit: Int) {
+    invoiceRecords(customerId: $customerId, sortBy: $sortBy, sortOrder: $sortOrder, offset: $offset, limit: $limit) {
+      items {
+        id
+        invoiceNumber
+        invoiceDate
+        totalGross
+        status
+        isPaid
+        pdfUrl
+        contractName
+      }
+      totalCount
+      hasNextPage
+    }
+  }
+`
+
 const invoiceStatusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
   extracting: 'bg-blue-100 text-blue-800',
@@ -337,10 +356,13 @@ export function CounterpartyDetailPage() {
   const customerSearchInputRef = useRef<HTMLInputElement>(null)
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<'account' | 'transactions' | 'invoices'>('account')
+  const [activeTab, setActiveTab] = useState<'account' | 'transactions' | 'invoices' | 'outgoing'>('account')
   const [invPage, setInvPage] = useState(1)
   const [invSortBy, setInvSortBy] = useState('invoice_date')
   const [invSortOrder, setInvSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [outPage, setOutPage] = useState(1)
+  const [outSortBy, setOutSortBy] = useState<string>('invoiceDate')
+  const [outSortOrder, setOutSortOrder] = useState<'asc' | 'desc'>('desc')
   const [ledgerSortOrder, setLedgerSortOrder] = useState<'asc' | 'desc'>('desc')
   const [selectedInvId, setSelectedInvId] = useState<string | null>(null)
 
@@ -395,6 +417,28 @@ export function CounterpartyDetailPage() {
   })
 
   const summary: CounterpartySummary | null = cpData?.counterparty || null
+
+  // Outgoing invoices for this counterparty (via linked customer)
+  const linkedCustomerId = summary?.customer?.id ?? null
+  const { data: outData, loading: outLoading } = useQuery(COUNTERPARTY_OUTGOING_INVOICES, {
+    variables: {
+      customerId: linkedCustomerId,
+      sortBy: outSortBy,
+      sortOrder: outSortOrder,
+      offset: (outPage - 1) * 50,
+      limit: 50,
+    },
+    skip: !linkedCustomerId,
+  })
+  const outInvoices = outData?.invoiceRecords?.items || []
+  const outTotalCount = outData?.invoiceRecords?.totalCount || 0
+  const outHasNextPage = outData?.invoiceRecords?.hasNextPage || false
+  // Bulk fetch for account ledger (no pagination)
+  const { data: outAllData } = useQuery(COUNTERPARTY_OUTGOING_INVOICES, {
+    variables: { customerId: linkedCustomerId, sortBy: 'invoiceDate', sortOrder: 'asc', offset: 0, limit: 500 },
+    skip: !linkedCustomerId,
+  })
+  const allOutInvoices = outAllData?.invoiceRecords?.items || []
 
   // Transactions query
   const { data: txData, loading: txLoading, refetch: txRefetch } = useQuery(BANK_TRANSACTIONS, {
@@ -880,10 +924,24 @@ export function CounterpartyDetailPage() {
             {t('common.total', 'Total')}
           </button>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-          {/* Invoiced (what they billed us) */}
+        {(() => {
+          // Year-filter outgoing invoices to match the summaryYear toggle
+          const inYear = (iso?: string) => {
+            if (summaryYear === 'total' || !iso) return true
+            return iso.startsWith(summaryYear)
+          }
+          const outFiltered = allOutInvoices.filter((inv: any) => inYear(inv.invoiceDate))
+          const totalOutgoing = outFiltered.reduce((sum: number, inv: any) => sum + parseFloat(inv.totalGross || '0'), 0)
+          const invoiced = parseFloat(summary.totalInvoiced) || 0
+          const paidToThem = Math.abs(parseFloat(summary.totalDebit) || 0)
+          const receivedFromThem = parseFloat(summary.totalCredit) || 0
+          // Net position: positive = we owe them, negative = they owe us
+          const netPosition = (invoiced - paidToThem) - (totalOutgoing - receivedFromThem)
+          return (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-5">
+          {/* Invoiced by them */}
           <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm font-medium text-gray-500">{t('banking.invoiced', 'Invoiced')}</p>
+            <p className="text-sm font-medium text-gray-500">{t('banking.invoicedByThem', 'Invoiced (in)')}</p>
             <p className="mt-1 text-xl font-semibold text-gray-900">
               {formatCurrency(summary.totalInvoiced)}
             </p>
@@ -891,51 +949,63 @@ export function CounterpartyDetailPage() {
               {summary.invoiceCount} {t('incomingInvoices.title', 'invoices')}
             </p>
           </div>
+          {/* Invoiced by us */}
+          <div className="rounded-lg border bg-white p-4">
+            <p className="text-sm font-medium text-gray-500">{t('banking.invoicedByUs', 'Invoiced (out)')}</p>
+            <p className="mt-1 text-xl font-semibold text-gray-900">
+              {formatCurrency(totalOutgoing)}
+            </p>
+            <p className="mt-1 text-xs text-gray-400">
+              {outFiltered.length} {t('banking.outgoingInvoices', 'outgoing')}
+            </p>
+          </div>
           {/* Paid (what we paid them) */}
           <div className="rounded-lg border bg-white p-4">
             <p className="text-sm font-medium text-gray-500">{t('banking.paid', 'Paid')}</p>
             <p className="mt-1 text-xl font-semibold text-red-600">
-              {formatCurrency(summary.totalDebit)}
+              {formatCurrency(paidToThem)}
             </p>
             <p className="mt-1 text-xs text-gray-400">
               {summary.transactionCount} {t('banking.transactions')}
-              {summary.totalCredit && parseFloat(summary.totalCredit) > 0 && (
-                <span className="text-green-600"> (+{formatCurrency(summary.totalCredit)})</span>
+              {receivedFromThem > 0 && (
+                <span className="text-green-600"> (+{formatCurrency(receivedFromThem)})</span>
               )}
             </p>
           </div>
-          {/* Outstanding (invoiced - paid) */}
+          {/* Outstanding — gross outstanding both directions */}
           <div className="rounded-lg border bg-white p-4">
             <p className="text-sm font-medium text-gray-500">{t('banking.outstanding', 'Outstanding')}</p>
             {(() => {
-              const invoiced = parseFloat(summary.totalInvoiced) || 0
-              const paid = Math.abs(parseFloat(summary.totalDebit) || 0)
-              const outstanding = invoiced - paid
+              const owedByUs = Math.max(0, invoiced - paidToThem)
+              const owedByThem = Math.max(0, totalOutgoing - receivedFromThem)
               return (
-                <p className={`mt-1 text-xl font-semibold ${outstanding > 0.01 ? 'text-orange-600' : outstanding < -0.01 ? 'text-green-600' : 'text-gray-900'}`}>
-                  {formatCurrency(outstanding)}
-                </p>
+                <>
+                  <p className="mt-1 text-xl font-semibold text-orange-600">
+                    {formatCurrency(owedByUs)}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    {t('banking.weOwe', 'we owe')}
+                    {owedByThem > 0.01 && (
+                      <span className="text-green-600"> · {formatCurrency(owedByThem)} {t('banking.theyOwe', 'they owe')}</span>
+                    )}
+                  </p>
+                </>
               )
             })()}
           </div>
-          {/* Cash flow balance */}
+          {/* Net balance */}
           <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm font-medium text-gray-500">{t('banking.cashBalance', 'Cash Balance')}</p>
-            {(() => {
-              const saldo = parseFloat(summary.totalCredit) + parseFloat(summary.totalDebit)
-              return (
-                <p className={`mt-1 text-xl font-semibold ${saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatCurrency(saldo)}
-                </p>
-              )
-            })()}
-            {summary.firstDate && summary.lastDate && (
-              <p className="mt-1 text-xs text-gray-400">
-                {formatDate(summary.firstDate)} – {formatDate(summary.lastDate)}
-              </p>
-            )}
+            <p className="text-sm font-medium text-gray-500">{t('banking.netBalance', 'Net Balance')}</p>
+            <p className={`mt-1 text-xl font-semibold ${netPosition > 0.01 ? 'text-orange-600' : netPosition < -0.01 ? 'text-green-600' : 'text-gray-900'}`}>
+              {netPosition < 0 ? `-${formatCurrency(Math.abs(netPosition))}` : formatCurrency(netPosition)}
+            </p>
+            <p className="mt-1 text-xs text-gray-400">
+              {netPosition > 0.01 ? t('banking.weOweNet', 'we owe net') : netPosition < -0.01 ? t('banking.theyOweNet', 'they owe net') : t('banking.settled', 'settled')}
+            </p>
           </div>
         </div>
+          )
+        })()}
         </>
         )
       })()}
@@ -979,22 +1049,43 @@ export function CounterpartyDetailPage() {
               <span className="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{invTotalCount}</span>
             )}
           </button>
+          {linkedCustomerId && (
+            <button
+              onClick={() => setActiveTab('outgoing')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'outgoing'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {t('banking.outgoingInvoices', 'Outgoing Invoices')}
+              {outTotalCount > 0 && (
+                <span className="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{outTotalCount}</span>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
       {/* Account Tab — unified ledger */}
       {activeTab === 'account' && (() => {
+        // Sign convention: positive amount = we owe them more / they owe us less
+        //   incoming invoice (they bill us)    → +amount (we owe more)
+        //   outgoing invoice (we bill them)    → -amount (they owe us)
+        //   payment we sent (tx amount < 0)    → -amount (reduces our debt)
+        //   payment we received (tx amount > 0)→ -amount (reduces their debt to us)
+        // Final balance: > 0 = we owe them; < 0 = they owe us.
         interface LedgerEntry {
           date: string
           description: string
           amount: number
-          type: 'invoice' | 'payment'
+          type: 'invoice' | 'outgoing-invoice' | 'payment' | 'payment-received'
           id: string
         }
 
         const entries: LedgerEntry[] = []
 
-        // Add invoices (what they billed us — positive = we owe)
+        // Incoming invoices (they bill us)
         for (const inv of cpInvoices) {
           entries.push({
             date: inv.invoiceDate || inv.createdAt?.split('T')[0] || '',
@@ -1005,19 +1096,42 @@ export function CounterpartyDetailPage() {
           })
         }
 
-        // Add payments (what we paid — negative amounts become positive payments)
+        // Outgoing invoices (we bill them)
+        for (const inv of allOutInvoices) {
+          entries.push({
+            date: inv.invoiceDate || '',
+            description: `${t('banking.outgoingInvoice', 'Outgoing Invoice')}: ${inv.invoiceNumber}`,
+            amount: -parseFloat(inv.totalGross || '0'),
+            type: 'outgoing-invoice',
+            id: `out-${inv.id}`,
+          })
+        }
+
+        // Bank transactions — split debits/credits
         for (const tx of transactions) {
-          if (parseFloat(tx.amount) >= 0) continue // skip credits (incoming payments to us)
+          const amt = parseFloat(tx.amount)
           const matchInfo = tx.matchedInvoice
             ? ` → ${tx.matchedInvoice.invoiceNumber}`
             : ''
-          entries.push({
-            date: tx.entryDate,
-            description: `${t('banking.payment', 'Payment')}${matchInfo}`,
-            amount: parseFloat(tx.amount), // negative
-            type: 'payment',
-            id: `tx-${tx.id}`,
-          })
+          if (amt < 0) {
+            // Payment we sent → reduces what we owe them
+            entries.push({
+              date: tx.entryDate,
+              description: `${t('banking.payment', 'Payment')}${matchInfo}`,
+              amount: amt, // negative
+              type: 'payment',
+              id: `tx-${tx.id}`,
+            })
+          } else if (amt > 0) {
+            // Payment we received → reduces what they owe us (negative side of net)
+            entries.push({
+              date: tx.entryDate,
+              description: `${t('banking.paymentReceived', 'Payment received')}${matchInfo}`,
+              amount: -amt, // negative net change
+              type: 'payment-received',
+              id: `tx-${tx.id}`,
+            })
+          }
         }
 
         // Always sort ascending first to compute running balance correctly
@@ -1058,21 +1172,28 @@ export function CounterpartyDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ledgerRows.map(row => (
+                  {ledgerRows.map(row => {
+                    // Soll = increases our liability to them (we owe more)
+                    //        = incoming invoice + payment we received (no longer their receivable)
+                    // Haben = decreases our liability (they owe us more)
+                    //        = outgoing invoice + payment we sent
+                    const isSoll = row.type === 'invoice' || row.type === 'payment-received'
+                    return (
                     <tr key={row.id} className="border-b">
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{formatDate(row.date)}</td>
                       <td className="px-4 py-2.5 text-gray-900">{row.description}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums font-medium text-gray-900">
-                        {row.type === 'invoice' ? formatCurrency(Math.abs(row.amount)) : ''}
+                        {isSoll ? formatCurrency(Math.abs(row.amount)) : ''}
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums font-medium text-gray-900">
-                        {row.type === 'payment' ? formatCurrency(Math.abs(row.amount)) : ''}
+                        {!isSoll ? formatCurrency(Math.abs(row.amount)) : ''}
                       </td>
                       <td className={`whitespace-nowrap px-4 py-2.5 text-right tabular-nums font-medium ${row.balance > 0.01 ? 'text-orange-600' : row.balance < -0.01 ? 'text-green-600' : 'text-gray-900'}`}>
                         {row.balance < 0 ? `-${formatCurrency(Math.abs(row.balance))}` : formatCurrency(row.balance)}
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1415,6 +1536,80 @@ export function CounterpartyDetailPage() {
         </div>
         )
       })()}
+
+      {/* Outgoing Invoices Tab */}
+      {activeTab === 'outgoing' && (
+        <div className="space-y-4">
+          {outLoading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div>
+          ) : outInvoices.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <Receipt className="mx-auto h-10 w-10 mb-2 opacity-50" />
+              <p>{t('banking.noOutgoingInvoices', 'No outgoing invoices')}</p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto rounded-lg border bg-white">
+                <table className="w-full table-fixed text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                      <th className="w-[12%] cursor-pointer px-4 py-3" onClick={() => { setOutSortBy('invoiceDate'); setOutSortOrder(outSortBy === 'invoiceDate' && outSortOrder === 'desc' ? 'asc' : 'desc') }}>
+                        <span className="inline-flex items-center gap-1">{t('incomingInvoices.date')}{outSortBy === 'invoiceDate' ? (outSortOrder === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />) : <ArrowUpDown className="h-3.5 w-3.5" />}</span>
+                      </th>
+                      <th className="w-[18%] cursor-pointer px-4 py-3" onClick={() => { setOutSortBy('invoiceNumber'); setOutSortOrder(outSortBy === 'invoiceNumber' && outSortOrder === 'desc' ? 'asc' : 'desc') }}>
+                        <span className="inline-flex items-center gap-1">{t('incomingInvoices.invoiceNumber')}{outSortBy === 'invoiceNumber' ? (outSortOrder === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />) : <ArrowUpDown className="h-3.5 w-3.5" />}</span>
+                      </th>
+                      <th className="px-4 py-3">{t('contracts.title', 'Contract')}</th>
+                      <th className="w-[14%] cursor-pointer px-4 py-3 text-right" onClick={() => { setOutSortBy('totalGross'); setOutSortOrder(outSortBy === 'totalGross' && outSortOrder === 'desc' ? 'asc' : 'desc') }}>
+                        <span className="inline-flex items-center justify-end gap-1">{t('incomingInvoices.grossAmount')}{outSortBy === 'totalGross' ? (outSortOrder === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />) : <ArrowUpDown className="h-3.5 w-3.5" />}</span>
+                      </th>
+                      <th className="w-[10%] px-4 py-3">{t('incomingInvoices.statusLabel')}</th>
+                      <th className="w-[8%] px-4 py-3 text-right">{t('common.actions', 'Actions')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {outInvoices.map((inv: any) => (
+                      <tr key={inv.id} className="border-b hover:bg-gray-50">
+                        <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{formatDate(inv.invoiceDate)}</td>
+                        <td className="px-4 py-2.5">
+                          <Link to={`/invoices/${inv.id}`} className="text-blue-600 hover:underline">{inv.invoiceNumber}</Link>
+                        </td>
+                        <td className="px-4 py-2.5 text-gray-600 truncate" title={inv.contractName}>{inv.contractName || '—'}</td>
+                        <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{formatCurrency(inv.totalGross)}</td>
+                        <td className="px-4 py-2.5">
+                          <Badge variant="secondary" className={inv.isPaid ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}>
+                            {inv.isPaid ? t('banking.paid', 'Paid') : inv.status}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          {inv.pdfUrl && (
+                            <a href={inv.pdfUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-gray-500 hover:text-gray-700" title="PDF">
+                              <FileText className="h-4 w-4" />
+                            </a>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {outTotalCount > 50 && (
+                <div className="flex items-center justify-between text-sm text-gray-600">
+                  <span>{outPage * 50 - 49}–{Math.min(outPage * 50, outTotalCount)} of {outTotalCount}</span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setOutPage(outPage - 1)} disabled={outPage <= 1} className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                      <ChevronLeft className="h-4 w-4" />{t('common.pagination.previous')}
+                    </button>
+                    <button onClick={() => setOutPage(outPage + 1)} disabled={!outHasNextPage} className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                      {t('common.pagination.next')}<ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Transaction Match Sheet */}
       <TransactionMatchSheet

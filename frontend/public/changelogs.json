@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.31.0",
+    "date": "2026-05-11",
+    "title": "Counterparty: Outgoing Invoices + erweiterte Saldenberechnung",
+    "description": "Counterparty-Detail-Seite zeigt jetzt auch Ausgangsrechnungen (wenn Customer verknüpft). Account-Tab integriert beide Richtungen mit korrekter Soll/Haben/Netto-Saldo-Berechnung.",
+    "type": "feature",
+    "details": [
+      "Neuer Tab Outgoing Invoices auf Counterparty-Detail-Seite (sortierbar, paginiert, mit PDF-Link)",
+      "Account-Tab erweitert: zeigt Incoming + Outgoing Invoices + bezahlte UND erhaltene Banktransaktionen mit konsistenter Soll/Haben-Logik",
+      "Summary-Cards von 4 auf 5 erweitert: Eingang, Ausgang, Bezahlt, Outstanding (mit weOwe/theyOwe Split), Saldo netto",
+      "Netto-Saldo: positiv → wir schulden, negativ → sie schulden",
+      "Tab nur sichtbar wenn Counterparty mit Customer verknüpft ist"
+    ]
+  },
+  {
     "version": "2.30.4",
     "date": "2026-05-11",
     "title": "Department Analysis CSV Export: RFC 4180 + Deutsches Zahlenformat",

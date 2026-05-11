@@ -2043,7 +2043,19 @@
       "allSuggestionsMatched": "All invoices from this customer are matched",
       "autoClosed": "Match saved",
       "undo": "Undo"
-    }
+    },
+    "outgoingInvoices": "Outgoing Invoices",
+    "outgoingInvoice": "Outgoing Invoice",
+    "invoicedByThem": "Invoiced (in)",
+    "invoicedByUs": "Invoiced (out)",
+    "paymentReceived": "Payment received",
+    "weOwe": "we owe",
+    "theyOwe": "they owe",
+    "netBalance": "Net Balance",
+    "weOweNet": "we owe (net)",
+    "theyOweNet": "they owe (net)",
+    "settled": "settled",
+    "noOutgoingInvoices": "No outgoing invoices"
   },
   "liquidity": {
     "title": "Liquidity Forecast",

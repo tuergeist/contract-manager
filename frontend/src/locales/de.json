@@ -2043,7 +2043,19 @@
       "allSuggestionsMatched": "Alle Rechnungen dieses Kunden sind zugeordnet",
       "autoClosed": "Match gespeichert",
       "undo": "Rückgängig"
-    }
+    },
+    "outgoingInvoices": "Ausgangsrechnungen",
+    "outgoingInvoice": "Ausgangsrechnung",
+    "invoicedByThem": "Eingang (Rechnungen)",
+    "invoicedByUs": "Ausgang (Rechnungen)",
+    "paymentReceived": "Zahlung erhalten",
+    "weOwe": "wir schulden",
+    "theyOwe": "sie schulden",
+    "netBalance": "Saldo netto",
+    "weOweNet": "wir schulden (netto)",
+    "theyOweNet": "sie schulden (netto)",
+    "settled": "ausgeglichen",
+    "noOutgoingInvoices": "Keine Ausgangsrechnungen"
   },
   "liquidity": {
     "title": "Liquiditätsvorschau",
