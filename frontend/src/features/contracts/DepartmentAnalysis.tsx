@@ -25,6 +25,9 @@ const DEPARTMENT_TIME_ANALYSIS = gql`
         userName
         totalHours
         absenceDays
+        sickDays
+        sickCertificateDays
+        sickChildDays
         departments {
           departmentName
           hours
@@ -35,6 +38,9 @@ const DEPARTMENT_TIME_ANALYSIS = gql`
         userName
         totalHours
         absenceDays
+        sickDays
+        sickCertificateDays
+        sickChildDays
         departments {
           departmentName
           hours
@@ -180,7 +186,7 @@ function DepartmentAnalysisContent() {
   // Get unique department names from distribution for matrix columns
   const deptNames = distribution.map((d: { departmentName: string }) => d.departmentName)
 
-  type MatrixRow = { userName: string; totalHours: number; absenceDays: number | null; departments: { departmentName: string; hours: number; percentage: number }[] }
+  type MatrixRow = { userName: string; totalHours: number; absenceDays: number | null; sickDays: number | null; sickCertificateDays: number | null; sickChildDays: number | null; departments: { departmentName: string; hours: number; percentage: number }[] }
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -207,6 +213,12 @@ function DepartmentAnalysisContent() {
         cmp = a.userName.localeCompare(b.userName)
       } else if (sortBy === '__absence') {
         cmp = (a.absenceDays || 0) - (b.absenceDays || 0)
+      } else if (sortBy === '__sick') {
+        cmp = (a.sickDays || 0) - (b.sickDays || 0)
+      } else if (sortBy === '__sickCert') {
+        cmp = (a.sickCertificateDays || 0) - (b.sickCertificateDays || 0)
+      } else if (sortBy === '__sickChild') {
+        cmp = (a.sickChildDays || 0) - (b.sickChildDays || 0)
       } else if (sortBy === '__total') {
         cmp = a.totalHours - b.totalHours
       } else {
@@ -525,18 +537,61 @@ function DepartmentAnalysisContent() {
           <div className="rounded-lg border bg-white p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-medium text-gray-900">{t('departmentAnalysis.userMatrix')}</h2>
-              <div className="flex rounded-md border">
+              <div className="flex items-center gap-2">
+                <div className="flex rounded-md border">
+                  <button
+                    onClick={() => setShowPercentage(false)}
+                    className={`px-3 py-1 text-sm ${!showPercentage ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    {t('departmentAnalysis.showHours')}
+                  </button>
+                  <button
+                    onClick={() => setShowPercentage(true)}
+                    className={`border-l px-3 py-1 text-sm ${showPercentage ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    {t('departmentAnalysis.showPercentage')}
+                  </button>
+                </div>
                 <button
-                  onClick={() => setShowPercentage(false)}
-                  className={`px-3 py-1 text-sm ${!showPercentage ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                  onClick={() => {
+                    const header = [
+                      t('departmentAnalysis.user'),
+                      t('departmentAnalysis.absenceDays'),
+                      t('departmentAnalysis.sickDays'),
+                      t('departmentAnalysis.sickCertificateDays'),
+                      t('departmentAnalysis.sickChildDays'),
+                      ...deptNames,
+                      t('departmentAnalysis.total'),
+                    ].join(';')
+                    const rows = sortedMatrix.map((row: MatrixRow) => {
+                      const cells = [
+                        row.userName,
+                        row.absenceDays != null ? row.absenceDays.toFixed(1) : '',
+                        row.sickDays != null ? row.sickDays.toFixed(1) : '',
+                        row.sickCertificateDays != null ? row.sickCertificateDays.toFixed(1) : '',
+                        row.sickChildDays != null ? row.sickChildDays.toFixed(1) : '',
+                        ...deptNames.map((name: string) => {
+                          const cell = row.departments.find((d: { departmentName: string }) => d.departmentName === name)
+                          if (!cell) return showPercentage ? '0.0' : '0.0'
+                          return showPercentage ? cell.percentage.toFixed(1) : cell.hours.toFixed(1)
+                        }),
+                        row.totalHours.toFixed(1),
+                      ]
+                      return cells.join(';')
+                    })
+                    const csv = [header, ...rows].join('\n')
+                    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `user-matrix-${dateFrom}-${dateTo}.csv`
+                    a.click()
+                    URL.revokeObjectURL(url)
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:bg-gray-50"
+                  title={t('departmentAnalysis.exportUserMatrix', 'User-Matrix exportieren')}
                 >
-                  {t('departmentAnalysis.showHours')}
-                </button>
-                <button
-                  onClick={() => setShowPercentage(true)}
-                  className={`border-l px-3 py-1 text-sm ${showPercentage ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                >
-                  {t('departmentAnalysis.showPercentage')}
+                  <Download className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -555,15 +610,48 @@ function DepartmentAnalysisContent() {
                       </div>
                     </th>
                     {hasAbsenceData && (
-                      <th
-                        className="cursor-pointer px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
-                        onClick={() => handleSort('__absence')}
-                      >
-                        <div className="flex items-center justify-end">
-                          {t('departmentAnalysis.absenceDays')}
-                          <SortIcon field="__absence" />
-                        </div>
-                      </th>
+                      <>
+                        <th
+                          className="cursor-pointer px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                          onClick={() => handleSort('__absence')}
+                          title={t('departmentAnalysis.absenceDaysHint', 'Gesamt-Abwesenheitstage')}
+                        >
+                          <div className="flex items-center justify-end">
+                            {t('departmentAnalysis.absenceDays')}
+                            <SortIcon field="__absence" />
+                          </div>
+                        </th>
+                        <th
+                          className="cursor-pointer px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                          onClick={() => handleSort('__sick')}
+                          title={t('departmentAnalysis.sickDaysHint', 'Krank ohne Krankenschein')}
+                        >
+                          <div className="flex items-center justify-end">
+                            {t('departmentAnalysis.sickDays')}
+                            <SortIcon field="__sick" />
+                          </div>
+                        </th>
+                        <th
+                          className="cursor-pointer px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                          onClick={() => handleSort('__sickCert')}
+                          title={t('departmentAnalysis.sickCertificateDaysHint', 'Krank mit Krankenschein (AU)')}
+                        >
+                          <div className="flex items-center justify-end">
+                            {t('departmentAnalysis.sickCertificateDays')}
+                            <SortIcon field="__sickCert" />
+                          </div>
+                        </th>
+                        <th
+                          className="cursor-pointer px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
+                          onClick={() => handleSort('__sickChild')}
+                          title={t('departmentAnalysis.sickChildDaysHint', 'Kind krank')}
+                        >
+                          <div className="flex items-center justify-end">
+                            {t('departmentAnalysis.sickChildDays')}
+                            <SortIcon field="__sickChild" />
+                          </div>
+                        </th>
+                      </>
                     )}
                     {deptNames.map((name: string) => (
                       <th
@@ -593,9 +681,20 @@ function DepartmentAnalysisContent() {
                     <tr key={row.userName}>
                       <td className="px-6 py-3 text-sm font-medium text-gray-900">{row.userName}</td>
                       {hasAbsenceData && (
-                        <td className={`px-6 py-3 text-right text-sm ${row.absenceDays && row.absenceDays > 0 ? 'text-orange-600 font-medium' : 'text-gray-300'}`}>
-                          {row.absenceDays != null ? row.absenceDays.toFixed(1) : '-'}
-                        </td>
+                        <>
+                          <td className={`px-6 py-3 text-right text-sm ${row.absenceDays && row.absenceDays > 0 ? 'text-orange-600 font-medium' : 'text-gray-300'}`}>
+                            {row.absenceDays != null ? row.absenceDays.toFixed(1) : '-'}
+                          </td>
+                          <td className={`px-6 py-3 text-right text-sm ${row.sickDays && row.sickDays > 0 ? 'text-red-600' : 'text-gray-300'}`}>
+                            {row.sickDays != null && row.sickDays > 0 ? row.sickDays.toFixed(1) : '-'}
+                          </td>
+                          <td className={`px-6 py-3 text-right text-sm ${row.sickCertificateDays && row.sickCertificateDays > 0 ? 'text-red-700 font-medium' : 'text-gray-300'}`}>
+                            {row.sickCertificateDays != null && row.sickCertificateDays > 0 ? row.sickCertificateDays.toFixed(1) : '-'}
+                          </td>
+                          <td className={`px-6 py-3 text-right text-sm ${row.sickChildDays && row.sickChildDays > 0 ? 'text-amber-600' : 'text-gray-300'}`}>
+                            {row.sickChildDays != null && row.sickChildDays > 0 ? row.sickChildDays.toFixed(1) : '-'}
+                          </td>
+                        </>
                       )}
                       {deptNames.map((name: string) => {
                         const cell = row.departments.find((d: { departmentName: string }) => d.departmentName === name)

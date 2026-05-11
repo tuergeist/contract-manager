@@ -2276,7 +2276,15 @@
     "filled": "Aufgefüllt",
     "absenceDays": "Abwesenheitstage",
     "allocationTab": "Zeitverteilung",
-    "absencesTab": "Fehlzeiten"
+    "absencesTab": "Fehlzeiten",
+    "sickDays": "Krank",
+    "sickCertificateDays": "Krank (AU)",
+    "sickChildDays": "Kind krank",
+    "sickDaysHint": "Krank ohne Krankenschein",
+    "sickCertificateDaysHint": "Krank mit Krankenschein (Arbeitsunfähigkeitsbescheinigung)",
+    "sickChildDaysHint": "Kind krank",
+    "absenceDaysHint": "Gesamt-Abwesenheitstage (inkl. Urlaub und Krank)",
+    "exportUserMatrix": "User-Matrix als CSV exportieren"
   },
   "absenceReport": {
     "generate": "Report generieren",

@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.30.3",
+    "date": "2026-05-11",
+    "title": "Department Analysis: Krankheits-Aufschlüsselung",
+    "description": "Die Abwesenheitsspalte im Department Analysis Report wird jetzt um drei differenzierte Krankheits-Spalten erweitert: Krank (ohne KS), Krank (AU), Kind krank. Auch im neuen User-Matrix-Export.",
+    "type": "feature",
+    "details": [
+      "Neue Spalten Krank / Krank (AU) / Kind krank in der User-Matrix",
+      "Mapping: Clockodo-Typ 4+12 → Krank, 11 → Krank (AU), 5 → Kind krank",
+      "Spalten sortierbar wie alle anderen",
+      "Neuer CSV-Export für User-Matrix (vorher gab es nur FTE-Distribution-Export)",
+      "Export enthält Gesamt-Abwesenheit + alle drei Krankheits-Kategorien"
+    ]
+  },
+  {
     "version": "2.30.2",
     "date": "2026-05-08",
     "title": "Auftragsbestätigung neu erzeugen",

@@ -1885,6 +1885,9 @@ class UserDepartmentRow:
     departments: list[UserDepartmentHours]
     total_hours: float
     absence_days: float | None = None
+    sick_days: float | None = None
+    sick_certificate_days: float | None = None
+    sick_child_days: float | None = None
 
 
 @strawberry.type
@@ -3816,6 +3819,9 @@ class ContractQuery:
 
         # Fetch absences (cached per year)
         user_absence_days: dict[str, float] = defaultdict(float)
+        user_sick_days: dict[str, float] = defaultdict(float)
+        user_sick_certificate_days: dict[str, float] = defaultdict(float)
+        user_sick_child_days: dict[str, float] = defaultdict(float)
         try:
             period_start = date.fromisoformat(date_from) if isinstance(date_from, str) else date_from
             period_end = date.fromisoformat(date_to) if isinstance(date_to, str) else date_to
@@ -3858,7 +3864,7 @@ class ContractQuery:
 
                 # If the absence fully falls within the period, use count_days directly
                 if ab_start >= period_start and ab_end <= period_end:
-                    user_absence_days[ab["user_id"]] += total_days
+                    counted_days = total_days
                 else:
                     # Partial overlap: pro-rate based on calendar days
                     absence_span = (ab_end - ab_start).days + 1
@@ -3866,7 +3872,27 @@ class ContractQuery:
                     overlap_end = min(ab_end, period_end)
                     overlap_days = (overlap_end - overlap_start).days + 1
                     if absence_span > 0:
-                        user_absence_days[ab["user_id"]] += total_days * (overlap_days / absence_span)
+                        counted_days = total_days * (overlap_days / absence_span)
+                    else:
+                        counted_days = 0
+
+                if counted_days <= 0:
+                    continue
+
+                uid = ab["user_id"]
+                user_absence_days[uid] += counted_days
+
+                # Categorize sick-related absences for sub-totals
+                try:
+                    normalized = provider.normalize_absence_type(ab.get("type", 0))
+                except Exception:
+                    normalized = "other"
+                if normalized == "sick":
+                    user_sick_days[uid] += counted_days
+                elif normalized == "sick_certificate":
+                    user_sick_certificate_days[uid] += counted_days
+                elif normalized == "sick_child":
+                    user_sick_child_days[uid] += counted_days
         except Exception:
             pass  # Absences are optional, don't fail the whole analysis
 
@@ -3968,6 +3994,15 @@ class ContractQuery:
                 return round(user_absence_days[uid], 1)
             return None
 
+        def _get_sick_breakdown(user_name: str) -> tuple[float | None, float | None, float | None]:
+            uid = name_to_user_id.get(user_name)
+            if not uid:
+                return (None, None, None)
+            sick = round(user_sick_days[uid], 1) if uid in user_sick_days else None
+            cert = round(user_sick_certificate_days[uid], 1) if uid in user_sick_certificate_days else None
+            child = round(user_sick_child_days[uid], 1) if uid in user_sick_child_days else None
+            return (sick, cert, child)
+
         # Unfilled matrix (raw hours)
         all_unfilled_users = sorted(set(list(unfilled_user_dept_hours.keys()) + list(user_dept_hours.keys())))
         user_matrix = []
@@ -3978,11 +4013,15 @@ class ContractQuery:
                 h = round(unfilled_user_dept_hours.get(user_name, {}).get(dept_name, 0), 2)
                 pct = round((h / user_total * 100) if user_total > 0 else 0, 1)
                 dept_entries.append(UserDepartmentHours(department_name=dept_name, hours=h, percentage=pct))
+            sick, cert, child = _get_sick_breakdown(user_name)
             user_matrix.append(UserDepartmentRow(
                 user_name=user_name,
                 departments=dept_entries,
                 total_hours=round(user_total, 2),
                 absence_days=_get_absence_days(user_name),
+                sick_days=sick,
+                sick_certificate_days=cert,
+                sick_child_days=child,
             ))
 
         # Filled matrix (after backfill) — only if backfilling actually occurred
@@ -3996,11 +4035,15 @@ class ContractQuery:
                     h = round(user_dept_hours[user_name].get(dept_name, 0), 2)
                     pct = round((h / user_total * 100) if user_total > 0 else 0, 1)
                     dept_entries.append(UserDepartmentHours(department_name=dept_name, hours=h, percentage=pct))
+                sick, cert, child = _get_sick_breakdown(user_name)
                 user_matrix_filled.append(UserDepartmentRow(
                     user_name=user_name,
                     departments=dept_entries,
                     total_hours=round(user_total, 2),
                     absence_days=_get_absence_days(user_name),
+                    sick_days=sick,
+                    sick_certificate_days=cert,
+                    sick_child_days=child,
                 ))
 
         # Cost computation

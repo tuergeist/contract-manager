@@ -2276,7 +2276,15 @@
     "filled": "Filled",
     "absenceDays": "Absent days",
     "allocationTab": "Time Allocation",
-    "absencesTab": "Absences"
+    "absencesTab": "Absences",
+    "sickDays": "Sick",
+    "sickCertificateDays": "Sick (cert.)",
+    "sickChildDays": "Sick (child)",
+    "sickDaysHint": "Sick without certificate",
+    "sickCertificateDaysHint": "Sick with medical certificate",
+    "sickChildDaysHint": "Child sick",
+    "absenceDaysHint": "Total absence days (incl. vacation and sick)",
+    "exportUserMatrix": "Export user matrix as CSV"
   },
   "absenceReport": {
     "generate": "Generate Report",
