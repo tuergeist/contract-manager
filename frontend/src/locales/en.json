@@ -43,7 +43,8 @@
     },
     "copy": "Copy",
     "copied": "Copied",
-    "done": "Done"
+    "done": "Done",
+    "of": "of"
   },
   "search": {
     "pages": "Pages",
@@ -2063,7 +2064,10 @@
     "received": "Received",
     "creditNote": "Credit Note",
     "cancels": "cancels",
-    "overpaid": "overpaid"
+    "overpaid": "overpaid",
+    "imported": "imported",
+    "showingFirst": "Showing first",
+    "yearScopedHint": "Showing entries for {{year}} only — switch to Total for all years"
   },
   "liquidity": {
     "title": "Liquidity Forecast",

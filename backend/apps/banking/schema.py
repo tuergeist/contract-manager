@@ -123,6 +123,7 @@ class BankTransactionType:
     account_name: str
     cost_center: CostCenterType | None = None
     matched_invoice: InvoiceMatchInfoType | None = None
+    matched_invoices: List[InvoiceMatchInfoType] = strawberry.field(default_factory=list)
 
 
 @strawberry.type
@@ -491,14 +492,16 @@ def _make_counterparty_type(cp) -> CounterpartyType:
 def _make_transaction_type(t, include_invoice_match: bool = True) -> BankTransactionType:
     """Convert a BankTransaction model to BankTransactionType."""
     matched_invoice = None
+    matched_invoices: list[InvoiceMatchInfoType] = []
     if include_invoice_match:
-        # Check for invoice matches
-        match = getattr(t, "first_invoice_match", None)
-        if match is None and hasattr(t, "invoice_matches"):
-            match = t.invoice_matches.first()
-        if match:
+        # Collect ALL matches (a payment can be matched against multiple invoices)
+        all_matches = []
+        if hasattr(t, "invoice_matches"):
+            all_matches = list(t.invoice_matches.all())
+        for match in all_matches:
+            info: InvoiceMatchInfoType | None = None
             if match.invoice_id:
-                matched_invoice = InvoiceMatchInfoType(
+                info = InvoiceMatchInfoType(
                     invoice_id=strawberry.ID(str(match.invoice_id)),
                     invoice_number=match.invoice.invoice_number or "",
                     match_type=match.match_type,
@@ -508,7 +511,7 @@ def _make_transaction_type(t, include_invoice_match: bool = True) -> BankTransac
                     invoice_type="imported",
                 )
             elif match.invoice_record_id:
-                matched_invoice = InvoiceMatchInfoType(
+                info = InvoiceMatchInfoType(
                     invoice_id=strawberry.ID(str(match.invoice_record_id)),
                     invoice_number=match.invoice_record.invoice_number or "",
                     match_type=match.match_type,
@@ -519,7 +522,7 @@ def _make_transaction_type(t, include_invoice_match: bool = True) -> BankTransac
                 )
             elif match.incoming_invoice_id:
                 inc = match.incoming_invoice
-                matched_invoice = InvoiceMatchInfoType(
+                info = InvoiceMatchInfoType(
                     invoice_id=strawberry.ID(str(inc.id)),
                     invoice_number=inc.invoice_number or inc.original_filename,
                     match_type=match.match_type,
@@ -528,6 +531,10 @@ def _make_transaction_type(t, include_invoice_match: bool = True) -> BankTransac
                     customer_id=None,
                     invoice_type="incoming",
                 )
+            if info is not None:
+                matched_invoices.append(info)
+        # Preserve legacy single-match field
+        matched_invoice = matched_invoices[0] if matched_invoices else None
 
     return BankTransactionType(
         id=t.id,
@@ -542,6 +549,7 @@ def _make_transaction_type(t, include_invoice_match: bool = True) -> BankTransac
         account_name=t.account.name,
         cost_center=_make_cost_center_type(getattr(t, "cost_center", None)),
         matched_invoice=matched_invoice,
+        matched_invoices=matched_invoices,
     )
 
 

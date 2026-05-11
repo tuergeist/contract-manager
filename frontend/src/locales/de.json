@@ -43,7 +43,8 @@
     },
     "copy": "Kopieren",
     "copied": "Kopiert",
-    "done": "Fertig"
+    "done": "Fertig",
+    "of": "von"
   },
   "search": {
     "pages": "Seiten",
@@ -2063,7 +2064,10 @@
     "received": "Eingegangen",
     "creditNote": "Gutschrift",
     "cancels": "storniert",
-    "overpaid": "überzahlt"
+    "overpaid": "überzahlt",
+    "imported": "importiert",
+    "showingFirst": "Zeige erste",
+    "yearScopedHint": "Zeigt nur Einträge aus {{year}} — Total wählen für alle Jahre"
   },
   "liquidity": {
     "title": "Liquiditätsvorschau",

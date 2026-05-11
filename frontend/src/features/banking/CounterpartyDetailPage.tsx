@@ -119,6 +119,11 @@ const BANK_TRANSACTIONS = gql`
           invoiceNumber
           invoiceType
         }
+        matchedInvoices {
+          invoiceId
+          invoiceNumber
+          invoiceType
+        }
       }
       totalCount
       page
@@ -306,6 +311,7 @@ interface BankTransaction {
   reference: string
   accountName: string
   matchedInvoice: { invoiceId: string; invoiceNumber: string; invoiceType: string } | null
+  matchedInvoices?: { invoiceId: string; invoiceNumber: string; invoiceType: string }[]
 }
 
 interface CounterpartySummary {
@@ -1128,6 +1134,14 @@ export function CounterpartyDetailPage() {
 
       {/* Account Tab — type-aware ledger */}
       {activeTab === 'account' && (() => {
+        // Filter ledger entries by the selected year so it stays consistent
+        // with the year-scoped summary cards above. Bank transactions are
+        // already server-filtered via summaryDateFrom/To.
+        const ledgerInYear = (iso?: string | null) => {
+          if (summaryYear === 'total') return true
+          if (!iso) return false
+          return iso.startsWith(summaryYear)
+        }
         // Debitor ledger (customer account): balance > 0 = they owe us
         //   outgoing invoice  → Soll  +gross
         //   outgoing storno   → Haben -gross (credit note reduces their debt)
@@ -1150,6 +1164,7 @@ export function CounterpartyDetailPage() {
         if (accountType === 'debtor') {
           // Outgoing invoices + stornos
           for (const inv of allOutInvoices) {
+            if (!ledgerInYear(inv.invoiceDate)) continue
             const isStorno = inv.documentType === 'storno'
             const gross = parseFloat(inv.totalGross || '0')
             entries.push({
@@ -1168,7 +1183,12 @@ export function CounterpartyDetailPage() {
           for (const tx of transactions) {
             const amt = parseFloat(tx.amount)
             if (amt <= 0) continue
-            const matchInfo = tx.matchedInvoice ? ` → ${tx.matchedInvoice.invoiceNumber}` : ''
+            const matches = tx.matchedInvoices && tx.matchedInvoices.length > 0
+              ? tx.matchedInvoices
+              : tx.matchedInvoice ? [tx.matchedInvoice] : []
+            const matchInfo = matches.length > 0
+              ? ` → ${matches.map(m => m.invoiceNumber).join(', ')}`
+              : ''
             entries.push({
               date: tx.entryDate,
               description: `${t('banking.paymentReceived', 'Payment received')}${matchInfo}`,
@@ -1182,6 +1202,8 @@ export function CounterpartyDetailPage() {
         } else {
           // Creditor: incoming invoices + payments sent
           for (const inv of cpInvoices) {
+            const invDate = inv.invoiceDate || inv.createdAt?.split('T')[0] || ''
+            if (!ledgerInYear(invDate)) continue
             entries.push({
               date: inv.invoiceDate || inv.createdAt?.split('T')[0] || '',
               description: `${t('incomingInvoices.invoiceNumber')}: ${inv.invoiceNumber || inv.originalFilename}`,
@@ -1223,6 +1245,11 @@ export function CounterpartyDetailPage() {
 
         return (
         <div className="space-y-4">
+          {summaryYear !== 'total' && (
+            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              {t('banking.yearScopedHint', 'Showing entries for {{year}} only — switch to "Total" to see all years', { year: summaryYear })}
+            </div>
+          )}
           {ledgerRows.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
               <FileText className="mx-auto h-10 w-10 mb-2 opacity-50" />

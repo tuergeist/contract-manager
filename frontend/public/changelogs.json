@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.31.3",
+    "date": "2026-05-11",
+    "title": "Counterparty: Multi-Match + Year-Filter im Account-Tab",
+    "description": "Banktransaktionen können gegen mehrere Rechnungen gematcht sein — alle werden jetzt angezeigt. Year-Filter wirkt jetzt auch auf den Account-Tab Ledger.",
+    "type": "bugfix",
+    "details": [
+      "Backend: BankTransactionType.matchedInvoices (List) liefert alle gematchten Rechnungen statt nur die erste",
+      "Account-Ledger zeigt im Description: → INV-VSX-26-0122, INV-VSX-26-0123, INV-VSX-26-0124",
+      "Account-Tab Ledger filtert jetzt Outgoing/Incoming-Invoices nach gewähltem Jahr (war vorher inkonsistent: Cards = Jahr, Ledger = alle Jahre)",
+      "Hinweis-Banner am Account-Tab wenn ein Jahr aktiv ist"
+    ]
+  },
+  {
     "version": "2.31.2",
     "date": "2026-05-11",
     "title": "Counterparty: importierte Rechnungen + funktionierender Jahresfilter",
