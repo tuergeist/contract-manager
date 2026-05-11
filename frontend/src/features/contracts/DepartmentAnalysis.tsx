@@ -554,6 +554,13 @@ function DepartmentAnalysisContent() {
                 </div>
                 <button
                   onClick={() => {
+                    // Quote fields containing the delimiter, quotes, or newlines (RFC 4180)
+                    const escape = (v: string | number): string => {
+                      const s = String(v)
+                      return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+                    }
+                    // German Excel expects comma as decimal separator with semicolon delimiter
+                    const num = (n: number, digits = 1): string => n.toFixed(digits).replace('.', ',')
                     const header = [
                       t('departmentAnalysis.user'),
                       t('departmentAnalysis.absenceDays'),
@@ -562,25 +569,26 @@ function DepartmentAnalysisContent() {
                       t('departmentAnalysis.sickChildDays'),
                       ...deptNames,
                       t('departmentAnalysis.total'),
-                    ].join(';')
+                    ].map(escape).join(';')
                     const rows = sortedMatrix.map((row: MatrixRow) => {
                       const cells = [
                         row.userName,
-                        row.absenceDays != null ? row.absenceDays.toFixed(1) : '',
-                        row.sickDays != null ? row.sickDays.toFixed(1) : '',
-                        row.sickCertificateDays != null ? row.sickCertificateDays.toFixed(1) : '',
-                        row.sickChildDays != null ? row.sickChildDays.toFixed(1) : '',
+                        row.absenceDays != null ? num(row.absenceDays) : '',
+                        row.sickDays != null ? num(row.sickDays) : '',
+                        row.sickCertificateDays != null ? num(row.sickCertificateDays) : '',
+                        row.sickChildDays != null ? num(row.sickChildDays) : '',
                         ...deptNames.map((name: string) => {
                           const cell = row.departments.find((d: { departmentName: string }) => d.departmentName === name)
-                          if (!cell) return showPercentage ? '0.0' : '0.0'
-                          return showPercentage ? cell.percentage.toFixed(1) : cell.hours.toFixed(1)
+                          if (!cell) return num(0)
+                          return num(showPercentage ? cell.percentage : cell.hours)
                         }),
-                        row.totalHours.toFixed(1),
+                        num(row.totalHours),
                       ]
-                      return cells.join(';')
+                      return cells.map(escape).join(';')
                     })
-                    const csv = [header, ...rows].join('\n')
-                    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+                    // BOM ensures Excel detects UTF-8 (umlauts in user names render correctly)
+                    const csv = '﻿' + [header, ...rows].join('\r\n')
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
                     const url = URL.createObjectURL(blob)
                     const a = document.createElement('a')
                     a.href = url

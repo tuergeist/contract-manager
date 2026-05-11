@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.30.4",
+    "date": "2026-05-11",
+    "title": "Department Analysis CSV Export: RFC 4180 + Deutsches Zahlenformat",
+    "description": "CSV-Export der User-Matrix erzeugt jetzt korrekte deutsche Excel-CSVs.",
+    "type": "bugfix",
+    "details": [
+      "RFC 4180 Quoting für Felder mit Semikolon, Anführungszeichen oder Zeilenumbruch",
+      "Komma als Dezimaltrennzeichen (3,5 statt 3.5) → German Excel parst nicht mehr fälschlich als 35",
+      "CRLF Zeilenenden (Windows/Excel-Standard)",
+      "Verifiziert mit Umlauten, Semikolons in Departments, Quotes in Usernames"
+    ]
+  },
+  {
     "version": "2.30.3",
     "date": "2026-05-11",
     "title": "Department Analysis: Krankheits-Aufschlüsselung",
