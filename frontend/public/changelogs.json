@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.31.1",
+    "date": "2026-05-11",
+    "title": "Counterparty: Debitor/Kreditor + Gutschriften",
+    "description": "Counterparty wird jetzt als Debitor oder Kreditor klassifiziert (Faustregel: Ausgangsrechnungen → Debitor). Soll/Haben und Saldo richten sich nach Konto-Art. Gutschriften (Stornos) heben Originalrechnungen korrekt auf.",
+    "type": "feature",
+    "details": [
+      "Debitor/Kreditor-Badge in der Headline (Faustregel: outgoing invoices vorhanden → Debitor)",
+      "Konto-spezifische Soll/Haben-Logik: Debitor → Ausgang=Soll, Zahlungseingang=Haben | Kreditor → Eingang=Haben, Zahlungsausgang=Soll",
+      "Gutschriften/Stornos in Outgoing-Liste als negativer Betrag mit Purple-Badge + storniert XYZ Hinweis",
+      "Outstanding-Berechnung berücksichtigt Stornos: voided Original + Storno → netto 0",
+      "Summary-Cards je nach Konto-Art angepasst (Debitor zeigt Ausgang/Eingegangen/Outstanding, Kreditor Eingang/Bezahlt/Outstanding)"
+    ]
+  },
+  {
     "version": "2.31.0",
     "date": "2026-05-11",
     "title": "Counterparty: Outgoing Invoices + erweiterte Saldenberechnung",

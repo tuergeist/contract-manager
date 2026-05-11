@@ -2055,7 +2055,15 @@
     "weOweNet": "wir schulden (netto)",
     "theyOweNet": "sie schulden (netto)",
     "settled": "ausgeglichen",
-    "noOutgoingInvoices": "Keine Ausgangsrechnungen"
+    "noOutgoingInvoices": "Keine Ausgangsrechnungen",
+    "debtor": "Debitor",
+    "creditor": "Kreditor",
+    "debtorHint": "Kunde — Soll: Ausgangsrechnung, Haben: Zahlungseingang",
+    "creditorHint": "Lieferant — Haben: Eingangsrechnung, Soll: Zahlungsausgang",
+    "received": "Eingegangen",
+    "creditNote": "Gutschrift",
+    "cancels": "storniert",
+    "overpaid": "überzahlt"
   },
   "liquidity": {
     "title": "Liquiditätsvorschau",

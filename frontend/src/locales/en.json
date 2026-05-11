@@ -2055,7 +2055,15 @@
     "weOweNet": "we owe (net)",
     "theyOweNet": "they owe (net)",
     "settled": "settled",
-    "noOutgoingInvoices": "No outgoing invoices"
+    "noOutgoingInvoices": "No outgoing invoices",
+    "debtor": "Debtor",
+    "creditor": "Creditor",
+    "debtorHint": "Customer — Soll: outgoing invoice, Haben: payment received",
+    "creditorHint": "Vendor — Haben: incoming invoice, Soll: payment sent",
+    "received": "Received",
+    "creditNote": "Credit Note",
+    "cancels": "cancels",
+    "overpaid": "overpaid"
   },
   "liquidity": {
     "title": "Liquidity Forecast",

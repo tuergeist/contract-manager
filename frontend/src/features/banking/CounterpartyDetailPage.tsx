@@ -256,6 +256,9 @@ const COUNTERPARTY_OUTGOING_INVOICES = gql`
         isPaid
         pdfUrl
         contractName
+        documentType
+        stornoOfId
+        stornoOfNumber
       }
       totalCount
       hasNextPage
@@ -439,6 +442,10 @@ export function CounterpartyDetailPage() {
     skip: !linkedCustomerId,
   })
   const allOutInvoices = outAllData?.invoiceRecords?.items || []
+  // Rule of thumb: if any outgoing invoices exist → counterparty is treated as a Debitor
+  // (customer account). Otherwise it's a Kreditor (vendor account). Different Soll/Haben
+  // conventions apply per account type.
+  const accountType: 'debtor' | 'creditor' = allOutInvoices.length > 0 ? 'debtor' : 'creditor'
 
   // Transactions query
   const { data: txData, loading: txLoading, refetch: txRefetch } = useQuery(BANK_TRANSACTIONS, {
@@ -658,6 +665,13 @@ export function CounterpartyDetailPage() {
         ) : (
           <>
             <h1 className="text-2xl font-bold text-gray-900">{summary?.name}</h1>
+            <Badge
+              variant="secondary"
+              className={accountType === 'debtor' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}
+              title={accountType === 'debtor' ? t('banking.debtorHint', 'Customer — Soll: outgoing invoice, Haben: payment received') : t('banking.creditorHint', 'Vendor — Haben: incoming invoice, Soll: payment sent')}
+            >
+              {accountType === 'debtor' ? t('banking.debtor', 'Debitor') : t('banking.creditor', 'Kreditor')}
+            </Badge>
             <button
               onClick={handleStartEdit}
               className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
@@ -925,85 +939,88 @@ export function CounterpartyDetailPage() {
           </button>
         </div>
         {(() => {
-          // Year-filter outgoing invoices to match the summaryYear toggle
           const inYear = (iso?: string) => {
             if (summaryYear === 'total' || !iso) return true
             return iso.startsWith(summaryYear)
           }
           const outFiltered = allOutInvoices.filter((inv: any) => inYear(inv.invoiceDate))
-          const totalOutgoing = outFiltered.reduce((sum: number, inv: any) => sum + parseFloat(inv.totalGross || '0'), 0)
+          // Signed: storno negates the original; voided pair → net 0
+          const totalOutgoingNet = outFiltered.reduce((sum: number, inv: any) => {
+            const amt = parseFloat(inv.totalGross || '0')
+            return sum + (inv.documentType === 'storno' ? -amt : amt)
+          }, 0)
           const invoiced = parseFloat(summary.totalInvoiced) || 0
           const paidToThem = Math.abs(parseFloat(summary.totalDebit) || 0)
           const receivedFromThem = parseFloat(summary.totalCredit) || 0
-          // Net position: positive = we owe them, negative = they owe us
-          const netPosition = (invoiced - paidToThem) - (totalOutgoing - receivedFromThem)
+          if (accountType === 'debtor') {
+            // Debitor: positive = they owe us
+            const outstandingFromThem = totalOutgoingNet - receivedFromThem
+            return (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+              <div className="rounded-lg border bg-white p-4">
+                <p className="text-sm font-medium text-gray-500">{t('banking.invoicedByUs', 'Invoiced (out)')}</p>
+                <p className="mt-1 text-xl font-semibold text-gray-900">{formatCurrency(totalOutgoingNet)}</p>
+                <p className="mt-1 text-xs text-gray-400">{outFiltered.length} {t('banking.outgoingInvoices', 'outgoing')}</p>
+              </div>
+              <div className="rounded-lg border bg-white p-4">
+                <p className="text-sm font-medium text-gray-500">{t('banking.received', 'Received')}</p>
+                <p className="mt-1 text-xl font-semibold text-green-600">{formatCurrency(receivedFromThem)}</p>
+                <p className="mt-1 text-xs text-gray-400">{summary.transactionCount} {t('banking.transactions')}</p>
+              </div>
+              <div className="rounded-lg border bg-white p-4">
+                <p className="text-sm font-medium text-gray-500">{t('banking.outstanding', 'Outstanding')}</p>
+                <p className={`mt-1 text-xl font-semibold ${outstandingFromThem > 0.01 ? 'text-orange-600' : outstandingFromThem < -0.01 ? 'text-blue-600' : 'text-gray-900'}`}>
+                  {formatCurrency(outstandingFromThem)}
+                </p>
+                <p className="mt-1 text-xs text-gray-400">
+                  {outstandingFromThem > 0.01 ? t('banking.theyOwe', 'they owe') : outstandingFromThem < -0.01 ? t('banking.overpaid', 'overpaid') : t('banking.settled', 'settled')}
+                </p>
+              </div>
+              <div className="rounded-lg border bg-white p-4">
+                <p className="text-sm font-medium text-gray-500">{t('banking.balance', 'Saldo')}</p>
+                <p className={`mt-1 text-xl font-semibold ${outstandingFromThem > 0.01 ? 'text-orange-600' : 'text-gray-900'}`}>
+                  {outstandingFromThem < 0 ? `-${formatCurrency(Math.abs(outstandingFromThem))}` : formatCurrency(outstandingFromThem)}
+                </p>
+                {summary.firstDate && summary.lastDate && (
+                  <p className="mt-1 text-xs text-gray-400">{formatDate(summary.firstDate)} – {formatDate(summary.lastDate)}</p>
+                )}
+              </div>
+            </div>
+            )
+          }
+          // Creditor: positive = we owe them
+          const outstandingToThem = invoiced - paidToThem
           return (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-5">
-          {/* Invoiced by them */}
-          <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm font-medium text-gray-500">{t('banking.invoicedByThem', 'Invoiced (in)')}</p>
-            <p className="mt-1 text-xl font-semibold text-gray-900">
-              {formatCurrency(summary.totalInvoiced)}
-            </p>
-            <p className="mt-1 text-xs text-gray-400">
-              {summary.invoiceCount} {t('incomingInvoices.title', 'invoices')}
-            </p>
-          </div>
-          {/* Invoiced by us */}
-          <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm font-medium text-gray-500">{t('banking.invoicedByUs', 'Invoiced (out)')}</p>
-            <p className="mt-1 text-xl font-semibold text-gray-900">
-              {formatCurrency(totalOutgoing)}
-            </p>
-            <p className="mt-1 text-xs text-gray-400">
-              {outFiltered.length} {t('banking.outgoingInvoices', 'outgoing')}
-            </p>
-          </div>
-          {/* Paid (what we paid them) */}
-          <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm font-medium text-gray-500">{t('banking.paid', 'Paid')}</p>
-            <p className="mt-1 text-xl font-semibold text-red-600">
-              {formatCurrency(paidToThem)}
-            </p>
-            <p className="mt-1 text-xs text-gray-400">
-              {summary.transactionCount} {t('banking.transactions')}
-              {receivedFromThem > 0 && (
-                <span className="text-green-600"> (+{formatCurrency(receivedFromThem)})</span>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+            <div className="rounded-lg border bg-white p-4">
+              <p className="text-sm font-medium text-gray-500">{t('banking.invoicedByThem', 'Invoiced (in)')}</p>
+              <p className="mt-1 text-xl font-semibold text-gray-900">{formatCurrency(summary.totalInvoiced)}</p>
+              <p className="mt-1 text-xs text-gray-400">{summary.invoiceCount} {t('incomingInvoices.title', 'invoices')}</p>
+            </div>
+            <div className="rounded-lg border bg-white p-4">
+              <p className="text-sm font-medium text-gray-500">{t('banking.paid', 'Paid')}</p>
+              <p className="mt-1 text-xl font-semibold text-red-600">{formatCurrency(paidToThem)}</p>
+              <p className="mt-1 text-xs text-gray-400">{summary.transactionCount} {t('banking.transactions')}</p>
+            </div>
+            <div className="rounded-lg border bg-white p-4">
+              <p className="text-sm font-medium text-gray-500">{t('banking.outstanding', 'Outstanding')}</p>
+              <p className={`mt-1 text-xl font-semibold ${outstandingToThem > 0.01 ? 'text-orange-600' : outstandingToThem < -0.01 ? 'text-green-600' : 'text-gray-900'}`}>
+                {formatCurrency(outstandingToThem)}
+              </p>
+              <p className="mt-1 text-xs text-gray-400">
+                {outstandingToThem > 0.01 ? t('banking.weOwe', 'we owe') : outstandingToThem < -0.01 ? t('banking.overpaid', 'overpaid') : t('banking.settled', 'settled')}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-white p-4">
+              <p className="text-sm font-medium text-gray-500">{t('banking.balance', 'Saldo')}</p>
+              <p className={`mt-1 text-xl font-semibold ${outstandingToThem > 0.01 ? 'text-orange-600' : 'text-gray-900'}`}>
+                {outstandingToThem < 0 ? `-${formatCurrency(Math.abs(outstandingToThem))}` : formatCurrency(outstandingToThem)}
+              </p>
+              {summary.firstDate && summary.lastDate && (
+                <p className="mt-1 text-xs text-gray-400">{formatDate(summary.firstDate)} – {formatDate(summary.lastDate)}</p>
               )}
-            </p>
+            </div>
           </div>
-          {/* Outstanding — gross outstanding both directions */}
-          <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm font-medium text-gray-500">{t('banking.outstanding', 'Outstanding')}</p>
-            {(() => {
-              const owedByUs = Math.max(0, invoiced - paidToThem)
-              const owedByThem = Math.max(0, totalOutgoing - receivedFromThem)
-              return (
-                <>
-                  <p className="mt-1 text-xl font-semibold text-orange-600">
-                    {formatCurrency(owedByUs)}
-                  </p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    {t('banking.weOwe', 'we owe')}
-                    {owedByThem > 0.01 && (
-                      <span className="text-green-600"> · {formatCurrency(owedByThem)} {t('banking.theyOwe', 'they owe')}</span>
-                    )}
-                  </p>
-                </>
-              )
-            })()}
-          </div>
-          {/* Net balance */}
-          <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm font-medium text-gray-500">{t('banking.netBalance', 'Net Balance')}</p>
-            <p className={`mt-1 text-xl font-semibold ${netPosition > 0.01 ? 'text-orange-600' : netPosition < -0.01 ? 'text-green-600' : 'text-gray-900'}`}>
-              {netPosition < 0 ? `-${formatCurrency(Math.abs(netPosition))}` : formatCurrency(netPosition)}
-            </p>
-            <p className="mt-1 text-xs text-gray-400">
-              {netPosition > 0.01 ? t('banking.weOweNet', 'we owe net') : netPosition < -0.01 ? t('banking.theyOweNet', 'they owe net') : t('banking.settled', 'settled')}
-            </p>
-          </div>
-        </div>
           )
         })()}
         </>
@@ -1067,68 +1084,83 @@ export function CounterpartyDetailPage() {
         </div>
       </div>
 
-      {/* Account Tab — unified ledger */}
+      {/* Account Tab — type-aware ledger */}
       {activeTab === 'account' && (() => {
-        // Sign convention: positive amount = we owe them more / they owe us less
-        //   incoming invoice (they bill us)    → +amount (we owe more)
-        //   outgoing invoice (we bill them)    → -amount (they owe us)
-        //   payment we sent (tx amount < 0)    → -amount (reduces our debt)
-        //   payment we received (tx amount > 0)→ -amount (reduces their debt to us)
-        // Final balance: > 0 = we owe them; < 0 = they owe us.
+        // Debitor ledger (customer account): balance > 0 = they owe us
+        //   outgoing invoice  → Soll  +gross
+        //   outgoing storno   → Haben -gross (credit note reduces their debt)
+        //   payment received  → Haben -gross (reduces their debt)
+        // Creditor ledger (vendor account): balance > 0 = we owe them
+        //   incoming invoice  → Haben +gross
+        //   payment sent      → Soll  -gross (reduces our debt)
         interface LedgerEntry {
           date: string
           description: string
-          amount: number
-          type: 'invoice' | 'outgoing-invoice' | 'payment' | 'payment-received'
+          amount: number      // signed for balance calc per account type
+          displayAmount: number // absolute amount for Soll/Haben column
+          side: 'soll' | 'haben'
+          type: 'invoice' | 'outgoing-invoice' | 'outgoing-storno' | 'payment' | 'payment-received'
           id: string
         }
 
         const entries: LedgerEntry[] = []
 
-        // Incoming invoices (they bill us)
-        for (const inv of cpInvoices) {
-          entries.push({
-            date: inv.invoiceDate || inv.createdAt?.split('T')[0] || '',
-            description: `${t('incomingInvoices.invoiceNumber')}: ${inv.invoiceNumber || inv.originalFilename}`,
-            amount: parseFloat(inv.grossAmount || '0'),
-            type: 'invoice',
-            id: `inv-${inv.id}`,
-          })
-        }
-
-        // Outgoing invoices (we bill them)
-        for (const inv of allOutInvoices) {
-          entries.push({
-            date: inv.invoiceDate || '',
-            description: `${t('banking.outgoingInvoice', 'Outgoing Invoice')}: ${inv.invoiceNumber}`,
-            amount: -parseFloat(inv.totalGross || '0'),
-            type: 'outgoing-invoice',
-            id: `out-${inv.id}`,
-          })
-        }
-
-        // Bank transactions — split debits/credits
-        for (const tx of transactions) {
-          const amt = parseFloat(tx.amount)
-          const matchInfo = tx.matchedInvoice
-            ? ` → ${tx.matchedInvoice.invoiceNumber}`
-            : ''
-          if (amt < 0) {
-            // Payment we sent → reduces what we owe them
+        if (accountType === 'debtor') {
+          // Outgoing invoices + stornos
+          for (const inv of allOutInvoices) {
+            const isStorno = inv.documentType === 'storno'
+            const gross = parseFloat(inv.totalGross || '0')
+            entries.push({
+              date: inv.invoiceDate || '',
+              description: isStorno
+                ? `${t('banking.creditNote', 'Credit Note')}: ${inv.invoiceNumber}${inv.stornoOfNumber ? ` (${t('banking.cancels', 'cancels')} ${inv.stornoOfNumber})` : ''}`
+                : `${t('banking.outgoingInvoice', 'Outgoing Invoice')}: ${inv.invoiceNumber}`,
+              amount: isStorno ? -gross : +gross,
+              displayAmount: gross,
+              side: isStorno ? 'haben' : 'soll',
+              type: isStorno ? 'outgoing-storno' : 'outgoing-invoice',
+              id: `out-${inv.id}`,
+            })
+          }
+          // Payments received (credits)
+          for (const tx of transactions) {
+            const amt = parseFloat(tx.amount)
+            if (amt <= 0) continue
+            const matchInfo = tx.matchedInvoice ? ` → ${tx.matchedInvoice.invoiceNumber}` : ''
+            entries.push({
+              date: tx.entryDate,
+              description: `${t('banking.paymentReceived', 'Payment received')}${matchInfo}`,
+              amount: -amt,
+              displayAmount: amt,
+              side: 'haben',
+              type: 'payment-received',
+              id: `tx-${tx.id}`,
+            })
+          }
+        } else {
+          // Creditor: incoming invoices + payments sent
+          for (const inv of cpInvoices) {
+            entries.push({
+              date: inv.invoiceDate || inv.createdAt?.split('T')[0] || '',
+              description: `${t('incomingInvoices.invoiceNumber')}: ${inv.invoiceNumber || inv.originalFilename}`,
+              amount: +parseFloat(inv.grossAmount || '0'),
+              displayAmount: parseFloat(inv.grossAmount || '0'),
+              side: 'haben',
+              type: 'invoice',
+              id: `inv-${inv.id}`,
+            })
+          }
+          for (const tx of transactions) {
+            const amt = parseFloat(tx.amount)
+            if (amt >= 0) continue
+            const matchInfo = tx.matchedInvoice ? ` → ${tx.matchedInvoice.invoiceNumber}` : ''
             entries.push({
               date: tx.entryDate,
               description: `${t('banking.payment', 'Payment')}${matchInfo}`,
               amount: amt, // negative
+              displayAmount: Math.abs(amt),
+              side: 'soll',
               type: 'payment',
-              id: `tx-${tx.id}`,
-            })
-          } else if (amt > 0) {
-            // Payment we received → reduces what they owe us (negative side of net)
-            entries.push({
-              date: tx.entryDate,
-              description: `${t('banking.paymentReceived', 'Payment received')}${matchInfo}`,
-              amount: -amt, // negative net change
-              type: 'payment-received',
               id: `tx-${tx.id}`,
             })
           }
@@ -1172,28 +1204,21 @@ export function CounterpartyDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ledgerRows.map(row => {
-                    // Soll = increases our liability to them (we owe more)
-                    //        = incoming invoice + payment we received (no longer their receivable)
-                    // Haben = decreases our liability (they owe us more)
-                    //        = outgoing invoice + payment we sent
-                    const isSoll = row.type === 'invoice' || row.type === 'payment-received'
-                    return (
+                  {ledgerRows.map(row => (
                     <tr key={row.id} className="border-b">
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{formatDate(row.date)}</td>
                       <td className="px-4 py-2.5 text-gray-900">{row.description}</td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums font-medium text-gray-900">
-                        {isSoll ? formatCurrency(Math.abs(row.amount)) : ''}
+                        {row.side === 'soll' ? formatCurrency(row.displayAmount) : ''}
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums font-medium text-gray-900">
-                        {!isSoll ? formatCurrency(Math.abs(row.amount)) : ''}
+                        {row.side === 'haben' ? formatCurrency(row.displayAmount) : ''}
                       </td>
                       <td className={`whitespace-nowrap px-4 py-2.5 text-right tabular-nums font-medium ${row.balance > 0.01 ? 'text-orange-600' : row.balance < -0.01 ? 'text-green-600' : 'text-gray-900'}`}>
                         {row.balance < 0 ? `-${formatCurrency(Math.abs(row.balance))}` : formatCurrency(row.balance)}
                       </td>
                     </tr>
-                    )
-                  })}
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -1568,16 +1593,31 @@ export function CounterpartyDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {outInvoices.map((inv: any) => (
+                    {outInvoices.map((inv: any) => {
+                      const isStorno = inv.documentType === 'storno'
+                      const gross = parseFloat(inv.totalGross || '0')
+                      return (
                       <tr key={inv.id} className="border-b hover:bg-gray-50">
                         <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{formatDate(inv.invoiceDate)}</td>
                         <td className="px-4 py-2.5">
-                          <Link to={`/invoices/${inv.id}`} className="text-blue-600 hover:underline">{inv.invoiceNumber}</Link>
+                          <div className="flex items-center gap-1.5">
+                            <Link to={`/invoices/${inv.id}`} className="text-blue-600 hover:underline">{inv.invoiceNumber}</Link>
+                            {isStorno && (
+                              <Badge variant="secondary" className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0">
+                                {t('banking.creditNote', 'Gutschrift')}
+                              </Badge>
+                            )}
+                          </div>
+                          {isStorno && inv.stornoOfNumber && (
+                            <div className="text-xs text-gray-400 mt-0.5">{t('banking.cancels', 'storniert')} {inv.stornoOfNumber}</div>
+                          )}
                         </td>
                         <td className="px-4 py-2.5 text-gray-600 truncate" title={inv.contractName}>{inv.contractName || '—'}</td>
-                        <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{formatCurrency(inv.totalGross)}</td>
+                        <td className={`whitespace-nowrap px-4 py-2.5 text-right tabular-nums ${isStorno ? 'text-purple-700' : ''}`}>
+                          {isStorno ? `-${formatCurrency(gross)}` : formatCurrency(gross)}
+                        </td>
                         <td className="px-4 py-2.5">
-                          <Badge variant="secondary" className={inv.isPaid ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}>
+                          <Badge variant="secondary" className={inv.isPaid ? 'bg-green-100 text-green-800' : inv.status === 'voided' ? 'bg-gray-100 text-gray-500 line-through' : 'bg-gray-100 text-gray-700'}>
                             {inv.isPaid ? t('banking.paid', 'Paid') : inv.status}
                           </Badge>
                         </td>
@@ -1589,7 +1629,8 @@ export function CounterpartyDetailPage() {
                           )}
                         </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
