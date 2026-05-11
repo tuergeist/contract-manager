@@ -2067,7 +2067,8 @@
     "overpaid": "overpaid",
     "imported": "imported",
     "showingFirst": "Showing first",
-    "yearScopedHint": "Showing entries for {{year}} only — switch to Total for all years"
+    "yearScopedHint": "Showing entries for {{year}} only — switch to Total for all years",
+    "ourReceivable": "our receivable"
   },
   "liquidity": {
     "title": "Liquidity Forecast",

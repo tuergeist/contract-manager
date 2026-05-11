@@ -2067,7 +2067,8 @@
     "overpaid": "überzahlt",
     "imported": "importiert",
     "showingFirst": "Zeige erste",
-    "yearScopedHint": "Zeigt nur Einträge aus {{year}} — Total wählen für alle Jahre"
+    "yearScopedHint": "Zeigt nur Einträge aus {{year}} — Total wählen für alle Jahre",
+    "ourReceivable": "unsere Forderung"
   },
   "liquidity": {
     "title": "Liquiditätsvorschau",

@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.31.4",
+    "date": "2026-05-11",
+    "title": "Debitor-Saldo: korrekte Vorzeichen-Konvention",
+    "description": "Debitor-Saldo folgt jetzt der buchhalterischen Konvention: Soll-Bewegungen senken den Saldo (rot, negativ = unsere Forderung), Haben-Bewegungen heben ihn (grün, positiv = überzahlt).",
+    "type": "bugfix",
+    "details": [
+      "Debitor Account-Ledger: ausgehende Rechnung → -gross (Saldo fällt), Storno → +gross, Zahlungseingang → +amount",
+      "Saldo-Farbe pro Konto-Art: Debitor neg=rot/pos=grün, Kreditor neg=grün/pos=rot",
+      "Outstanding/Saldo-Cards für Debitor: negativ angezeigt wenn offene Forderung, Hinweis unsere Forderung"
+    ]
+  },
+  {
     "version": "2.31.3",
     "date": "2026-05-11",
     "title": "Counterparty: Multi-Match + Year-Filter im Account-Tab",

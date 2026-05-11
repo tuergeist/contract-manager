@@ -1001,8 +1001,10 @@ export function CounterpartyDetailPage() {
           const paidToThem = Math.abs(parseFloat(summary.totalDebit) || 0)
           const receivedFromThem = parseFloat(summary.totalCredit) || 0
           if (accountType === 'debtor') {
-            // Debitor: positive = they owe us
-            const outstandingFromThem = totalOutgoingNet - receivedFromThem
+            // Debitor saldo from partner's account perspective:
+            //   negative = we have a receivable from them (they owe us) → rot
+            //   positive = they overpaid → grün
+            const debtorSaldo = receivedFromThem - totalOutgoingNet
             return (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
               <div className="rounded-lg border bg-white p-4">
@@ -1017,17 +1019,17 @@ export function CounterpartyDetailPage() {
               </div>
               <div className="rounded-lg border bg-white p-4">
                 <p className="text-sm font-medium text-gray-500">{t('banking.outstanding', 'Outstanding')}</p>
-                <p className={`mt-1 text-xl font-semibold ${outstandingFromThem > 0.01 ? 'text-orange-600' : outstandingFromThem < -0.01 ? 'text-blue-600' : 'text-gray-900'}`}>
-                  {formatCurrency(outstandingFromThem)}
+                <p className={`mt-1 text-xl font-semibold ${debtorSaldo < -0.01 ? 'text-red-600' : debtorSaldo > 0.01 ? 'text-green-600' : 'text-gray-900'}`}>
+                  {debtorSaldo < 0 ? `-${formatCurrency(Math.abs(debtorSaldo))}` : formatCurrency(debtorSaldo)}
                 </p>
                 <p className="mt-1 text-xs text-gray-400">
-                  {outstandingFromThem > 0.01 ? t('banking.theyOwe', 'they owe') : outstandingFromThem < -0.01 ? t('banking.overpaid', 'overpaid') : t('banking.settled', 'settled')}
+                  {debtorSaldo < -0.01 ? t('banking.ourReceivable', 'unsere Forderung') : debtorSaldo > 0.01 ? t('banking.overpaid', 'überzahlt') : t('banking.settled', 'ausgeglichen')}
                 </p>
               </div>
               <div className="rounded-lg border bg-white p-4">
                 <p className="text-sm font-medium text-gray-500">{t('banking.balance', 'Saldo')}</p>
-                <p className={`mt-1 text-xl font-semibold ${outstandingFromThem > 0.01 ? 'text-orange-600' : 'text-gray-900'}`}>
-                  {outstandingFromThem < 0 ? `-${formatCurrency(Math.abs(outstandingFromThem))}` : formatCurrency(outstandingFromThem)}
+                <p className={`mt-1 text-xl font-semibold ${debtorSaldo < -0.01 ? 'text-red-600' : debtorSaldo > 0.01 ? 'text-green-600' : 'text-gray-900'}`}>
+                  {debtorSaldo < 0 ? `-${formatCurrency(Math.abs(debtorSaldo))}` : formatCurrency(debtorSaldo)}
                 </p>
                 {summary.firstDate && summary.lastDate && (
                   <p className="mt-1 text-xs text-gray-400">{formatDate(summary.firstDate)} – {formatDate(summary.lastDate)}</p>
@@ -1162,7 +1164,11 @@ export function CounterpartyDetailPage() {
         const entries: LedgerEntry[] = []
 
         if (accountType === 'debtor') {
-          // Outgoing invoices + stornos
+          // Debitor-Saldo (counterparty's account with us):
+          //   Soll-Bewegung (we billed them)        → -amount (saldo more negative)
+          //   Haben-Bewegung (they paid / storno)   → +amount (saldo more positive)
+          // Final saldo < 0  →  they owe us  →  rot
+          // Final saldo > 0  →  they overpaid →  grün
           for (const inv of allOutInvoices) {
             if (!ledgerInYear(inv.invoiceDate)) continue
             const isStorno = inv.documentType === 'storno'
@@ -1172,7 +1178,7 @@ export function CounterpartyDetailPage() {
               description: isStorno
                 ? `${t('banking.creditNote', 'Credit Note')}: ${inv.invoiceNumber}${inv.stornoOfNumber ? ` (${t('banking.cancels', 'cancels')} ${inv.stornoOfNumber})` : ''}`
                 : `${t('banking.outgoingInvoice', 'Outgoing Invoice')}: ${inv.invoiceNumber}`,
-              amount: isStorno ? -gross : +gross,
+              amount: isStorno ? +gross : -gross,
               displayAmount: gross,
               side: isStorno ? 'haben' : 'soll',
               type: isStorno ? 'outgoing-storno' : 'outgoing-invoice',
@@ -1192,7 +1198,7 @@ export function CounterpartyDetailPage() {
             entries.push({
               date: tx.entryDate,
               description: `${t('banking.paymentReceived', 'Payment received')}${matchInfo}`,
-              amount: -amt,
+              amount: +amt,
               displayAmount: amt,
               side: 'haben',
               type: 'payment-received',
@@ -1273,7 +1279,17 @@ export function CounterpartyDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ledgerRows.map(row => (
+                  {ledgerRows.map(row => {
+                    // Debitor: saldo > 0 = überzahlt (grün), saldo < 0 = unsere Forderung (rot)
+                    // Creditor: saldo > 0 = wir schulden (rot), saldo < 0 = überzahlt (grün)
+                    const isDebtor = accountType === 'debtor'
+                    const saldoColor =
+                      row.balance > 0.01
+                        ? (isDebtor ? 'text-green-600' : 'text-red-600')
+                        : row.balance < -0.01
+                        ? (isDebtor ? 'text-red-600' : 'text-green-600')
+                        : 'text-gray-900'
+                    return (
                     <tr key={row.id} className="border-b">
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{formatDate(row.date)}</td>
                       <td className="px-4 py-2.5 text-gray-900">{row.description}</td>
@@ -1283,11 +1299,12 @@ export function CounterpartyDetailPage() {
                       <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums font-medium text-gray-900">
                         {row.side === 'haben' ? formatCurrency(row.displayAmount) : ''}
                       </td>
-                      <td className={`whitespace-nowrap px-4 py-2.5 text-right tabular-nums font-medium ${row.balance > 0.01 ? 'text-orange-600' : row.balance < -0.01 ? 'text-green-600' : 'text-gray-900'}`}>
+                      <td className={`whitespace-nowrap px-4 py-2.5 text-right tabular-nums font-medium ${saldoColor}`}>
                         {row.balance < 0 ? `-${formatCurrency(Math.abs(row.balance))}` : formatCurrency(row.balance)}
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
