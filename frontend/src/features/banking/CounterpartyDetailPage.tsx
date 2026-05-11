@@ -59,6 +59,7 @@ const COUNTERPARTY_DETAIL = gql`
       lastDate
       totalInvoiced
       invoiceCount
+      availableYears
       customer {
         id
         name
@@ -216,14 +217,6 @@ const UNLINK_COUNTERPARTY_FROM_CUSTOMER = gql`
   }
 `
 
-const COUNTERPARTY_INVOICE_YEARS = gql`
-  query CounterpartyInvoiceYears($counterpartyId: ID!) {
-    incomingInvoices(counterpartyId: $counterpartyId, pageSize: 200) {
-      items { invoiceDate }
-    }
-  }
-`
-
 const COUNTERPARTY_INVOICES = gql`
   query CounterpartyInvoices($counterpartyId: ID!, $sortBy: String, $sortOrder: String, $page: Int, $pageSize: Int) {
     incomingInvoices(counterpartyId: $counterpartyId, sortBy: $sortBy, sortOrder: $sortOrder, page: $page, pageSize: $pageSize) {
@@ -262,6 +255,25 @@ const COUNTERPARTY_OUTGOING_INVOICES = gql`
       }
       totalCount
       hasNextPage
+    }
+  }
+`
+
+const COUNTERPARTY_IMPORTED_INVOICES = gql`
+  query CounterpartyImportedInvoices($customerId: Int!, $limit: Int) {
+    invoices(customerId: $customerId, limit: $limit) {
+      items {
+        id
+        invoiceNumber
+        invoiceDate
+        totalAmount
+        currency
+        isPaid
+        pdfUrl
+        contractName
+        extractionStatus
+      }
+      totalCount
     }
   }
 `
@@ -310,6 +322,7 @@ interface CounterpartySummary {
   invoiceCount: number
   customer: { id: number; name: string } | null
   defaultCostCenter: { id: string; code: string; name: string; isActive: boolean } | null
+  availableYears: number[]
 }
 
 interface CustomerSearchResult {
@@ -328,7 +341,8 @@ export function CounterpartyDetailPage() {
 
   // Summary year filter
   const currentYear = new Date().getFullYear()
-  const [summaryYear, setSummaryYear] = useState<string>(String(currentYear))
+  // Default to 'total' (all years) — proper default gets set once availableYears loads
+  const [summaryYear, setSummaryYear] = useState<string>('total')
   const summaryDateFrom = summaryYear === 'total' ? null : `${summaryYear}-01-01`
   const summaryDateTo = summaryYear === 'total' ? null : `${summaryYear}-12-31`
 
@@ -363,7 +377,6 @@ export function CounterpartyDetailPage() {
   const [invPage, setInvPage] = useState(1)
   const [invSortBy, setInvSortBy] = useState('invoice_date')
   const [invSortOrder, setInvSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [outPage, setOutPage] = useState(1)
   const [outSortBy, setOutSortBy] = useState<string>('invoiceDate')
   const [outSortOrder, setOutSortOrder] = useState<'asc' | 'desc'>('desc')
   const [ledgerSortOrder, setLedgerSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -395,7 +408,7 @@ export function CounterpartyDetailPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [filterAccountId, debouncedSearch, dateFrom, dateTo, amountMin, amountMax, direction])
+  }, [filterAccountId, debouncedSearch, dateFrom, dateTo, amountMin, amountMax, direction, summaryYear])
 
   // Counterparty detail query
   const { data: costCentersData } = useQuery(COST_CENTERS_FOR_DROPDOWN)
@@ -413,48 +426,83 @@ export function CounterpartyDetailPage() {
   const invTotalCount = invData?.incomingInvoices?.totalCount || 0
   const invHasNextPage = invData?.incomingInvoices?.hasNextPage || false
 
-  // Invoice years for year selector
-  const { data: invYearsData } = useQuery(COUNTERPARTY_INVOICE_YEARS, {
-    variables: { counterpartyId: id },
-    skip: !id,
-  })
+  // Year list now comes from backend (counterparty.availableYears) — no extra query needed
 
   const summary: CounterpartySummary | null = cpData?.counterparty || null
 
   // Outgoing invoices for this counterparty (via linked customer)
   const linkedCustomerId = summary?.customer?.id ?? null
-  const { data: outData, loading: outLoading } = useQuery(COUNTERPARTY_OUTGOING_INVOICES, {
-    variables: {
-      customerId: linkedCustomerId,
-      sortBy: outSortBy,
-      sortOrder: outSortOrder,
-      offset: (outPage - 1) * 50,
-      limit: 50,
-    },
+  // Bulk fetch for account ledger + unified outgoing tab (client-side sort/pagination)
+  const { data: outAllData, loading: outLoading } = useQuery(COUNTERPARTY_OUTGOING_INVOICES, {
+    variables: { customerId: linkedCustomerId, sortBy: outSortBy, sortOrder: outSortOrder, offset: 0, limit: 500 },
     skip: !linkedCustomerId,
   })
-  const outInvoices = outData?.invoiceRecords?.items || []
-  const outTotalCount = outData?.invoiceRecords?.totalCount || 0
-  const outHasNextPage = outData?.invoiceRecords?.hasNextPage || false
-  // Bulk fetch for account ledger (no pagination)
-  const { data: outAllData } = useQuery(COUNTERPARTY_OUTGOING_INVOICES, {
-    variables: { customerId: linkedCustomerId, sortBy: 'invoiceDate', sortOrder: 'asc', offset: 0, limit: 500 },
+  const outData = outAllData
+  const allOutRecordsRaw = outAllData?.invoiceRecords?.items || []
+  // Also pull imported (uploaded) outgoing invoices
+  const { data: outImportedData } = useQuery(COUNTERPARTY_IMPORTED_INVOICES, {
+    variables: { customerId: linkedCustomerId, limit: 500 },
     skip: !linkedCustomerId,
   })
-  const allOutInvoices = outAllData?.invoiceRecords?.items || []
-  // Rule of thumb: if any outgoing invoices exist → counterparty is treated as a Debitor
-  // (customer account). Otherwise it's a Kreditor (vendor account). Different Soll/Haben
-  // conventions apply per account type.
+  const importedOutInvoices = outImportedData?.invoices?.items || []
+  // Normalize both shapes to a unified shape consumed by the rest of the page
+  type OutInvoice = {
+    id: string
+    source: 'generated' | 'imported'
+    invoiceNumber: string
+    invoiceDate: string | null
+    totalGross: string
+    status: string
+    isPaid: boolean
+    pdfUrl: string | null
+    contractName: string | null
+    documentType: 'invoice' | 'storno'
+    stornoOfNumber: string | null
+  }
+  const allOutInvoices: OutInvoice[] = [
+    ...allOutRecordsRaw.map((inv: any): OutInvoice => ({
+      id: String(inv.id),
+      source: 'generated',
+      invoiceNumber: inv.invoiceNumber,
+      invoiceDate: inv.invoiceDate,
+      totalGross: inv.totalGross,
+      status: inv.status,
+      isPaid: inv.isPaid,
+      pdfUrl: inv.pdfUrl,
+      contractName: inv.contractName,
+      documentType: inv.documentType || 'invoice',
+      stornoOfNumber: inv.stornoOfNumber,
+    })),
+    ...importedOutInvoices.map((inv: any): OutInvoice => ({
+      id: String(inv.id),
+      source: 'imported',
+      invoiceNumber: inv.invoiceNumber || `#${inv.id}`,
+      invoiceDate: inv.invoiceDate,
+      totalGross: inv.totalAmount || '0',
+      status: inv.extractionStatus,
+      isPaid: inv.isPaid,
+      pdfUrl: inv.pdfUrl,
+      contractName: inv.contractName,
+      documentType: 'invoice',
+      stornoOfNumber: null,
+    })),
+  ]
+  // Sort by invoice date desc for display consistency
+  const allOutInvoicesSorted = [...allOutInvoices].sort((a, b) =>
+    (b.invoiceDate || '').localeCompare(a.invoiceDate || '')
+  )
+  const allOutTotalCount = (outData?.invoiceRecords?.totalCount || 0) + (outImportedData?.invoices?.totalCount || 0)
+  // Rule of thumb: if any outgoing invoices (generated OR imported) exist → Debitor
   const accountType: 'debtor' | 'creditor' = allOutInvoices.length > 0 ? 'debtor' : 'creditor'
 
-  // Transactions query
+  // Transactions query — respects the year selector via summaryDateFrom/To
   const { data: txData, loading: txLoading, refetch: txRefetch } = useQuery(BANK_TRANSACTIONS, {
     variables: {
       accountId: filterAccountId !== 'all' ? parseInt(filterAccountId) : null,
       search: debouncedSearch || null,
       counterpartyId: id,
-      dateFrom: dateFrom || null,
-      dateTo: dateTo || null,
+      dateFrom: summaryDateFrom || dateFrom || null,
+      dateTo: summaryDateTo || dateTo || null,
       amountMin: amountMin ? parseFloat(amountMin) : null,
       amountMax: amountMax ? parseFloat(amountMax) : null,
       direction: direction !== 'all' ? direction : null,
@@ -898,18 +946,12 @@ export function CounterpartyDetailPage() {
 
       {/* Year selector + Summary Cards */}
       {summary && (() => {
-        // Collect years from transactions and invoices
-        const yearSet = new Set<number>()
-        if (summary.firstDate) {
-          const from = new Date(summary.firstDate).getFullYear()
-          const to = summary.lastDate ? new Date(summary.lastDate).getFullYear() : currentYear
-          for (let y = from; y <= to; y++) yearSet.add(y)
-        }
-        for (const inv of (invYearsData?.incomingInvoices?.items || [])) {
-          if (inv.invoiceDate) yearSet.add(new Date(inv.invoiceDate).getFullYear())
-        }
-        if (yearSet.size === 0) yearSet.add(currentYear)
-        const years = Array.from(yearSet).sort((a, b) => b - a).map(String)
+        // Years come from backend (counterparty.availableYears) — covers transactions,
+        // incoming invoices, and outgoing invoices (generated + imported).
+        const years = (summary.availableYears && summary.availableYears.length > 0
+          ? summary.availableYears
+          : [currentYear]
+        ).map(String)
 
         return (
         <>
@@ -1076,8 +1118,8 @@ export function CounterpartyDetailPage() {
               }`}
             >
               {t('banking.outgoingInvoices', 'Outgoing Invoices')}
-              {outTotalCount > 0 && (
-                <span className="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{outTotalCount}</span>
+              {allOutTotalCount > 0 && (
+                <span className="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{allOutTotalCount}</span>
               )}
             </button>
           )}
@@ -1567,7 +1609,7 @@ export function CounterpartyDetailPage() {
         <div className="space-y-4">
           {outLoading ? (
             <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div>
-          ) : outInvoices.length === 0 ? (
+          ) : allOutInvoicesSorted.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
               <Receipt className="mx-auto h-10 w-10 mb-2 opacity-50" />
               <p>{t('banking.noOutgoingInvoices', 'No outgoing invoices')}</p>
@@ -1593,18 +1635,26 @@ export function CounterpartyDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {outInvoices.map((inv: any) => {
+                    {allOutInvoicesSorted.map((inv) => {
                       const isStorno = inv.documentType === 'storno'
                       const gross = parseFloat(inv.totalGross || '0')
+                      const detailHref = inv.source === 'imported'
+                        ? `/invoices/imported/${inv.id}`
+                        : `/invoices/${inv.id}`
                       return (
-                      <tr key={inv.id} className="border-b hover:bg-gray-50">
+                      <tr key={`${inv.source}-${inv.id}`} className="border-b hover:bg-gray-50">
                         <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{formatDate(inv.invoiceDate)}</td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-1.5">
-                            <Link to={`/invoices/${inv.id}`} className="text-blue-600 hover:underline">{inv.invoiceNumber}</Link>
+                            <Link to={detailHref} className="text-blue-600 hover:underline">{inv.invoiceNumber}</Link>
                             {isStorno && (
                               <Badge variant="secondary" className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0">
                                 {t('banking.creditNote', 'Gutschrift')}
+                              </Badge>
+                            )}
+                            {inv.source === 'imported' && (
+                              <Badge variant="secondary" className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0">
+                                {t('banking.imported', 'imported')}
                               </Badge>
                             )}
                           </div>
@@ -1612,7 +1662,7 @@ export function CounterpartyDetailPage() {
                             <div className="text-xs text-gray-400 mt-0.5">{t('banking.cancels', 'storniert')} {inv.stornoOfNumber}</div>
                           )}
                         </td>
-                        <td className="px-4 py-2.5 text-gray-600 truncate" title={inv.contractName}>{inv.contractName || '—'}</td>
+                        <td className="px-4 py-2.5 text-gray-600 truncate" title={inv.contractName || ''}>{inv.contractName || '—'}</td>
                         <td className={`whitespace-nowrap px-4 py-2.5 text-right tabular-nums ${isStorno ? 'text-purple-700' : ''}`}>
                           {isStorno ? `-${formatCurrency(gross)}` : formatCurrency(gross)}
                         </td>
@@ -1634,17 +1684,9 @@ export function CounterpartyDetailPage() {
                   </tbody>
                 </table>
               </div>
-              {outTotalCount > 50 && (
-                <div className="flex items-center justify-between text-sm text-gray-600">
-                  <span>{outPage * 50 - 49}–{Math.min(outPage * 50, outTotalCount)} of {outTotalCount}</span>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setOutPage(outPage - 1)} disabled={outPage <= 1} className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                      <ChevronLeft className="h-4 w-4" />{t('common.pagination.previous')}
-                    </button>
-                    <button onClick={() => setOutPage(outPage + 1)} disabled={!outHasNextPage} className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                      {t('common.pagination.next')}<ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
+              {allOutTotalCount > allOutInvoicesSorted.length && (
+                <div className="text-xs text-gray-500 text-center">
+                  {t('banking.showingFirst', 'Showing first')} {allOutInvoicesSorted.length} {t('common.of', 'of')} {allOutTotalCount}
                 </div>
               )}
             </>

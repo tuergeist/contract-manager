@@ -83,6 +83,8 @@ class CounterpartySummaryType:
     invoice_count: int = 0
     customer: LinkedCustomerType | None = None
     default_cost_center: CostCenterType | None = None
+    # Years that have at least one related transaction or invoice (in/out, generated/imported)
+    available_years: List[int] = strawberry.field(default_factory=list)
 
 
 @strawberry.type
@@ -1436,6 +1438,35 @@ class BankingQuery:
             count=Count("id"),
         )
 
+        # Available years across all related data (unfiltered by date_from/date_to)
+        from apps.banking.models import BankTransaction
+        from apps.invoices.models import InvoiceRecord, ImportedInvoice
+        years: set[int] = set()
+        # Transactions
+        for ed in BankTransaction.objects.filter(
+            tenant=user.tenant, counterparty=cp
+        ).values_list("entry_date", flat=True):
+            if ed:
+                years.add(ed.year)
+        # Incoming invoices
+        for ed in IncomingInvoice.objects.filter(
+            tenant=user.tenant, counterparty=cp,
+        ).values_list("invoice_date", flat=True):
+            if ed:
+                years.add(ed.year)
+        # Outgoing invoices via linked customer
+        if cp.customer_id:
+            for ed in InvoiceRecord.objects.filter(
+                tenant=user.tenant, customer_id=cp.customer_id,
+            ).exclude(status="draft").values_list("invoice_date", flat=True):
+                if ed:
+                    years.add(ed.year)
+            for ed in ImportedInvoice.objects.filter(
+                tenant=user.tenant, customer_id=cp.customer_id,
+            ).values_list("invoice_date", flat=True):
+                if ed:
+                    years.add(ed.year)
+
         return CounterpartySummaryType(
             id=strawberry.ID(str(cp.id)),
             name=cp.name,
@@ -1450,6 +1481,7 @@ class BankingQuery:
             invoice_count=inv_agg["count"],
             customer=LinkedCustomerType(id=cp.customer.id, name=cp.customer.name) if cp.customer else None,
             default_cost_center=_make_cost_center_type(cp.default_cost_center),
+            available_years=sorted(years, reverse=True),
         )
 
     @strawberry.field
