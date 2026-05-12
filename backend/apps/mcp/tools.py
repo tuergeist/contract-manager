@@ -60,6 +60,40 @@ class _BaseTool(MCPToolset):
             d = d.date()
         return d.strftime("%d.%m.%Y")
 
+    def _dump_all_fields(self, obj, exclude: set[str] | None = None) -> str:
+        """Render a markdown ## All fields section listing every concrete model field.
+
+        Skips reverse relations, M2M, and obviously-sensitive/internal fields.
+        FK columns are surfaced as their *_id integer for downstream tool use.
+        """
+        from django.db.models import ForeignKey, OneToOneField, ManyToManyField
+        excl = exclude or set()
+        excl |= {"tenant", "tenant_id"}
+        lines = ["", "## All fields"]
+        for f in obj._meta.get_fields():
+            # Skip reverse relations and M2M
+            if not hasattr(f, "concrete") or not f.concrete:
+                continue
+            if isinstance(f, ManyToManyField):
+                continue
+            name = f.name
+            if name in excl:
+                continue
+            if isinstance(f, (ForeignKey, OneToOneField)):
+                attr = f"{name}_id"
+                val = getattr(obj, attr, None)
+                lines.append(f"- {attr}: {val if val is not None else '-'}")
+                continue
+            val = getattr(obj, name, None)
+            if isinstance(val, datetime):
+                val = val.isoformat()
+            elif isinstance(val, date):
+                val = self._fmt_date(val)
+            elif val is None:
+                val = "-"
+            lines.append(f"- {name}: {val}")
+        return "\n".join(lines)
+
 
 class CustomerTools(_BaseTool):
     def list_customers(self, search: str = "", offset: int = 0, limit: int = 20) -> str:
@@ -85,7 +119,7 @@ class CustomerTools(_BaseTool):
             lines.append(f"  Contracts: {contract_count}")
         return "\n".join(lines)
 
-    def get_customer(self, customer_id: int) -> str:
+    def get_customer(self, customer_id: int, verbose: bool = False) -> str:
         """Get detailed customer information including contacts and contracts."""
         if err := self._check_perm("customers", "read"):
             return err
@@ -123,6 +157,9 @@ class CustomerTools(_BaseTool):
                     f"{contract.status}, started {self._fmt_date(contract.start_date)}"
                 )
 
+        if verbose:
+            lines.append(self._dump_all_fields(c))
+
         return "\n".join(lines)
 
 
@@ -148,8 +185,11 @@ class ProductTools(_BaseTool):
                 lines.append(f"  Billing: {p.billing_frequency}")
         return "\n".join(lines)
 
-    def get_product(self, product_id: int) -> str:
-        """Get detailed product information."""
+    def get_product(self, product_id: int, verbose: bool = False) -> str:
+        """Get detailed product information.
+
+        Set verbose=True to dump every concrete field of the product.
+        """
         if err := self._check_perm("products", "read"):
             return err
         tenant = self._get_tenant()
@@ -165,6 +205,8 @@ class ProductTools(_BaseTool):
             lines.append(f"Billing: {p.billing_frequency}")
         if p.description:
             lines.append(f"\n{p.description}")
+        if verbose:
+            lines.append(self._dump_all_fields(p))
         return "\n".join(lines)
 
 
@@ -200,8 +242,12 @@ class ContractTools(_BaseTool):
             lines.append(f"  Start: {self._fmt_date(c.start_date)} | Cycle: {c.billing_interval}")
         return "\n".join(lines)
 
-    def get_contract(self, contract_id: int) -> str:
-        """Get contract details including items and financial summary."""
+    def get_contract(self, contract_id: int, verbose: bool = False) -> str:
+        """Get contract details including items and financial summary.
+
+        Set verbose=True to also dump every concrete field of the contract
+        (AB number, offer number, NetSuite IDs, alignment dates, etc.).
+        """
         if err := self._check_perm("contracts", "read"):
             return err
         tenant = self._get_tenant()
@@ -220,6 +266,14 @@ class ContractTools(_BaseTool):
         ]
         if c.end_date:
             lines.append(f"End Date: {self._fmt_date(c.end_date)}")
+        if c.order_confirmation_number:
+            lines.append(f"AB Nummer: {c.order_confirmation_number}")
+        if c.offer_number:
+            lines.append(f"Offer Number: {c.offer_number}")
+        if c.po_number:
+            lines.append(f"PO Number: {c.po_number}")
+        if c.netsuite_sales_order_number:
+            lines.append(f"NetSuite SO: {c.netsuite_sales_order_number}")
         if c.notes:
             lines.append(f"Notes: {c.notes}")
 
@@ -248,6 +302,9 @@ class ContractTools(_BaseTool):
                 total_one_off += total
                 lines.append(f"- {name}: {self._fmt_currency(total)}")
             lines.append(f"\n**Total One-Off: {self._fmt_currency(total_one_off)}**")
+
+        if verbose:
+            lines.append(self._dump_all_fields(c))
 
         return "\n".join(lines)
 
@@ -333,8 +390,11 @@ class InvoiceTools(_BaseTool):
             )
         return "\n".join(lines)
 
-    def get_invoice(self, invoice_id: int, invoice_type: str = "generated") -> str:
-        """Get invoice details. invoice_type: 'generated' or 'imported'."""
+    def get_invoice(self, invoice_id: int, invoice_type: str = "generated", verbose: bool = False) -> str:
+        """Get invoice details. invoice_type: 'generated' or 'imported'.
+
+        Set verbose=True to dump every concrete field.
+        """
         if err := self._check_perm("invoices", "read"):
             return err
         tenant = self._get_tenant()
@@ -354,6 +414,8 @@ class InvoiceTools(_BaseTool):
                 f"Net: {self._fmt_currency(inv.net_amount)}",
                 f"Gross: {self._fmt_currency(inv.gross_amount)}",
             ]
+            if verbose:
+                lines.append(self._dump_all_fields(inv))
             return "\n".join(lines)
 
         try:
@@ -380,6 +442,8 @@ class InvoiceTools(_BaseTool):
             lines.append(f"Email Sent: {self._fmt_date(r.email_sent_at)} to {recipients}")
         else:
             lines.append("Email: Not sent")
+        if verbose:
+            lines.append(self._dump_all_fields(r))
 
         # Line items from snapshot
         items = r.items_snapshot or []
@@ -427,8 +491,11 @@ class BankingTools(_BaseTool):
                 lines.append(f"  Purpose: {t.purpose[:80]}")
         return "\n".join(lines)
 
-    def get_transaction(self, transaction_id: int) -> str:
-        """Get detailed bank transaction information."""
+    def get_transaction(self, transaction_id: int, verbose: bool = False) -> str:
+        """Get detailed bank transaction information.
+
+        Set verbose=True to dump every concrete field.
+        """
         if err := self._check_perm("banking", "read"):
             return err
         tenant = self._get_tenant()
@@ -450,6 +517,8 @@ class BankingTools(_BaseTool):
             lines.append(f"Purpose: {t.purpose}")
         if t.counterparty_iban:
             lines.append(f"IBAN: {t.counterparty_iban}")
+        if verbose:
+            lines.append(self._dump_all_fields(t))
         return "\n".join(lines)
 
 

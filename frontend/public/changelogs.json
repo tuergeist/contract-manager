@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.31.7",
+    "date": "2026-05-12",
+    "title": "MCP verbose + GraphQL-Schema + API-Tab-Doku",
+    "description": "MCP-Tools liefern auf Wunsch alle Modellfelder. GraphQL-SDL ist öffentlich abrufbar. Integrations/API-Tab dokumentiert beide Schnittstellen.",
+    "type": "feature",
+    "details": [
+      "MCP: get_contract/customer/product/invoice/transaction unterstützen verbose=True für vollständigen Felddump",
+      "MCP: get_contract zeigt AB-Nummer, Angebotsnummer, PO-Nummer, NetSuite SO unconditional",
+      "GraphQL: SDL public unter /graphql/schema.graphql (Fallback auf live schema bei fehlender Datei)",
+      "Management-Command: python manage.py export_graphql_schema dumpt SDL nach backend/schema.graphql",
+      "Integrations/API-Tab: GraphQL-Section mit Endpoint, SDL-Link, curl-Beispiel, Introspection-Hinweis"
+    ]
+  },
+  {
     "version": "2.31.6",
     "date": "2026-05-12",
     "title": "Integrations/API: für alle User sichtbar",

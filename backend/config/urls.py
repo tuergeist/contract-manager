@@ -23,7 +23,7 @@ class AuthenticatedGraphQLView(GraphQLView):
         return get_context(request)
 
 
-from apps.core.version_views import VersionView, BackendLicensesView
+from apps.core.version_views import VersionView, BackendLicensesView, GraphQLSchemaView
 from apps.invoices.views import InvoiceExportView, InvoicePreviewHtmlView, InvoicePreviewView, InvoiceRecordPdfView
 from apps.offers.views import OfferRecordPdfView
 from apps.contracts.views import AttachmentDownloadView, AttachmentPermalinkView, ContractExportView
@@ -36,6 +36,8 @@ urlpatterns = [
     path("accounts/", include("django.contrib.auth.urls")),
     path("admin/", admin.site.urls),
     path("graphql", csrf_exempt(AuthenticatedGraphQLView.as_view(schema=schema))),
+    # Public GraphQL SDL for client codegen + docs
+    path("graphql/schema.graphql", GraphQLSchemaView.as_view(), name="graphql-schema"),
     # OAuth 2.1 endpoints (django-oauth-toolkit)
     # Custom authorize view handles URL-based client_id (MCP metadata document flow)
     path("oauth/authorize/", McpAuthorizationView.as_view(), name="oauth-authorize"),

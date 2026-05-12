@@ -1,0 +1,3253 @@
+type ABEmailTemplate {
+  language: String!
+  subject: String!
+  body: String!
+  isCustom: Boolean!
+}
+
+type ABEmailTemplatesResult {
+  success: Boolean!
+  error: String
+  templates: [ABEmailTemplate!]
+}
+
+type APIKeyType {
+  id: Int!
+  name: String!
+  prefix: String!
+  permissions: JSON!
+  createdAt: DateTime!
+  expiresAt: DateTime
+  lastUsedAt: DateTime
+  isActive: Boolean!
+}
+
+type AbsenceReportEntryType {
+  id: Int!
+  userName: String!
+  externalUserId: String!
+  absenceType: String!
+  dateFrom: Date!
+  dateTo: Date!
+  daysCount: Decimal!
+}
+
+type AbsenceReportType {
+  id: Int!
+  year: Int!
+  month: Int!
+  status: String!
+  finalizedAt: DateTime
+  entries: [AbsenceReportEntryType!]!
+}
+
+type ActivationChecklistSettings {
+  availableFields: [String!]!
+  requiredFields: [String!]!
+}
+
+input ActivationOptionsInput {
+  sendOrderConfirmation: Boolean! = true
+  createOrderConfirmationOnly: Boolean! = false
+}
+
+type ActivationPreviewOneOffItem {
+  id: Int!
+  description: String!
+}
+
+type ActivationPreviewResult {
+  clockodoConfigured: Boolean!
+  customerLinked: Boolean!
+  customerName: String!
+  customerId: Int!
+  clockodoCustomerId: String
+  maintenanceNeeded: Boolean!
+  maintenanceProjectExists: Boolean!
+  maintenanceProjectName: String!
+  oneOffItems: [ActivationPreviewOneOffItem!]!
+}
+
+input AddContractLinkInput {
+  contractId: ID!
+  name: String!
+  url: String!
+}
+
+input AddCustomerLinkInput {
+  customerId: ID!
+  name: String!
+  url: String!
+}
+
+type AnalyzeReferenceResult {
+  success: Boolean!
+  error: String
+  extractedData: JSON
+}
+
+type AssigneeColumn {
+  assigneeId: Int
+  assigneeName: String!
+  isCurrentUser: Boolean!
+  todos: [TodoItemType!]!
+}
+
+type AttachmentResult {
+  attachment: ContractAttachmentType
+  success: Boolean!
+  error: String
+}
+
+type AuditLogChangeType {
+  field: String!
+  oldValue: JSON
+  newValue: JSON
+}
+
+type AuditLogConnection {
+  edges: [AuditLogEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type AuditLogEdge {
+  node: AuditLogType!
+  cursor: String!
+}
+
+type AuditLogType {
+  id: Int!
+  action: String!
+  entityType: String!
+  entityId: Int!
+  entityRepr: String!
+  userId: Int
+  userName: String
+  changes: [AuditLogChangeType!]!
+  timestamp: DateTime!
+  parentEntityType: String
+  parentEntityId: Int
+}
+
+type AuthError {
+  message: String!
+}
+
+type AuthPayload {
+  accessToken: String!
+  refreshToken: String!
+  userId: Int!
+  email: String!
+  tenantId: Int
+}
+
+union AuthResult = AuthPayload | TwoFactorChallenge | AuthError
+
+type AutoLinkRuleType {
+  id: Int!
+  pattern: String!
+  matchType: String!
+  isActive: Boolean!
+  contractItemId: Int
+  contractItemName: String
+  createdMappingsCount: Int!
+}
+
+type BankAccountResult {
+  success: Boolean!
+  error: String
+  account: BankAccountType
+}
+
+type BankAccountType {
+  id: Int!
+  name: String!
+  bankCode: String!
+  accountNumber: String!
+  iban: String!
+  bic: String!
+  transactionCount: Int!
+}
+
+type BankTransactionPage {
+  items: [BankTransactionType!]!
+  totalCount: Int!
+  page: Int!
+  pageSize: Int!
+  hasNextPage: Boolean!
+}
+
+type BankTransactionType {
+  id: Int!
+  entryDate: Date!
+  valueDate: Date
+  amount: Decimal!
+  currency: String!
+  transactionType: String!
+  counterparty: CounterpartyType!
+  bookingText: String!
+  reference: String!
+  accountName: String!
+  costCenter: CostCenterType
+  matchedInvoice: InvoiceMatchInfoType
+  matchedInvoices: [InvoiceMatchInfoType!]!
+}
+
+type BankingSettingsType {
+  feeToleranceFixed: Decimal!
+  feeTolerancePercent: Decimal!
+}
+
+type BillingEvent {
+  date: Date!
+  items: [BillingScheduleItem!]!
+  total: Decimal!
+  matchedInvoice: MatchedInvoiceType
+}
+
+type BillingScheduleItem {
+  itemId: Int!
+  productName: String!
+  description: String!
+  quantity: Int!
+  unitPrice: Decimal!
+  amount: Decimal!
+  isProrated: Boolean!
+  prorateFactor: Decimal
+  isOneOff: Boolean!
+}
+
+type BillingScheduleResult {
+  events: [BillingEvent!]!
+  totalForecast: Decimal!
+  periodStart: Date!
+  periodEnd: Date!
+  error: String
+}
+
+input BulkPriceIncreaseInput {
+  contractId: ID!
+  percentage: Decimal!
+  effectiveDate: Date!
+  mode: String! = "period_specific"
+  increaseType: String! = "inflation"
+}
+
+type BulkPriceIncreaseItemResult {
+  itemId: Int!
+  itemDescription: String!
+  oldPrice: Decimal!
+  newPrice: Decimal!
+  skipped: Boolean!
+  skipReason: String
+}
+
+type BulkPriceIncreaseResult {
+  success: Boolean!
+  error: String
+  itemsChanged: Int!
+  itemsSkipped: Int!
+  details: [BulkPriceIncreaseItemResult!]!
+}
+
+type BulkSendError {
+  invoiceNumber: String!
+  error: String!
+}
+
+type BulkSendResult {
+  success: Boolean!
+  error: String
+  sent: Int!
+  errors: [BulkSendError!]
+}
+
+input BulkUploadInvoiceInput {
+  fileContent: String!
+  filename: String!
+}
+
+type BulkUploadInvoicesResult {
+  success: Boolean!
+  error: String
+  results: [BulkUploadItemResult!]!
+  totalUploaded: Int!
+  totalFailed: Int!
+}
+
+type BulkUploadItemResult {
+  filename: String!
+  success: Boolean!
+  error: String
+  invoice: InvoiceType
+  matchedExpected: Boolean!
+}
+
+type ClockodoCustomerMatch {
+  customerId: Int!
+  customerName: String!
+  clockodoCustomerId: String!
+  clockodoCustomerName: String!
+}
+
+type ClockodoServiceType {
+  id: String!
+  name: String!
+}
+
+type ClockodoUserType {
+  id: String!
+  name: String!
+}
+
+type CommentAuthorType {
+  id: ID!
+  firstName: String!
+  lastName: String!
+}
+
+input CompanyLegalDataInput {
+  companyName: String!
+  street: String!
+  zipCode: String!
+  city: String!
+  country: String! = "Deutschland"
+  taxNumber: String! = ""
+  vatId: String! = ""
+  commercialRegisterCourt: String! = ""
+  commercialRegisterNumber: String! = ""
+  managingDirectors: [String!]! = []
+  bankName: String! = ""
+  iban: String! = ""
+  bic: String! = ""
+  phone: String! = ""
+  email: String! = ""
+  website: String! = ""
+  shareCapital: String! = ""
+  defaultTaxRate: Decimal! = "19.00"
+  vatTextEu: String! = "Reverse Charge – VAT liability transferred to the recipient (§ 13b UStG)"
+  vatTextNonEu: String! = "VAT not applicable – place of supply rules (§ 3a(2) UStG)"
+}
+
+type CompanyLegalDataResult {
+  success: Boolean!
+  error: String
+  data: CompanyLegalDataType
+}
+
+type CompanyLegalDataType {
+  companyName: String!
+  street: String!
+  zipCode: String!
+  city: String!
+  country: String!
+  taxNumber: String!
+  vatId: String!
+  commercialRegisterCourt: String!
+  commercialRegisterNumber: String!
+  managingDirectors: [String!]!
+  bankName: String!
+  iban: String!
+  bic: String!
+  phone: String!
+  email: String!
+  website: String!
+  shareCapital: String!
+  defaultTaxRate: Decimal!
+  vatTextEu: String!
+  vatTextNonEu: String!
+}
+
+type ConfirmAndMatchResult {
+  success: Boolean!
+  error: String
+  invoice: IncomingInvoiceType
+  matchId: Int
+}
+
+input ConfirmForecastInvoiceInput {
+  invoiceId: ID!
+  invoiceNumber: String!
+  invoiceDate: Date!
+  totalAmount: Decimal!
+}
+
+type ContractAmendmentType {
+  id: Int!
+  effectiveDate: Date!
+  type: String!
+  description: String!
+  changes: JSON!
+  createdAt: DateTime!
+}
+
+type ContractAttachmentType {
+  id: Int!
+  originalFilename: String!
+  fileSize: Int!
+  contentType: String!
+  description: String!
+  category: String!
+  uploadedAt: DateTime!
+  uploadedByName: String
+  downloadUrl: String!
+}
+
+type ContractCommentResult {
+  comment: ContractCommentType
+  success: Boolean!
+  error: String
+}
+
+type ContractCommentType {
+  id: ID!
+  text: String!
+  author: CommentAuthorType!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  canEdit: Boolean!
+  canDelete: Boolean!
+}
+
+type ContractConnection {
+  items: [ContractType!]!
+  totalCount: Int!
+  page: Int!
+  pageSize: Int!
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+}
+
+type ContractGroupResult {
+  group: ContractGroupType
+  success: Boolean!
+  error: String
+}
+
+type ContractGroupType {
+  id: Int!
+  name: String!
+  contractCount: Int!
+}
+
+input ContractItemInput {
+  productId: ID = null
+  description: String! = ""
+  quantity: Int! = 1
+  unitPrice: Decimal! = "0"
+  pricePeriod: String! = "monthly"
+  priceSource: String! = "list"
+  startDate: Date = null
+  billingStartDate: Date = null
+  alignToContractAt: Date = null
+  isOneOff: Boolean! = false
+  orderConfirmationNumber: String = null
+  deliveryTracking: Boolean! = false
+  dependsOnItemId: ID = null
+  estimatedDeliveryDate: Date = null
+  invoiceIndependent: Boolean! = false
+  revenueType: String = null
+  dealWonDate: Date = null
+}
+
+input ContractItemPriceInput {
+  validFrom: Date!
+  validTo: Date = null
+  unitPrice: Decimal!
+  pricePeriod: String! = "monthly"
+  source: String! = "fixed"
+  increaseType: String = null
+}
+
+type ContractItemPriceResult {
+  pricePeriod: ContractItemPriceType
+  success: Boolean!
+  error: String
+}
+
+type ContractItemPriceType {
+  id: Int!
+  validFrom: Date!
+  validTo: Date
+  unitPrice: Decimal!
+  pricePeriod: String!
+  source: String!
+  increaseType: String
+}
+
+type ContractItemResult {
+  item: ContractItemType
+  success: Boolean!
+  error: String
+}
+
+type ContractItemType {
+  id: Int!
+  quantity: Int!
+  unitPrice: Decimal!
+  pricePeriod: String!
+  priceSource: String!
+  totalPrice: Decimal!
+  effectivePrice: Decimal!
+  effectivePricePeriod: String!
+  product: ProductType
+  description: String!
+  startDate: Date
+  billingStartDate: Date
+  billingEndDate: Date
+  alignToContractAt: Date
+  suggestedAlignmentDate: Date
+  isOneOff: Boolean!
+  orderConfirmationNumber: String
+  priceLocked: Boolean!
+  priceLockedUntil: Date
+  sortOrder: Int
+  deliveryStatus: String
+  deliveredAt: Date
+  estimatedDeliveryDate: Date
+  invoiceIndependent: Boolean!
+  dependsOn: ContractItemType
+  dependentItems: [ContractItemType!]!
+  pricePeriods: [ContractItemPriceType!]!
+  revenueType: String
+  effectiveRevenueType: String
+  sourceHubspotDealId: String
+  dealWonDate: Date
+  movedToItemId: Int
+  movedToContractId: Int
+  movedToContractName: String
+  movedFromItemId: Int
+  movedFromContractId: Int
+  movedFromContractName: String
+}
+
+type ContractLinkResult {
+  link: ContractLinkType
+  success: Boolean!
+  error: String
+}
+
+type ContractLinkType {
+  id: Int!
+  name: String!
+  url: String!
+  createdAt: DateTime!
+  createdByName: String
+}
+
+type ContractPriceIncreaseDetailType {
+  contractId: ID!
+  contractName: String!
+  customerName: String!
+  currentArr: Decimal!
+  previousArr: Decimal!
+  arrDiff: Decimal!
+  itemCount: Int!
+}
+
+type ContractResult {
+  contract: ContractType
+  success: Boolean!
+  error: String
+}
+
+type ContractRevenueRow {
+  contractId: Int!
+  contractName: String!
+  customerId: Int!
+  customerName: String!
+  months: [RevenueMonthData!]!
+  total: Decimal!
+  customerNumber: String
+}
+
+"""A contract with a customer."""
+type ContractType {
+  id: ID!
+  name: String!
+  hubspotDealId: String
+  startDate: Date!
+  endDate: Date
+  billingStartDate: Date!
+  billingInterval: String!
+  billingAnchorDay: Int!
+
+  """
+  Date when billing aligns to regular cycle. First invoice covers period from billing_start_date to this date (pro-rated).
+  """
+  billingAlignmentDate: Date
+  minDurationMonths: Int
+  noticePeriodMonths: Int!
+  noticePeriodAnchor: String!
+
+  """
+  Notice period after minimum duration ends (if different from notice_period_months)
+  """
+  noticePeriodAfterMinMonths: Int
+  cancelledAt: DateTime
+  cancellationEffectiveDate: Date
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  """Sales Order number from NetSuite (e.g., 'SO-VSX-25-039')"""
+  netsuiteSalesOrderNumber: String
+
+  """Contract number from NetSuite (e.g., '13634_2025-01-01_2025-12-31')"""
+  netsuiteContractNumber: String
+
+  """Link to this contract in NetSuite"""
+  netsuiteUrl: String
+
+  """Purchase Order number"""
+  poNumber: String
+
+  """Order Confirmation number (AB Nummer)"""
+  orderConfirmationNumber: String
+
+  """
+  Offer number (VSX) — usually copied from the related deal/offer when the contract is created
+  """
+  offerNumber: String
+
+  """Internal notes (not shown on invoices)"""
+  notes: String!
+
+  """Optional text to show on invoices below line items"""
+  invoiceText: String!
+
+  """Date the deal was won (from HubSpot closedate for imported deals)"""
+  dealWonDate: Date
+  customer: CustomerType!
+  orderConfirmations: [OrderConfirmationType!]!
+  orderConfirmationSentAt: DateTime
+  isNewBusiness: Boolean!
+  hasInvoices: Boolean!
+  invoicedItemIds: [Int!]!
+  itemInvoicedUntil: JSON!
+  group: ContractGroupType
+  status: String!
+  hubspotUrl: String
+  items: [ContractItemType!]!
+  amendments: [ContractAmendmentType!]!
+  attachments: [ContractAttachmentType!]!
+  links: [ContractLinkType!]!
+  todos: [TodoItemType!]!
+  orderConfirmation: OrderConfirmationType
+  timeTrackingMappingsCount: Int!
+  effectiveEndDate: Date
+  durationMonths: Int!
+  remainingMonths: Int!
+  totalValue: Decimal!
+  monthlyRecurringValue: Decimal!
+  arr: Decimal!
+}
+
+type CostCenterReportRow {
+  costCenter: CostCenterType
+  label: String!
+  totalAmount: Decimal!
+  transactionCount: Int!
+}
+
+type CostCenterReportType {
+  rows: [CostCenterReportRow!]!
+  dateFrom: Date!
+  dateTo: Date!
+}
+
+type CostCenterResult {
+  success: Boolean!
+  error: String
+  costCenter: CostCenterType
+}
+
+type CostCenterSplitAllocationType {
+  id: ID!
+  costCenter: CostCenterType!
+  percentage: Decimal
+  fixedAmount: Decimal
+}
+
+type CostCenterSplitRuleResult {
+  success: Boolean!
+  error: String
+  rule: CostCenterSplitRuleType
+}
+
+type CostCenterSplitRuleType {
+  id: ID!
+  mode: String!
+  counterparty: CounterpartyType
+  bookingTextPattern: String
+  priority: Int!
+  isActive: Boolean!
+  allocations: [CostCenterSplitAllocationType!]!
+}
+
+type CostCenterType {
+  id: ID!
+  code: String!
+  name: String!
+  isActive: Boolean!
+}
+
+type CounterpartyPage {
+  items: [CounterpartySummaryType!]!
+  totalCount: Int!
+  page: Int!
+  pageSize: Int!
+  hasNextPage: Boolean!
+}
+
+type CounterpartyResult {
+  success: Boolean!
+  error: String
+  counterparty: CounterpartyType
+}
+
+type CounterpartySummaryType {
+  id: ID!
+  name: String!
+  iban: String!
+  bic: String!
+  totalDebit: Decimal!
+  totalCredit: Decimal!
+  transactionCount: Int!
+  firstDate: Date
+  lastDate: Date
+  totalInvoiced: Decimal!
+  invoiceCount: Int!
+  customer: LinkedCustomerType
+  defaultCostCenter: CostCenterType
+  availableYears: [Int!]!
+}
+
+type CounterpartyType {
+  id: ID!
+  name: String!
+  iban: String!
+  bic: String!
+  transactionCount: Int!
+  customerId: Int
+  customerName: String
+  defaultCostCenter: CostCenterType
+}
+
+input CreateBankAccountInput {
+  name: String!
+  bankCode: String!
+  accountNumber: String!
+  iban: String! = ""
+  bic: String! = ""
+}
+
+input CreateContractInput {
+  customerId: ID!
+  name: String = null
+  salesOrderNumber: String = null
+  netsuiteUrl: String = null
+  poNumber: String = null
+  orderConfirmationNumber: String = null
+  offerNumber: String = null
+  notes: String = null
+  startDate: Date!
+  endDate: Date = null
+  billingStartDate: Date = null
+  billingInterval: String! = "monthly"
+  billingAnchorDay: Int! = 1
+  billingAlignmentDate: Date = null
+  minDurationMonths: Int = null
+  noticePeriodMonths: Int! = 3
+  noticePeriodAnchor: String! = "end_of_duration"
+  noticePeriodAfterMinMonths: Int = null
+  groupId: ID = null
+}
+
+input CreateCostCenterInput {
+  code: String!
+  name: String!
+  isActive: Boolean! = true
+}
+
+input CreateCounterpartyInput {
+  name: String!
+  iban: String! = ""
+  bic: String! = ""
+}
+
+input CreateInvoiceInboxInput {
+  name: String!
+  inboxType: String! = "imap"
+  host: String! = ""
+  port: Int! = 993
+  username: String! = ""
+  password: String! = ""
+  folder: String! = "INBOX"
+  useSsl: Boolean! = true
+  m365Mailbox: String! = ""
+  isActive: Boolean! = true
+  pollIntervalMinutes: Int! = 15
+}
+
+type CreateOfferResult {
+  success: Boolean!
+  error: String
+  offer: OfferRecordType
+}
+
+type CreatePaymentMatchResult {
+  success: Boolean!
+  error: String
+  match: PaymentMatchType
+}
+
+input CreateSplitRuleInput {
+  counterpartyId: ID = null
+  bookingTextPattern: String = null
+  priority: Int! = 0
+  isActive: Boolean! = true
+  mode: String! = "percentage"
+  allocations: [SplitAllocationInput!]! = []
+}
+
+type CurrentUser {
+  id: Int!
+  email: String!
+  firstName: String!
+  lastName: String!
+  tenantId: Int
+  tenantName: String
+  companyName: String
+  roleName: String
+  isAdmin: Boolean!
+  roles: [String!]
+  permissions: [String!]
+  twoFactorEnabled: Boolean!
+  twoFactorMethod: String
+}
+
+type CustomerAttachmentResult {
+  attachment: CustomerAttachmentType
+  success: Boolean!
+  error: String
+}
+
+type CustomerAttachmentType {
+  id: Int!
+  originalFilename: String!
+  fileSize: Int!
+  contentType: String!
+  description: String!
+  category: String!
+  uploadedAt: DateTime!
+  uploadedByName: String
+  downloadUrl: String!
+}
+
+type CustomerCommentAuthorType {
+  id: ID!
+  firstName: String!
+  lastName: String!
+}
+
+type CustomerCommentResult {
+  comment: CustomerCommentType
+  success: Boolean!
+  error: String
+}
+
+type CustomerCommentType {
+  id: ID!
+  text: String!
+  author: CustomerCommentAuthorType!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  canEdit: Boolean!
+  canDelete: Boolean!
+}
+
+type CustomerConnection {
+  items: [CustomerType!]!
+  totalCount: Int!
+  page: Int!
+  pageSize: Int!
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+}
+
+type CustomerDocumentType {
+  id: Int!
+  originalFilename: String!
+  fileSize: Int!
+  contentType: String!
+  description: String!
+  category: String!
+  uploadedAt: DateTime!
+  uploadedByName: String
+  downloadUrl: String!
+  contractId: Int!
+  contractName: String!
+}
+
+type CustomerLinkResult {
+  link: CustomerLinkType
+  success: Boolean!
+  error: String
+}
+
+type CustomerLinkType {
+  id: Int!
+  name: String!
+  url: String!
+  createdAt: DateTime!
+  createdByName: String
+}
+
+type CustomerMatchSuggestionType {
+  customerId: Int!
+  customerName: String!
+  city: String
+  similarity: Decimal!
+  hubspotId: String
+}
+
+"""A customer synced from Hubspot or created manually."""
+type CustomerType {
+  id: ID!
+  name: String!
+  hubspotId: String
+
+  """Customer number from NetSuite (e.g., 'CUS174')"""
+  netsuiteCustomerNumber: String
+  address: JSON!
+  isActive: Boolean!
+  syncedAt: DateTime
+  createdAt: DateTime!
+
+  """List of billing contact email addresses"""
+  billingEmails: JSON!
+
+  """Language for invoices (de/en). Empty means use system default."""
+  invoiceLanguage: String!
+
+  """Customer VAT registration number (e.g., DE123456789)"""
+  vatId: String!
+
+  """Linked Clockodo customer ID"""
+  clockodoCustomerId: String
+  hubspotUrl: String
+  contracts: [ContractType!]!
+  contractCount: Int!
+  activeContractCount: Int!
+  attachments: [CustomerAttachmentType!]!
+  links: [CustomerLinkType!]!
+  todos: [TodoItemType!]!
+}
+
+type DashboardKPIsType {
+  totalActiveContracts: Int!
+  totalContractValue: Decimal!
+  annualRecurringRevenue: Decimal!
+  yearToDateRevenue: Decimal!
+  currentYearForecast: Decimal!
+  currentYearOneOff: Decimal!
+  currentYearDiscounts: Decimal!
+  nextYearForecast: Decimal!
+  nextYearOneOff: Decimal!
+  nextYearDiscounts: Decimal!
+}
+
+type DashboardPreferencesType {
+  showContracts: Boolean!
+  showRevenueGoals: Boolean!
+  showNewBusiness: Boolean!
+  showPriceIncreaseImpact: Boolean!
+  autoCloseMatchSheet: Boolean!
+}
+
+"""Date (isoformat)"""
+scalar Date
+
+"""Date with time (isoformat)"""
+scalar DateTime
+
+"""Decimal (fixed-point)"""
+scalar Decimal
+
+type DeleteCostCenterResult {
+  success: Boolean!
+  error: String
+  inUse: Boolean!
+  usageCount: Int!
+}
+
+type DeleteResult {
+  success: Boolean!
+  error: String
+}
+
+type DeliverItemResult {
+  success: Boolean!
+  error: String
+  dependentItems: [DependentItemInfo!]!
+}
+
+type DeliverableItemType {
+  id: Int!
+  productName: String
+  description: String!
+  isOneOff: Boolean!
+  deliveryStatus: String
+  deliveredAt: Date
+  estimatedDeliveryDate: Date
+  invoiceIndependent: Boolean!
+  contractId: Int!
+  contractName: String!
+  customerName: String!
+  customerId: Int!
+  dependentItemsCount: Int!
+}
+
+type DepartmentCostEntry {
+  departmentName: String!
+  cost: Float!
+  percentage: Float!
+  ftes: Float!
+}
+
+input DepartmentServiceMappingInput {
+  externalServiceId: String!
+  externalServiceName: String!
+  departmentId: ID!
+}
+
+type DepartmentServiceMappingType {
+  id: ID!
+  externalServiceId: String!
+  externalServiceName: String!
+  departmentId: ID!
+}
+
+type DepartmentTimeAnalysisType {
+  distribution: [DepartmentTimeEntry!]!
+  distributionFilled: [DepartmentTimeEntry!]
+  userMatrix: [UserDepartmentRow!]!
+  userMatrixFilled: [UserDepartmentRow!]
+  totalHours: Float!
+  totalHoursFilled: Float
+  costDistribution: [DepartmentCostEntry!]
+  totalCost: Float
+}
+
+type DepartmentTimeEntry {
+  departmentName: String!
+  hours: Float!
+  percentage: Float!
+}
+
+type DepartmentType {
+  id: ID!
+  name: String!
+  sortOrder: Int!
+  costCenterId: ID
+  costCenterName: String
+  costCenterCode: String
+}
+
+type DependentItemInfo {
+  id: Int!
+  name: String!
+  hasBillingStartDate: Boolean!
+}
+
+type DetectPatternsResult {
+  success: Boolean!
+  error: String
+  detectedCount: Int!
+}
+
+type DocumentEmailBccEntry {
+  documentType: String!
+  recipients: [String!]!
+}
+
+input FeedbackInput {
+  type: FeedbackType!
+  title: String!
+  description: String = null
+  screenshot: String = null
+  pageUrl: String = null
+  viewport: String = null
+  userAgent: String = null
+}
+
+type FeedbackResult {
+  success: Boolean!
+  error: String
+  taskUrl: String
+}
+
+enum FeedbackType {
+  BUG
+  FEATURE
+  GENERAL
+}
+
+type FteDistributionEntryType {
+  id: ID!
+  departmentName: String!
+  costCenterCode: String!
+  ftePercentage: Decimal!
+  monthlyIncomeTotal: Decimal!
+  hoursTotal: Decimal!
+}
+
+type FteDistributionSnapshotType {
+  id: ID!
+  yearMonth: String!
+  capturedAt: String!
+  capturedByName: String
+  entries: [FteDistributionEntryType!]!
+}
+
+type FteSnapshotResult {
+  success: Boolean!
+  error: String
+  snapshot: FteDistributionSnapshotType
+}
+
+input GenerateAPIKeyInput {
+  name: String!
+  permissions: JSON!
+  expiresInDays: Int = null
+}
+
+type GenerateAPIKeyResult {
+  apiKey: APIKeyType
+  rawKey: String
+  success: Boolean!
+  error: String
+}
+
+type GenerateInvoicesResult {
+  success: Boolean!
+  error: String
+  count: Int!
+  records: [InvoiceRecordType!]!
+}
+
+type GlobalSearchResult {
+  groups: [SearchResultGroup!]!
+  totalCount: Int!
+}
+
+input HelpVideoLinkInput {
+  url: String!
+  label: String = null
+}
+
+type HelpVideoLinkType {
+  url: String!
+  label: String
+}
+
+input HelpVideoLinksEntryInput {
+  routeKey: String!
+  links: [HelpVideoLinkInput!]!
+}
+
+type HelpVideoLinksEntryType {
+  routeKey: String!
+  links: [HelpVideoLinkType!]!
+}
+
+type HubSpotAssociatedCompany {
+  hubspotId: String!
+  name: String
+  synced: Boolean!
+}
+
+type HubSpotAssociationLabel {
+  typeId: Int!
+  label: String!
+  category: String!
+}
+
+type HubSpotAssociationLabelsResult {
+  success: Boolean!
+  error: String
+  labels: [HubSpotAssociationLabel!]
+}
+
+type HubSpotCompanyFilter {
+  propertyName: String!
+  values: [String!]!
+}
+
+input HubSpotCompanyFilterInput {
+  propertyName: String!
+  values: [String!]!
+}
+
+input HubSpotDateRangeInput {
+  modifiedSince: Date = null
+  modifiedUntil: Date = null
+}
+
+type HubSpotDealCheckResult {
+  success: Boolean!
+  error: String
+  dealName: String
+  dealStage: String
+  dealStageId: String
+  pipeline: String
+  pipelineId: String
+  isClosedWon: Boolean
+  associatedCompany: HubSpotAssociatedCompany
+  existingContractId: String
+  wouldSync: Boolean
+  reasons: [String!]
+}
+
+type HubSpotDealSyncResult {
+  success: Boolean!
+  error: String
+  created: Int!
+  skipped: Int!
+  warnings: [String!]
+}
+
+type HubSpotPropertiesResult {
+  success: Boolean!
+  error: String
+  properties: [HubSpotProperty!]
+}
+
+type HubSpotProperty {
+  name: String!
+  label: String!
+  propertyType: String!
+  options: [String!]
+}
+
+type HubSpotPropertyCheckResult {
+  success: Boolean!
+  error: String
+  exists: Boolean!
+  options: [String!]
+  propertyType: String
+}
+
+type HubSpotSettings {
+  isConfigured: Boolean!
+  apiKeySet: Boolean!
+  lastSync: String
+  lastProductSync: String
+  lastDealSync: String
+  companyFilters: [HubSpotCompanyFilter!]!
+  autoSyncEnabled: Boolean!
+  lastAutoSyncCustomers: String
+  lastAutoSyncProducts: String
+  lastAutoSyncDeals: String
+  billingContactLabel: String
+  portalId: String
+  syncMode: String
+  webhookLastReceived: String
+}
+
+type HubSpotSyncResult {
+  success: Boolean!
+  error: String
+  created: Int!
+  updated: Int!
+  warnings: [String!]
+}
+
+type HubSpotTestResult {
+  success: Boolean!
+  error: String
+}
+
+type ImportApplyResult {
+  createdContracts: [ContractType!]!
+  success: Boolean!
+  error: String
+  errorsByProposal: [String!]
+}
+
+type ImportLineItem {
+  itemName: String!
+  monthlyRate: Float!
+  productId: Int
+  productName: String
+}
+
+type ImportMatchAlternative {
+  customerId: Int!
+  customerName: String!
+  customerCity: String
+  confidence: Float!
+}
+
+type ImportMatchResult {
+  status: String!
+  customerId: Int
+  customerName: String
+  customerCity: String
+  confidence: Float!
+  alternatives: [ImportMatchAlternative!]!
+  originalName: String!
+  netsuiteCustomerNumber: String!
+}
+
+input ImportPdfAnalysisInput {
+  contractId: ID!
+  items: [PdfImportItemInput!]!
+  metadata: PdfImportMetadataInput = null
+}
+
+type ImportProposalType {
+  id: String!
+  customerNumber: String!
+  customerName: String!
+  salesOrderNumber: String!
+  contractNumber: String!
+  startDate: Date
+  endDate: Date
+  invoicingInstructions: String!
+  matchResult: ImportMatchResult
+  selectedCustomerId: Int
+  items: [ImportLineItem!]!
+  totalMonthlyRate: Float!
+  approved: Boolean!
+  rejected: Boolean!
+  error: String
+  needsReview: Boolean!
+  existingContractId: Int
+}
+
+type ImportSessionType {
+  id: String!
+  proposals: [ImportProposalType!]!
+  summary: ImportSummary!
+  parserErrors: [String!]!
+}
+
+type ImportSummary {
+  totalProposals: Int!
+  autoMatched: Int!
+  needsReview: Int!
+  notFound: Int!
+  totalItems: Int!
+  alreadyImported: Int!
+}
+
+type ImportUploadResult {
+  session: ImportSessionType
+  success: Boolean!
+  error: String
+}
+
+type IncomingInvoicePage {
+  items: [IncomingInvoiceType!]!
+  totalCount: Int!
+  page: Int!
+  pageSize: Int!
+  hasNextPage: Boolean!
+}
+
+type IncomingInvoiceResult {
+  success: Boolean!
+  error: String
+  invoice: IncomingInvoiceType
+}
+
+type IncomingInvoiceType {
+  id: ID!
+  supplierName: String!
+  invoiceNumber: String!
+  invoiceDate: Date
+  dueDate: Date
+  netAmount: Decimal
+  vatAmount: Decimal
+  grossAmount: Decimal
+  currency: String!
+  originalFilename: String!
+  fileSize: Int!
+  extractionStatus: String!
+  extractionError: String!
+  extractionConfidence: JSON
+  emailMessageId: String!
+  sourceEmailSubject: String!
+  sourceEmailDate: String
+  counterpartyId: ID
+  counterpartyName: String
+  inboxName: String
+  pdfUrl: String
+  createdAt: String!
+}
+
+type InvitationResult {
+  success: Boolean!
+  error: String
+  invitation: InvitationType
+  inviteUrl: String
+}
+
+"""Invitation for a new user to join a tenant."""
+type InvitationType {
+  id: ID!
+  email: String!
+  status: String!
+  expiresAt: DateTime!
+  createdAt: DateTime!
+  isExpired: Boolean!
+  createdByName: String
+  inviteUrl: String!
+}
+
+type InvitationValidation {
+  valid: Boolean!
+  email: String
+  error: String
+}
+
+type InvoiceConnection {
+  items: [InvoiceType!]!
+  totalCount: Int!
+  hasNextPage: Boolean!
+}
+
+type InvoiceEmailTemplate {
+  language: String!
+  subject: String!
+  body: String!
+  isCustom: Boolean!
+}
+
+type InvoiceEmailTemplatesResult {
+  success: Boolean!
+  error: String
+  templates: [InvoiceEmailTemplate!]
+}
+
+type InvoiceImportBatchConnection {
+  items: [InvoiceImportBatchType!]!
+  totalCount: Int!
+  hasNextPage: Boolean!
+}
+
+type InvoiceImportBatchType {
+  id: ID!
+  name: String!
+  totalExpected: Int!
+  totalUploaded: Int!
+  pendingCount: Int!
+  createdAt: String!
+  createdByName: String
+}
+
+type InvoiceInboxResult {
+  success: Boolean!
+  error: String
+  inbox: InvoiceInboxType
+}
+
+type InvoiceInboxType {
+  id: ID!
+  name: String!
+  inboxType: String!
+  host: String!
+  port: Int!
+  username: String!
+  folder: String!
+  m365Mailbox: String!
+  isActive: Boolean!
+  pollIntervalMinutes: Int!
+  lastPolledAt: String
+  useSsl: Boolean!
+}
+
+type InvoiceLineItemType {
+  itemId: Int!
+  productName: String!
+  description: String!
+  quantity: Int!
+  unitPrice: Decimal!
+  amount: Decimal!
+  isProrated: Boolean!
+  prorateFactor: Decimal
+  isOneOff: Boolean!
+}
+
+type InvoiceMatchInfoType {
+  invoiceId: ID!
+  invoiceNumber: String!
+  matchType: String!
+  confidence: Decimal!
+  contractId: Int
+  customerId: Int
+  invoiceType: String!
+}
+
+input InvoiceNumberSchemeInput {
+  pattern: String!
+  resetPeriod: String! = "yearly"
+  nextCounter: Int = null
+}
+
+type InvoiceNumberSchemeResult {
+  success: Boolean!
+  error: String
+  data: InvoiceNumberSchemeType
+}
+
+type InvoiceNumberSchemeType {
+  pattern: String!
+  nextCounter: Int!
+  resetPeriod: String!
+  preview: String!
+}
+
+type InvoicePreviewType {
+  contractId: Int!
+  contractName: String!
+  customerId: Int!
+  customerName: String!
+  customerAddress: JSON!
+  billingDate: Date!
+  billingPeriodStart: Date!
+  billingPeriodEnd: Date!
+  lineItems: [InvoiceLineItemType!]!
+  totalAmount: Decimal!
+  lineItemCount: Int!
+  invoiceText: String!
+}
+
+type InvoiceRecordConnection {
+  items: [InvoiceRecordType!]!
+  totalCount: Int!
+  hasNextPage: Boolean!
+}
+
+type InvoiceRecordType {
+  id: Int!
+  invoiceNumber: String!
+  contractId: Int
+  contractName: String!
+  customerId: Int
+  customerName: String!
+  billingDate: Date!
+  invoiceDate: Date!
+  periodStart: Date!
+  periodEnd: Date!
+  totalNet: Decimal!
+  taxRate: Decimal!
+  taxAmount: Decimal!
+  totalGross: Decimal!
+  status: String!
+  generatedAt: String!
+  lineItemsSnapshot: JSON!
+  invoiceText: String!
+  pdfUrl: String
+  isPaid: Boolean!
+  paymentMatches: [PaymentMatchType!]!
+  voidReason: String!
+  customerBillingEmails: [String!]!
+  emailSentAt: String
+  emailSentTo: [String!]!
+  emailMessageId: String!
+  documentType: String!
+  stornoOfId: Int
+  stornoOfNumber: String
+  stornoRecordId: Int
+  stornoRecordNumber: String
+}
+
+type InvoiceResult {
+  success: Boolean!
+  error: String
+  invoice: InvoiceType
+}
+
+type InvoiceSearchResultType {
+  id: ID!
+  invoiceNumber: String!
+  amount: Decimal!
+  customerName: String!
+  invoiceType: String!
+  status: String!
+  invoiceDate: Date
+  isPaid: Boolean!
+}
+
+type InvoiceSearchResultsType {
+  items: [InvoiceSearchResultType!]!
+  hasMore: Boolean!
+}
+
+input InvoiceTemplateInput {
+  accentColor: String! = "#2563eb"
+  headerText: String! = ""
+  footerText: String! = ""
+}
+
+type InvoiceTemplateReferenceType {
+  id: Int!
+  originalFilename: String!
+  fileSize: Int!
+  createdAt: String!
+  extractionStatus: String!
+  extractedData: JSON
+}
+
+type InvoiceTemplateResult {
+  success: Boolean!
+  error: String
+  data: InvoiceTemplateType
+}
+
+type InvoiceTemplateType {
+  accentColor: String!
+  headerText: String!
+  footerText: String!
+  hasLogo: Boolean!
+  logoUrl: String
+  references: [InvoiceTemplateReferenceType!]!
+}
+
+type InvoiceType {
+  id: ID!
+  invoiceNumber: String!
+  invoiceDate: Date
+  totalAmount: Decimal
+  currency: String!
+  customerName: String!
+  customerId: Int
+  customerDisplayName: String
+  contractId: Int
+  contractName: String
+  originalFilename: String!
+  fileSize: Int!
+  pdfUrl: String
+  extractionStatus: String!
+  extractionError: String!
+  isPaid: Boolean!
+  paidAt: Date
+  firstPaymentTransactionId: Int
+  paymentMatches: [PaymentMatchType!]!
+  createdAt: String!
+  createdByName: String
+  expectedFilename: String!
+  receiverEmails: [String!]!
+  uploadStatus: String!
+  importBatchId: Int
+}
+
+"""
+The `JSON` scalar type represents JSON values as specified by [ECMA-404](https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf).
+"""
+scalar JSON @specifiedBy(url: "https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf")
+
+type LegalDataCheckResult {
+  isComplete: Boolean!
+  missingFields: [String!]!
+}
+
+type LinkedCustomerType {
+  id: Int!
+  name: String!
+}
+
+type LiquidityAnalysisType {
+  year: Int!
+  currentBalance: Decimal!
+  balanceAsOf: Date
+  months: [LiquidityMonthType!]!
+}
+
+type LiquidityForecastType {
+  currentBalance: Decimal!
+  balanceAsOf: Date
+  months: [MonthlyForecastType!]!
+}
+
+type LiquidityMonthType {
+  month: Date!
+  actualCosts: Decimal!
+  actualIncome: Decimal!
+  projectedCosts: Decimal!
+  projectedIncome: Decimal!
+  totalCosts: Decimal!
+  totalIncome: Decimal!
+  net: Decimal!
+  cumulativeBalance: Decimal!
+  isPast: Boolean!
+}
+
+type M365MailboxType {
+  email: String!
+  displayName: String!
+}
+
+type M365MailboxesResult {
+  success: Boolean!
+  error: String
+  mailboxes: [M365MailboxType!]
+}
+
+type M365Settings {
+  isConfigured: Boolean!
+  senderMailbox: String
+  clientIdMasked: String
+  azureTenantIdMasked: String
+}
+
+type M365TestResult {
+  success: Boolean!
+  error: String
+  organization: String
+}
+
+input ManualSplitInput {
+  costCenterId: ID!
+  amount: Decimal!
+}
+
+type ManualSplitResult {
+  success: Boolean!
+  error: String
+  splits: [TransactionCostCenterSplitType!]
+}
+
+type MatchDetailType {
+  id: Int!
+  invoiceId: ID
+  invoiceRecordId: Int
+  invoiceNumber: String!
+  invoiceAmount: Decimal!
+  customerName: String!
+  invoiceType: String!
+  matchType: String!
+  confidence: Decimal!
+  matchedAt: String!
+}
+
+type MatchedInvoiceType {
+  id: ID!
+  invoiceNumber: String!
+  isPaid: Boolean!
+  pdfUrl: String
+}
+
+type MergeClockodoPreviewType {
+  hasNewRecurringItems: Boolean!
+  newOneOffItems: [String!]!
+  sourceMappingsWillBeDeleted: Int!
+}
+
+input MergeContractInput {
+  sourceContractId: ID!
+  targetContractId: ID!
+  itemOverrides: [MergeContractItemOverrideInput!] = null
+}
+
+input MergeContractItemOverrideInput {
+  itemId: Int!
+  startDate: Date = null
+  billingStartDate: Date = null
+}
+
+type MergeContractPreviewType {
+  items: [MergePreviewItemType!]!
+  willCreateAmendments: Boolean!
+  clockodoPreview: MergeClockodoPreviewType
+  sourceContractName: String!
+  targetContractName: String!
+  errors: [String!]!
+}
+
+type MergeContractResult {
+  contract: ContractType
+  success: Boolean!
+  errors: [String!]!
+  itemsTransferred: Int!
+}
+
+type MergeCounterpartiesResult {
+  success: Boolean!
+  error: String
+  target: CounterpartyType
+  mergedTransactionCount: Int!
+}
+
+type MergePreviewItemType {
+  id: Int!
+  productName: String
+  description: String!
+  quantity: Int!
+  unitPrice: String!
+  pricePeriod: String!
+  startDate: String
+  billingStartDate: String
+  isOneOff: Boolean!
+}
+
+type MonthlyBreakdown {
+  month: String!
+  hours: Float!
+  revenue: Float!
+}
+
+type MonthlyForecastType {
+  month: Date!
+  startingBalance: Decimal!
+  projectedCosts: Decimal!
+  projectedIncome: Decimal!
+  endingBalance: Decimal!
+  transactions: [ProjectedTransactionType!]!
+}
+
+input MoveContractItemInput {
+  itemId: ID!
+  targetContractId: ID!
+  effectiveDate: Date!
+}
+
+type MoveContractItemResult {
+  success: Boolean!
+  error: String
+  sourceItem: ContractItemType
+  newItem: ContractItemType
+}
+
+type Mutation {
+  login(email: String!, password: String!): AuthResult!
+  verify2fa(challengeToken: String!, code: String!): AuthResult!
+  refreshToken(refreshToken: String!): AuthResult!
+  submitFeedback(input: FeedbackInput!): FeedbackResult!
+  saveTimeTrackingSettings(provider: String!, apiEmail: String! = "", apiKey: String! = "", showRevenue: Boolean! = true): TimeTrackingTestResult!
+  updateTimeTrackingDisplay(showRevenue: Boolean!): Boolean!
+  saveTimeTrackingProjectTemplates(maintenanceTemplate: String! = "", oneoffTemplate: String! = ""): Boolean!
+  saveHubspotSettings(apiKey: String!): HubSpotTestResult!
+  testHubspotConnection: HubSpotTestResult!
+  syncHubspotCustomers(dateRange: HubSpotDateRangeInput = null): HubSpotSyncResult!
+  syncHubspotProducts(dateRange: HubSpotDateRangeInput = null): HubSpotSyncResult!
+  syncHubspotDeals(dateRange: HubSpotDateRangeInput = null): HubSpotDealSyncResult!
+  saveHubspotCompanyFilters(filters: [HubSpotCompanyFilterInput!]!): HubSpotTestResult!
+  setHubspotAutoSync(enabled: Boolean!): HubSpotTestResult!
+  setHubspotBillingContactLabel(label: String): HubSpotTestResult!
+  saveWebhookSettings(portalId: String = null, syncMode: String = null): HubSpotTestResult!
+  setActivationRequiredFields(fields: [String!]!): HubSpotTestResult!
+  updateHelpVideoLinks(entries: [HelpVideoLinksEntryInput!]!): [HelpVideoLinksEntryType!]!
+  checkHubspotProperty(propertyName: String!): HubSpotPropertyCheckResult!
+  deactivateUser(userId: ID!): OperationResult!
+  reactivateUser(userId: ID!): OperationResult!
+  createInvitation(email: String!, baseUrl: String = null, roleIds: [ID!] = null): InvitationResult!
+  revokeInvitation(invitationId: ID!): OperationResult!
+  acceptInvitation(token: String!, password: String!, firstName: String! = "", lastName: String! = ""): OperationResult!
+  changePassword(currentPassword: String!, newPassword: String!): OperationResult!
+  updateProfile(firstName: String = null, lastName: String = null, email: String = null): ProfileUpdateResult!
+  createPasswordReset(userId: ID!, baseUrl: String = null): ResetLinkResult!
+  requestPasswordReset(email: String!): OperationResult!
+  resetPassword(token: String!, newPassword: String!): OperationResult!
+  setupTotp: TotpSetupResult!
+  confirmTotp(code: String!): TwoFactorConfirmResult!
+  enableEmail2fa: TwoFactorConfirmResult!
+  disable2fa(password: String!): OperationResult!
+  regenerateRecoveryCodes(password: String!): TwoFactorConfirmResult!
+  updateTenantName(name: String!): OperationResult!
+  setPaymentDelayDays(days: Int!): OperationResult!
+  setTenant2faEnforcement(enforced: Boolean!): OperationResult!
+  updateFteSnapshotSettings(captureDay: Int = null, notificationEmail: String): OperationResult!
+  resetUser2fa(userId: ID!): OperationResult!
+  createRole(name: String!, permissions: JSON = null): RoleResult!
+  updateRolePermissions(roleId: ID!, permissions: JSON!): RoleResult!
+  deleteRole(roleId: ID!): OperationResult!
+  assignUserRoles(userId: ID!, roleIds: [ID!]!): OperationResult!
+  saveM365Settings(azureTenantId: String!, clientId: String!, clientSecret: String!): OperationResult!
+  testM365Connection: M365TestResult!
+  discoverM365Mailboxes: M365MailboxesResult!
+  sendM365TestEmail: OperationResult!
+  selectM365Mailbox(mailbox: String!): OperationResult!
+  saveSmtpSettings(host: String!, port: Int!, username: String!, password: String!, fromName: String!, fromAddress: String!, useTls: Boolean! = true): OperationResult!
+  saveBankingSettings(feeToleranceFixed: Decimal!, feeTolerancePercent: Decimal!): OperationResult!
+  saveForecastCacheTtl(minutes: Int!): OperationResult!
+  testSmtpConnection: OperationResult!
+  sendSmtpTestEmail: OperationResult!
+  updateNotificationPreferences(todoAssigned: Boolean = null, hubspotNewContract: Boolean = null, hubspotSyncCompleted: Boolean = null, timeTrackingSyncCompleted: Boolean = null): OperationResult!
+  updateDashboardPreferences(showContracts: Boolean = null, showRevenueGoals: Boolean = null, showNewBusiness: Boolean = null, showPriceIncreaseImpact: Boolean = null, autoCloseMatchSheet: Boolean = null): OperationResult!
+  setInvoiceEmailTemplate(input: SetInvoiceEmailTemplateInput!): OperationResult!
+  setDocumentEmailBcc(input: SetDocumentEmailBccInput!): OperationResult!
+  signUp(companyName: String!, email: String!, firstName: String!, lastName: String!, password: String!, baseUrl: String! = ""): OperationResult!
+  verifySignup(token: String!): SignupVerifyResult!
+  generateApiKey(input: GenerateAPIKeyInput!): GenerateAPIKeyResult!
+  revokeApiKey(keyId: ID!): OperationResult!
+  saveReportSchedule(input: SaveReportScheduleInput!): ReportScheduleType!
+  sendReportNow(reportType: String!, year: Int!, month: Int!): OperationResult!
+  linkCustomerToClockodo(customerId: ID!, clockodoCustomerId: String!): OperationResult!
+  unlinkCustomerFromClockodo(customerId: ID!): OperationResult!
+  createClockodoCustomer(customerId: ID!): OperationResult!
+  bulkLinkClockodoCustomers(mappings: [String!]!): OperationResult!
+  uploadCustomerAttachment(input: UploadCustomerAttachmentInput!): CustomerAttachmentResult!
+  deleteCustomerAttachment(attachmentId: ID!): DeleteResult!
+  addCustomerLink(input: AddCustomerLinkInput!): CustomerLinkResult!
+  deleteCustomerLink(linkId: ID!): DeleteResult!
+  updateCustomerBillingEmails(input: UpdateBillingEmailsInput!): UpdateBillingEmailsResult!
+  updateCustomerInvoiceLanguage(input: UpdateCustomerInvoiceLanguageInput!): UpdateCustomerInvoiceLanguageResult!
+  updateCustomerVatId(input: UpdateCustomerVatIdInput!): UpdateCustomerVatIdResult!
+  updateCustomer(input: UpdateCustomerInput!): UpdateCustomerResult!
+  addCustomerComment(customerId: ID!, text: String!): CustomerCommentResult!
+  updateCustomerComment(commentId: ID!, text: String!): CustomerCommentResult!
+  deleteCustomerComment(commentId: ID!): DeleteResult!
+  setProductRevenueType(productId: ID!, revenueType: String!): SetProductRevenueTypeResult!
+  generateAbsenceReport(year: Int!, month: Int!): AbsenceReportType!
+  finalizeAbsenceReport(reportId: ID!): AbsenceReportType!
+  sendAbsenceReport(reportId: ID!, recipients: [String!]!): Boolean!
+  provisionClockodoProjects(contractId: ID!, createMaintenance: Boolean! = true, oneoffStrategy: String! = "combined", selectedOneoffItemIds: [Int!] = null): ProvisioningResult!
+  createContract(input: CreateContractInput!): ContractResult!
+  updateContract(input: UpdateContractInput!): ContractResult!
+  addContractItem(contractId: ID!, input: ContractItemInput!): ContractItemResult!
+  updateContractItem(input: UpdateContractItemInput!): ContractItemResult!
+  removeContractItem(itemId: ID!): DeleteResult!
+  moveContractItem(input: MoveContractItemInput!): MoveContractItemResult!
+  cancelContract(contractId: ID!, effectiveDate: Date!): ContractResult!
+  deleteContract(contractId: ID!): ContractResult!
+  transitionContractStatus(contractId: ID!, newStatus: String!, activationOptions: ActivationOptionsInput = null): ContractResult!
+  changeContractCustomer(contractId: ID!, customerId: ID!): ContractResult!
+  addContractItemPrice(itemId: ID!, input: ContractItemPriceInput!): ContractItemPriceResult!
+  updateContractItemPrice(input: UpdateContractItemPriceInput!): ContractItemPriceResult!
+  removeContractItemPrice(priceId: ID!): DeleteResult!
+  uploadContractAttachment(input: UploadAttachmentInput!): AttachmentResult!
+  deleteContractAttachment(attachmentId: ID!): DeleteResult!
+  updateContractAttachmentMeta(input: UpdateAttachmentMetaInput!): AttachmentResult!
+  addContractLink(input: AddContractLinkInput!): ContractLinkResult!
+  deleteContractLink(linkId: ID!): DeleteResult!
+  mapTimeTrackingProject(contractId: ID!, externalProjectId: String!, externalProjectName: String!, externalCustomerName: String! = "", contractItemId: ID = null): TimeTrackingMappingResult!
+  unmapTimeTrackingProject(mappingId: ID!): DeleteResult!
+  createClockodoProjectForContract(contractId: ID!, projectName: String!, contractItemId: ID = null): TimeTrackingMappingResult!
+  createAutoLinkRule(contractId: ID!, pattern: String!, matchType: String! = "contains", contractItemId: ID = null): DeleteResult!
+  deleteAutoLinkRule(ruleId: ID!): DeleteResult!
+  createContractGroup(customerId: ID!, name: String!): ContractGroupResult!
+  updateContractGroup(groupId: ID!, name: String!): ContractGroupResult!
+  deleteContractGroup(groupId: ID!): DeleteResult!
+  assignContractToGroup(contractId: ID!, groupId: ID): ContractResult!
+  mergeContract(input: MergeContractInput!): MergeContractResult!
+  uploadContractImport(fileContent: String!, filename: String!, autoApproveThreshold: Float! = 0.9): ImportUploadResult!
+  reviewImportProposals(sessionId: String!, reviews: [ReviewProposalInput!]!): ImportUploadResult!
+  applyImportProposals(sessionId: String!, autoCreateProducts: Boolean! = true): ImportApplyResult!
+  cancelImportSession(sessionId: String!): DeleteResult!
+  importPdfAnalysis(input: ImportPdfAnalysisInput!): PdfImportResultType!
+  reorderContractItems(input: ReorderContractItemsInput!): DeleteResult!
+  bulkPriceIncrease(input: BulkPriceIncreaseInput!): BulkPriceIncreaseResult!
+  markItemDelivered(itemId: ID!, deliveredAt: Date!): DeliverItemResult!
+  revertItemDelivery(itemId: ID!): DeliverItemResult!
+  setDeliverableEta(itemId: ID!, estimatedDeliveryDate: Date = null): DeleteResult!
+  addContractComment(contractId: ID!, text: String!): ContractCommentResult!
+  updateContractComment(commentId: ID!, text: String!): ContractCommentResult!
+  deleteContractComment(commentId: ID!): DeleteResult!
+  setRevenueGoal(year: Int!, revenueType: String!, targetAmount: Decimal!): RevenueGoalResult!
+  deleteRevenueGoal(year: Int!, revenueType: String!): DeleteResult!
+  setNewBusinessGoal(year: Int!, goalType: String!, targetAmount: Decimal!): NewBusinessGoalResult!
+  deleteNewBusinessGoal(year: Int!, goalType: String!): DeleteResult!
+  createDepartment(name: String!): DeleteResult!
+  updateDepartment(id: ID!, name: String!, costCenterId: ID): DeleteResult!
+  deleteDepartment(id: ID!): DeleteResult!
+  saveDepartmentServiceMappings(mappings: [DepartmentServiceMappingInput!]!): DeleteResult!
+  saveUserCostProfiles(profiles: [UserCostProfileInput!]!): DeleteResult!
+  createOrderConfirmation(contractId: ID!, personalMessage: String! = "", includeMessageInPdf: Boolean! = true, includeMessageInEmail: Boolean! = true, additionalEmails: [String!] = null): OrderConfirmationResult!
+  sendOrderConfirmation(orderConfirmationId: ID!): OrderConfirmationResult!
+  previewOrderConfirmationHtml(contractId: ID!, personalMessage: String! = "", includeMessageInPdf: Boolean! = true): OrderConfirmationPreviewResult!
+  saveOrderConfirmationNumberScheme(input: OrderConfirmationNumberSchemeInput!): OrderConfirmationNumberSchemeResult!
+  regenerateOrderConfirmationPdf(orderConfirmationId: ID!): OrderConfirmationResult!
+  setAbEmailTemplate(input: SetABEmailTemplateInput!): OperationResult!
+  createTodo(text: String!, isPublic: Boolean! = false, reminderDate: Date = null, assignedToId: Int = null, contractId: Int = null, contractItemId: Int = null, customerId: Int = null): TodoCreateResult!
+  updateTodo(todoId: Int!, text: String = null, reminderDate: Date, isPublic: Boolean = null, isCompleted: Boolean = null, assignedToId: Int): TodoUpdateResult!
+  deleteTodo(todoId: Int!): DeleteResult!
+  addTodoComment(todoId: Int!, text: String!): TodoCommentResult!
+  reassignTodoToSelf(todoId: Int!): ReassignResult!
+  saveCompanyLegalData(input: CompanyLegalDataInput!): CompanyLegalDataResult!
+  saveInvoiceNumberScheme(input: InvoiceNumberSchemeInput!): InvoiceNumberSchemeResult!
+  saveStornoNumberScheme(input: InvoiceNumberSchemeInput!): InvoiceNumberSchemeResult!
+  saveInvoiceTemplate(input: InvoiceTemplateInput!): InvoiceTemplateResult!
+  uploadInvoiceLogo(input: UploadLogoInput!): InvoiceTemplateResult!
+  uploadInvoiceReferencePdf(input: UploadReferencePdfInput!): InvoiceTemplateResult!
+  deleteInvoiceTemplateLogo: DeleteResult!
+  deleteInvoiceTemplateReference(referenceId: Int!): DeleteResult!
+  generateInvoices(year: Int!, month: Int!, contractIds: [Int!] = null): GenerateInvoicesResult!
+  voidInvoice(invoiceId: Int!, reason: String!): VoidInvoiceResult!
+  generateInvoicePdf(invoiceId: Int!): VoidInvoiceResult!
+  setZugferdDefault(enabled: Boolean!): VoidInvoiceResult!
+  analyzeReferencePdf(referenceId: Int!): AnalyzeReferenceResult!
+  uploadInvoice(input: UploadInvoiceInput!): InvoiceResult!
+  updateInvoice(id: ID!, input: UpdateInvoiceInput!): InvoiceResult!
+  deleteInvoice(id: ID!): DeleteResult!
+  confirmInvoice(id: ID!): InvoiceResult!
+  uploadForecastInvoice(input: UploadForecastInvoiceInput!): InvoiceResult!
+  confirmForecastInvoice(input: ConfirmForecastInvoiceInput!): InvoiceResult!
+  extractInvoice(id: ID!): InvoiceResult!
+  reExtractInvoice(id: ID!): InvoiceResult!
+  confirmCustomerMatch(invoiceId: ID!, customerId: Int!): InvoiceResult!
+  unlinkCustomerFromInvoice(invoiceId: ID!): InvoiceResult!
+  assignInvoiceContract(invoiceId: ID!, contractId: Int): InvoiceResult!
+  createPaymentMatch(invoiceId: ID!, transactionId: Int!, matchType: String! = "manual"): CreatePaymentMatchResult!
+  createPaymentMatchForRecord(invoiceRecordId: Int!, transactionId: Int!, matchType: String! = "manual"): CreatePaymentMatchResult!
+  createPaymentMatchForIncoming(incomingInvoiceId: ID!, transactionId: Int!, matchType: String! = "manual"): CreatePaymentMatchResult!
+  deletePaymentMatch(matchId: Int!): DeleteResult!
+  uploadInvoiceCsv(input: UploadInvoiceCsvInput!): UploadInvoiceCsvResult!
+  uploadInvoices(inputs: [BulkUploadInvoiceInput!]!): BulkUploadInvoicesResult!
+  deleteImportBatch(id: ID!): DeleteResult!
+  sendInvoiceEmail(invoiceRecordId: ID!): DeleteResult!
+  sendAllUnsentInvoices: BulkSendResult!
+  createBankAccount(input: CreateBankAccountInput!): BankAccountResult!
+  updateBankAccount(input: UpdateBankAccountInput!): BankAccountResult!
+  deleteBankAccount(id: Int!): DeleteResult!
+  createCounterparty(input: CreateCounterpartyInput!): CounterpartyResult!
+  updateTransactionCounterparty(input: UpdateTransactionCounterpartyInput!): DeleteResult!
+  updateCounterparty(input: UpdateCounterpartyInput!): CounterpartyResult!
+  mergeCounterparties(sourceId: ID!, targetId: ID!): MergeCounterpartiesResult!
+  detectPatterns: DetectPatternsResult!
+  confirmPattern(patternId: Int!): RecurringPatternResult!
+  ignorePattern(patternId: Int!): RecurringPatternResult!
+  restorePattern(patternId: Int!): RecurringPatternResult!
+  updatePattern(input: UpdatePatternInput!): RecurringPatternResult!
+  pausePattern(patternId: Int!): RecurringPatternResult!
+  resumePattern(patternId: Int!): RecurringPatternResult!
+  linkCounterpartyToCustomer(counterpartyId: ID!, customerId: Int!): CounterpartyResult!
+  unlinkCounterpartyFromCustomer(counterpartyId: ID!): CounterpartyResult!
+  createInvoiceInbox(input: CreateInvoiceInboxInput!): InvoiceInboxResult!
+  updateInvoiceInbox(input: UpdateInvoiceInboxInput!): InvoiceInboxResult!
+  deleteInvoiceInbox(id: ID!): DeleteResult!
+  testInvoiceInboxConnection(id: ID!): TestConnectionResult!
+  updateIncomingInvoice(input: UpdateIncomingInvoiceInput!): IncomingInvoiceResult!
+  confirmAndMatchIncoming(invoiceId: ID!, transactionId: Int = null): ConfirmAndMatchResult!
+  deleteIncomingInvoice(id: ID!): DeleteResult!
+  retriggerIncomingInvoiceExtraction(id: ID!): OperationResult!
+  uploadIncomingInvoices(files: [UploadIncomingInvoiceFileInput!]!): UploadIncomingInvoicesResult!
+  createCostCenter(input: CreateCostCenterInput!): CostCenterResult!
+  updateCostCenter(input: UpdateCostCenterInput!): CostCenterResult!
+  deleteCostCenter(id: ID!, force: Boolean! = false): DeleteCostCenterResult!
+  createCostCenterSplitRule(input: CreateSplitRuleInput!): CostCenterSplitRuleResult!
+  updateCostCenterSplitRule(input: UpdateSplitRuleInput!): CostCenterSplitRuleResult!
+  deleteCostCenterSplitRule(id: ID!): DeleteResult!
+  captureFteDistributionSnapshot(yearMonth: String!): FteSnapshotResult!
+  splitTransactionCostCenters(transactionId: Int!, splits: [ManualSplitInput!]!): ManualSplitResult!
+  assignTransactionCostCenter(transactionId: Int!, costCenterId: ID = null): DeleteResult!
+  createOffer(contractId: Int!, billingDate: Date!, itemIds: [Int!] = null): CreateOfferResult!
+  updateOfferStatus(id: Int!, status: String!): UpdateOfferStatusResult!
+  updateOffer(id: Int!, validUntil: Date = null, notes: String = null): UpdateOfferResult!
+  deleteOffer(id: Int!): DeleteResult!
+  sendOfferEmail(id: Int!, recipients: [String!]!): UpdateOfferStatusResult!
+  saveOfferNumberScheme(input: OfferNumberSchemeInput!): OfferNumberSchemeResult!
+}
+
+type NewBusinessDetailItem {
+  customerId: Int!
+  customerName: String!
+  contractId: Int!
+  contractName: String!
+  itemId: Int
+  itemDescription: String
+  value: Decimal!
+  source: String!
+}
+
+type NewBusinessGoalGQLType {
+  id: Int!
+  year: Int!
+  goalType: String!
+  targetAmount: Decimal!
+}
+
+type NewBusinessGoalResult {
+  goal: NewBusinessGoalGQLType
+  success: Boolean!
+  error: String
+}
+
+type NewBusinessMetricsType {
+  wonNewArr: Decimal!
+  backToBaseArr: Decimal!
+  wonDevelopmentRevenue: Decimal!
+  wonDealCount: Int!
+}
+
+type NotificationPreferencesType {
+  todoAssigned: Boolean!
+  hubspotNewContract: Boolean!
+  hubspotSyncCompleted: Boolean!
+  timeTrackingSyncCompleted: Boolean!
+}
+
+input OfferNumberSchemeInput {
+  pattern: String!
+  resetPeriod: String! = "yearly"
+  nextCounter: Int = null
+}
+
+type OfferNumberSchemeResult {
+  success: Boolean!
+  error: String
+  data: OfferNumberSchemeType
+}
+
+type OfferNumberSchemeType {
+  pattern: String!
+  nextCounter: Int!
+  resetPeriod: String!
+  preview: String!
+}
+
+type OfferRecordConnection {
+  items: [OfferRecordType!]!
+  totalCount: Int!
+  hasNextPage: Boolean!
+}
+
+type OfferRecordType {
+  id: Int!
+  offerNumber: String!
+  contractId: Int
+  contractName: String!
+  customerId: Int
+  customerName: String!
+  offerDate: Date!
+  validUntil: Date
+  billingDate: Date!
+  periodStart: Date!
+  periodEnd: Date!
+  totalNet: Decimal!
+  taxRate: Decimal!
+  taxAmount: Decimal!
+  totalGross: Decimal!
+  status: String!
+  createdAt: String!
+  lineItemsSnapshot: JSON!
+  notes: String!
+  pdfUrl: String
+  vatSentence: String!
+  customerBillingEmails: [String!]!
+  emailSentAt: String
+  emailSentTo: [String!]!
+  emailMessageId: String!
+  scopedItemIds: [Int!]
+}
+
+type OperationResult {
+  success: Boolean!
+  error: String
+}
+
+input OrderConfirmationNumberSchemeInput {
+  pattern: String!
+  resetPeriod: String!
+  nextCounter: Int = null
+}
+
+type OrderConfirmationNumberSchemeResult {
+  success: Boolean!
+  error: String
+  data: OrderConfirmationNumberSchemeType
+}
+
+type OrderConfirmationNumberSchemeType {
+  pattern: String!
+  nextCounter: Int!
+  resetPeriod: String!
+  preview: String!
+}
+
+type OrderConfirmationPreviewResult {
+  html: String
+  error: String
+}
+
+type OrderConfirmationResult {
+  orderConfirmation: OrderConfirmationType
+  success: Boolean!
+  error: String
+}
+
+"""An order confirmation (Auftragsbestätigung) linked to a contract."""
+type OrderConfirmationType {
+  id: ID!
+  orderConfirmationNumber: String!
+  status: String!
+
+  """Optional personal message from the sender"""
+  personalMessage: String!
+
+  """Include personal message in the PDF document"""
+  includeMessageInPdf: Boolean!
+
+  """Include personal message in the email body"""
+  includeMessageInEmail: Boolean!
+
+  """Additional email addresses beyond billing contacts"""
+  additionalEmails: JSON!
+
+  """Language for the AB document (de/en)"""
+  language: String!
+  sentAt: DateTime
+
+  """List of email addresses the AB was sent to"""
+  sentTo: JSON!
+
+  """Microsoft Graph API message ID"""
+  emailMessageId: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  pdfUrl: String
+  contractId: ID!
+  createdByName: String!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+type PaymentMatchCandidateType {
+  transactionId: Int!
+  transactionDate: Date!
+  amount: Decimal!
+  counterpartyName: String!
+  bookingText: String!
+  matchType: String!
+  confidence: Decimal!
+}
+
+type PaymentMatchType {
+  id: Int!
+  transactionId: Int!
+  transactionDate: Date!
+  transactionAmount: Decimal!
+  counterpartyName: String!
+  matchType: String!
+  confidence: Decimal!
+  matchedAt: String!
+  matchedByName: String
+  bookingText: String!
+  reference: String!
+  valueDate: Date
+  accountName: String!
+}
+
+enum PaymentStatusFilter {
+  ALL
+  PAID
+  UNPAID
+}
+
+type PdfAnalysisResultType {
+  items: [PdfComparisonItemType!]!
+  metadata: PdfExtractedMetadataType!
+  metadataComparisons: [PdfMetadataComparisonType!]!
+  error: String
+}
+
+type PdfComparisonItemType {
+  extracted: PdfExtractedItemType!
+  productMatch: PdfProductMatchType
+  status: String!
+  existingItemId: Int
+  priceDiffers: Boolean!
+}
+
+type PdfExtractedItemType {
+  description: String!
+  quantity: Int!
+  unitPrice: Decimal!
+  pricePeriod: String!
+  isOneOff: Boolean!
+}
+
+type PdfExtractedMetadataType {
+  poNumber: String
+  orderConfirmationNumber: String
+  minDurationMonths: Int
+}
+
+input PdfImportItemInput {
+  description: String!
+  quantity: Int!
+  unitPrice: Decimal!
+  pricePeriod: String!
+  isOneOff: Boolean! = false
+  productId: ID = null
+  existingItemId: ID = null
+}
+
+input PdfImportMetadataInput {
+  poNumber: String
+  orderConfirmationNumber: String
+  minDurationMonths: Int
+}
+
+type PdfImportResultType {
+  success: Boolean!
+  error: String
+  createdItemsCount: Int!
+  updatedItemsCount: Int!
+}
+
+type PdfMetadataComparisonType {
+  fieldName: String!
+  extractedValue: String
+  currentValue: String
+  differs: Boolean!
+}
+
+type PdfProductMatchType {
+  productId: Int!
+  productName: String!
+  confidence: Float!
+}
+
+type PermissionResource {
+  resource: String!
+  actions: [String!]!
+}
+
+type PriceIncreaseImpactType {
+  year: Int!
+  totalArrImpact: Decimal!
+  inflationArrImpact: Decimal!
+  negotiatedArrImpact: Decimal!
+  untaggedArrImpact: Decimal!
+  itemCount: Int!
+}
+
+"""Category for grouping products."""
+type ProductCategoryType {
+  id: ID!
+  name: String!
+}
+
+type ProductConnection {
+  items: [ProductType!]!
+  totalCount: Int!
+  page: Int!
+  pageSize: Int!
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+}
+
+type ProductPriceType {
+  id: Int!
+  price: Decimal!
+  validFrom: String!
+  validTo: String
+}
+
+"""A product that can be added to contracts."""
+type ProductType {
+  id: ID!
+  name: String!
+  sku: String!
+  description: String!
+  type: String!
+
+  """Default billing frequency for this product"""
+  billingFrequency: String
+  isActive: Boolean!
+  syncedAt: DateTime
+
+  """
+  Revenue stream classification: Advanced Development, Training + Implementation, or Recurring
+  """
+  revenueType: String
+  category: ProductCategoryType
+  currentPrice: ProductPriceType
+}
+
+type ProfileUpdateResult {
+  success: Boolean!
+  error: String
+  user: UserType
+}
+
+type ProjectedTransactionType {
+  patternId: Int!
+  counterparty: CounterpartyType!
+  amount: Decimal!
+  projectedDate: Date!
+  isConfirmed: Boolean!
+}
+
+type ProvisioningProjectResult {
+  name: String!
+  action: String!
+}
+
+type ProvisioningResult {
+  success: Boolean!
+  createdProjects: [ProvisioningProjectResult!]!
+  errors: [String!]!
+}
+
+type Query {
+  feedbackEnabled: Boolean!
+  signupEnabled: Boolean!
+  me: CurrentUser
+  globalSearch(query: String!, limit: Int! = 10): GlobalSearchResult!
+  tenantSettings: TenantSettingsType
+  currentUser: UserType
+  currentTenant: TenantType
+  roles: [RoleType!]!
+  permissionRegistry: [PermissionResource!]!
+  apiKeys: [APIKeyType!]!
+  users: [UserType!]!
+  pendingInvitations: [InvitationType!]!
+  validateInvitation(token: String!): InvitationValidation!
+  validatePasswordReset(token: String!): ResetTokenValidation!
+  timeTrackingSettings: TimeTrackingSettings
+  hubspotSettings: HubSpotSettings
+  webhookEventLogs(limit: Int! = 20): [WebhookEventLogType!]!
+  activationChecklistSettings: ActivationChecklistSettings
+  hubspotCompanyProperties: HubSpotPropertiesResult!
+  checkHubspotDeal(dealId: String!): HubSpotDealCheckResult!
+  hubspotContactAssociationLabels: HubSpotAssociationLabelsResult!
+  m365Settings: M365Settings
+  smtpSettings: SmtpSettingsType
+  bankingSettings: BankingSettingsType
+  forecastCacheTtl: Int!
+  notificationPreferences: NotificationPreferencesType
+  dashboardPreferences: DashboardPreferencesType!
+  helpVideoLinks: [HelpVideoLinksEntryType!]!
+  invoiceEmailTemplates: InvoiceEmailTemplatesResult!
+  documentEmailBcc: [DocumentEmailBccEntry!]!
+  reportSchedules: [ReportScheduleType!]!
+  customerDocuments(customerId: ID!, category: String = null): [CustomerDocumentType!]!
+  autoMatchClockodoCustomers: [ClockodoCustomerMatch!]!
+  clockodoCustomers: [String!]!
+  customers(search: String = null, isActive: Boolean = null, page: Int! = 1, pageSize: Int! = 20, sortBy: String = "name", sortOrder: String = "asc"): CustomerConnection!
+  customer(id: ID!): CustomerType
+  customerComments(customerId: ID!): [CustomerCommentType!]!
+  products(search: String = null, isActive: Boolean = null, revenueType: String = null, page: Int! = 1, pageSize: Int! = 20, sortBy: String = "name", sortOrder: String = "asc"): ProductConnection!
+  product(id: ID!): ProductType
+  previewContractActivation(contractId: ID!): ActivationPreviewResult
+  mergeContractPreview(sourceContractId: ID!, targetContractId: ID!): MergeContractPreviewType!
+  dashboardKpis: DashboardKPIsType!
+  priceIncreaseImpact(year: Int!): PriceIncreaseImpactType!
+  contractPriceIncreases(year: Int!): [ContractPriceIncreaseDetailType!]!
+  suggestedAlignmentDate(contractId: ID!, billingStartDate: Date!): SuggestedAlignmentDateResult!
+  billingSchedule(contractId: ID!, months: Int! = 13, includeHistory: Boolean! = false, historyPeriods: Int! = 2): BillingScheduleResult!
+  revenueForecast(months: Int = null, quarters: Int = null, view: String! = "monthly", proRata: Boolean! = false, excludeOneOff: Boolean! = false, refresh: Boolean! = false): RevenueForecastResult!
+  recognitionForecast(months: Int = null, quarters: Int = null, view: String! = "monthly", proRata: Boolean! = false, excludeOneOff: Boolean! = false, refresh: Boolean! = false): RevenueForecastResult!
+  contracts(search: String = null, status: String = null, isNewBusiness: Boolean = null, dealWonYear: Int = null, includeDeleted: Boolean! = false, page: Int! = 1, pageSize: Int! = 20, sortBy: String = "updated_at", sortOrder: String = "desc"): ContractConnection!
+  contract(id: ID!): ContractType
+  contractGroups(customerId: ID!): [ContractGroupType!]!
+  timeTrackingProjects(search: String! = ""): [TimeTrackingExternalProject!]!
+  timeTrackingSummary(contractId: ID!): TimeTrackingSummaryType
+  previewAutoLinkMatches(pattern: String!, matchType: String! = "contains"): [TimeTrackingExternalProject!]!
+  departments: [DepartmentType!]!
+  clockodoServices: [ClockodoServiceType!]!
+  clockodoUsers: [ClockodoUserType!]!
+  userCostProfiles: [UserCostProfileType!]!
+  departmentServiceMappings: [DepartmentServiceMappingType!]!
+  departmentTimeAnalysis(dateFrom: Date!, dateTo: Date!): DepartmentTimeAnalysisType!
+  analyzePdfAttachment(attachmentId: ID!): PdfAnalysisResultType!
+  deliverableItems(status: String = null, customerId: ID = null): [DeliverableItemType!]!
+  contractComments(contractId: ID!): [ContractCommentType!]!
+  revenueGoals(year: Int!): [RevenueGoalType!]!
+  revenueByStream(year: Int!): [RevenueStreamDataType!]!
+  unclassifiedRevenueItems: [UnclassifiedItemType!]!
+  absenceReport(year: Int!, month: Int!): AbsenceReportType
+  newBusinessGoals(year: Int!): [NewBusinessGoalGQLType!]!
+  newBusinessMetrics(year: Int!): NewBusinessMetricsType!
+  wonDeals(year: Int!): [WonDealType!]!
+  newBusinessDetails(year: Int!, metricType: String!): [NewBusinessDetailItem!]!
+  importSession(sessionId: String!): ImportSessionType
+  orderConfirmation(id: ID!): OrderConfirmationType
+  orderConfirmationNumberScheme: OrderConfirmationNumberSchemeType!
+  abEmailTemplates: ABEmailTemplatesResult!
+  invoicesForMonth(year: Int!, month: Int!): [InvoicePreviewType!]!
+  invoiceRecord(id: Int!): InvoiceRecordType
+  invoiceRecordsForMonth(year: Int!, month: Int!, status: String = null): [InvoiceRecordType!]!
+  invoiceRecords(search: String = null, contractId: Int = null, customerId: Int = null, sortBy: String = null, sortOrder: String = "desc", offset: Int! = 0, limit: Int! = 50): InvoiceRecordConnection!
+  companyLegalData: CompanyLegalDataType
+  invoiceNumberScheme: InvoiceNumberSchemeType!
+  stornoNumberScheme: InvoiceNumberSchemeType!
+  invoiceTemplate: InvoiceTemplateType!
+  pdfAnalysisAvailable: Boolean!
+  checkLegalDataComplete: LegalDataCheckResult!
+  zugferdEnabled: Boolean!
+  importBatches(offset: Int! = 0, limit: Int! = 50): InvoiceImportBatchConnection!
+  importBatch(id: ID!): InvoiceImportBatchType
+  pendingInvoices(batchId: ID!, offset: Int! = 0, limit: Int! = 50): InvoiceConnection!
+  invoices(search: String = null, customerId: Int = null, contractId: Int = null, paymentStatus: PaymentStatusFilter = null, uploadStatus: UploadStatusFilter = null, sortBy: String = null, sortOrder: String = "desc", offset: Int! = 0, limit: Int! = 50): InvoiceConnection!
+  invoice(id: ID!): InvoiceType
+  customerMatchSuggestions(invoiceId: ID!): [CustomerMatchSuggestionType!]!
+  findPaymentMatches(invoiceId: ID!, daysAfter: Int! = 90): [PaymentMatchCandidateType!]!
+  findPaymentMatchesForRecord(invoiceRecordId: Int!, daysAfter: Int! = 90): [PaymentMatchCandidateType!]!
+  searchInvoicesForMatching(search: String! = "", unmatchedOnly: Boolean! = false, limit: Int! = 20): InvoiceSearchResultsType!
+  auditLogs(entityType: String = null, entityId: Int = null, userId: Int = null, action: String = null, includeRelated: Boolean! = false, dateFrom: DateTime = null, dateTo: DateTime = null, search: String = null, first: Int! = 25, after: String = null): AuditLogConnection!
+  todo(todoId: Int!): TodoItemType
+  myTodos(isCompleted: Boolean = null, limit: Int! = 100): [TodoItemType!]!
+  teamTodos(limit: Int! = 20): [TodoItemType!]!
+  todosByAssignee(includeCompleted: Boolean! = false): [AssigneeColumn!]!
+  costCenters(isActive: Boolean = null): [CostCenterType!]!
+  costCenterSplitRules(counterpartyId: ID = null, isActive: Boolean = null): [CostCenterSplitRuleType!]!
+  transactionCostCenterSplits(transactionId: Int!): [TransactionCostCenterSplitType!]!
+  costCenterReport(dateFrom: Date!, dateTo: Date!): CostCenterReportType!
+  fteDistributionSnapshots(year: Int = null): [FteDistributionSnapshotType!]!
+  transactionMatchDetails(transactionId: Int!): TransactionMatchDetailsType
+  suggestedInvoiceMatches(transactionId: Int!): SuggestedMatchesResultType
+  bankAccounts: [BankAccountType!]!
+  bankTransactions(accountId: Int = null, search: String = null, counterpartyId: ID = null, dateFrom: Date = null, dateTo: Date = null, amountMin: Decimal = null, amountMax: Decimal = null, direction: String = null, costCenterId: ID = null, unmatchedCreditsOnly: Boolean! = false, sortBy: String = null, sortOrder: String = null, page: Int! = 1, pageSize: Int! = 50, centerOnId: Int = null): BankTransactionPage!
+  counterparty(id: ID!, dateFrom: Date = null, dateTo: Date = null): CounterpartySummaryType
+  counterparties(search: String = null, dateFrom: Date = null, dateTo: Date = null, sortBy: String = null, sortOrder: String = null, page: Int! = 1, pageSize: Int! = 50): CounterpartyPage!
+  recurringPatterns(includeConfirmed: Boolean! = true, includeUnconfirmed: Boolean! = true, includeIgnored: Boolean! = false): [RecurringPatternType!]!
+  liquidityForecast(months: Int! = 12): LiquidityForecastType!
+  liquidityAnalysis(year: Int!): LiquidityAnalysisType!
+  invoiceInboxes: [InvoiceInboxType!]!
+  incomingInvoices(status: String = null, counterpartyId: ID = null, inboxId: ID = null, dateFrom: Date = null, dateTo: Date = null, search: String = null, sortBy: String = null, sortOrder: String = null, page: Int! = 1, pageSize: Int! = 50): IncomingInvoicePage!
+  incomingInvoice(id: ID!): IncomingInvoiceType
+  incomingInvoiceMatchSuggestion(invoiceId: ID!): BankTransactionType
+  offer(id: Int!): OfferRecordType
+  offers(search: String = null, status: String = null, dateFrom: Date = null, dateTo: Date = null, sortBy: String = null, sortOrder: String = "desc", offset: Int! = 0, limit: Int! = 50): OfferRecordConnection!
+  offerNumberScheme: OfferNumberSchemeType
+  offersForContract(contractId: Int!): [OfferRecordType!]!
+  health: String!
+}
+
+type ReassignResult {
+  success: Boolean!
+  todo: TodoItemType
+  error: String
+}
+
+type RecurringPatternResult {
+  success: Boolean!
+  error: String
+  pattern: RecurringPatternType
+}
+
+type RecurringPatternType {
+  id: Int!
+  counterparty: CounterpartyType!
+  averageAmount: Decimal!
+  frequency: String!
+  dayOfMonth: Int
+  confidenceScore: Float!
+  isConfirmed: Boolean!
+  isIgnored: Boolean!
+  isPaused: Boolean!
+  lastOccurrence: Date
+  projectedNextDate: Date
+  sourceTransactionCount: Int!
+}
+
+input ReorderContractItemsInput {
+  contractId: ID!
+  itemIds: [ID!]!
+  isOneOff: Boolean! = false
+}
+
+type ReportScheduleType {
+  id: Int!
+  reportType: String!
+  enabled: Boolean!
+  recipients: [String!]!
+  sendDayOfMonth: Int!
+  autoFinalize: Boolean!
+}
+
+type ResetLinkResult {
+  success: Boolean!
+  error: String
+  resetUrl: String
+}
+
+type ResetTokenValidation {
+  valid: Boolean!
+  email: String
+  error: String
+}
+
+type RevenueForecastResult {
+  monthColumns: [String!]!
+  monthlyTotals: [RevenueMonthData!]!
+  contracts: [ContractRevenueRow!]!
+  grandTotal: Decimal!
+  error: String
+}
+
+type RevenueGoalResult {
+  goal: RevenueGoalType
+  success: Boolean!
+  error: String
+}
+
+type RevenueGoalType {
+  id: Int!
+  year: Int!
+  revenueType: String!
+  targetAmount: Decimal!
+}
+
+type RevenueMonthData {
+  month: String!
+  amount: Decimal!
+  invoiceStatus: String
+}
+
+type RevenueStreamDataType {
+  revenueType: String!
+  ytdActual: Decimal!
+  fullYearForecast: Decimal!
+}
+
+input ReviewProposalInput {
+  proposalId: String!
+  approved: Boolean!
+  selectedCustomerId: ID = null
+}
+
+type RoleResult {
+  success: Boolean!
+  error: String
+  role: RoleType
+}
+
+type RoleType {
+  id: Int!
+  name: String!
+  isSystem: Boolean!
+  permissions: JSON!
+  userCount: Int!
+}
+
+input SaveReportScheduleInput {
+  reportType: String!
+  enabled: Boolean!
+  recipients: [String!]!
+  sendDayOfMonth: Int! = 5
+  autoFinalize: Boolean! = false
+}
+
+type SearchResultGroup {
+  type: String!
+  label: String!
+  items: [SearchResultItem!]!
+  hasMore: Boolean!
+}
+
+type SearchResultItem {
+  id: Int!
+  title: String!
+  subtitle: String
+  url: String!
+}
+
+type ServiceBreakdown {
+  serviceName: String!
+  hours: Float!
+  revenue: Float!
+}
+
+input SetABEmailTemplateInput {
+  language: String!
+  subject: String!
+  body: String!
+}
+
+input SetDocumentEmailBccInput {
+  documentType: String!
+  recipients: [String!]!
+}
+
+input SetInvoiceEmailTemplateInput {
+  language: String!
+  subject: String!
+  body: String!
+}
+
+type SetProductRevenueTypeResult {
+  product: ProductType
+  success: Boolean!
+  error: String
+}
+
+type SignupVerifyResult {
+  success: Boolean!
+  error: String
+  accessToken: String
+  refreshToken: String
+}
+
+type SmtpSettingsType {
+  host: String!
+  port: Int!
+  username: String!
+  fromName: String!
+  fromAddress: String!
+  useTls: Boolean!
+  isConfigured: Boolean!
+  passwordSet: Boolean!
+}
+
+input SplitAllocationInput {
+  costCenterId: ID!
+  percentage: Decimal = null
+  fixedAmount: Decimal = null
+}
+
+type SuggestedAlignmentDateResult {
+  suggestedDate: Date
+  error: String
+}
+
+type SuggestedMatchType {
+  id: ID!
+  invoiceNumber: String!
+  amount: Decimal!
+  customerName: String!
+  invoiceType: String!
+  status: String!
+  invoiceDate: Date
+  isPaid: Boolean!
+  amountDifference: Decimal!
+}
+
+type SuggestedMatchesResultType {
+  items: [SuggestedMatchType!]!
+  customerName: String!
+  customerId: Int!
+}
+
+type TenantSettingsType {
+  twoFactorEnforced: Boolean!
+  paymentDelayDays: Int!
+  fteSnapshotCaptureDay: Int!
+  fteSnapshotNotificationEmail: String
+}
+
+"""A tenant represents a company using the system."""
+type TenantType {
+  id: ID!
+  name: String!
+  currency: String!
+  isActive: Boolean!
+}
+
+type TestConnectionResult {
+  success: Boolean!
+  message: String!
+  emailCount: Int
+}
+
+type TimeTrackingExternalProject {
+  id: String!
+  name: String!
+  customerName: String!
+  active: Boolean!
+}
+
+type TimeTrackingMappingResult {
+  success: Boolean!
+  error: String
+  mapping: TimeTrackingMappingType
+}
+
+type TimeTrackingMappingType {
+  id: Int!
+  externalProjectId: String!
+  externalProjectName: String!
+  externalCustomerName: String!
+  contractItemId: Int
+  contractItemName: String
+  cachedTotalHours: Float!
+  contractItemMonthlyRevenue: Float
+  linkSource: String!
+}
+
+type TimeTrackingSettings {
+  provider: String
+  isConfigured: Boolean!
+  showRevenue: Boolean!
+  maintenanceProjectTemplate: String!
+  oneoffProjectTemplate: String!
+}
+
+type TimeTrackingSummaryType {
+  totalHours: Float!
+  totalRevenue: Float!
+  byService: [ServiceBreakdown!]!
+  byMonth: [MonthlyBreakdown!]!
+  mappings: [TimeTrackingMappingType!]!
+  autoLinkRules: [AutoLinkRuleType!]!
+  lastSynced: DateTime
+}
+
+type TimeTrackingTestResult {
+  success: Boolean!
+  error: String
+}
+
+type TodoCommentResult {
+  success: Boolean!
+  comment: TodoCommentType
+  error: String
+}
+
+type TodoCommentType {
+  id: Int!
+  text: String!
+  authorId: Int!
+  authorName: String!
+  createdAt: DateTime!
+}
+
+type TodoCreateResult {
+  success: Boolean!
+  todo: TodoItemType
+  error: String
+}
+
+type TodoItemType {
+  id: Int!
+  text: String!
+  reminderDate: Date
+  isPublic: Boolean!
+  isCompleted: Boolean!
+  completedAt: DateTime
+  createdAt: DateTime!
+  entityType: String!
+  entityName: String!
+  entityId: Int!
+  createdById: Int!
+  createdByName: String!
+  assignedToId: Int
+  assignedToName: String
+  contractId: Int
+  contractItemId: Int
+  customerId: Int
+  customerName: String
+  contractCustomerId: Int
+  commentCount: Int!
+  comments: [TodoCommentType!]!
+}
+
+type TodoUpdateResult {
+  success: Boolean!
+  todo: TodoItemType
+  error: String
+}
+
+type TotpSetupResult {
+  success: Boolean!
+  error: String
+  secret: String
+  provisioningUri: String
+}
+
+type TransactionCostCenterSplitType {
+  id: ID!
+  costCenter: CostCenterType!
+  amount: Decimal!
+  isManual: Boolean!
+  ruleId: ID
+}
+
+type TransactionMatchDetailsType {
+  id: Int!
+  entryDate: Date!
+  valueDate: Date
+  amount: Decimal!
+  currency: String!
+  counterpartyName: String!
+  bookingText: String!
+  reference: String!
+  accountName: String!
+  matches: [MatchDetailType!]!
+  totalMatched: Decimal!
+  difference: Decimal!
+  customerId: Int
+}
+
+type TwoFactorChallenge {
+  requiresTwoFactor: Boolean!
+  challengeToken: String!
+  method: String!
+}
+
+type TwoFactorConfirmResult {
+  success: Boolean!
+  error: String
+  recoveryCodes: [String!]
+}
+
+type UnclassifiedItemType {
+  itemId: Int!
+  productName: String
+  description: String!
+  isOneOff: Boolean!
+  unitPrice: Decimal!
+  quantity: Int!
+  contractId: Int!
+  contractName: String!
+  customerName: String!
+  customerId: Int!
+}
+
+input UpdateAttachmentMetaInput {
+  attachmentId: ID!
+  category: String = null
+  description: String = null
+}
+
+input UpdateBankAccountInput {
+  id: Int!
+  name: String!
+  iban: String! = ""
+  bic: String! = ""
+}
+
+input UpdateBillingEmailsInput {
+  customerId: ID!
+  addEmails: [String!] = null
+  removeEmails: [String!] = null
+}
+
+type UpdateBillingEmailsResult {
+  success: Boolean!
+  error: String
+  billingEmails: [String!]
+}
+
+input UpdateContractInput {
+  id: ID!
+  name: String = null
+  salesOrderNumber: String = null
+  netsuiteUrl: String = null
+  poNumber: String = null
+  orderConfirmationNumber: String = null
+  offerNumber: String = null
+  notes: String = null
+  invoiceText: String = null
+  startDate: Date = null
+  endDate: Date
+  billingStartDate: Date = null
+  billingInterval: String = null
+  billingAnchorDay: Int = null
+  billingAlignmentDate: Date
+  minDurationMonths: Int = null
+  noticePeriodMonths: Int = null
+  noticePeriodAnchor: String = null
+  noticePeriodAfterMinMonths: Int = null
+  groupId: ID
+  dealWonDate: Date
+}
+
+input UpdateContractItemInput {
+  id: ID!
+  productId: ID = null
+  description: String = null
+  quantity: Int = null
+  unitPrice: Decimal = null
+  pricePeriod: String = null
+  priceSource: String = null
+  startDate: Date
+  billingStartDate: Date
+  billingEndDate: Date
+  alignToContractAt: Date
+  isOneOff: Boolean = null
+  orderConfirmationNumber: String = null
+  priceLocked: Boolean = null
+  priceLockedUntil: Date
+  deliveryTracking: Boolean = null
+  dependsOnItemId: ID
+  estimatedDeliveryDate: Date
+  invoiceIndependent: Boolean = null
+  revenueType: String
+  dealWonDate: Date
+}
+
+input UpdateContractItemPriceInput {
+  id: ID!
+  validFrom: Date = null
+  validTo: Date = null
+  unitPrice: Decimal = null
+  pricePeriod: String = null
+  source: String = null
+  increaseType: String = null
+}
+
+input UpdateCostCenterInput {
+  id: ID!
+  code: String = null
+  name: String = null
+  isActive: Boolean = null
+}
+
+input UpdateCounterpartyInput {
+  id: ID!
+  name: String = null
+  iban: String = null
+  bic: String = null
+  defaultCostCenterId: ID
+}
+
+input UpdateCustomerInput {
+  customerId: ID!
+  name: String = null
+  netsuiteCustomerNumber: String = null
+  isActive: Boolean = null
+}
+
+input UpdateCustomerInvoiceLanguageInput {
+  customerId: ID!
+  language: String!
+}
+
+type UpdateCustomerInvoiceLanguageResult {
+  success: Boolean!
+  error: String
+  invoiceLanguage: String
+}
+
+type UpdateCustomerResult {
+  success: Boolean!
+  error: String
+}
+
+input UpdateCustomerVatIdInput {
+  customerId: ID!
+  vatId: String!
+}
+
+type UpdateCustomerVatIdResult {
+  success: Boolean!
+  error: String
+  vatId: String
+}
+
+input UpdateIncomingInvoiceInput {
+  id: ID!
+  supplierName: String = null
+  invoiceNumber: String = null
+  invoiceDate: Date
+  dueDate: Date
+  netAmount: Decimal
+  vatAmount: Decimal
+  grossAmount: Decimal
+  currency: String = null
+  counterpartyId: ID
+  extractionStatus: String = null
+}
+
+input UpdateInvoiceInboxInput {
+  id: ID!
+  name: String = null
+  inboxType: String = null
+  host: String = null
+  port: Int = null
+  username: String = null
+  password: String = null
+  folder: String = null
+  useSsl: Boolean = null
+  m365Mailbox: String = null
+  isActive: Boolean = null
+  pollIntervalMinutes: Int = null
+}
+
+input UpdateInvoiceInput {
+  invoiceNumber: String = null
+  invoiceDate: Date = null
+  totalAmount: Decimal = null
+  currency: String = null
+  customerName: String = null
+  customerId: Int = null
+}
+
+type UpdateOfferResult {
+  success: Boolean!
+  error: String
+  offer: OfferRecordType
+}
+
+type UpdateOfferStatusResult {
+  success: Boolean!
+  error: String
+  offer: OfferRecordType
+}
+
+input UpdatePatternInput {
+  id: Int!
+  amount: Decimal = null
+  frequency: String = null
+  dayOfMonth: Int = null
+}
+
+input UpdateSplitRuleInput {
+  id: ID!
+  counterpartyId: ID
+  bookingTextPattern: String
+  priority: Int = null
+  isActive: Boolean = null
+  allocations: [SplitAllocationInput!] = null
+}
+
+input UpdateTransactionCounterpartyInput {
+  transactionId: Int!
+  counterpartyId: ID!
+}
+
+input UploadAttachmentInput {
+  contractId: ID!
+  fileContent: String!
+  filename: String!
+  contentType: String!
+  description: String! = ""
+  category: String! = ""
+}
+
+input UploadCustomerAttachmentInput {
+  customerId: ID!
+  fileContent: String!
+  filename: String!
+  contentType: String!
+  description: String! = ""
+  category: String! = ""
+}
+
+input UploadForecastInvoiceInput {
+  fileContent: String!
+  filename: String!
+  contractId: Int!
+  billingDate: Date!
+}
+
+input UploadIncomingInvoiceFileInput {
+  fileContent: String!
+  filename: String!
+}
+
+type UploadIncomingInvoiceItemResult {
+  filename: String!
+  success: Boolean!
+  error: String
+}
+
+type UploadIncomingInvoicesResult {
+  success: Boolean!
+  error: String
+  totalUploaded: Int!
+  totalFailed: Int!
+  results: [UploadIncomingInvoiceItemResult!]!
+}
+
+input UploadInvoiceCsvInput {
+  fileContent: String!
+  filename: String!
+}
+
+type UploadInvoiceCsvResult {
+  success: Boolean!
+  error: String
+  batch: InvoiceImportBatchType
+  rowsProcessed: Int!
+}
+
+input UploadInvoiceInput {
+  fileContent: String!
+  filename: String!
+}
+
+input UploadLogoInput {
+  fileContent: String!
+  filename: String!
+}
+
+input UploadReferencePdfInput {
+  fileContent: String!
+  filename: String!
+}
+
+enum UploadStatusFilter {
+  ALL
+  PENDING
+  UPLOADED
+}
+
+input UserCostProfileInput {
+  externalUserId: String!
+  externalUserName: String!
+  ftePercentage: Int!
+  monthlyIncome: Float!
+  defaultDepartmentId: ID = null
+}
+
+type UserCostProfileType {
+  id: ID!
+  externalUserId: String!
+  externalUserName: String!
+  ftePercentage: Int!
+  monthlyIncome: Float!
+  defaultDepartmentId: ID
+}
+
+type UserDepartmentHours {
+  departmentName: String!
+  hours: Float!
+  percentage: Float!
+}
+
+type UserDepartmentRow {
+  userName: String!
+  departments: [UserDepartmentHours!]!
+  totalHours: Float!
+  absenceDays: Float
+  sickDays: Float
+  sickCertificateDays: Float
+  sickChildDays: Float
+}
+
+"""Custom user model with tenant association."""
+type UserType {
+  id: ID!
+  email: String!
+  firstName: String!
+  lastName: String!
+
+  """
+  Legt fest, ob dieser Benutzer aktiv ist. Kann deaktiviert werden, anstatt Benutzer zu löschen.
+  """
+  isActive: Boolean!
+  isAdmin: Boolean!
+  lastLogin: DateTime
+  fullName: String!
+  roleNames: [String!]!
+  twoFactorEnabled: Boolean!
+  twoFactorMethod: String
+}
+
+type VoidInvoiceResult {
+  success: Boolean!
+  error: String
+  stornoRecord: InvoiceRecordType
+}
+
+type WebhookEventLogType {
+  id: Int!
+  subscriptionType: String!
+  objectId: String!
+  objectKind: String!
+  status: String!
+  result: String!
+  errorMessage: String!
+  receivedAt: String!
+}
+
+type WonDealType {
+  contractId: Int!
+  contractName: String!
+  customerName: String!
+  dealWonDate: String!
+  annualRecurringRevenue: Decimal!
+}

@@ -677,6 +677,44 @@ export function McpSettings() {
           )}
         </div>
       </div>
+
+      {/* GraphQL API Section */}
+      <div className="rounded-lg border bg-white p-6">
+        <h2 className="text-lg font-medium">{t('settings.graphql.title', 'GraphQL API')}</h2>
+        <p className="mt-1 text-sm text-gray-500">
+          {t('settings.graphql.description', 'Für strukturierten programmatischen Zugriff steht zusätzlich zur MCP-Schnittstelle ein vollständiges GraphQL-API zur Verfügung. Authentifizierung über denselben API-Key (X-API-Key Header).')}
+        </p>
+
+        <div className="mt-4 space-y-3 text-sm">
+          <div>
+            <p className="font-medium text-gray-700">{t('settings.graphql.endpointLabel', 'Endpoint')}</p>
+            <code className="mt-1 inline-block rounded bg-gray-100 px-2 py-1 text-xs">{window.location.origin}/graphql</code>
+          </div>
+          <div>
+            <p className="font-medium text-gray-700">{t('settings.graphql.schemaLabel', 'Schema (SDL)')}</p>
+            <a
+              href="/graphql/schema.graphql"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              {window.location.origin}/graphql/schema.graphql
+            </a>
+          </div>
+          <div>
+            <p className="font-medium text-gray-700">{t('settings.graphql.exampleLabel', 'Beispiel-Request')}</p>
+            <pre className="mt-1 overflow-x-auto rounded bg-gray-50 p-3 text-xs text-gray-800 border">
+{`curl -X POST ${window.location.origin}/graphql \\
+  -H "X-API-Key: cm_..." \\
+  -H "Content-Type: application/json" \\
+  -d '{"query":"{ contracts { items { id name orderConfirmationNumber } } }"}'`}
+            </pre>
+          </div>
+          <p className="text-xs text-gray-500">
+            {t('settings.graphql.introspectionHint', 'Schema unterstützt Introspection — GraphiQL-UI ist beim Browser-Aufruf von /graphql verfügbar.')}
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
