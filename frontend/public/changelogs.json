@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.31.6",
+    "date": "2026-05-12",
+    "title": "Integrations/API: für alle User sichtbar",
+    "description": "Persönliche API-Keys (MCP-Zugriff) waren bisher hinter Admin-Permission versteckt. Alle authentifizierten User können nun ihre eigenen Keys verwalten.",
+    "type": "feature",
+    "details": [
+      "Frontend: Integrations-Tab ohne Permission-Gate. Admin-Sub-Tabs (HubSpot/TimeTracking/Email/Notifications) bleiben weiterhin nur für Admins sichtbar",
+      "Non-Admins sehen nur den API-Sub-Tab als Default",
+      "Backend: api_keys/generate_api_key/revoke_api_key benötigen nur Authentifizierung statt settings.read/write",
+      "Privilege-Escalation verhindert: API-Key kann nur Permissions enthalten die der User selbst besitzt"
+    ]
+  },
+  {
     "version": "2.31.5",
     "date": "2026-05-11",
     "title": "Counterparty: Year-Scope-Toggle + Kreditor-Überzahlung-Hinweis",

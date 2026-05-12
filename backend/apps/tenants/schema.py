@@ -642,9 +642,9 @@ class TenantQuery:
 
     @strawberry.field
     def api_keys(self, info: Info[Context, None]) -> list[APIKeyType]:
-        """List API keys for the current user. Requires settings.read."""
-        user = require_perm(info, "settings", "read")
-        if not user.tenant:
+        """List API keys for the current user. Per-user — any authenticated user can manage their own."""
+        user = get_current_user(info)
+        if not user or not user.tenant:
             return []
         return [
             APIKeyType(
@@ -2647,10 +2647,10 @@ class TenantMutation:
     def generate_api_key(
         self, info: Info[Context, None], input: GenerateAPIKeyInput
     ) -> GenerateAPIKeyResult:
-        """Generate a new API key with scoped permissions."""
-        user, err = check_perm(info, "settings", "write")
+        """Generate a new API key with scoped permissions. Per-user — any authenticated user can create their own."""
+        user = get_current_user(info)
         if not user:
-            return GenerateAPIKeyResult(error=err)
+            return GenerateAPIKeyResult(error="Authentication required")
         if not user.tenant:
             return GenerateAPIKeyResult(error="No tenant assigned")
 
@@ -2715,10 +2715,10 @@ class TenantMutation:
     def revoke_api_key(
         self, info: Info[Context, None], key_id: strawberry.ID
     ) -> OperationResult:
-        """Revoke an API key."""
-        user, err = check_perm(info, "settings", "write")
+        """Revoke an API key. Per-user — any authenticated user can revoke their own."""
+        user = get_current_user(info)
         if not user:
-            return OperationResult(error=err)
+            return OperationResult(error="Authentication required")
         if not user.tenant:
             return OperationResult(error="No tenant assigned")
 

@@ -87,9 +87,9 @@ export function SettingsLayout() {
           {canViewSettings && (
             <TabsTrigger value="general"><Settings className="mr-1.5 h-4 w-4" />{t('settings.tabs.general')}</TabsTrigger>
           )}
-          {canViewSettings && (
-            <TabsTrigger value="integrations"><Puzzle className="mr-1.5 h-4 w-4" />{t('settings.tabs.integrations')}</TabsTrigger>
-          )}
+          {/* Integrations always visible — every user can manage their own API keys (MCP).
+              Admin-only sub-tabs are hidden inside IntegrationSettingsTabs for non-admins. */}
+          <TabsTrigger value="integrations"><Puzzle className="mr-1.5 h-4 w-4" />{t('settings.tabs.integrations')}</TabsTrigger>
           {canViewUsers && (
             <TabsTrigger value="team"><Users className="mr-1.5 h-4 w-4" />{t('settings.tabs.team')}</TabsTrigger>
           )}
@@ -123,11 +123,9 @@ export function SettingsLayout() {
           </TabsContent>
         )}
 
-        {canViewSettings && (
-          <TabsContent value="integrations">
-            <IntegrationSettingsTabs />
-          </TabsContent>
-        )}
+        <TabsContent value="integrations">
+          <IntegrationSettingsTabs />
+        </TabsContent>
 
         {canViewUsers && (
           <TabsContent value="team">

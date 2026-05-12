@@ -4,18 +4,22 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Settings } from './Settings'
 import { SmtpSettings } from './SmtpSettings'
 import { McpSettings } from './McpSettings'
+import { useAuth } from '@/lib/auth'
 
 export function IntegrationSettingsTabs() {
   const { t } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()
+  const { hasPermission } = useAuth()
+  // Admin-only sub-tabs (tenant-wide integration configuration). API tab is per-user.
+  const canManageIntegrations = hasPermission('settings', 'read')
 
   const getActiveSubTab = () => {
     if (location.pathname.includes('/integrations/time-tracking')) return 'timeTracking'
     if (location.pathname.includes('/integrations/email')) return 'email'
     if (location.pathname.includes('/integrations/notifications')) return 'notifications'
     if (location.pathname.includes('/integrations/api')) return 'api'
-    return 'hubspot'
+    return canManageIntegrations ? 'hubspot' : 'api'
   }
 
   const activeSubTab = getActiveSubTab()
@@ -42,28 +46,36 @@ export function IntegrationSettingsTabs() {
   return (
     <Tabs value={activeSubTab} onValueChange={handleSubTabChange}>
       <TabsList className="mb-4">
-        <TabsTrigger value="hubspot">{t('settings.integrationTabs.hubspot')}</TabsTrigger>
-        <TabsTrigger value="timeTracking">{t('settings.integrationTabs.timeTracking')}</TabsTrigger>
-        <TabsTrigger value="email">{t('settings.integrationTabs.email')}</TabsTrigger>
-        <TabsTrigger value="notifications">{t('settings.integrationTabs.notifications')}</TabsTrigger>
+        {canManageIntegrations && <TabsTrigger value="hubspot">{t('settings.integrationTabs.hubspot')}</TabsTrigger>}
+        {canManageIntegrations && <TabsTrigger value="timeTracking">{t('settings.integrationTabs.timeTracking')}</TabsTrigger>}
+        {canManageIntegrations && <TabsTrigger value="email">{t('settings.integrationTabs.email')}</TabsTrigger>}
+        {canManageIntegrations && <TabsTrigger value="notifications">{t('settings.integrationTabs.notifications')}</TabsTrigger>}
         <TabsTrigger value="api">{t('settings.integrationTabs.api')}</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="hubspot">
-        <Settings showHeader={false} section="hubspot" />
-      </TabsContent>
+      {canManageIntegrations && (
+        <TabsContent value="hubspot">
+          <Settings showHeader={false} section="hubspot" />
+        </TabsContent>
+      )}
 
-      <TabsContent value="timeTracking">
-        <Settings showHeader={false} section="timeTracking" />
-      </TabsContent>
+      {canManageIntegrations && (
+        <TabsContent value="timeTracking">
+          <Settings showHeader={false} section="timeTracking" />
+        </TabsContent>
+      )}
 
-      <TabsContent value="email">
-        <Settings showHeader={false} section="email" />
-      </TabsContent>
+      {canManageIntegrations && (
+        <TabsContent value="email">
+          <Settings showHeader={false} section="email" />
+        </TabsContent>
+      )}
 
-      <TabsContent value="notifications">
-        <SmtpSettings />
-      </TabsContent>
+      {canManageIntegrations && (
+        <TabsContent value="notifications">
+          <SmtpSettings />
+        </TabsContent>
+      )}
 
       <TabsContent value="api">
         <McpSettings />
