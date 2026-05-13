@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.31.8",
+    "date": "2026-05-13",
+    "title": "Auftragsbestätigungen in Attachments-Liste",
+    "description": "Auftragsbestätigungen (PDFs) erscheinen jetzt in der Vertrags-Anhänge-Liste — kein Springen mehr zwischen Tabs nötig.",
+    "type": "feature",
+    "details": [
+      "Contract.attachments-Resolver: appendet Order-Confirmation-PDFs als virtuelle Attachments mit Kategorie order_confirmation und Lila-Badge",
+      "Synthetische Einträge unterstützen Download + Preview, gated für Note/Kategorie/Permalink/Analyze/Delete"
+    ]
+  },
+  {
     "version": "2.31.7",
     "date": "2026-05-12",
     "title": "MCP verbose + GraphQL-Schema + API-Tab-Doku",
