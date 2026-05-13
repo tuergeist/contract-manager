@@ -525,10 +525,16 @@ class ContractType:
 
     @strawberry.field
     def attachments(self) -> List[ContractAttachmentType]:
-        """Get all file attachments for this contract."""
+        """Get all file attachments for this contract.
+
+        Includes uploaded attachments AND generated order-confirmation PDFs
+        as virtual attachments (category 'order_confirmation'), so users see
+        everything in one list.
+        """
+        result: list[ContractAttachmentType] = []
         attachments = ContractAttachment.objects.filter(contract=self).select_related("uploaded_by")
-        return [
-            ContractAttachmentType(
+        for a in attachments:
+            result.append(ContractAttachmentType(
                 id=a.id,
                 original_filename=a.original_filename,
                 file_size=a.file_size,
@@ -538,9 +544,29 @@ class ContractType:
                 uploaded_at=a.created_at,
                 uploaded_by_name=a.uploaded_by.email if a.uploaded_by else None,
                 download_url=f"/api/attachments/{a.id}/download/",
-            )
-            for a in attachments
-        ]
+            ))
+        # Surface order confirmations as virtual attachments (negative id = synthetic)
+        ocs = OrderConfirmation.objects.filter(contract=self).select_related("created_by")
+        for oc in ocs:
+            if not oc.pdf_file:
+                continue
+            filename = f"{oc.order_confirmation_number or f'AB-{oc.id}'}.pdf"
+            try:
+                file_size = oc.pdf_file.size
+            except Exception:
+                file_size = 0
+            result.append(ContractAttachmentType(
+                id=-int(oc.id),  # negative ID so it can't collide with real attachments
+                original_filename=filename,
+                file_size=file_size,
+                content_type="application/pdf",
+                description=f"Auftragsbestätigung {oc.order_confirmation_number} ({oc.status})",
+                category="order_confirmation",
+                uploaded_at=oc.created_at,
+                uploaded_by_name=oc.created_by.email if oc.created_by else None,
+                download_url=oc.pdf_file.url,
+            ))
+        return result
 
     @strawberry.field
     def links(self) -> List[ContractLinkType]:

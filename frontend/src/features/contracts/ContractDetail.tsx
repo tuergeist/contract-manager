@@ -4410,6 +4410,7 @@ function AttachmentsTab({
   ]
 
   const getCategoryLabel = (category: string) => {
+    if (category === 'order_confirmation') return t('attachments.categoryOrderConfirmation', 'Auftragsbestätigung')
     const cat = ATTACHMENT_CATEGORIES.find((c) => c.value === category)
     return cat ? cat.label : ''
   }
@@ -4419,6 +4420,7 @@ function AttachmentsTab({
       case 'order': return 'bg-blue-100 text-blue-800'
       case 'contract': return 'bg-green-100 text-green-800'
       case 'offer': return 'bg-amber-100 text-amber-800'
+      case 'order_confirmation': return 'bg-purple-100 text-purple-800'
       case 'other': return 'bg-gray-100 text-gray-800'
       default: return ''
     }
@@ -4773,7 +4775,11 @@ function AttachmentsTab({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {attachments.map((attachment) => (
+              {attachments.map((attachment) => {
+                // Synthetic attachments (e.g. order confirmation PDFs) have negative IDs
+                // — no edit/delete/permalink/analyze actions; only download + preview.
+                const isSynthetic = Number(attachment.id) < 0
+                return (
                 <tr key={attachment.id}>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
@@ -4782,7 +4788,7 @@ function AttachmentsTab({
                         {attachment.originalFilename}
                       </span>
                     </div>
-                    {editingNoteId === attachment.id ? (
+                    {!isSynthetic && editingNoteId === attachment.id ? (
                       <div className="mt-1 flex items-center gap-1">
                         <Input
                           value={editNoteValue}
@@ -4817,20 +4823,20 @@ function AttachmentsTab({
                         className={cn(
                           "mt-1 text-xs",
                           attachment.description ? "text-gray-500" : "text-gray-300 italic",
-                          canEdit && "cursor-pointer hover:text-blue-600"
+                          canEdit && !isSynthetic && "cursor-pointer hover:text-blue-600"
                         )}
                         onClick={() => {
-                          if (!canEdit) return
+                          if (!canEdit || isSynthetic) return
                           setEditingNoteId(attachment.id)
                           setEditNoteValue(attachment.description)
                         }}
                       >
-                        {attachment.description || (canEdit ? t('attachments.notePlaceholder') : '')}
+                        {attachment.description || (canEdit && !isSynthetic ? t('attachments.notePlaceholder') : '')}
                       </p>
                     )}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm">
-                    {canEdit ? (
+                    {canEdit && !isSynthetic ? (
                       <Select
                         value={attachment.category || '__none__'}
                         onValueChange={(value) => handleUpdateCategory(attachment.id, value === '__none__' ? '' : value)}
@@ -4873,7 +4879,7 @@ function AttachmentsTab({
                     {formatDateTime(attachment.uploadedAt)}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-right">
-                    {attachment.contentType === 'application/pdf' && (
+                    {!isSynthetic && attachment.contentType === 'application/pdf' && (
                       <button
                         onClick={() => setAnalyzingAttachmentId(attachment.id)}
                         className="mr-2 text-gray-400 hover:text-purple-600"
@@ -4892,17 +4898,19 @@ function AttachmentsTab({
                         <Eye className="h-4 w-4" />
                       </button>
                     )}
-                    <button
-                      onClick={() => handleCopyPermalink(attachment.id)}
-                      className="mr-2 text-gray-400 hover:text-blue-600"
-                      title={copiedId === attachment.id ? t('attachments.linkCopied') : t('attachments.copyLink')}
-                    >
-                      {copiedId === attachment.id ? (
-                        <Check className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <Link2 className="h-4 w-4" />
-                      )}
-                    </button>
+                    {!isSynthetic && (
+                      <button
+                        onClick={() => handleCopyPermalink(attachment.id)}
+                        className="mr-2 text-gray-400 hover:text-blue-600"
+                        title={copiedId === attachment.id ? t('attachments.linkCopied') : t('attachments.copyLink')}
+                      >
+                        {copiedId === attachment.id ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <Link2 className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDownload(attachment)}
                       className="mr-2 text-gray-400 hover:text-blue-600"
@@ -4910,7 +4918,7 @@ function AttachmentsTab({
                     >
                       <Download className="h-4 w-4" />
                     </button>
-                    {canEdit && (
+                    {canEdit && !isSynthetic && (
                       <button
                         onClick={() => handleDelete(attachment)}
                         className="text-gray-400 hover:text-red-600"
@@ -4921,7 +4929,8 @@ function AttachmentsTab({
                     )}
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>
