@@ -9,7 +9,7 @@ import {
   CircleDot,
   FolderKanban,
 } from 'lucide-react'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatCurrency, formatNumber } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -43,6 +43,10 @@ const DELIVERABLE_ITEMS_QUERY = gql`
       customerName
       customerId
       dependentItemsCount
+      hoursBooked
+      orderValue
+      orderConfirmationNumber
+      psRatio
     }
   }
 `
@@ -92,6 +96,50 @@ interface DeliverableItem {
   customerName: string
   customerId: number
   dependentItemsCount: number
+  hoursBooked: number
+  orderValue: number
+  orderConfirmationNumber: string | null
+  psRatio: number | null
+}
+
+interface ContractGroup {
+  contractId: number
+  contractName: string
+  customerId: number
+  customerName: string
+  items: DeliverableItem[]
+}
+
+function groupByContract(items: DeliverableItem[]): ContractGroup[] {
+  const groups = new Map<number, ContractGroup>()
+  for (const item of items) {
+    let group = groups.get(item.contractId)
+    if (!group) {
+      group = {
+        contractId: item.contractId,
+        contractName: item.contractName,
+        customerId: item.customerId,
+        customerName: item.customerName,
+        items: [],
+      }
+      groups.set(item.contractId, group)
+    }
+    group.items.push(item)
+  }
+  return Array.from(groups.values())
+}
+
+function PsRatioCell({ value }: { value: number | null }) {
+  if (value == null) {
+    return <span className="text-gray-400">–</span>
+  }
+  const color =
+    value >= 1 ? 'text-green-700' : value >= 0.8 ? 'text-amber-700' : 'text-red-700'
+  return (
+    <span className={`font-medium ${color}`}>
+      {formatNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+    </span>
+  )
 }
 
 export function ProjectList() {
@@ -111,6 +159,7 @@ export function ProjectList() {
   const [setEta] = useMutation(SET_DELIVERABLE_ETA_MUTATION)
 
   const items = (data?.deliverableItems || []) as DeliverableItem[]
+  const groups = groupByContract(items)
 
   const handleMarkDelivered = async () => {
     if (!deliveryItem) return
@@ -162,8 +211,11 @@ export function ProjectList() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4">
+      <div className="rounded-lg border bg-white p-4">
         <div className="w-48">
+          <label className="mb-1 block text-xs font-medium text-gray-500">
+            {t('projects.status')}
+          </label>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger>
               <SelectValue />
@@ -177,121 +229,158 @@ export function ProjectList() {
         </div>
       </div>
 
-      {/* Items Table */}
-      {items.length === 0 ? (
+      {/* Grouped by contract */}
+      {groups.length === 0 ? (
         <div className="rounded-lg border bg-white p-8 text-center">
           <FolderKanban className="mx-auto h-12 w-12 text-gray-400" />
           <p className="mt-2 text-gray-600">{t('projects.noItems')}</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  {t('projects.contract')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  {t('projects.item')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  {t('projects.status')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  {t('projects.eta')}
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                  {t('projects.dependents')}
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                  {/* Actions */}
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {items.map((item) => (
-                <tr key={item.id}>
-                  <td className="px-6 py-4">
+        <div className="space-y-6">
+          {groups.map((group) => {
+            const totalHours = group.items.reduce((s, i) => s + (i.hoursBooked || 0), 0)
+            const totalValue = group.items.reduce((s, i) => s + (i.orderValue || 0), 0)
+            return (
+              <div key={group.contractId} className="overflow-hidden rounded-lg border">
+                {/* Contract group header */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-gray-50 px-6 py-3">
+                  <div>
                     <Link
-                      to={`/contracts/${item.contractId}`}
-                      className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                      to={`/contracts/${group.contractId}`}
+                      className="font-semibold text-blue-600 hover:text-blue-800 hover:underline"
                     >
-                      {item.contractName}
+                      {group.contractName || `#${group.contractId}`}
                     </Link>
                     <Link
-                      to={`/customers/${item.customerId}`}
-                      className="block text-xs text-gray-500 hover:text-blue-600"
+                      to={`/customers/${group.customerId}`}
+                      className="ml-2 text-xs text-gray-500 hover:text-blue-600"
                     >
-                      {item.customerName}
+                      {group.customerName}
                     </Link>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="font-medium text-gray-900">
-                      {item.productName || item.description || '-'}
+                  </div>
+                  <div className="flex gap-6 text-xs text-gray-600">
+                    <span>
+                      {t('projects.hours')}:{' '}
+                      <strong>{formatNumber(totalHours, { maximumFractionDigits: 1 })}</strong>
                     </span>
-                    {item.isOneOff && (
-                      <span className="ml-2 text-xs text-gray-400">{t('contracts.item.oneOff')}</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {item.deliveryStatus === 'pending' && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                        <CircleDot className="h-3 w-3" />
-                        {t('contracts.delivery.pending')}
-                      </span>
-                    )}
-                    {item.deliveryStatus === 'delivered' && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                        <CheckCircle2 className="h-3 w-3" />
-                        {t('contracts.delivery.delivered')}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {item.deliveryStatus === 'pending' ? (
-                      <Input
-                        type="date"
-                        className="h-8 w-40"
-                        value={item.estimatedDeliveryDate || ''}
-                        onChange={(e) => handleSetEta(item, e.target.value)}
-                      />
-                    ) : item.deliveredAt ? (
-                      formatDate(item.deliveredAt)
-                    ) : '-'}
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm text-gray-500">
-                    {item.dependentItemsCount > 0 && (
-                      <span className="text-xs text-gray-600">
-                        {t('projects.dependentCount', { count: item.dependentItemsCount })}
-                      </span>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-right">
-                    {item.deliveryStatus === 'pending' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => { setDeliveryItem(item); setDeliveryDate(new Date().toISOString().slice(0, 10)) }}
-                      >
-                        <CheckCircle2 className="mr-1 h-3 w-3" />
-                        {t('contracts.delivery.markDelivered')}
-                      </Button>
-                    )}
-                    {item.deliveryStatus === 'delivered' && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRevertDelivery(item)}
-                        className="text-gray-400 hover:text-amber-600"
-                      >
-                        {t('contracts.delivery.revertToPending')}
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <span>
+                      {t('projects.orderValue')}: <strong>{formatCurrency(totalValue)}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-white">
+                    <tr>
+                      <th className="px-6 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('projects.item')}
+                      </th>
+                      <th className="px-6 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('projects.ocNumber')}
+                      </th>
+                      <th className="px-6 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('projects.status')}
+                      </th>
+                      <th className="px-6 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('projects.eta')}
+                      </th>
+                      <th className="px-6 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('projects.hours')}
+                      </th>
+                      <th className="px-6 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('projects.orderValue')}
+                      </th>
+                      <th className="px-6 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                        {t('projects.psRatio')}
+                      </th>
+                      <th className="px-6 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {group.items.map((item) => (
+                      <tr key={item.id}>
+                        <td className="px-6 py-3">
+                          <span className="font-medium text-gray-900">
+                            {item.productName || item.description || '-'}
+                          </span>
+                          {item.dependentItemsCount > 0 && (
+                            <span className="ml-2 text-xs text-gray-500">
+                              {t('projects.dependentCount', { count: item.dependentItemsCount })}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-gray-700">
+                          {item.orderConfirmationNumber || <span className="text-gray-400">–</span>}
+                        </td>
+                        <td className="px-6 py-3">
+                          {item.deliveryStatus === 'pending' && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                              <CircleDot className="h-3 w-3" />
+                              {t('contracts.delivery.pending')}
+                            </span>
+                          )}
+                          {item.deliveryStatus === 'delivered' && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                              <CheckCircle2 className="h-3 w-3" />
+                              {t('contracts.delivery.delivered')}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-gray-500">
+                          {item.deliveryStatus === 'pending' ? (
+                            <Input
+                              type="date"
+                              className="h-8 w-40"
+                              value={item.estimatedDeliveryDate || ''}
+                              onChange={(e) => handleSetEta(item, e.target.value)}
+                            />
+                          ) : item.deliveredAt ? (
+                            formatDate(item.deliveredAt)
+                          ) : (
+                            '-'
+                          )}
+                        </td>
+                        <td className="px-6 py-3 text-right text-sm text-gray-700">
+                          {formatNumber(item.hoursBooked, { maximumFractionDigits: 1 })}
+                        </td>
+                        <td className="px-6 py-3 text-right text-sm text-gray-700">
+                          {formatCurrency(item.orderValue)}
+                        </td>
+                        <td className="px-6 py-3 text-right text-sm">
+                          <PsRatioCell value={item.psRatio} />
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-3 text-right">
+                          {item.deliveryStatus === 'pending' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setDeliveryItem(item)
+                                setDeliveryDate(new Date().toISOString().slice(0, 10))
+                              }}
+                            >
+                              <CheckCircle2 className="mr-1 h-3 w-3" />
+                              {t('contracts.delivery.markDelivered')}
+                            </Button>
+                          )}
+                          {item.deliveryStatus === 'delivered' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRevertDelivery(item)}
+                              className="text-gray-400 hover:text-amber-600"
+                            >
+                              {t('contracts.delivery.revertToPending')}
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
         </div>
       )}
 

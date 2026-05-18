@@ -1357,6 +1357,15 @@
       "saved": "Forecast-Cache-Einstellungen gespeichert",
       "saveFailed": "Forecast-Cache-Einstellungen konnten nicht gespeichert werden"
     },
+    "psRate": {
+      "title": "PS-Stundensatz",
+      "description": "Interner Stundensatz für die Projektrentabilität. Die PS-Ratio in der Projektübersicht berechnet sich als Auftragswert / (gebuchte Stunden × Stundensatz).",
+      "rateLabel": "PS-Stundensatz (EUR)",
+      "rateHint": "Standard 160 EUR. Wird zur Berechnung der PS-Ratio je Projekt verwendet.",
+      "save": "Einstellungen speichern",
+      "saved": "PS-Stundensatz gespeichert",
+      "saveFailed": "PS-Stundensatz konnte nicht gespeichert werden"
+    },
     "banking": {
       "title": "Banking-Einstellungen",
       "description": "Toleranz für die Zuordnung von Zahlungen zu Rechnungen konfigurieren (z. B. Bankgebühren).",
@@ -2181,7 +2190,11 @@
     "noItems": "Keine lieferbaren Positionen gefunden",
     "allStatuses": "Alle Status",
     "dependentCount": "{{count}} abhängige Positionen",
-    "dependentCount_one": "{{count}} abhängige Position"
+    "dependentCount_one": "{{count}} abhängige Position",
+    "ocNumber": "AB-Nummer",
+    "hours": "Stunden gebucht",
+    "orderValue": "Auftragswert",
+    "psRatio": "PS-Ratio"
   },
   "comments": {
     "title": "Kommentare",

@@ -930,6 +930,10 @@ class DeliverableItemType:
     customer_name: str
     customer_id: int
     dependent_items_count: int
+    hours_booked: float = 0
+    order_value: float = 0
+    order_confirmation_number: str | None = None
+    ps_ratio: float | None = None
 
 
 @strawberry.type
@@ -4181,9 +4185,11 @@ class ContractQuery:
         if not user.tenant:
             return []
 
+        # Projects are one-off deliverable items only.
         qs = ContractItem.objects.filter(
             tenant=user.tenant,
             delivery_status__isnull=False,
+            is_one_off=True,
         ).select_related("contract", "contract__customer", "product")
 
         if status:
@@ -4192,27 +4198,55 @@ class ContractQuery:
         if customer_id:
             qs = qs.filter(contract__customer_id=customer_id)
 
-        from django.db.models import Count
-        qs = qs.annotate(dep_count=Count("dependent_items"))
+        from django.db.models import Count, Sum
 
-        return [
-            DeliverableItemType(
-                id=item.id,
-                product_name=item.product.name if item.product else None,
-                description=item.description,
-                is_one_off=item.is_one_off,
-                delivery_status=item.delivery_status,
-                delivered_at=item.delivered_at,
-                estimated_delivery_date=item.estimated_delivery_date,
-                invoice_independent=item.invoice_independent,
-                contract_id=item.contract_id,
-                contract_name=item.contract.name or "",
-                customer_name=item.contract.customer.name,
-                customer_id=item.contract.customer_id,
-                dependent_items_count=item.dep_count,
+        qs = qs.annotate(dep_count=Count("dependent_items"))
+        items = list(qs.order_by("-contract__created_at"))
+
+        # Booked hours per item, summed from Clockodo time-tracking mappings.
+        item_ids = [item.id for item in items]
+        hours_by_item = {
+            row["contract_item_id"]: row["total"] or 0
+            for row in TimeTrackingProjectMapping.objects.filter(
+                tenant=user.tenant,
+                contract_item_id__in=item_ids,
             )
-            for item in qs.order_by("-contract__created_at")
-        ]
+            .values("contract_item_id")
+            .annotate(total=Sum("cached_total_hours"))
+        }
+        ps_rate = float((user.tenant.settings or {}).get("ps_hourly_rate", 160.0))
+
+        result = []
+        for item in items:
+            hours = float(hours_by_item.get(item.id, 0) or 0)
+            order_value = float(item.total_price_raw)
+            ps_ratio = (
+                order_value / (hours * ps_rate)
+                if hours > 0 and ps_rate > 0
+                else None
+            )
+            result.append(
+                DeliverableItemType(
+                    id=item.id,
+                    product_name=item.product.name if item.product else None,
+                    description=item.description,
+                    is_one_off=item.is_one_off,
+                    delivery_status=item.delivery_status,
+                    delivered_at=item.delivered_at,
+                    estimated_delivery_date=item.estimated_delivery_date,
+                    invoice_independent=item.invoice_independent,
+                    contract_id=item.contract_id,
+                    contract_name=item.contract.name or "",
+                    customer_name=item.contract.customer.name,
+                    customer_id=item.contract.customer_id,
+                    dependent_items_count=item.dep_count,
+                    hours_booked=hours,
+                    order_value=order_value,
+                    order_confirmation_number=item.order_confirmation_number,
+                    ps_ratio=ps_ratio,
+                )
+            )
+        return result
 
     @strawberry.field
     def contract_comments(

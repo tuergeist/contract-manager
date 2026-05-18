@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Settings } from './Settings'
 import { TenantNameSettings } from './TenantNameSettings'
 import { ForecastCacheSettings } from './ForecastCacheSettings'
+import { ProjectRateSettings } from './ProjectRateSettings'
 import { TenantSecuritySettings } from './TenantSecuritySettings'
 import { ReportScheduleSettings } from './ReportScheduleSettings'
 
@@ -55,6 +56,7 @@ export function GeneralSettingsTabs() {
         <div className="space-y-6">
           <TenantNameSettings />
           <Settings showHeader={false} section="contracts" />
+          <ProjectRateSettings />
         </div>
       </TabsContent>
 

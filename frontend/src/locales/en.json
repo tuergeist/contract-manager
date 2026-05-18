@@ -1357,6 +1357,15 @@
       "saved": "Forecast cache settings saved",
       "saveFailed": "Failed to save forecast cache settings"
     },
+    "psRate": {
+      "title": "PS Hourly Rate",
+      "description": "Internal hourly rate for project profitability. The PS ratio in the projects overview is computed as order value / (booked hours × hourly rate).",
+      "rateLabel": "PS Hourly Rate (EUR)",
+      "rateHint": "Default 160 EUR. Used to compute the PS ratio per project.",
+      "save": "Save Settings",
+      "saved": "PS hourly rate saved",
+      "saveFailed": "Failed to save PS hourly rate"
+    },
     "banking": {
       "title": "Banking Settings",
       "description": "Configure tolerance for matching payments to invoices (e.g. for banking fees).",
@@ -2181,7 +2190,11 @@
     "noItems": "No deliverable items found",
     "allStatuses": "All Statuses",
     "dependentCount": "{{count}} dependent items",
-    "dependentCount_one": "{{count}} dependent item"
+    "dependentCount_one": "{{count}} dependent item",
+    "ocNumber": "OC Number",
+    "hours": "Hours Booked",
+    "orderValue": "Order Value",
+    "psRatio": "PS Ratio"
   },
   "comments": {
     "title": "Comments",

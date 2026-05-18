@@ -968,6 +968,14 @@ class TenantQuery:
         return (user.tenant.settings or {}).get("forecast_cache_ttl", 60)
 
     @strawberry.field
+    def ps_hourly_rate(self, info: Info[Context, None]) -> float:
+        """Get PS hourly rate in EUR for project profitability calculation."""
+        user = get_current_user(info)
+        if not user.tenant:
+            return 160.0
+        return float((user.tenant.settings or {}).get("ps_hourly_rate", 160.0))
+
+    @strawberry.field
     def notification_preferences(self, info: Info[Context, None]) -> NotificationPreferencesType | None:
         """Get the current user's notification subscription preferences."""
         user = get_current_user(info)
@@ -2359,6 +2367,25 @@ class TenantMutation:
         if not tenant.settings:
             tenant.settings = {}
         tenant.settings["forecast_cache_ttl"] = minutes
+        tenant.save(update_fields=["settings"])
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def save_ps_hourly_rate(
+        self,
+        info: Info[Context, None],
+        rate: float,
+    ) -> OperationResult:
+        """Save PS hourly rate in EUR. Requires settings.write."""
+        user = require_perm(info, "settings", "write")
+        tenant = user.tenant
+        if not tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+        if rate < 0:
+            return OperationResult(success=False, error="Rate must not be negative")
+        s = tenant.settings or {}
+        s["ps_hourly_rate"] = rate
+        tenant.settings = s
         tenant.save(update_fields=["settings"])
         return OperationResult(success=True)
 
