@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.31.9",
+    "date": "2026-05-18",
+    "title": "Projekte nach Vertrag gruppiert mit PS-Ratio",
+    "description": "Die Projektübersicht listet einmalige Lieferpositionen jetzt nach Vertrag gruppiert — mit gebuchten Stunden, Auftragswert und Rentabilitäts-Kennzahl.",
+    "type": "feature",
+    "details": [
+      "Projekte nach Vertrag gruppiert; je Projekt: gebuchte Stunden (aus Clockodo-Mappings), Auftragswert, AB-Nummer, Status und ETA/Lieferdatum",
+      "Neue PS-Ratio je Projekt: Auftragswert / (gebuchte Stunden × PS-Stundensatz), farbcodiert nach Rentabilität",
+      "PS-Stundensatz in Einstellungen → Allgemein konfigurierbar (Standard 160 EUR)",
+      "Projektübersicht zeigt nur noch einmalige Positionen mit Liefertracking"
+    ]
+  },
+  {
     "version": "2.31.8",
     "date": "2026-05-13",
     "title": "Auftragsbestätigungen in Attachments-Liste",
