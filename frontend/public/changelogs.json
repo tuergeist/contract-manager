@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.31.10",
+    "date": "2026-05-20",
+    "title": "Clockodo-Konflikt zeigt jetzt, wo das Projekt verlinkt ist",
+    "description": "Beim Verknüpfen eines Clockodo-Projekts wird im Konfliktfall angezeigt, an welchen Vertrag (und welche Position) es bereits gebunden ist — inkl. Direktlink zum betroffenen Vertrag.",
+    "type": "bugfix",
+    "details": [
+      "mapTimeTrackingProject liefert bei Konflikt jetzt Contract-ID, -Name und Item-Name zurück",
+      "Verknüpfungs-Dialog zeigt Fehlertext und Direktlink zum Konflikt-Vertrag statt stiller Fehlschlag",
+      "Backend-Fehlertext nennt Vertrag und Position explizit"
+    ]
+  },
+  {
     "version": "2.31.9",
     "date": "2026-05-18",
     "title": "Projekte nach Vertrag gruppiert mit PS-Ratio",
