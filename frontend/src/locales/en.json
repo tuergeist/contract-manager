@@ -1809,6 +1809,8 @@
     "inactive": "Inactive",
     "link": "Link",
     "alreadyLinked": "Linked",
+    "linkFailed": "Linking failed",
+    "openConflictContract": "Open contract: {{name}}",
     "totalHours": "Total Hours",
     "totalRevenue": "Revenue",
     "byService": "By Service",

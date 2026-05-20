@@ -305,7 +305,7 @@ class TestMapTimeTrackingProject:
         assert result.errors is None
         data = result.data["mapTimeTrackingProject"]
         assert data["success"] is False
-        assert data["error"] == "Project is already mapped"
+        assert "already linked" in data["error"]
 
     @patch("apps.contracts.tasks.sync_time_tracking_mapping_task.delay")
     def test_rejects_contract_item_from_different_contract(

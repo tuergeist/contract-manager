@@ -1809,6 +1809,8 @@
     "inactive": "Inaktiv",
     "link": "Verknüpfen",
     "alreadyLinked": "Verknüpft",
+    "linkFailed": "Verknüpfung fehlgeschlagen",
+    "openConflictContract": "Vertrag öffnen: {{name}}",
     "totalHours": "Gesamtstunden",
     "totalRevenue": "Umsatz",
     "byService": "Nach Leistung",

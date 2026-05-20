@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link as RouterLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
 import { Loader2, Plus, Link2, Clock, Search, Trash2, Wand2 } from 'lucide-react'
@@ -90,6 +91,9 @@ const MAP_PROJECT_MUTATION = gql`
     ) {
       success
       error
+      conflictContractId
+      conflictContractName
+      conflictItemName
     }
   }
 `
@@ -550,6 +554,12 @@ function LinkProjectDialog({
   const [newProjectName, setNewProjectName] = useState('')
   const [createItemId, setCreateItemId] = useState('none')
   const [createError, setCreateError] = useState<string | null>(null)
+  const [linkError, setLinkError] = useState<{
+    message: string
+    conflictContractId: number | null
+    conflictContractName: string | null
+    conflictItemName: string | null
+  } | null>(null)
 
   const { data, loading } = useQuery(TIME_TRACKING_PROJECTS_QUERY, {
     variables: { search },
@@ -562,6 +572,7 @@ function LinkProjectDialog({
   const projects: ExternalProject[] = data?.timeTrackingProjects || []
 
   const handleLink = async (project: ExternalProject) => {
+    setLinkError(null)
     const result = await mapProject({
       variables: {
         contractId,
@@ -571,8 +582,16 @@ function LinkProjectDialog({
         contractItemId: selectedItemId !== 'none' ? selectedItemId : null,
       },
     })
-    if (result.data?.mapTimeTrackingProject?.success) {
+    const response = result.data?.mapTimeTrackingProject
+    if (response?.success) {
       onLinked()
+    } else if (response) {
+      setLinkError({
+        message: response.error || t('timeTracking.linkFailed'),
+        conflictContractId: response.conflictContractId ?? null,
+        conflictContractName: response.conflictContractName ?? null,
+        conflictItemName: response.conflictItemName ?? null,
+      })
     }
   }
 
@@ -715,6 +734,23 @@ function LinkProjectDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {linkError && (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <div>{linkError.message}</div>
+              {linkError.conflictContractId && (
+                <RouterLink
+                  to={`/contracts/${linkError.conflictContractId}`}
+                  className="mt-1 inline-block text-xs font-medium text-red-800 underline hover:text-red-900"
+                  onClick={() => onClose()}
+                >
+                  {t('timeTracking.openConflictContract', {
+                    name: linkError.conflictContractName || '',
+                  })}
+                </RouterLink>
+              )}
             </div>
           )}
 

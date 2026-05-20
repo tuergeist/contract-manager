@@ -169,6 +169,65 @@ class TestPsHourlyRate:
         assert result.errors is None
         assert result.data["savePsHourlyRate"]["success"] is False
 
+class TestMapTimeTrackingProjectConflict:
+    def test_already_mapped_returns_conflict_details(self, user, tenant, contract, customer):
+        """Conflict response carries existing-contract details for the UI."""
+        item = ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            description="Existing item",
+            quantity=1,
+            unit_price=Decimal("500.00"),
+            is_one_off=True,
+        )
+        TimeTrackingProjectMapping.objects.create(
+            tenant=tenant,
+            contract=contract,
+            contract_item=item,
+            external_project_id="ext-conflict",
+            external_project_name="Conflict Project",
+        )
+        # A second contract to try mapping the same external project to.
+        other_contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="Other Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2025, 2, 1),
+            billing_start_date=date(2025, 2, 1),
+        )
+
+        mutation = """
+            mutation($cid: ID!, $ext: String!) {
+                mapTimeTrackingProject(
+                    contractId: $cid,
+                    externalProjectId: $ext,
+                    externalProjectName: "X",
+                    externalCustomerName: ""
+                ) {
+                    success
+                    error
+                    conflictContractId
+                    conflictContractName
+                    conflictItemName
+                }
+            }
+        """
+        result = run_graphql(
+            mutation,
+            {"cid": str(other_contract.id), "ext": "ext-conflict"},
+            make_context(user),
+        )
+        assert result.errors is None
+        data = result.data["mapTimeTrackingProject"]
+        assert data["success"] is False
+        assert "Project Contract" in data["error"]
+        assert data["conflictContractId"] == contract.id
+        assert data["conflictContractName"] == "Project Contract"
+        assert data["conflictItemName"] == "Existing item"
+
+
+class TestPsHourlyRateRatio:
     def test_rate_affects_ps_ratio(self, user, tenant, contract):
         """Changing the PS rate changes the computed PS ratio."""
         tenant.settings = {"ps_hourly_rate": 100.0}

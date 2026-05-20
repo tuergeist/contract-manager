@@ -1858,6 +1858,11 @@ class TimeTrackingMappingResult:
     success: bool
     error: str | None = None
     mapping: TimeTrackingMappingType | None = None
+    # Populated when a "already mapped" conflict occurs so the UI can point
+    # the user at the existing link.
+    conflict_contract_id: int | None = None
+    conflict_contract_name: str | None = None
+    conflict_item_name: str | None = None
 
 
 # =============================================================================
@@ -6223,12 +6228,33 @@ class ContractMutation:
         if not contract:
             return TimeTrackingMappingResult(success=False, error="Contract not found")
 
-        # Check if already mapped
-        if TimeTrackingProjectMapping.objects.filter(
-            tenant=user.tenant, external_project_id=external_project_id
-        ).exists():
+        # Check if already mapped — surface where, so user can fix/unmap.
+        existing = (
+            TimeTrackingProjectMapping.objects
+            .filter(tenant=user.tenant, external_project_id=external_project_id)
+            .select_related("contract", "contract_item", "contract_item__product")
+            .first()
+        )
+        if existing:
+            existing_contract = existing.contract
+            existing_item = existing.contract_item
+            item_name = None
+            if existing_item:
+                item_name = (
+                    existing_item.product.name if existing_item.product
+                    else (existing_item.description[:50] if existing_item.description else f"Item {existing_item.id}")
+                )
+            contract_name = existing_contract.name or f"#{existing_contract.id}"
+            error_msg = (
+                f"Project is already linked to contract '{contract_name}'"
+                + (f" (item: {item_name})" if item_name else "")
+            )
             return TimeTrackingMappingResult(
-                success=False, error="Project is already mapped"
+                success=False,
+                error=error_msg,
+                conflict_contract_id=existing_contract.id,
+                conflict_contract_name=contract_name,
+                conflict_item_name=item_name,
             )
 
         # Validate contract_item belongs to this contract
