@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('invoices', '0024_add_incoming_invoice_to_payment_match'),
-        ('tenants', '0020_remove_tenant_slack_config'),
+        ('tenants', '0018_reportschedule'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
