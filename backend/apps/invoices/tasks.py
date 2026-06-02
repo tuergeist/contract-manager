@@ -7,7 +7,7 @@ from django.core.files.base import ContentFile
 from django.utils import timezone
 
 from apps.invoices.extraction import run_extraction
-from apps.invoices.models import ImportedInvoice, InvoiceRecord
+from apps.invoices.models import ImportedInvoice, InvoiceRecord, PaymentReminder
 
 logger = logging.getLogger(__name__)
 
@@ -344,3 +344,106 @@ def send_invoice_email_task(self, record_id: int, user_id: int | None = None) ->
     except M365Error as e:
         logger.error("Failed to send invoice email for record %s: %s", record_id, e)
         return False
+
+
+def _body_text_to_html(text: str) -> str:
+    """Convert a plain-text dunning body into simple HTML paragraphs."""
+    import html
+
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    return "".join(
+        "<p>" + html.escape(p).replace("\n", "<br>") + "</p>" for p in paragraphs
+    )
+
+
+@shared_task(bind=True, acks_late=True)
+def send_dunning_email_task(self, reminder_id: int, user_id: int | None = None) -> bool:
+    """Send a payment reminder (Mahnung) email via M365 Graph API.
+
+    Generates the reminder PDF if missing, sends it as an attachment, and
+    only marks the reminder as sent on success. No automatic retry to avoid
+    duplicate sends.
+    """
+    from apps.core.m365 import M365Error, get_document_bcc, send_mail
+    from apps.invoices.audit import log_reminder_sent
+    from apps.invoices.services import InvoiceService
+    from apps.tenants.models import User
+
+    try:
+        reminder = PaymentReminder.objects.select_related(
+            "invoice_record", "invoice_record__customer", "tenant"
+        ).get(id=reminder_id)
+    except PaymentReminder.DoesNotExist:
+        logger.error("PaymentReminder %s not found for email sending", reminder_id)
+        return False
+
+    record = reminder.invoice_record
+    customer = record.customer
+    if not customer:
+        logger.error("PaymentReminder %s invoice has no customer", reminder_id)
+        return False
+
+    # Re-check payment status immediately before sending.
+    if record.is_paid:
+        logger.info(
+            "PaymentReminder %s skipped: invoice %s is already paid",
+            reminder_id, record.id,
+        )
+        return False
+
+    recipients = customer.billing_emails or []
+    if not recipients:
+        logger.error("Customer %s has no billing_emails", customer.id)
+        return False
+
+    # Generate and store the PDF if it does not exist yet.
+    if not reminder.pdf_file:
+        pdf_bytes = InvoiceService(reminder.tenant).generate_dunning_pdf(reminder)
+        reminder.pdf_file.save(
+            f"reminder-{record.invoice_number}-stage{reminder.stage}.pdf",
+            ContentFile(pdf_bytes),
+            save=True,
+        )
+    else:
+        pdf_bytes = reminder.pdf_file.read()
+
+    attachments = [
+        {
+            "name": f"{record.invoice_number}-mahnung.pdf",
+            "content_type": "application/pdf",
+            "content_bytes": pdf_bytes,
+        }
+    ]
+    bcc = get_document_bcc(reminder.tenant, "dunning")
+
+    try:
+        send_mail(
+            reminder.tenant,
+            to=recipients,
+            subject=reminder.subject,
+            body_html=_body_text_to_html(reminder.body_text),
+            attachments=attachments,
+            bcc=bcc or None,
+        )
+    except M365Error as e:
+        logger.error(
+            "Failed to send dunning email for reminder %s: %s", reminder_id, e
+        )
+        return False
+
+    # Success — mark as sent and set invoice status to DUNNING on first send.
+    reminder.sent_at = timezone.now()
+    reminder.sent_to = recipients
+    reminder.save(update_fields=["sent_at", "sent_to"])
+
+    if record.status in (InvoiceRecord.Status.FINALIZED, InvoiceRecord.Status.SENT):
+        record.status = InvoiceRecord.Status.DUNNING
+        record.save(update_fields=["status"])
+
+    triggered_by = User.objects.filter(id=user_id).first() if user_id else None
+    log_reminder_sent(reminder, user=triggered_by)
+
+    logger.info(
+        "Dunning email sent for reminder %s to %s", reminder_id, recipients
+    )
+    return True

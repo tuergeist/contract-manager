@@ -157,6 +157,11 @@ class Contract(TenantModel):
         default=BillingInterval.MONTHLY,
     )
     billing_anchor_day = models.PositiveSmallIntegerField(default=1)
+    payment_term_days = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Payment term in days. Empty means fall back to customer, then tenant default.",
+    )
     billing_alignment_date = models.DateField(
         null=True,
         blank=True,

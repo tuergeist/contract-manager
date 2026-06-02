@@ -37,6 +37,9 @@ import {
   AlertTriangle,
   Mail,
   MoveRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react'
 import { cn, formatDate, formatDateTime, formatMonthYear, formatCurrency, formatPercent } from '@/lib/utils'
 import { useDocumentTitle } from '@/lib/useDocumentTitle'
@@ -101,7 +104,13 @@ import { TimeTrackingTab } from './TimeTrackingTab'
 import { MoveItemDialog } from './MoveItemDialog'
 import { PdfAnalysisPanel } from './PdfAnalysisPanel'
 import { InvoiceStatusBadge } from '@/components/InvoiceStatusBadge'
-import { ListTodo, Receipt } from 'lucide-react'
+import { ListTodo, Receipt, Bell } from 'lucide-react'
+import { PaymentReminderList } from '@/features/reminders/PaymentReminderList'
+import {
+  DUNNING_SETTINGS_QUERY,
+  type PaymentReminder,
+  type DunningSettings,
+} from '@/features/reminders/dunning'
 
 const CONTRACT_DETAIL_QUERY = gql`
   query ContractDetail($id: ID!) {
@@ -254,6 +263,27 @@ const CONTRACT_DETAIL_QUERY = gql`
       hasInvoices
       invoicedItemIds
       itemInvoicedUntil
+      paymentTermDays
+      paymentReminders {
+        id
+        invoiceRecordId
+        invoiceNumber
+        customerId
+        customerName
+        stage
+        language
+        title
+        subject
+        bodyText
+        feeAmount
+        interestAmount
+        interestRateSnapshot
+        interestDays
+        pdfUrl
+        sentAt
+        sentTo
+        createdAt
+      }
     }
   }
 `
@@ -292,6 +322,7 @@ const CONTRACT_GENERATED_INVOICES_QUERY = gql`
         pdfUrl
         emailSentAt
         emailSentTo
+        overdueDays
       }
       totalCount
     }
@@ -748,6 +779,8 @@ interface Contract {
   hasInvoices: boolean
   invoicedItemIds: number[]
   itemInvoicedUntil: Record<string, string>
+  paymentTermDays: number | null
+  paymentReminders: PaymentReminder[]
 }
 
 function SortableRow({
@@ -823,6 +856,38 @@ export function ContractDetail() {
     variables: { contractId: parseInt(id!, 10) },
     skip: !id,
   })
+
+  const { data: dunningData } = useQuery<{ dunningSettings: DunningSettings | null }>(
+    DUNNING_SETTINGS_QUERY
+  )
+  const dunningSettings = dunningData?.dunningSettings ?? null
+
+  // Invoices table sort (Verzug column)
+  const [invoiceSortField, setInvoiceSortField] = useState<'overdueDays' | null>(null)
+  const [invoiceSortOrder, setInvoiceSortOrder] = useState<'asc' | 'desc'>('desc')
+  const handleInvoiceSort = (field: 'overdueDays') => {
+    if (invoiceSortField === field) {
+      if (invoiceSortOrder === 'desc') {
+        setInvoiceSortOrder('asc')
+      } else {
+        setInvoiceSortField(null)
+        setInvoiceSortOrder('desc')
+      }
+    } else {
+      setInvoiceSortField(field)
+      setInvoiceSortOrder('desc')
+    }
+  }
+  const invoiceSortIcon = (field: 'overdueDays') => {
+    if (invoiceSortField !== field) {
+      return <ArrowUpDown className="ml-1 inline h-3 w-3 opacity-50" />
+    }
+    return invoiceSortOrder === 'desc' ? (
+      <ArrowDown className="ml-1 inline h-3 w-3" />
+    ) : (
+      <ArrowUp className="ml-1 inline h-3 w-3" />
+    )
+  }
 
   const [updateNotes, { loading: savingNotes }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
   const [updateInvoiceText, { loading: savingInvoiceText }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
@@ -1847,6 +1912,13 @@ export function ContractDetail() {
                     <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                       {t('invoices.import.colAmount')}
                     </th>
+                    <th
+                      className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleInvoiceSort('overdueDays')}
+                    >
+                      {t('reminders.overdueColumn')}
+                      {invoiceSortIcon('overdueDays')}
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                       {t('invoices.import.colStatus')}
                     </th>
@@ -1857,7 +1929,13 @@ export function ContractDetail() {
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {/* Generated invoices */}
-                  {generatedInvoicesData?.invoiceRecords?.items?.map((record: { id: number; invoiceNumber: string; billingDate: string; invoiceDate: string | null; totalGross: string; status: string; isPaid: boolean; pdfUrl: string | null; emailSentAt: string | null; emailSentTo: string[] }) => (
+                  {[...(generatedInvoicesData?.invoiceRecords?.items ?? [])]
+                    .sort((a: { overdueDays?: number }, b: { overdueDays?: number }) => {
+                      if (invoiceSortField !== 'overdueDays') return 0
+                      const diff = (a.overdueDays ?? 0) - (b.overdueDays ?? 0)
+                      return invoiceSortOrder === 'asc' ? diff : -diff
+                    })
+                    .map((record: { id: number; invoiceNumber: string; billingDate: string; invoiceDate: string | null; totalGross: string; status: string; isPaid: boolean; pdfUrl: string | null; emailSentAt: string | null; emailSentTo: string[]; overdueDays?: number }) => (
                     <tr key={`gen-${record.id}`} className="hover:bg-gray-50">
                       <td className="whitespace-nowrap px-6 py-4">
                         <Link to={`/invoices/${record.id}`} className="font-medium text-blue-600 hover:underline">
@@ -1869,6 +1947,25 @@ export function ContractDetail() {
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
                         {formatCurrency(record.totalGross)}
+                      </td>
+                      <td
+                        className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono"
+                        data-testid={`invoice-overdue-${record.id}`}
+                      >
+                        {(record.overdueDays ?? 0) > 0 ? (
+                          <span
+                            className={cn(
+                              dunningSettings &&
+                                (record.overdueDays ?? 0) >= dunningSettings.overdueRedThresholdDays
+                                ? 'font-semibold text-red-600'
+                                : 'text-gray-700'
+                            )}
+                          >
+                            {record.overdueDays}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">–</span>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4">
                         <InvoiceStatusBadge status={record.status} isPaid={record.isPaid} />
@@ -1920,6 +2017,12 @@ export function ContractDetail() {
                           ? formatCurrency(invoice.totalAmount, { currency: invoice.currency || 'EUR' })
                           : '-'}
                       </td>
+                      <td
+                        className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono"
+                        data-testid={`invoice-overdue-${invoice.id}`}
+                      >
+                        <span className="text-gray-400">–</span>
+                      </td>
                       <td className="whitespace-nowrap px-6 py-4">
                         <div className="flex flex-col">
                           <InvoiceStatusBadge isPaid={invoice.isPaid} />
@@ -1958,6 +2061,18 @@ export function ContractDetail() {
               </table>
             </div>
           )}
+
+          {/* Payment Reminders */}
+          <div className="mt-6 rounded-lg border bg-white p-6" data-testid="contract-reminders-section">
+            <div className="flex items-center gap-2 mb-4">
+              <Bell className="h-5 w-5 text-gray-400" />
+              <h3 className="text-md font-semibold">{t('reminders.sectionTitle')}</h3>
+              <span className="text-sm text-gray-500">
+                ({contract.paymentReminders?.length || 0})
+              </span>
+            </div>
+            <PaymentReminderList reminders={contract.paymentReminders ?? []} showInvoice />
+          </div>
         </div>
       )}
 

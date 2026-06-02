@@ -2,7 +2,7 @@
 import io
 import zipfile
 from calendar import monthrange
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Literal
 
@@ -105,6 +105,29 @@ STORNO_LABELS = {
         "title": "Credit Note",
         "reference": "Credit note for Invoice No.",
         "void_reason": "Void Reason",
+    },
+}
+
+DUNNING_LABELS = {
+    "de": {
+        "invoice_number": "Rechnungsnummer",
+        "invoice_date": "Rechnungsdatum",
+        "due_date": "Fällig am",
+        "overdue_days": "Tage überfällig",
+        "invoice_amount": "Rechnungsbetrag",
+        "dunning_fee": "Mahngebühr",
+        "interest": "Verzugszinsen",
+        "total_due": "Offener Gesamtbetrag",
+    },
+    "en": {
+        "invoice_number": "Invoice number",
+        "invoice_date": "Invoice date",
+        "due_date": "Due date",
+        "overdue_days": "Days overdue",
+        "invoice_amount": "Invoice amount",
+        "dunning_fee": "Dunning fee",
+        "interest": "Late-payment interest",
+        "total_due": "Total amount due",
     },
 }
 
@@ -847,6 +870,56 @@ class InvoiceService:
         pdf_document = HTML(string=html).render()
         return pdf_document.write_pdf()
 
+    def generate_dunning_pdf(self, reminder, language: str | None = None) -> bytes:
+        """Generate the PDF for a payment reminder (Mahnung).
+
+        Reuses company legal data, logo, and accent color from the standard
+        template context. The stage title from the reminder is the heading.
+
+        Args:
+            reminder: PaymentReminder instance
+            language: Override language; defaults to the reminder's language
+
+        Returns:
+            PDF bytes
+        """
+        record = reminder.invoice_record
+        language = language or reminder.language or "de"
+
+        fee = reminder.fee_amount or Decimal("0")
+        interest = reminder.interest_amount or Decimal("0")
+        total_due = record.total_gross + fee + interest
+
+        ctx = {
+            "language": language,
+            "title": reminder.title,
+            "body_text": reminder.body_text,
+            "currency_symbol": self.tenant.currency_symbol,
+            "customer": {
+                "name": record.customer_name,
+                "address": (record.customer.address if record.customer else {})
+                or {},
+            },
+            "invoice": {
+                "number": record.invoice_number,
+                "date": record.invoice_date or record.billing_date,
+                "due_date": record.due_date,
+                "amount": record.total_gross,
+                "overdue_days": record.overdue_days,
+            },
+            "fee_amount": fee,
+            "interest_amount": interest,
+            "show_fee": fee > 0,
+            "show_interest": interest > 0,
+            "total_due": total_due,
+            "labels": DUNNING_LABELS.get(language, DUNNING_LABELS["en"]),
+            **self._get_template_context(),
+        }
+
+        html = render_to_string("invoices/dunning.html", ctx)
+        pdf_document = HTML(string=html).render()
+        return pdf_document.write_pdf()
+
     # ----------------------------------------------------------------
     # ZUGFeRD PDF generation
     # ----------------------------------------------------------------
@@ -1344,13 +1417,22 @@ class InvoiceService:
                 # Get next invoice number
                 invoice_number = numbering.get_next_number(invoice_data.billing_date)
 
+                # Resolve payment term (contract -> customer -> tenant default)
+                invoice_date = date.today()
+                due_date = invoice_date + timedelta(
+                    days=self._resolve_payment_term(
+                        invoice_data.contract_id, invoice_data.customer_id
+                    )
+                )
+
                 record = InvoiceRecord.objects.create(
                     tenant=self.tenant,
                     contract_id=invoice_data.contract_id,
                     customer_id=invoice_data.customer_id,
                     invoice_number=invoice_number,
                     billing_date=invoice_data.billing_date,
-                    invoice_date=date.today(),
+                    invoice_date=invoice_date,
+                    due_date=due_date,
                     period_start=invoice_data.billing_period_start,
                     period_end=invoice_data.billing_period_end,
                     total_net=total_net,
@@ -1378,6 +1460,24 @@ class InvoiceService:
             generate_invoice_pdf_task.delay(record.id)
 
         return created_records
+
+    def _resolve_payment_term(self, contract_id, customer_id) -> int:
+        """Resolve the payment term in days for an invoice being created."""
+        from apps.contracts.models import Contract
+        from apps.customers.models import Customer
+        from apps.invoices.dunning import resolve_payment_term
+
+        contract = (
+            Contract.objects.filter(id=contract_id).first()
+            if contract_id
+            else None
+        )
+        customer = (
+            Customer.objects.filter(id=customer_id).first()
+            if customer_id
+            else None
+        )
+        return resolve_payment_term(contract, customer, self.tenant)
 
     def void_invoice(self, invoice_record, reason: str):
         """Void a finalized or sent invoice, creating a storno (credit note) record.

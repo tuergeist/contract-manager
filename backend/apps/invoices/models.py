@@ -5,6 +5,7 @@ import uuid
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 
 from apps.core.models import TenantModel, TimestampedModel
 
@@ -33,6 +34,12 @@ def invoice_record_upload_path(instance, filename):
     """Upload path: uploads/{tenant_id}/invoices/generated/{uuid}.pdf"""
     unique_filename = f"{uuid.uuid4().hex}.pdf"
     return f"uploads/{instance.tenant_id}/invoices/generated/{unique_filename}"
+
+
+def payment_reminder_upload_path(instance, filename):
+    """Upload path: uploads/{tenant_id}/invoices/reminders/{uuid}.pdf"""
+    unique_filename = f"{uuid.uuid4().hex}.pdf"
+    return f"uploads/{instance.tenant_id}/invoices/reminders/{unique_filename}"
 
 
 class CompanyLegalData(TimestampedModel):
@@ -367,6 +374,11 @@ class InvoiceRecord(TenantModel):
     )
     period_start = models.DateField()
     period_end = models.DateField()
+    due_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Payment due date (invoice_date + resolved payment term)",
+    )
 
     # Amounts
     total_net = models.DecimalField(max_digits=12, decimal_places=2)
@@ -423,6 +435,17 @@ class InvoiceRecord(TenantModel):
     def is_paid(self) -> bool:
         """Check if this invoice record has at least one payment match."""
         return self.payment_matches.exists()
+
+    @property
+    def overdue_days(self) -> int:
+        """Number of days this invoice is overdue.
+
+        Returns 0 if the invoice is paid, has no due date, or is not yet due.
+        """
+        if self.due_date is None or self.is_paid:
+            return 0
+        delta = (timezone.now().date() - self.due_date).days
+        return delta if delta > 0 else 0
 
 
 class UploadStatus(models.TextChoices):
@@ -700,3 +723,59 @@ class InvoicePaymentMatch(TenantModel):
         elif self.invoice_record:
             inv_num = self.invoice_record.invoice_number
         return f"Match: {inv_num} <- {self.transaction}"
+
+
+class PaymentReminder(TenantModel):
+    """A dunning notice (Mahnung) sent for a single overdue invoice."""
+
+    class Stage(models.IntegerChoices):
+        REMINDER = 0, "Payment reminder"
+        FIRST = 1, "First dunning notice"
+        SECOND = 2, "Second dunning notice"
+        THIRD = 3, "Third dunning notice"
+
+    invoice_record = models.ForeignKey(
+        InvoiceRecord,
+        on_delete=models.CASCADE,
+        related_name="payment_reminders",
+    )
+    stage = models.PositiveSmallIntegerField(choices=Stage.choices)
+    language = models.CharField(max_length=2, default="de")
+
+    # Content (final, editable text used in PDF and email)
+    title = models.CharField(max_length=255)
+    subject = models.CharField(max_length=255)
+    body_text = models.TextField()
+
+    # Fee / interest snapshot — frozen at send time
+    fee_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    interest_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    interest_rate_snapshot = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text="Annual interest rate (%) applied at send time",
+    )
+    interest_days = models.PositiveIntegerField(
+        default=0,
+        help_text="Overdue days the interest was calculated on",
+    )
+
+    pdf_file = models.FileField(upload_to=payment_reminder_upload_path, blank=True)
+
+    # Send tracking
+    sent_at = models.DateTimeField(null=True, blank=True)
+    sent_to = models.JSONField(default=list, blank=True)
+    created_by = models.ForeignKey(
+        "tenants.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_reminders_created",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Reminder stage {self.stage} - Invoice {self.invoice_record_id}"

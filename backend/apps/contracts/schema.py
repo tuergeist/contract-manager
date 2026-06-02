@@ -308,6 +308,27 @@ class ContractType:
     order_confirmation_number: auto
     offer_number: auto
     notes: auto
+    payment_term_days: auto
+
+    @strawberry.field
+    def payment_reminders(
+        self,
+    ) -> list[
+        Annotated[
+            "PaymentReminderType",
+            strawberry.lazy("apps.invoices.dunning_schema"),
+        ]
+    ]:
+        """Payment reminders sent for this contract's invoices."""
+        from apps.invoices.dunning_schema import _convert_reminder
+        from apps.invoices.models import PaymentReminder
+
+        qs = (
+            PaymentReminder.objects.filter(invoice_record__contract=self)
+            .select_related("invoice_record")
+            .order_by("-created_at")
+        )
+        return [_convert_reminder(r) for r in qs]
 
     @strawberry.field(name="orderConfirmations")
     def get_order_confirmations(self) -> list[OrderConfirmationType]:
@@ -719,6 +740,7 @@ class CreateContractInput:
     notice_period_months: int = 3
     notice_period_anchor: str = "end_of_duration"
     notice_period_after_min_months: int | None = None
+    payment_term_days: int | None = None
     group_id: strawberry.ID | None = None
 
 
@@ -743,6 +765,7 @@ class UpdateContractInput:
     notice_period_months: int | None = None
     notice_period_anchor: str | None = None
     notice_period_after_min_months: int | None = None
+    payment_term_days: int | None = UNSET
     group_id: strawberry.ID | None = UNSET
     deal_won_date: date | None = UNSET
 
@@ -4950,6 +4973,7 @@ class ContractMutation:
                 notice_period_months=input.notice_period_months,
                 notice_period_anchor=input.notice_period_anchor,
                 notice_period_after_min_months=input.notice_period_after_min_months,
+                payment_term_days=input.payment_term_days,
                 group=group,
             )
             return ContractResult(contract=contract, success=True)
@@ -5010,6 +5034,8 @@ class ContractMutation:
                 contract.notice_period_anchor = input.notice_period_anchor
             if input.notice_period_after_min_months is not None:
                 contract.notice_period_after_min_months = input.notice_period_after_min_months
+            if input.payment_term_days is not UNSET:
+                contract.payment_term_days = input.payment_term_days
             if input.group_id is not UNSET:
                 if input.group_id is None:
                     contract.group = None

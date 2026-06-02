@@ -17,6 +17,7 @@ from strawberry.types import Info
 from apps.core.context import Context
 from apps.core.permissions import check_perm, get_current_user, require_perm
 from apps.core.schema import DeleteResult
+from apps.invoices.dunning_schema import PaymentReminderType, _convert_reminder
 from apps.invoices.models import ImportedInvoice, InvoiceImportBatch, InvoicePaymentMatch, InvoiceRecord, StornoNumberScheme, UploadStatus
 from apps.invoices.services import InvoiceService
 from apps.invoices.types import InvoiceData, InvoiceLineItem
@@ -314,6 +315,12 @@ class InvoiceRecordType:
     storno_of_number: str | None
     storno_record_id: int | None
     storno_record_number: str | None
+    # Dunning
+    due_date: date | None = None
+    overdue_days: int = 0
+    payment_reminders: List[PaymentReminderType] = strawberry.field(
+        default_factory=list
+    )
 
 
 @strawberry.type
@@ -2817,6 +2824,12 @@ def _convert_record(record) -> InvoiceRecordType:
         storno_of_number=storno_of_number,
         storno_record_id=storno_record_id,
         storno_record_number=storno_record_number,
+        due_date=record.due_date,
+        overdue_days=record.overdue_days,
+        payment_reminders=[
+            _convert_reminder(r)
+            for r in record.payment_reminders.all().order_by("-created_at")
+        ],
     )
 
 

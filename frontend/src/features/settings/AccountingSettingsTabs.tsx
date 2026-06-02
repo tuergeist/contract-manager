@@ -5,6 +5,7 @@ import { RevenueGoalSettings } from './RevenueGoalSettings'
 import { CostCenterSettings } from './CostCenterSettings'
 import { SplitRuleSettings } from './SplitRuleSettings'
 import { FteSnapshotSettings } from './FteSnapshotSettings'
+import { DunningSettings } from './DunningSettings'
 
 export function AccountingSettingsTabs() {
   const { t } = useTranslation()
@@ -13,6 +14,7 @@ export function AccountingSettingsTabs() {
 
   const getActiveSubTab = () => {
     if (location.pathname.includes('/accounting/cost-centers')) return 'costCenters'
+    if (location.pathname.includes('/accounting/dunning')) return 'dunning'
     return 'revenueGoals'
   }
 
@@ -22,6 +24,9 @@ export function AccountingSettingsTabs() {
     switch (value) {
       case 'costCenters':
         navigate('/settings/accounting/cost-centers')
+        break
+      case 'dunning':
+        navigate('/settings/accounting/dunning')
         break
       default:
         navigate('/settings/accounting')
@@ -33,6 +38,7 @@ export function AccountingSettingsTabs() {
       <TabsList className="mb-4">
         <TabsTrigger value="revenueGoals">{t('settings.accountingTabs.revenueGoals')}</TabsTrigger>
         <TabsTrigger value="costCenters">{t('settings.accountingTabs.costCenters')}</TabsTrigger>
+        <TabsTrigger value="dunning">{t('settings.accountingTabs.dunning')}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="revenueGoals">
@@ -45,6 +51,10 @@ export function AccountingSettingsTabs() {
           <SplitRuleSettings />
           <FteSnapshotSettings />
         </div>
+      </TabsContent>
+
+      <TabsContent value="dunning">
+        <DunningSettings showHeader={false} />
       </TabsContent>
     </Tabs>
   )

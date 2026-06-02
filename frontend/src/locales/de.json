@@ -1091,6 +1091,62 @@
     "noContracts": "Keine Verträge für diesen Kunden gefunden",
     "receiverEmails": "Empfänger-E-Mails"
   },
+  "reminders": {
+    "overdueColumn": "Verzug",
+    "dunButton": "Mahnen",
+    "sectionTitle": "Mahnungen",
+    "noReminders": "Keine Mahnungen versendet",
+    "notSent": "Nicht versendet",
+    "forInvoice": "Rechnung",
+    "viewPdf": "PDF anzeigen",
+    "stage": {
+      "0": "Zahlungserinnerung",
+      "1": "1. Mahnung",
+      "2": "2. Mahnung",
+      "3": "3. Mahnung"
+    },
+    "dialogTitle": "Mahnung versenden – {{invoice}}",
+    "dialogTitleGeneric": "Mahnung versenden",
+    "dialogDescription": "Prüfen und anpassen Sie die Mahnung, bevor Sie sie an den Kunden senden.",
+    "stageLabel": "Mahnstufe",
+    "titleLabel": "Titel",
+    "subjectLabel": "E-Mail-Betreff",
+    "bodyLabel": "Textinhalt",
+    "feeLabel": "Mahngebühr",
+    "interestLabel": "Verzugszinsen",
+    "overdueDaysInfo": "{{days}} Tage überfällig",
+    "interestDaysInfo": "{{days}} Tage zu {{rate}} %",
+    "sendButton": "Mahnung versenden",
+    "sendSuccess": "Mahnung versendet",
+    "sendFailed": "Mahnung konnte nicht versendet werden",
+    "draftFailed": "Mahnungsentwurf konnte nicht erstellt werden",
+    "paymentTermLabel": "Zahlungsziel (Tage)",
+    "paymentTermPlaceholder": "z. B. 14",
+    "paymentTermDefault": "Standard",
+    "paymentTermDaysValue": "{{days}} Tage",
+    "paymentTermContractHint": "Überschreibt den Kunden-/Standardwert für diesen Vertrag.",
+    "settings": {
+      "title": "Mahnwesen",
+      "description": "Zahlungsziele, Schwellenwerte, Gebühren, Zinsen und Mahnvorlagen konfigurieren.",
+      "saved": "Mahneinstellungen gespeichert",
+      "saveFailed": "Mahneinstellungen konnten nicht gespeichert werden",
+      "readonlyNotice": "Sie haben keine Berechtigung, diese Einstellungen zu bearbeiten.",
+      "sectionThresholds": "Zahlungsziele & Schwellenwerte",
+      "sectionFees": "Mahngebühren je Stufe",
+      "sectionTemplates": "Mahnvorlagen",
+      "defaultPaymentTermDays": "Standard-Zahlungsziel (Tage)",
+      "defaultPaymentTermDaysHint": "Wird verwendet, wenn Kunde / Vertrag kein eigenes Zahlungsziel hat.",
+      "overdueRedThresholdDays": "Rot-Schwelle Verzug (Tage)",
+      "overdueRedThresholdDaysHint": "Ab diesem Wert werden Verzugstage rot dargestellt.",
+      "mahnfaehigThresholdDays": "Mahnschwelle (Tage)",
+      "mahnfaehigThresholdDaysHint": "Ab so vielen Verzugstagen können Rechnungen gemahnt werden.",
+      "interestRate": "Standard-Zinssatz (%)",
+      "interestRateHint": "Jahreszinssatz, der auf überfällige Beträge angewendet wird.",
+      "templateTitle": "Titel",
+      "templateSubject": "E-Mail-Betreff",
+      "templateBody": "Textinhalt"
+    }
+  },
   "audit": {
     "title": "Auditlog",
     "entries": "Einträge",
@@ -1328,7 +1384,8 @@
     },
     "accountingTabs": {
       "revenueGoals": "Umsatzziele",
-      "costCenters": "Kostenstellen"
+      "costCenters": "Kostenstellen",
+      "dunning": "Mahnwesen"
     },
     "revenueGoals": {
       "title": "Umsatzziele",

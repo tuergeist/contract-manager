@@ -26,6 +26,7 @@ import {
   ArrowDown,
   FileDown,
   Info,
+  Bell,
 } from 'lucide-react'
 import {
   Dialog,
@@ -44,6 +45,8 @@ import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { CustomerPickerDialog } from '@/components/CustomerPickerDialog'
 import { PaymentMatchModal } from './PaymentMatchModal'
 import { InvoiceStatusBadge } from '@/components/InvoiceStatusBadge'
+import { ReminderDialog } from '@/features/reminders/ReminderDialog'
+import { DUNNING_SETTINGS_QUERY, type DunningSettings } from '@/features/reminders/dunning'
 
 // --- GraphQL ---
 
@@ -290,6 +293,8 @@ const INVOICE_RECORDS = gql`
         emailSentAt
         emailSentTo
         documentType
+        dueDate
+        overdueDays
         paymentMatches {
           id
           transactionId
@@ -356,6 +361,8 @@ interface GeneratedInvoice {
   emailSentAt: string | null
   emailSentTo: string[]
   documentType: string
+  dueDate: string | null
+  overdueDays: number
   paymentMatches: {
     id: number
     transactionId: number
@@ -380,6 +387,7 @@ interface UnifiedRow {
   contractName?: string
   amount: number | null
   currency: string
+  overdueDays: number
   imported?: Invoice
   generated?: GeneratedInvoice
 }
@@ -537,6 +545,13 @@ export function InvoiceList() {
     }
   )
 
+  // Dunning settings (for overdue thresholds + reminder action)
+  const { data: dunningData } = useQuery<{ dunningSettings: DunningSettings | null }>(
+    DUNNING_SETTINGS_QUERY
+  )
+  const dunningSettings = dunningData?.dunningSettings ?? null
+  const [reminderInvoiceId, setReminderInvoiceId] = useState<number | null>(null)
+
 
   const invoices: Invoice[] = data?.invoices?.items ?? []
   const generatedInvoices: GeneratedInvoice[] = generatedData?.invoiceRecords?.items ?? []
@@ -562,6 +577,7 @@ export function InvoiceList() {
           contractId: inv.contractId,
           amount: inv.totalAmount ? parseFloat(inv.totalAmount) : null,
           currency: inv.currency,
+          overdueDays: 0,
           imported: inv,
         })
       }
@@ -584,6 +600,7 @@ export function InvoiceList() {
           contractName: rec.contractName,
           amount: rec.totalGross ? parseFloat(rec.totalGross) : null,
           currency: 'EUR',
+          overdueDays: rec.overdueDays ?? 0,
           generated: rec,
         })
       }
@@ -1089,6 +1106,14 @@ export function InvoiceList() {
                 {t('invoices.import.colAmount')}
                 {getSortIcon(sourceFilter === 'GENERATED' ? 'totalGross' : 'totalAmount')}
               </th>
+              <th
+                className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('overdueDays')}
+                data-testid="invoice-overdue-header"
+              >
+                {t('reminders.overdueColumn')}
+                {getSortIcon('overdueDays')}
+              </th>
               {sourceFilter === 'ALL' && (
                 <th className="px-4 py-3">{t('invoices.import.source')}</th>
               )}
@@ -1099,13 +1124,13 @@ export function InvoiceList() {
           <tbody>
             {isLoading && displayRows.length === 0 ? (
               <tr>
-                <td colSpan={sourceFilter === 'ALL' ? 7 : 6} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={sourceFilter === 'ALL' ? 8 : 7} className="px-4 py-8 text-center text-gray-500">
                   <Loader2 className="w-6 h-6 mx-auto animate-spin" />
                 </td>
               </tr>
             ) : displayRows.length === 0 ? (
               <tr>
-                <td colSpan={sourceFilter === 'ALL' ? 7 : 6} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={sourceFilter === 'ALL' ? 8 : 7} className="px-4 py-8 text-center text-gray-500">
                   {t('invoices.import.noInvoicesUnified')}
                 </td>
               </tr>
@@ -1213,6 +1238,26 @@ export function InvoiceList() {
                     {row.amount != null
                       ? `${formatCurrency(row.amount)} ${row.currency !== 'EUR' ? row.currency : ''}`
                       : '-'}
+                  </td>
+                  {/* Overdue days */}
+                  <td
+                    className="px-4 py-3 text-right font-mono"
+                    data-testid={`invoice-overdue-${row.generated ? row.generated.id : row.imported?.id}`}
+                  >
+                    {row.source === 'generated' && row.overdueDays > 0 ? (
+                      <span
+                        className={cn(
+                          dunningSettings &&
+                            row.overdueDays >= dunningSettings.overdueRedThresholdDays
+                            ? 'font-semibold text-red-600'
+                            : 'text-gray-700'
+                        )}
+                      >
+                        {row.overdueDays}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">–</span>
+                    )}
                   </td>
                   {/* Source badge */}
                   {sourceFilter === 'ALL' && (
@@ -1353,6 +1398,23 @@ export function InvoiceList() {
                               <CreditCard className="w-4 h-4" />
                             </Button>
                           )}
+                          {/* Mahnen / send payment reminder */}
+                          {!row.generated.isPaid &&
+                            row.generated.status !== 'voided' &&
+                            hasPermission('reminders', 'send') &&
+                            dunningSettings &&
+                            row.overdueDays >= dunningSettings.mahnfaehigThresholdDays && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setReminderInvoiceId(row.generated!.id)}
+                                title={t('reminders.dunButton')}
+                                className="text-gray-400 hover:text-orange-600 hover:bg-orange-50"
+                                data-testid={`invoice-dun-${row.generated.id}`}
+                              >
+                                <Bell className="w-4 h-4" />
+                              </Button>
+                            )}
                           {row.generated.pdfUrl ? (
                             <Button variant="ghost" size="sm" asChild className="text-gray-400 hover:text-foreground">
                               <a href={row.generated.pdfUrl} target="_blank" rel="noopener noreferrer" title={t('invoices.import.viewPdf')}>
@@ -1723,6 +1785,17 @@ export function InvoiceList() {
           setPaymentMatchInvoice(null)
           setPaymentMatchRecord(null)
           refetch()
+          generatedRefetch()
+        }}
+      />
+
+      {/* Payment Reminder Dialog */}
+      <ReminderDialog
+        open={reminderInvoiceId != null}
+        onOpenChange={(open) => { if (!open) setReminderInvoiceId(null) }}
+        invoiceRecordId={reminderInvoiceId}
+        onSent={() => {
+          setReminderInvoiceId(null)
           generatedRefetch()
         }}
       />

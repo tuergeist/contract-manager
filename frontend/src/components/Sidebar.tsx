@@ -131,6 +131,7 @@ const searchablePages: SearchablePage[] = [
   { labelKey: 'settings.tabs.accounting', keywords: ['accounting', 'buchhaltung', 'revenue goals', 'umsatzziele'], url: '/settings/accounting', permission: 'settings.read' },
   { labelKey: 'settings.accountingTabs.revenueGoals', keywords: ['revenue goals', 'umsatzziele', 'ziele', 'goals'], url: '/settings/accounting', permission: 'settings.read' },
   { labelKey: 'settings.accountingTabs.costCenters', keywords: ['cost centers', 'kostenstellen', 'cost center', 'kostenstelle', 'split rules', 'aufteilungsregeln'], url: '/settings/accounting/cost-centers', permission: 'settings.read' },
+  { labelKey: 'reminders.settings.title', keywords: ['dunning', 'mahnwesen', 'mahnung', 'mahnungen', 'payment reminder', 'zahlungserinnerung', 'verzug', 'interest', 'verzugszinsen', 'mahngebühr', 'reminder', 'dunning settings'], url: '/settings/accounting/dunning', permission: 'reminders.settings' },
   { labelKey: 'settings.tabs.banking', keywords: ['banking settings', 'bankeinstellungen', 'bank account', 'bankkonto', 'iban', 'fee tolerance'], url: '/settings/banking', permission: 'banking.read' },
   { labelKey: 'auth.signUp', keywords: ['signup', 'sign up', 'registrieren', 'register', 'anmelden'], url: '/signup' },
   { labelKey: 'auth.verifySuccess', keywords: ['verify', 'verifizieren', 'bestätigen', 'verification'], url: '/verify-signup' },

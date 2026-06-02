@@ -19,6 +19,7 @@ PERMISSION_REGISTRY = {
     "todos": ["read", "write", "delete"],
     "notes": ["read", "write"],
     "invoices": ["read", "write", "delete", "export", "generate", "settings"],
+    "reminders": ["send", "settings"],
     "offers": ["read", "write", "delete"],
     "banking": ["read", "write"],
     "incoming_invoices": ["read", "write", "config"],
@@ -43,6 +44,7 @@ DEFAULT_ROLES = {
         if not perm.startswith("users.")
         and not perm.startswith("settings.")
         and perm != "invoices.settings"
+        and perm != "reminders.settings"
         and perm != "incoming_invoices.config"
         and perm != "cost_centers.config"
     },

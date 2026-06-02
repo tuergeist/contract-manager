@@ -1091,6 +1091,62 @@
     "noContracts": "No contracts found for this customer",
     "receiverEmails": "Receiver Emails"
   },
+  "reminders": {
+    "overdueColumn": "Overdue",
+    "dunButton": "Send reminder",
+    "sectionTitle": "Payment Reminders",
+    "noReminders": "No payment reminders sent",
+    "notSent": "Not sent",
+    "forInvoice": "Invoice",
+    "viewPdf": "View PDF",
+    "stage": {
+      "0": "Payment reminder",
+      "1": "1st reminder",
+      "2": "2nd reminder",
+      "3": "3rd reminder"
+    },
+    "dialogTitle": "Send payment reminder – {{invoice}}",
+    "dialogTitleGeneric": "Send payment reminder",
+    "dialogDescription": "Review and adjust the reminder before sending it to the customer.",
+    "stageLabel": "Reminder stage",
+    "titleLabel": "Title",
+    "subjectLabel": "Email subject",
+    "bodyLabel": "Body text",
+    "feeLabel": "Dunning fee",
+    "interestLabel": "Default interest",
+    "overdueDaysInfo": "{{days}} days overdue",
+    "interestDaysInfo": "{{days}} days at {{rate}}%",
+    "sendButton": "Send reminder",
+    "sendSuccess": "Payment reminder sent",
+    "sendFailed": "Failed to send payment reminder",
+    "draftFailed": "Failed to create reminder draft",
+    "paymentTermLabel": "Payment term (days)",
+    "paymentTermPlaceholder": "e.g. 14",
+    "paymentTermDefault": "Default",
+    "paymentTermDaysValue": "{{days}} days",
+    "paymentTermContractHint": "Overrides the customer / global default for this contract.",
+    "settings": {
+      "title": "Dunning",
+      "description": "Configure payment terms, thresholds, fees, interest and reminder templates.",
+      "saved": "Dunning settings saved",
+      "saveFailed": "Failed to save dunning settings",
+      "readonlyNotice": "You do not have permission to edit these settings.",
+      "sectionThresholds": "Payment Terms & Thresholds",
+      "sectionFees": "Dunning Fees per Stage",
+      "sectionTemplates": "Reminder Templates",
+      "defaultPaymentTermDays": "Default payment term (days)",
+      "defaultPaymentTermDaysHint": "Used when a customer / contract has no own payment term.",
+      "overdueRedThresholdDays": "Overdue red threshold (days)",
+      "overdueRedThresholdDaysHint": "Overdue days are shown in red from this value.",
+      "mahnfaehigThresholdDays": "Reminder threshold (days)",
+      "mahnfaehigThresholdDaysHint": "Invoices can be dunned from this many overdue days.",
+      "interestRate": "Default interest rate (%)",
+      "interestRateHint": "Annual interest rate applied to overdue amounts.",
+      "templateTitle": "Title",
+      "templateSubject": "Email subject",
+      "templateBody": "Body text"
+    }
+  },
   "audit": {
     "title": "Audit Log",
     "entries": "entries",
@@ -1328,7 +1384,8 @@
     },
     "accountingTabs": {
       "revenueGoals": "Revenue Goals",
-      "costCenters": "Cost Centers"
+      "costCenters": "Cost Centers",
+      "dunning": "Dunning"
     },
     "revenueGoals": {
       "title": "Revenue Goals",

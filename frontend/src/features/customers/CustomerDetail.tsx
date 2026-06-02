@@ -3,7 +3,7 @@ import { usePersistedState } from '@/lib/usePersistedState'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, gql } from '@apollo/client'
-import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, History, Paperclip, Upload, Download, File, Image, Trash2, Link2, Plus, TrendingUp, DollarSign, ListTodo, Mail, X, Receipt, ChevronsUpDown, Check, FolderOpen, Globe, Eye, Pencil } from 'lucide-react'
+import { Loader2, ArrowLeft, Building2, MapPin, FileText, ExternalLink, ArrowUpDown, ArrowUp, ArrowDown, History, Paperclip, Upload, Download, File, Image, Trash2, Link2, Plus, TrendingUp, DollarSign, ListTodo, Mail, X, Receipt, ChevronsUpDown, Check, FolderOpen, Globe, Eye, Pencil, Bell } from 'lucide-react'
 import { TodoModal, TodoList, type TodoContext, type TodoItem } from '@/features/todos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -34,6 +34,13 @@ import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { CommentsSection } from '@/components/CommentsSection'
 import { InvoiceStatusBadge } from '@/components/InvoiceStatusBadge'
 import { FileDropZone } from '@/components/FileDropZone'
+import { PaymentReminderList } from '@/features/reminders/PaymentReminderList'
+import {
+  UPDATE_CUSTOMER_PAYMENT_TERM,
+  DUNNING_SETTINGS_QUERY,
+  type PaymentReminder,
+  type DunningSettings,
+} from '@/features/reminders/dunning'
 
 type SortField = 'name' | 'status' | 'startDate' | 'endDate' | 'arr' | 'totalValue' | 'remainingMonths' | null
 type SortOrder = 'asc' | 'desc'
@@ -87,6 +94,27 @@ const CUSTOMER_QUERY = gql`
       vatId
       billingEmails
       invoiceLanguage
+      paymentTermDays
+      paymentReminders {
+        id
+        invoiceRecordId
+        invoiceNumber
+        customerId
+        customerName
+        stage
+        language
+        title
+        subject
+        bodyText
+        feeAmount
+        interestAmount
+        interestRateSnapshot
+        interestDays
+        pdfUrl
+        sentAt
+        sentTo
+        createdAt
+      }
       todos {
         id
         text
@@ -277,6 +305,7 @@ const CUSTOMER_INVOICE_RECORDS_QUERY = gql`
         isPaid
         pdfUrl
         emailSentAt
+        overdueDays
         paymentMatches {
           id
           transactionId
@@ -429,6 +458,7 @@ interface CustomerInvoiceRecord {
   isPaid: boolean
   pdfUrl: string | null
   emailSentAt: string | null
+  overdueDays: number
   paymentMatches: { id: number; transactionId: number; transactionDate: string }[]
 }
 
@@ -449,6 +479,8 @@ interface Customer {
   vatId: string
   billingEmails: string[]
   invoiceLanguage: string
+  paymentTermDays: number | null
+  paymentReminders: PaymentReminder[]
 }
 
 interface CustomerData {
@@ -494,6 +526,14 @@ export function CustomerDetail() {
   const [addingEmail, setAddingEmail] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
 
+  // Payment term (Zahlungsziel) state
+  const [editingPaymentTerm, setEditingPaymentTerm] = useState(false)
+  const [paymentTermValue, setPaymentTermValue] = useState('')
+
+  // Invoices table sort (Verzug column)
+  const [invoiceSortField, setInvoiceSortField] = useState<'overdueDays' | null>(null)
+  const [invoiceSortOrder, setInvoiceSortOrder] = useState<SortOrder>('desc')
+
   const { data, loading, error, refetch } = useQuery<CustomerData>(CUSTOMER_QUERY, {
     variables: { id },
     skip: !id,
@@ -511,6 +551,11 @@ export function CustomerDetail() {
     variables: { customerId: parseInt(id!, 10) },
     skip: !id,
   })
+
+  const { data: dunningData } = useQuery<{ dunningSettings: DunningSettings | null }>(
+    DUNNING_SETTINGS_QUERY
+  )
+  const dunningSettings = dunningData?.dunningSettings ?? null
 
   // Contract groups state
   const [groupPopoverOpen, setGroupPopoverOpen] = useState<string | null>(null)
@@ -539,6 +584,7 @@ export function CustomerDetail() {
   const [updateBillingEmails] = useMutation(UPDATE_CUSTOMER_BILLING_EMAILS_MUTATION)
   const [updateVatId] = useMutation(UPDATE_CUSTOMER_VAT_ID_MUTATION)
   const [updateInvoiceLanguage] = useMutation(UPDATE_CUSTOMER_INVOICE_LANGUAGE_MUTATION)
+  const [updatePaymentTerm] = useMutation(UPDATE_CUSTOMER_PAYMENT_TERM)
   const [assignInvoiceContract] = useMutation(ASSIGN_INVOICE_CONTRACT_MUTATION)
   const [createContractGroup] = useMutation(CREATE_CONTRACT_GROUP_MUTATION)
   const [assignContractToGroup] = useMutation(ASSIGN_CONTRACT_TO_GROUP_MUTATION)
@@ -997,6 +1043,28 @@ export function CustomerDetail() {
     }
   }
 
+  const handlePaymentTermSave = async () => {
+    if (!id) return
+    const trimmed = paymentTermValue.trim()
+    const parsed = trimmed === '' ? null : parseInt(trimmed, 10)
+    try {
+      const result = await updatePaymentTerm({
+        variables: {
+          input: {
+            customerId: id,
+            paymentTermDays: parsed != null && !Number.isNaN(parsed) ? parsed : null,
+          },
+        },
+      })
+      if (result.data?.updateCustomerPaymentTerm?.success) {
+        setEditingPaymentTerm(false)
+        refetch()
+      }
+    } catch (err) {
+      console.error('Update payment term error:', err)
+    }
+  }
+
   const handleInvoiceLanguageChange = async (value: string) => {
     if (!id) return
     try {
@@ -1236,6 +1304,45 @@ export function CustomerDetail() {
                   onClick={() => { setVatIdValue(customer.vatId || ''); setEditingVatId(true) }}
                 >
                   {customer.vatId || <span className="text-gray-400 italic">-</span>}
+                </span>
+              )}
+            </div>
+            <div className="flex justify-between items-center" data-testid="customer-payment-term-row">
+              <span className="text-gray-500">{t('reminders.paymentTermLabel')}</span>
+              {editingPaymentTerm ? (
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={paymentTermValue}
+                    onChange={(e) => setPaymentTermValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handlePaymentTermSave()
+                      if (e.key === 'Escape') setEditingPaymentTerm(false)
+                    }}
+                    className="h-6 w-24 text-xs"
+                    placeholder={t('reminders.paymentTermPlaceholder')}
+                    autoFocus
+                  />
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={handlePaymentTermSave}>
+                    <Check className="h-3 w-3" />
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setEditingPaymentTerm(false)}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <span
+                  className="text-gray-900 cursor-pointer hover:text-blue-600"
+                  onClick={() => {
+                    setPaymentTermValue(customer.paymentTermDays != null ? String(customer.paymentTermDays) : '')
+                    setEditingPaymentTerm(true)
+                  }}
+                  data-testid="customer-payment-term-value"
+                >
+                  {customer.paymentTermDays != null
+                    ? t('reminders.paymentTermDaysValue', { days: customer.paymentTermDays })
+                    : <span className="text-gray-400 italic">{t('reminders.paymentTermDefault')}</span>}
                 </span>
               )}
             </div>
@@ -1701,6 +1808,7 @@ export function CustomerDetail() {
               contractName: string | null
               isPaid: boolean
               pdfUrl: string | null
+              overdueDays: number
               imported?: CustomerInvoice
               generated?: CustomerInvoiceRecord
             }
@@ -1716,6 +1824,7 @@ export function CustomerDetail() {
                 contractName: inv.contractName,
                 isPaid: inv.isPaid,
                 pdfUrl: inv.pdfUrl,
+                overdueDays: 0,
                 imported: inv,
               })),
               ...generatedInvoices.map((rec) => ({
@@ -1728,13 +1837,43 @@ export function CustomerDetail() {
                 contractName: rec.contractName,
                 isPaid: rec.isPaid,
                 pdfUrl: rec.pdfUrl,
+                overdueDays: rec.overdueDays ?? 0,
                 generated: rec,
               })),
             ].sort((a, b) => {
+              if (invoiceSortField === 'overdueDays') {
+                const diff = a.overdueDays - b.overdueDays
+                return invoiceSortOrder === 'asc' ? diff : -diff
+              }
               const da = a.invoiceDate || ''
               const db = b.invoiceDate || ''
               return db.localeCompare(da)
             })
+
+            const handleInvoiceSort = (field: 'overdueDays') => {
+              if (invoiceSortField === field) {
+                if (invoiceSortOrder === 'desc') {
+                  setInvoiceSortOrder('asc')
+                } else {
+                  setInvoiceSortField(null)
+                  setInvoiceSortOrder('desc')
+                }
+              } else {
+                setInvoiceSortField(field)
+                setInvoiceSortOrder('desc')
+              }
+            }
+
+            const invoiceSortIcon = (field: 'overdueDays') => {
+              if (invoiceSortField !== field) {
+                return <ArrowUpDown className="ml-1 inline h-3 w-3 opacity-50" />
+              }
+              return invoiceSortOrder === 'desc' ? (
+                <ArrowDown className="ml-1 inline h-3 w-3" />
+              ) : (
+                <ArrowUp className="ml-1 inline h-3 w-3" />
+              )
+            }
 
             if (unified.length === 0) {
               return (
@@ -1757,6 +1896,13 @@ export function CustomerDetail() {
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                         {t('invoices.import.colAmount')}
+                      </th>
+                      <th
+                        className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                        onClick={() => handleInvoiceSort('overdueDays')}
+                      >
+                        {t('reminders.overdueColumn')}
+                        {invoiceSortIcon('overdueDays')}
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                         {t('contracts.title')}
@@ -1788,6 +1934,25 @@ export function CustomerDetail() {
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-gray-900">
                           {row.amount ? formatCurrency(row.amount) : '-'}
+                        </td>
+                        <td
+                          className="whitespace-nowrap px-6 py-4 text-right text-sm font-mono"
+                          data-testid={`invoice-overdue-${row.generated ? row.generated.id : row.imported?.id}`}
+                        >
+                          {row.source === 'generated' && row.overdueDays > 0 ? (
+                            <span
+                              className={cn(
+                                dunningSettings &&
+                                  row.overdueDays >= dunningSettings.overdueRedThresholdDays
+                                  ? 'font-semibold text-red-600'
+                                  : 'text-gray-700'
+                              )}
+                            >
+                              {row.overdueDays}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">–</span>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           {row.source === 'imported' ? (
@@ -1870,6 +2035,18 @@ export function CustomerDetail() {
               </div>
             )
           })()}
+
+          {/* Payment Reminders */}
+          <div className="mt-6 rounded-lg border bg-white p-6" data-testid="customer-reminders-section">
+            <div className="flex items-center gap-2 mb-4">
+              <Bell className="h-5 w-5 text-gray-400" />
+              <h3 className="text-md font-semibold">{t('reminders.sectionTitle')}</h3>
+              <span className="text-sm text-gray-500">
+                ({customer.paymentReminders?.length || 0})
+              </span>
+            </div>
+            <PaymentReminderList reminders={customer.paymentReminders ?? []} showInvoice />
+          </div>
         </div>
       )}
 

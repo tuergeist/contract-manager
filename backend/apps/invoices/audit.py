@@ -79,6 +79,37 @@ def log_invoice_voided(record, *, old_status="finalized", user=None) -> AuditLog
         return None
 
 
+def log_reminder_sent(reminder, *, user=None) -> AuditLog | None:
+    """Log an audit entry when a payment reminder (Mahnung) is sent."""
+    try:
+        record = reminder.invoice_record
+        return AuditLog.objects.create(
+            tenant=reminder.tenant,
+            action=AuditLog.Action.UPDATE,
+            entity_type="invoice_record",
+            entity_id=record.pk,
+            entity_repr=f"Invoice {record.invoice_number}",
+            user=user or get_current_user(),
+            changes={
+                "payment_reminder": {
+                    "old": None,
+                    "new": {
+                        "stage": reminder.stage,
+                        "sent_to": reminder.sent_to,
+                        "sent_at": reminder.sent_at.isoformat()
+                        if reminder.sent_at
+                        else None,
+                    },
+                },
+            },
+        )
+    except Exception:
+        logger.exception(
+            "Failed to log reminder sent for reminder %s", reminder.pk
+        )
+        return None
+
+
 def log_storno_created(record, *, user=None) -> AuditLog | None:
     """Log an audit entry when a storno (credit note) is created."""
     try:

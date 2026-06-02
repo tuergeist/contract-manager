@@ -1,0 +1,157 @@
+{% load invoice_filters %}
+<!DOCTYPE html>
+<html lang="{{ language }}">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} - {{ invoice.number }}</title>
+    <style>
+        :root {
+            --accent-color: {{ accent_color|default:"#2563eb" }};
+        }
+
+        @page {
+            size: A4;
+            margin: 2cm 2cm 3cm 2cm;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.5;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+
+        .dunning-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 30px;
+        }
+
+        .company-logo { max-width: 180px; max-height: 50px; }
+
+        .company-info { text-align: right; font-size: 8pt; color: #666; }
+
+        .company-name {
+            font-size: 12pt;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .recipient { margin-bottom: 30px; }
+
+        .dunning-title {
+            font-size: 16pt;
+            font-weight: bold;
+            color: var(--accent-color);
+            margin: 24px 0 8px 0;
+        }
+
+        .body-text {
+            white-space: pre-line;
+            margin: 16px 0 24px 0;
+        }
+
+        table.amounts {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+
+        table.amounts td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        table.amounts td.value { text-align: right; white-space: nowrap; }
+
+        table.amounts tr.total td {
+            font-weight: bold;
+            font-size: 11pt;
+            border-top: 2px solid var(--accent-color);
+            border-bottom: none;
+        }
+
+        .footer {
+            margin-top: 40px;
+            font-size: 7.5pt;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="dunning-header">
+        <div class="header-left">
+            {% if logo_url %}
+                <img src="{{ logo_url }}" class="company-logo" alt="Logo">
+            {% endif %}
+        </div>
+        <div class="company-info">
+            <div class="company-name">{{ company.company_name }}</div>
+            {% if company.street %}{{ company.street }}<br>{% endif %}
+            {% if company.zip_code %}{{ company.zip_code }} {% endif %}{{ company.city }}<br>
+            {% if company.country %}{{ company.country }}{% endif %}
+        </div>
+    </div>
+
+    <div class="recipient">
+        <strong>{{ customer.name }}</strong><br>
+        {% if customer.address.street %}{{ customer.address.street }}<br>{% endif %}
+        {% if customer.address.zip %}{{ customer.address.zip }} {% endif %}{% if customer.address.city %}{{ customer.address.city }}{% endif %}
+        {% if customer.address.country %}<br>{{ customer.address.country }}{% endif %}
+    </div>
+
+    <div class="dunning-title">{{ title }}</div>
+
+    <div class="body-text">{{ body_text }}</div>
+
+    <table class="amounts">
+        <tr>
+            <td>{{ labels.invoice_number }}</td>
+            <td class="value">{{ invoice.number }}</td>
+        </tr>
+        <tr>
+            <td>{{ labels.invoice_date }}</td>
+            <td class="value">{{ invoice.date|date:"d.m.Y" }}</td>
+        </tr>
+        {% if invoice.due_date %}
+        <tr>
+            <td>{{ labels.due_date }}</td>
+            <td class="value">{{ invoice.due_date|date:"d.m.Y" }}</td>
+        </tr>
+        {% endif %}
+        <tr>
+            <td>{{ labels.overdue_days }}</td>
+            <td class="value">{{ invoice.overdue_days }}</td>
+        </tr>
+        <tr>
+            <td>{{ labels.invoice_amount }}</td>
+            <td class="value">{{ invoice.amount|money:language }} {{ currency_symbol }}</td>
+        </tr>
+        {% if show_fee %}
+        <tr>
+            <td>{{ labels.dunning_fee }}</td>
+            <td class="value">{{ fee_amount|money:language }} {{ currency_symbol }}</td>
+        </tr>
+        {% endif %}
+        {% if show_interest %}
+        <tr>
+            <td>{{ labels.interest }}</td>
+            <td class="value">{{ interest_amount|money:language }} {{ currency_symbol }}</td>
+        </tr>
+        {% endif %}
+        <tr class="total">
+            <td>{{ labels.total_due }}</td>
+            <td class="value">{{ total_due|money:language }} {{ currency_symbol }}</td>
+        </tr>
+    </table>
+
+    {% if footer_text %}
+    <div class="footer">{{ footer_text }}</div>
+    {% endif %}
+</body>
+</html>

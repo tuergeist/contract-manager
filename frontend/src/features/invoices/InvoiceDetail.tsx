@@ -12,6 +12,7 @@ import {
   CreditCard,
   Clock,
   Eye,
+  Bell,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -38,6 +39,8 @@ import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
 import { useDocumentTitle } from '@/lib/useDocumentTitle'
 import { ImportedInvoiceDetail } from './ImportedInvoiceDetail'
 import { InvoiceStatusStepper } from '@/components/InvoiceStatusBadge'
+import { PaymentReminderList } from '@/features/reminders/PaymentReminderList'
+import { PAYMENT_REMINDER_FIELDS, type PaymentReminder } from '@/features/reminders/dunning'
 
 const INVOICE_RECORD_QUERY = gql`
   query InvoiceRecord($id: Int!) {
@@ -86,6 +89,11 @@ const INVOICE_RECORD_QUERY = gql`
       stornoOfNumber
       stornoRecordId
       stornoRecordNumber
+      dueDate
+      overdueDays
+      paymentReminders {
+        ${PAYMENT_REMINDER_FIELDS}
+      }
     }
   }
 `
@@ -199,6 +207,9 @@ interface InvoiceRecord {
   stornoOfNumber: string | null
   stornoRecordId: number | null
   stornoRecordNumber: string | null
+  dueDate: string | null
+  overdueDays: number
+  paymentReminders: PaymentReminder[]
 }
 
 interface AuditChange {
@@ -751,6 +762,19 @@ function GeneratedInvoiceDetail({ id, fallbackToImported }: { id: number; fallba
                   {t('invoiceDetail.notSent')}
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Payment Reminders */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Bell className="h-4 w-4" />
+                {t('reminders.sectionTitle')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PaymentReminderList reminders={record.paymentReminders} />
             </CardContent>
           </Card>
 

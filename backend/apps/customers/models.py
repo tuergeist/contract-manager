@@ -60,6 +60,11 @@ class Customer(TenantModel):
         null=True,
         help_text="Linked Clockodo customer ID",
     )
+    payment_term_days = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Payment term in days. Empty means use the tenant default.",
+    )
 
     class Meta:
         ordering = ["name"]

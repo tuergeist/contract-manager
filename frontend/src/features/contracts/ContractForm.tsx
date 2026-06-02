@@ -86,6 +86,7 @@ const CONTRACT_QUERY = gql`
       noticePeriodMonths
       noticePeriodAfterMinMonths
       noticePeriodAnchor
+      paymentTermDays
       group {
         id
         name
@@ -228,6 +229,7 @@ interface Contract {
   noticePeriodMonths: number
   noticePeriodAfterMinMonths: number | null
   noticePeriodAnchor: string
+  paymentTermDays: number | null
   group: { id: string; name: string } | null
   customer: Customer
   hasInvoices: boolean
@@ -255,6 +257,7 @@ const formSchema = z.object({
   noticePeriodMonths: z.number().min(0),
   noticePeriodAfterMinMonths: z.number().optional().nullable(),
   noticePeriodAnchor: z.string(),
+  paymentTermDays: z.number().min(0).optional().nullable(),
 })
 
 type FormData = z.infer<typeof formSchema>
@@ -343,6 +346,7 @@ export function ContractForm() {
       noticePeriodMonths: 3,
       noticePeriodAfterMinMonths: null,
       noticePeriodAnchor: 'end_of_duration',
+      paymentTermDays: null,
     },
   })
 
@@ -397,6 +401,7 @@ export function ContractForm() {
         noticePeriodMonths: c.noticePeriodMonths,
         noticePeriodAfterMinMonths: c.noticePeriodAfterMinMonths,
         noticePeriodAnchor: c.noticePeriodAnchor,
+        paymentTermDays: c.paymentTermDays,
       })
     }
   }, [contractData, form])
@@ -436,6 +441,7 @@ export function ContractForm() {
               noticePeriodMonths: data.noticePeriodMonths,
               noticePeriodAfterMinMonths: data.noticePeriodAfterMinMonths,
               noticePeriodAnchor: data.noticePeriodAnchor,
+              paymentTermDays: data.paymentTermDays ?? null,
             },
           },
         })
@@ -467,6 +473,7 @@ export function ContractForm() {
               noticePeriodMonths: data.noticePeriodMonths,
               noticePeriodAfterMinMonths: data.noticePeriodAfterMinMonths,
               noticePeriodAnchor: data.noticePeriodAnchor,
+              paymentTermDays: data.paymentTermDays ?? null,
             },
           },
         })
@@ -1272,6 +1279,40 @@ export function ContractForm() {
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('reminders.paymentTermLabel')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <FormField
+                control={form.control}
+                name="paymentTermDays"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('reminders.paymentTermLabel')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder={t('reminders.paymentTermPlaceholder')}
+                        disabled={!isEditing}
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          field.onChange(e.target.value ? parseInt(e.target.value) : null)
+                        }
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      {t('reminders.paymentTermContractHint')}
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
           {isEditing && (
             <div className="flex justify-end gap-4">
               <Button
@@ -1300,6 +1341,7 @@ export function ContractForm() {
                         noticePeriodMonths: contract.noticePeriodMonths,
                         noticePeriodAfterMinMonths: contract.noticePeriodAfterMinMonths,
                         noticePeriodAnchor: contract.noticePeriodAnchor,
+                        paymentTermDays: contract.paymentTermDays,
                       })
                     }
                   } else {

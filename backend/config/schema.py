@@ -16,6 +16,7 @@ from apps.contracts.order_confirmation_schema import (
     OrderConfirmationMutation,
 )
 from apps.invoices.schema import InvoiceQuery, InvoiceMutation
+from apps.invoices.dunning_schema import DunningQuery, DunningMutation
 from apps.audit.schema import AuditLogQuery
 from apps.todos.schema import TodoQuery, TodoMutation
 from apps.banking.schema import BankingQuery, BankingMutation
@@ -32,6 +33,7 @@ class Query(
     ContractImportQuery,
     OrderConfirmationQuery,
     InvoiceQuery,
+    DunningQuery,
     AuditLogQuery,
     TodoQuery,
     BankingQuery,
@@ -43,7 +45,7 @@ class Query(
 
 
 @strawberry.type
-class Mutation(AuthMutation, FeedbackMutation, TenantMutation, CustomerMutation, ProductMutation, ContractMutation, ContractImportMutation, OrderConfirmationMutation, TodoMutation, InvoiceMutation, BankingMutation, OfferMutation):
+class Mutation(AuthMutation, FeedbackMutation, TenantMutation, CustomerMutation, ProductMutation, ContractMutation, ContractImportMutation, OrderConfirmationMutation, TodoMutation, InvoiceMutation, DunningMutation, BankingMutation, OfferMutation):
     pass
 
 

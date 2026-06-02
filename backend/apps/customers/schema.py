@@ -67,6 +67,27 @@ class CustomerType:
     invoice_language: auto
     vat_id: auto
     clockodo_customer_id: auto
+    payment_term_days: auto
+
+    @strawberry.field
+    def payment_reminders(
+        self,
+    ) -> List[
+        Annotated[
+            "PaymentReminderType",
+            strawberry.lazy("apps.invoices.dunning_schema"),
+        ]
+    ]:
+        """Payment reminders sent for this customer's invoices."""
+        from apps.invoices.dunning_schema import _convert_reminder
+        from apps.invoices.models import PaymentReminder
+
+        qs = (
+            PaymentReminder.objects.filter(invoice_record__customer=self)
+            .select_related("invoice_record")
+            .order_by("-created_at")
+        )
+        return [_convert_reminder(r) for r in qs]
 
     @strawberry.field
     def hubspot_url(self, info: Info[Context, None]) -> str | None:
@@ -253,6 +274,23 @@ class UpdateCustomerInvoiceLanguageResult:
     success: bool = False
     error: str | None = None
     invoice_language: str | None = None
+
+
+@strawberry.input
+class UpdateCustomerPaymentTermInput:
+    """Input for updating a customer's payment term."""
+
+    customer_id: strawberry.ID
+    payment_term_days: int | None = None
+
+
+@strawberry.type
+class UpdateCustomerPaymentTermResult:
+    """Result of updating a customer's payment term."""
+
+    success: bool = False
+    error: str | None = None
+    payment_term_days: int | None = None
 
 
 @strawberry.input
@@ -943,6 +981,38 @@ class CustomerMutation:
         return UpdateCustomerInvoiceLanguageResult(
             success=True,
             invoice_language=customer.invoice_language,
+        )
+
+    @strawberry.mutation
+    def update_customer_payment_term(
+        self,
+        info: Info[Context, None],
+        input: UpdateCustomerPaymentTermInput,
+    ) -> UpdateCustomerPaymentTermResult:
+        """Set the payment term (in days) for a customer."""
+        user, err = check_perm(info, "customers", "write")
+        if err:
+            return UpdateCustomerPaymentTermResult(error=err)
+        if not user.tenant:
+            return UpdateCustomerPaymentTermResult(error="No tenant assigned")
+
+        if input.payment_term_days is not None and input.payment_term_days < 0:
+            return UpdateCustomerPaymentTermResult(
+                error="Payment term must not be negative"
+            )
+
+        customer = Customer.objects.filter(
+            tenant=user.tenant, id=input.customer_id
+        ).first()
+        if not customer:
+            return UpdateCustomerPaymentTermResult(error="Customer not found")
+
+        customer.payment_term_days = input.payment_term_days
+        customer.save(update_fields=["payment_term_days", "updated_at"])
+
+        return UpdateCustomerPaymentTermResult(
+            success=True,
+            payment_term_days=customer.payment_term_days,
         )
 
     # =========================================================================
