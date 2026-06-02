@@ -468,11 +468,17 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
     }
   }
 
-  const handleLinkCustomer = async (customerId: number) => {
+  const handleLinkCustomer = async (customerId: number | string) => {
     if (!invoice) return
+    // CustomerPickerDialog hands us customer.id which is the GraphQL ID
+    // scalar (string at runtime), but confirmCustomerMatch declares
+    // customerId as Int! — cast defensively to avoid a server-side
+    // "Int cannot represent non-integer value" error.
+    const customerIdInt =
+      typeof customerId === 'string' ? parseInt(customerId, 10) : customerId
     try {
       const result = await confirmCustomerMatch({
-        variables: { invoiceId: invoice.id, customerId },
+        variables: { invoiceId: invoice.id, customerId: customerIdInt },
       })
       if (result.data?.confirmCustomerMatch?.success) {
         setShowCustomerPicker(false)
