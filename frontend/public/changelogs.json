@@ -1,5 +1,23 @@
 [
   {
+    "version": "2.31.11",
+    "date": "2026-06-02",
+    "title": "Mahnungen versenden: Verzugsspalte, Vorlagen, Mahnstufen",
+    "description": "Überfällige Rechnungen lassen sich jetzt direkt aus dem Contract Manager mahnen — mit Verzugsspalte in allen Übersichten, konfigurierbaren DE/EN-Vorlagen je Stufe, Verzugszinsen und Mahngebühren.",
+    "type": "feature",
+    "details": [
+      "Verzugsspalte (Tage) in allen Rechnungsübersichten, sortierbar und rot ab konfigurierbarer Schwelle",
+      "Mahn-Dialog mit Stufenauswahl (Zahlungserinnerung, 1./2./3. Mahnung), editierbarem Text und Toggles für Mahngebühr und Verzugszinsen",
+      "Mahn-PDF + Versand per E-Mail über bestehende M365-Anbindung, BCC-Schlüssel `dunning`",
+      "Versendete Mahnungen sichtbar in Rechnungsverlauf, Kunden- und Vertragsansicht inkl. Zuordnung zur Rechnung",
+      "Neue Settings-Sektion „Mahnwesen\": Vorlagen DE/EN je Stufe (Titel/Betreff/Text), Zinssatz, Gebühren je Stufe, globaler Zahlungsziel-Default und Schwellwerte (mahnfähig + rot)",
+      "Zahlungsziel konfigurierbar global, pro Kunde und pro Vertrag — bestimmt Fälligkeit und Verzug",
+      "Neue Permissions `reminders.send` und `reminders.settings`; Ansehen bleibt an `invoices.read` gekoppelt",
+      "Rechnungsstatus wechselt automatisch auf DUNNING beim ersten Versand und auf PAID bei Zahlungszuordnung",
+      "Fix: ConfirmCustomerMatch in importierter Rechnungsdetail-Ansicht parst customerId jetzt als Int (vorher Server-Fehler beim Zuordnen einer Credit-Memo)"
+    ]
+  },
+  {
     "version": "2.31.10",
     "date": "2026-05-20",
     "title": "Clockodo-Konflikt zeigt jetzt, wo das Projekt verlinkt ist",
