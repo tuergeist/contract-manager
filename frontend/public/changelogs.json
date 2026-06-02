@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.31.12",
+    "date": "2026-06-02",
+    "title": "CI-Fix: Migrations-Abhängigkeit für Mahnungen-Release",
+    "description": "Re-Release von 2.31.11 — die neue PaymentReminder-Migration hing an einer in CI nicht vorhandenen Tenants-Migration und brach den Build. Inhalt identisch zu 2.31.11.",
+    "type": "bugfix",
+    "details": [
+      "invoices.0025_invoicerecord_due_date_paymentreminder hängt jetzt an tenants.0018_reportschedule statt an einer ungetrackten Tenants-Migration",
+      "Sonst keine Änderungen gegenüber 2.31.11"
+    ]
+  },
+  {
     "version": "2.31.11",
     "date": "2026-06-02",
     "title": "Mahnungen versenden: Verzugsspalte, Vorlagen, Mahnstufen",
