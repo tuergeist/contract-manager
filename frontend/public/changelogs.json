@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.32.0",
+    "date": "2026-06-03",
+    "title": "Storno für importierte Rechnungen + Projekte als eine flache Tabelle",
+    "description": "Importierte Rechnungen lassen sich jetzt stornieren — mit optionaler Verknüpfung einer bereits importierten Gutschrift. Außerdem zählt das Rechnungsdatum nun als Versanddatum (Status SENT), und die Projekte-Seite zeigt alle Positionen in einer einzigen sortier- und filterbaren Tabelle.",
+    "type": "feature",
+    "details": [
+      "Importierte Rechnung kann über „Stornieren\" auf voided gesetzt werden — optional sofort eine vorhandene Credit Note/Memo verknüpfen, alternativ später über „Als Gutschrift zuordnen\" auf der Credit-Note-Seite",
+      "Status-Banner zeigt Stornogrund, Zeitpunkt + verknüpfte Gutschrift bzw. die Originalrechnung bei Credit Notes; Storno kann wieder aufgehoben werden",
+      "Importierte Rechnung mit Rechnungsdatum wechselt beim Bestätigen jetzt in den Status „Versendet\" statt „Bestätigt\" — Backfill setzt 131 bestehende Rechnungen auf SENT",
+      "Projekte-View ist jetzt eine flache Tabelle mit eigenen Spalten für Kunde + Projekt (Vertrag), klick-sortierbar und mit Volltextsuche über Kunde, Vertrag, Position und AB-Nummer",
+      "Footer-Zeile mit Summen für Stunden und Auftragswert; Sortier- und Filter-State persistiert in localStorage"
+    ]
+  },
+  {
     "version": "2.31.14",
     "date": "2026-06-03",
     "title": "Suche findet importierte Rechnungen nach Kundenname",
