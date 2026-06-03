@@ -175,7 +175,7 @@ export function RoleManagement() {
   }
 
   if (loading) return <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin" /></div>
-  if (error) return <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-600">Error loading roles: {error.message}</div>
+  if (error) return <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-600">{t('settings.roles.loadError', { message: error.message })}</div>
 
   return (
     <div className="rounded-lg border bg-white p-6">

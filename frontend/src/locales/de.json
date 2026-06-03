@@ -1618,7 +1618,10 @@
         "banking": "Banking",
         "offers": "Angebote",
         "incoming_invoices": "Rechnungspostfach",
-        "cost_centers": "Kostenstellen"
+        "cost_centers": "Kostenstellen",
+        "reminders": "Mahnungen",
+        "department_analysis": "Abteilungsanalyse",
+        "assistant": "Assistent"
       },
       "actions": {
         "read": "Lesen",
@@ -1627,7 +1630,11 @@
         "export": "Exportieren",
         "generate": "Generieren",
         "settings": "Einstellungen",
-        "config": "Konfiguration"
+        "config": "Konfiguration",
+        "send": "Senden",
+        "regenerate": "Neu generieren",
+        "finalize": "Finalisieren",
+        "use": "Nutzen"
       },
       "assignRoles": "Rollen zuweisen",
       "selectRoles": "Rollen für diesen Benutzer auswählen",
@@ -1640,7 +1647,8 @@
         "contractItems": "Vertragsposten mit Produkten: Verträge (Schreiben) + Produkte (Lesen)",
         "invoiceGeneration": "Rechnungen generieren: Rechnungen (Generieren) + Verträge (Lesen)",
         "customerMatching": "Kundenzuordnung (Import): Rechnungen (Lesen) + Kunden (Lesen)"
-      }
+      },
+      "loadError": "Fehler beim Laden der Rollen: {{message}}"
     },
     "hubspot": {
       "title": "HubSpot Integration",

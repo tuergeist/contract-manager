@@ -1618,7 +1618,10 @@
         "banking": "Banking",
         "offers": "Offers",
         "incoming_invoices": "Invoice Inbox",
-        "cost_centers": "Cost Centers"
+        "cost_centers": "Cost Centers",
+        "reminders": "Payment Reminders",
+        "department_analysis": "Department Analysis",
+        "assistant": "Assistant"
       },
       "actions": {
         "read": "Read",
@@ -1627,7 +1630,11 @@
         "export": "Export",
         "generate": "Generate",
         "settings": "Settings",
-        "config": "Config"
+        "config": "Config",
+        "send": "Send",
+        "regenerate": "Regenerate",
+        "finalize": "Finalize",
+        "use": "Use"
       },
       "assignRoles": "Assign Roles",
       "selectRoles": "Select roles for this user",
@@ -1640,7 +1647,8 @@
         "contractItems": "Contract items with products: Contracts (Write) + Products (Read)",
         "invoiceGeneration": "Generate invoices: Invoices (Generate) + Contracts (Read)",
         "customerMatching": "Customer matching (import): Invoices (Read) + Customers (Read)"
-      }
+      },
+      "loadError": "Error loading roles: {{message}}"
     },
     "hubspot": {
       "title": "HubSpot Integration",
