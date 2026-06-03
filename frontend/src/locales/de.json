@@ -2268,7 +2268,10 @@
     "ocNumber": "AB-Nummer",
     "hours": "Stunden gebucht",
     "orderValue": "Auftragswert",
-    "psRatio": "PS-Ratio"
+    "psRatio": "PS-Ratio",
+    "search": "Suche",
+    "searchPlaceholder": "Kunde, Vertrag, Position oder AB-Nummer...",
+    "totals": "{{count}} Positionen · {{hours}} Std. · {{value}}"
   },
   "comments": {
     "title": "Kommentare",

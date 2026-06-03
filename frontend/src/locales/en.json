@@ -2268,7 +2268,10 @@
     "ocNumber": "OC Number",
     "hours": "Hours Booked",
     "orderValue": "Order Value",
-    "psRatio": "PS Ratio"
+    "psRatio": "PS Ratio",
+    "search": "Search",
+    "searchPlaceholder": "Customer, contract, item or OC number...",
+    "totals": "{{count}} items · {{hours}} hrs · {{value}}"
   },
   "comments": {
     "title": "Comments",
