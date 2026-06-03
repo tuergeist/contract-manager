@@ -1144,7 +1144,13 @@
       "interestRateHint": "Jahreszinssatz, der auf überfällige Beträge angewendet wird.",
       "templateTitle": "Titel",
       "templateSubject": "E-Mail-Betreff",
-      "templateBody": "Textinhalt"
+      "templateBody": "Textinhalt",
+      "templatesMoved": "Mahn-Vorlagen sind jetzt unter „E-Mail-Vorlagen → Mahnungen“ zu finden.",
+      "templatesMovedLink": "Zu den Vorlagen"
+    },
+    "templates": {
+      "title": "Mahn-Vorlagen",
+      "description": "Vorlagen für Zahlungserinnerung und 1./2./3. Mahnung pro Sprache und Stufe."
     }
   },
   "audit": {
@@ -1832,7 +1838,8 @@
     "emailTemplates": {
       "invoice": "Rechnungs-E-Mail",
       "orderConfirmation": "AB-E-Mail",
-      "bcc": "BCC-Empfänger"
+      "bcc": "BCC-Empfänger",
+      "dunning": "Mahnungen"
     },
     "bcc": {
       "description": "E-Mail-Adressen konfigurieren, die eine Blindkopie (BCC) ausgehender Dokument-E-Mails erhalten.",

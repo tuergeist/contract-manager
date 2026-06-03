@@ -19,8 +19,6 @@ type Language = 'de' | 'en'
 const LANGUAGES: Language[] = ['de', 'en']
 const STAGES = [0, 1, 2, 3]
 
-const emptyStage: DunningTemplateStage = { title: '', subject: '', body: '' }
-
 interface FormState {
   defaultPaymentTermDays: string
   overdueRedThresholdDays: string
@@ -66,7 +64,6 @@ export function DunningSettings({ showHeader = true }: DunningSettingsProps) {
   const canEdit = hasPermission('reminders', 'settings')
 
   const [form, setForm] = useState<FormState>(() => buildInitialState(null))
-  const [activeLang, setActiveLang] = useState<Language>('de')
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   const { data, loading } = useQuery<{ dunningSettings: DunningSettingsType | null }>(
@@ -79,27 +76,6 @@ export function DunningSettings({ showHeader = true }: DunningSettingsProps) {
       setForm(buildInitialState(data.dunningSettings))
     }
   }, [data])
-
-  const updateTemplate = (
-    lang: Language,
-    stage: number,
-    field: keyof DunningTemplateStage,
-    value: string
-  ) => {
-    setForm((prev) => ({
-      ...prev,
-      templates: {
-        ...prev.templates,
-        [lang]: {
-          ...prev.templates[lang],
-          [String(stage)]: {
-            ...(prev.templates[lang][String(stage)] ?? emptyStage),
-            [field]: value,
-          },
-        },
-      },
-    }))
-  }
 
   const updateFee = (stage: number, value: string) => {
     setForm((prev) => ({
@@ -269,77 +245,13 @@ export function DunningSettings({ showHeader = true }: DunningSettingsProps) {
         </div>
       </section>
 
-      {/* Templates */}
-      <section className="rounded-lg border bg-white p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">
-            {t('reminders.settings.sectionTemplates')}
-          </h2>
-          <div className="inline-flex rounded-md border border-input">
-            {LANGUAGES.map((lang) => (
-              <button
-                key={lang}
-                type="button"
-                onClick={() => setActiveLang(lang)}
-                className={`px-3 py-1.5 text-sm font-medium transition-colors first:rounded-l-md last:rounded-r-md ${
-                  activeLang === lang
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-background text-muted-foreground hover:bg-muted'
-                }`}
-                data-testid={`dunning-lang-${lang}`}
-              >
-                {lang.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="space-y-6">
-          {STAGES.map((stage) => {
-            const tpl = form.templates[activeLang][String(stage)] ?? emptyStage
-            return (
-              <div
-                key={`${activeLang}-${stage}`}
-                className="rounded-lg border p-4"
-                data-testid={`dunning-template-${activeLang}-${stage}`}
-              >
-                <h3 className="mb-3 text-sm font-semibold text-gray-900">
-                  {t(stageLabelKey(stage))}
-                </h3>
-                <div className="space-y-3">
-                  <div>
-                    <label className={labelClass}>{t('reminders.settings.templateTitle')}</label>
-                    <input
-                      className={inputClass}
-                      disabled={!canEdit}
-                      value={tpl.title}
-                      onChange={(e) => updateTemplate(activeLang, stage, 'title', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelClass}>{t('reminders.settings.templateSubject')}</label>
-                    <input
-                      className={inputClass}
-                      disabled={!canEdit}
-                      value={tpl.subject}
-                      onChange={(e) => updateTemplate(activeLang, stage, 'subject', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelClass}>{t('reminders.settings.templateBody')}</label>
-                    <textarea
-                      className={inputClass}
-                      rows={5}
-                      disabled={!canEdit}
-                      value={tpl.body}
-                      onChange={(e) => updateTemplate(activeLang, stage, 'body', e.target.value)}
-                    />
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
+      {/* Templates live under Settings → E-Mail-Templates → Mahnungen. */}
+      <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        {t('reminders.settings.templatesMoved')}{' '}
+        <a href="/settings/email-templates/dunning" className="font-medium underline">
+          {t('reminders.settings.templatesMovedLink')}
+        </a>
+      </div>
 
       {canEdit && (
         <div className="flex justify-end">

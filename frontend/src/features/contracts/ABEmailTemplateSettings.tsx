@@ -27,6 +27,14 @@ const SET_AB_EMAIL_TEMPLATE = gql`
   }
 `
 
+const COMPANY_NAME_QUERY = gql`
+  query ABEmailTemplateCompanyName {
+    companyLegalData {
+      companyName
+    }
+  }
+`
+
 const AB_EMAIL_PLACEHOLDERS = [
   { key: '{order_confirmation_number}', label: 'Order Confirmation Number' },
   { key: '{customer_name}', label: 'Customer Name' },
@@ -35,17 +43,17 @@ const AB_EMAIL_PLACEHOLDERS = [
   { key: '{company_name}', label: 'Company Name' },
 ]
 
-const SAMPLE_DATA: Record<string, string> = {
+const FALLBACK_SAMPLE_DATA: Record<string, string> = {
   order_confirmation_number: 'AB-2026-001',
   customer_name: 'Acme Corp',
   contract_reference: 'Contract #12345',
   personal_message: 'Thank you for your order!',
-  company_name: 'My Company GmbH',
+  company_name: 'Your Company GmbH',
 }
 
-function renderPreview(template: string): string {
+function renderPreview(template: string, sample: Record<string, string>): string {
   try {
-    return template.replace(/\{(\w+)\}/g, (match, key) => SAMPLE_DATA[key] ?? match)
+    return template.replace(/\{(\w+)\}/g, (match, key) => sample[key] ?? match)
   } catch {
     return template
   }
@@ -63,6 +71,16 @@ export function ABEmailTemplateSettings({ showHeader = true }: ABEmailTemplateSe
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const { data, refetch } = useQuery(AB_EMAIL_TEMPLATES_QUERY)
+  const { data: companyData } = useQuery<{
+    companyLegalData: { companyName: string } | null
+  }>(COMPANY_NAME_QUERY)
+
+  const sampleData: Record<string, string> = {
+    ...FALLBACK_SAMPLE_DATA,
+    company_name:
+      companyData?.companyLegalData?.companyName ||
+      FALLBACK_SAMPLE_DATA.company_name,
+  }
   const [setEmailTemplate, { loading: saving }] = useMutation(SET_AB_EMAIL_TEMPLATE)
 
   useEffect(() => {
@@ -195,11 +213,11 @@ export function ABEmailTemplateSettings({ showHeader = true }: ABEmailTemplateSe
             </label>
             <div className="rounded-md border bg-gray-50 p-4">
               <div className="text-sm font-medium text-gray-900 mb-2">
-                {renderPreview(subject)}
+                {renderPreview(subject, sampleData)}
               </div>
               <div
                 className="text-sm text-gray-700 prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: renderPreview(body) }}
+                dangerouslySetInnerHTML={{ __html: renderPreview(body, sampleData) }}
               />
             </div>
           </div>

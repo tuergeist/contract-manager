@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { EmailTemplateSettings } from '@/features/invoices/EmailTemplateSettings'
 import { ABEmailTemplateSettings } from '@/features/contracts/ABEmailTemplateSettings'
 import { DocumentEmailBccSettings } from './DocumentEmailBccSettings'
+import { DunningTemplateSettings } from './DunningTemplateSettings'
 import { SettingsCrossLink } from './SettingsCrossLink'
 
 export function EmailTemplateSettingsTabs() {
@@ -13,6 +14,7 @@ export function EmailTemplateSettingsTabs() {
 
   const getActiveSubTab = () => {
     if (location.pathname.includes('/order-confirmation')) return 'order-confirmation'
+    if (location.pathname.includes('/dunning')) return 'dunning'
     if (location.pathname.includes('/bcc')) return 'bcc'
     return 'invoice'
   }
@@ -23,6 +25,9 @@ export function EmailTemplateSettingsTabs() {
     switch (value) {
       case 'order-confirmation':
         navigate('/settings/email-templates/order-confirmation')
+        break
+      case 'dunning':
+        navigate('/settings/email-templates/dunning')
         break
       case 'bcc':
         navigate('/settings/email-templates/bcc')
@@ -43,6 +48,7 @@ export function EmailTemplateSettingsTabs() {
         <TabsList className="mb-4">
           <TabsTrigger value="invoice">{t('settings.emailTemplates.invoice')}</TabsTrigger>
           <TabsTrigger value="order-confirmation">{t('settings.emailTemplates.orderConfirmation')}</TabsTrigger>
+          <TabsTrigger value="dunning">{t('settings.emailTemplates.dunning')}</TabsTrigger>
           <TabsTrigger value="bcc">{t('settings.emailTemplates.bcc')}</TabsTrigger>
         </TabsList>
 
@@ -52,6 +58,10 @@ export function EmailTemplateSettingsTabs() {
 
         <TabsContent value="order-confirmation">
           <ABEmailTemplateSettings showHeader={false} />
+        </TabsContent>
+
+        <TabsContent value="dunning">
+          <DunningTemplateSettings showHeader={false} />
         </TabsContent>
 
         <TabsContent value="bcc">

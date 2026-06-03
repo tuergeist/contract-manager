@@ -1144,7 +1144,13 @@
       "interestRateHint": "Annual interest rate applied to overdue amounts.",
       "templateTitle": "Title",
       "templateSubject": "Email subject",
-      "templateBody": "Body text"
+      "templateBody": "Body text",
+      "templatesMoved": "Dunning templates now live under Email Templates → Dunning.",
+      "templatesMovedLink": "Open templates"
+    },
+    "templates": {
+      "title": "Dunning templates",
+      "description": "Templates per language and stage for payment reminders and 1st/2nd/3rd dunning notices."
     }
   },
   "audit": {
@@ -1832,7 +1838,8 @@
     "emailTemplates": {
       "invoice": "Invoice Email",
       "orderConfirmation": "Order Confirmation Email",
-      "bcc": "BCC Recipients"
+      "bcc": "BCC Recipients",
+      "dunning": "Dunning"
     },
     "bcc": {
       "description": "Configure email addresses that receive a blind copy (BCC) of outgoing document emails.",

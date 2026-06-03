@@ -18,6 +18,14 @@ const INVOICE_EMAIL_TEMPLATES_QUERY = gql`
   }
 `
 
+const COMPANY_NAME_QUERY = gql`
+  query EmailTemplateCompanyName {
+    companyLegalData {
+      companyName
+    }
+  }
+`
+
 const SET_INVOICE_EMAIL_TEMPLATE = gql`
   mutation SetInvoiceEmailTemplate($input: SetInvoiceEmailTemplateInput!) {
     setInvoiceEmailTemplate(input: $input) {
@@ -36,18 +44,18 @@ const EMAIL_PLACEHOLDERS = [
   { key: '{company_name}', label: 'Company Name' },
 ]
 
-const SAMPLE_DATA: Record<string, string> = {
+const FALLBACK_SAMPLE_DATA: Record<string, string> = {
   invoice_number: 'INV-2026-001',
   total_gross: '1,250.00',
   currency: 'EUR',
   period_start: '01.01.2026',
   period_end: '31.01.2026',
-  company_name: 'Acme Corp',
+  company_name: 'Your Company GmbH',
 }
 
-function renderPreview(template: string): string {
+function renderPreview(template: string, sample: Record<string, string>): string {
   try {
-    return template.replace(/\{(\w+)\}/g, (match, key) => SAMPLE_DATA[key] ?? match)
+    return template.replace(/\{(\w+)\}/g, (match, key) => sample[key] ?? match)
   } catch {
     return template
   }
@@ -65,7 +73,17 @@ export function EmailTemplateSettings({ showHeader = true }: EmailTemplateSettin
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const { data, refetch } = useQuery(INVOICE_EMAIL_TEMPLATES_QUERY)
+  const { data: companyData } = useQuery<{
+    companyLegalData: { companyName: string } | null
+  }>(COMPANY_NAME_QUERY)
   const [setEmailTemplate, { loading: saving }] = useMutation(SET_INVOICE_EMAIL_TEMPLATE)
+
+  const sampleData: Record<string, string> = {
+    ...FALLBACK_SAMPLE_DATA,
+    company_name:
+      companyData?.companyLegalData?.companyName ||
+      FALLBACK_SAMPLE_DATA.company_name,
+  }
 
   useEffect(() => {
     const templates = data?.invoiceEmailTemplates?.templates
@@ -198,11 +216,11 @@ export function EmailTemplateSettings({ showHeader = true }: EmailTemplateSettin
             </label>
             <div className="rounded-md border bg-gray-50 p-4">
               <div className="text-sm font-medium text-gray-900 mb-2">
-                {renderPreview(subject)}
+                {renderPreview(subject, sampleData)}
               </div>
               <div
                 className="text-sm text-gray-700 prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: renderPreview(body) }}
+                dangerouslySetInnerHTML={{ __html: renderPreview(body, sampleData) }}
               />
             </div>
           </div>
