@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.33.0",
+    "date": "2026-06-03",
+    "title": "Projekte: ausblendbare Spalten + Ø PS-Ratio · Zeiterfassung: Item-Zuweisung inline",
+    "description": "Projekte-Tabelle ist jetzt kompakter und konfigurierbar: zusammengelegte Kunde/Vertrag-Spalte, ein- und ausblendbare Spalten mit persistenter Auswahl und ein hours-gewichteter Ø PS-Ratio unter der Überschrift. Im Vertrags-Tab Zeiterfassung lassen sich verknüpfte Projekte ohne Position jetzt direkt einer Position zuweisen (auto-save).",
+    "type": "feature",
+    "details": [
+      "Projekte: Kunde + Vertrag in einer Zelle zweizeilig statt zwei Spalten — spart Tabellenbreite",
+      "Projekte: neuer 'Spalten'-Button mit Checkbox-Popover — Item, AB-Nummer, Status, ETA, Stunden, Auftragswert, PS-Ratio jeweils ein-/ausblendbar, Auswahl wird im Browser gespeichert, mit Reset-Link",
+      "Projekte: Ø PS-Ratio als gedämpfte Zeile unter dem Titel — Stunden-gewichteter Durchschnitt aller gelieferten Positionen mit Stunden > 0 und Auftragswert > 0, farbcodiert grün/gelb/rot",
+      "Projekte: Summen + Position-Count wandern aus dem rechten Header in dieselbe gedämpfte Zeile unter dem Titel",
+      "Zeiterfassung (Vertrag): verknüpfte Projekte ohne zugewiesene Position zeigen ein inline-Select — Auswahl speichert sofort und aktualisiert die Tabelle, mit Lade-Spinner pro Zeile",
+      "Tests: 12 neue Backend-Tests (7 für die neue updateTimeTrackingMappingItem-Mutation inkl. cross-Tenant und Permission, 5 weitere für den Storno- und Sent-Date-Lifecycle der importierten Rechnungen)"
+    ]
+  },
+  {
     "version": "2.32.1",
     "date": "2026-06-03",
     "title": "CI-Fix: Migrations-Abhängigkeit für 2.32.0",
