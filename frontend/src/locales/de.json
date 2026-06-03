@@ -2306,7 +2306,11 @@
     "psRatio": "PS-Ratio",
     "search": "Suche",
     "searchPlaceholder": "Kunde, Vertrag, Position oder AB-Nummer...",
-    "totals": "{{count}} Positionen · {{hours}} Std. · {{value}}"
+    "totals": "{{count}} Positionen · {{hours}} Std. · {{value}}",
+    "totalPsRatio": "Ø PS-Ratio",
+    "totalPsRatioHint": "Stunden-gewichteter Durchschnitt aller gelieferten Items mit gebuchten Stunden und Auftragswert",
+    "columns": "Spalten",
+    "resetColumns": "Zurücksetzen"
   },
   "comments": {
     "title": "Kommentare",

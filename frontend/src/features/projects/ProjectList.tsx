@@ -12,10 +12,17 @@ import {
   ArrowDown,
   ArrowUpDown,
   Search,
+  Columns,
 } from 'lucide-react'
 import { formatDate, formatCurrency, formatNumber } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -168,12 +175,50 @@ function PsRatioCell({ value }: { value: number | null }) {
   )
 }
 
+type ToggleableColumn = 'item' | 'ocNumber' | 'status' | 'eta' | 'hours' | 'orderValue' | 'psRatio'
+
+const ALL_TOGGLEABLE_COLUMNS: ToggleableColumn[] = [
+  'item',
+  'ocNumber',
+  'status',
+  'eta',
+  'hours',
+  'orderValue',
+  'psRatio',
+]
+
+const DEFAULT_COLUMN_VISIBILITY: Record<ToggleableColumn, boolean> = {
+  item: true,
+  ocNumber: true,
+  status: true,
+  eta: true,
+  hours: true,
+  orderValue: true,
+  psRatio: true,
+}
+
 export function ProjectList() {
   const { t } = useTranslation()
   const [statusFilter, setStatusFilter] = usePersistedState('cm:projectList:statusFilter', 'pending')
   const [searchTerm, setSearchTerm] = usePersistedState('cm:projectList:search', '')
   const [sortBy, setSortBy] = usePersistedState<SortField>('cm:projectList:sortBy', 'customer')
   const [sortOrder, setSortOrder] = usePersistedState<SortOrder>('cm:projectList:sortOrder', 'asc')
+  const [columnVisibility, setColumnVisibility] = usePersistedState<Record<ToggleableColumn, boolean>>(
+    'cm:projectList:columnVisibility',
+    DEFAULT_COLUMN_VISIBILITY,
+  )
+
+  // Defensive: merge with defaults so newly-added columns become visible by default
+  // for users with old persisted state.
+  const visibleColumns: Record<ToggleableColumn, boolean> = {
+    ...DEFAULT_COLUMN_VISIBILITY,
+    ...columnVisibility,
+  }
+  const isVisible = (col: ToggleableColumn) => visibleColumns[col] !== false
+  const toggleColumn = (col: ToggleableColumn) => {
+    setColumnVisibility({ ...visibleColumns, [col]: !isVisible(col) })
+  }
+  const hiddenCount = ALL_TOGGLEABLE_COLUMNS.filter((c) => !isVisible(c)).length
   const [deliveryItem, setDeliveryItem] = useState<DeliverableItem | null>(null)
   const [deliveryDate, setDeliveryDate] = useState(() => new Date().toISOString().slice(0, 10))
 
@@ -215,6 +260,28 @@ export function ProjectList() {
       },
       { hours: 0, value: 0 }
     )
+  }, [filteredItems])
+
+  // Aggregate PS ratio across delivered items with hours>0 and orderValue>0.
+  // Per-item ratio is order_value / (hours * ps_rate), so a hours-weighted
+  // average of those ratios equals total_order_value / (total_hours * ps_rate)
+  // — i.e. the global ratio — without needing ps_rate on the client.
+  const totalPsRatio = useMemo(() => {
+    let weightedSum = 0
+    let hoursSum = 0
+    for (const i of filteredItems) {
+      if (
+        i.deliveryStatus === 'delivered' &&
+        i.hoursBooked > 0 &&
+        i.orderValue > 0 &&
+        i.psRatio != null
+      ) {
+        weightedSum += i.hoursBooked * i.psRatio
+        hoursSum += i.hoursBooked
+      }
+    }
+    if (hoursSum === 0) return null
+    return weightedSum / hoursSum
   }, [filteredItems])
 
   const handleSort = (field: SortField) => {
@@ -286,14 +353,74 @@ export function ProjectList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">{t('projects.title')}</h1>
-        <div className="text-sm text-gray-500">
-          {t('projects.totals', {
-            count: filteredItems.length,
-            hours: formatNumber(totals.hours, { maximumFractionDigits: 1 }),
-            value: formatCurrency(totals.value),
-          })}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{t('projects.title')}</h1>
+          <div className="mt-1 text-sm text-gray-400">
+            {t('projects.totals', {
+              count: filteredItems.length,
+              hours: formatNumber(totals.hours, { maximumFractionDigits: 1 }),
+              value: formatCurrency(totals.value),
+            })}
+            {totalPsRatio != null && (
+              <>
+                {' · '}
+                <span title={t('projects.totalPsRatioHint', { defaultValue: 'Hours-weighted average of delivered items with hours > 0 and order value > 0' })}>
+                  {t('projects.totalPsRatio', { defaultValue: 'PS-Ratio' })}{' '}
+                  <span className={
+                    totalPsRatio >= 1
+                      ? 'font-medium text-green-700'
+                      : totalPsRatio >= 0.8
+                      ? 'font-medium text-amber-700'
+                      : 'font-medium text-red-700'
+                  }>
+                    {formatNumber(totalPsRatio, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="projects-columns-toggle">
+                <Columns className="mr-1 h-4 w-4" />
+                {t('projects.columns', { defaultValue: 'Spalten' })}
+                {hiddenCount > 0 && (
+                  <span className="ml-1 rounded-full bg-blue-100 px-1.5 text-xs text-blue-700">
+                    -{hiddenCount}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-56">
+              <div className="space-y-2">
+                <div className="text-xs font-medium uppercase tracking-wider text-gray-500">
+                  {t('projects.columns', { defaultValue: 'Spalten' })}
+                </div>
+                {ALL_TOGGLEABLE_COLUMNS.map((col) => (
+                  <label
+                    key={col}
+                    className="flex cursor-pointer items-center gap-2 py-1 text-sm"
+                  >
+                    <Checkbox
+                      checked={isVisible(col)}
+                      onCheckedChange={() => toggleColumn(col)}
+                    />
+                    {t(`projects.${col}`)}
+                  </label>
+                ))}
+                <button
+                  type="button"
+                  className="mt-2 text-xs text-blue-600 hover:underline"
+                  onClick={() => setColumnVisibility(DEFAULT_COLUMN_VISIBILITY)}
+                >
+                  {t('projects.resetColumns', { defaultValue: 'Zurücksetzen' })}
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
@@ -342,60 +469,82 @@ export function ProjectList() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className={thBase} onClick={() => handleSort('customer')}>
-                  <div className="flex items-center">
-                    {t('projects.customer')}
-                    <SortIcon field="customer" />
+                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <div className="flex flex-col gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('customer')}
+                      className="flex items-center hover:text-gray-700"
+                    >
+                      {t('projects.customer')}
+                      <SortIcon field="customer" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSort('contract')}
+                      className="flex items-center text-[10px] normal-case text-gray-400 hover:text-gray-700"
+                    >
+                      {t('projects.contract')}
+                      <SortIcon field="contract" />
+                    </button>
                   </div>
                 </th>
-                <th className={thBase} onClick={() => handleSort('contract')}>
-                  <div className="flex items-center">
-                    {t('projects.contract')}
-                    <SortIcon field="contract" />
-                  </div>
-                </th>
-                <th className={thBase} onClick={() => handleSort('item')}>
-                  <div className="flex items-center">
-                    {t('projects.item')}
-                    <SortIcon field="item" />
-                  </div>
-                </th>
-                <th className={thBase} onClick={() => handleSort('ocNumber')}>
-                  <div className="flex items-center">
-                    {t('projects.ocNumber')}
-                    <SortIcon field="ocNumber" />
-                  </div>
-                </th>
-                <th className={thBase} onClick={() => handleSort('status')}>
-                  <div className="flex items-center">
-                    {t('projects.status')}
-                    <SortIcon field="status" />
-                  </div>
-                </th>
-                <th className={thBase} onClick={() => handleSort('eta')}>
-                  <div className="flex items-center">
-                    {t('projects.eta')}
-                    <SortIcon field="eta" />
-                  </div>
-                </th>
-                <th className={thBaseRight} onClick={() => handleSort('hours')}>
-                  <div className="flex items-center justify-end">
-                    {t('projects.hours')}
-                    <SortIcon field="hours" />
-                  </div>
-                </th>
-                <th className={thBaseRight} onClick={() => handleSort('orderValue')}>
-                  <div className="flex items-center justify-end">
-                    {t('projects.orderValue')}
-                    <SortIcon field="orderValue" />
-                  </div>
-                </th>
-                <th className={thBaseRight} onClick={() => handleSort('psRatio')}>
-                  <div className="flex items-center justify-end">
-                    {t('projects.psRatio')}
-                    <SortIcon field="psRatio" />
-                  </div>
-                </th>
+                {isVisible('item') && (
+                  <th className={thBase} onClick={() => handleSort('item')}>
+                    <div className="flex items-center">
+                      {t('projects.item')}
+                      <SortIcon field="item" />
+                    </div>
+                  </th>
+                )}
+                {isVisible('ocNumber') && (
+                  <th className={thBase} onClick={() => handleSort('ocNumber')}>
+                    <div className="flex items-center">
+                      {t('projects.ocNumber')}
+                      <SortIcon field="ocNumber" />
+                    </div>
+                  </th>
+                )}
+                {isVisible('status') && (
+                  <th className={thBase} onClick={() => handleSort('status')}>
+                    <div className="flex items-center">
+                      {t('projects.status')}
+                      <SortIcon field="status" />
+                    </div>
+                  </th>
+                )}
+                {isVisible('eta') && (
+                  <th className={thBase} onClick={() => handleSort('eta')}>
+                    <div className="flex items-center">
+                      {t('projects.eta')}
+                      <SortIcon field="eta" />
+                    </div>
+                  </th>
+                )}
+                {isVisible('hours') && (
+                  <th className={thBaseRight} onClick={() => handleSort('hours')}>
+                    <div className="flex items-center justify-end">
+                      {t('projects.hours')}
+                      <SortIcon field="hours" />
+                    </div>
+                  </th>
+                )}
+                {isVisible('orderValue') && (
+                  <th className={thBaseRight} onClick={() => handleSort('orderValue')}>
+                    <div className="flex items-center justify-end">
+                      {t('projects.orderValue')}
+                      <SortIcon field="orderValue" />
+                    </div>
+                  </th>
+                )}
+                {isVisible('psRatio') && (
+                  <th className={thBaseRight} onClick={() => handleSort('psRatio')}>
+                    <div className="flex items-center justify-end">
+                      {t('projects.psRatio')}
+                      <SortIcon field="psRatio" />
+                    </div>
+                  </th>
+                )}
                 <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500" />
               </tr>
             </thead>
@@ -403,71 +552,85 @@ export function ProjectList() {
               {filteredItems.map((item) => (
                 <tr key={item.id} className="hover:bg-gray-50">
                   <td className="whitespace-nowrap px-4 py-3 text-sm">
-                    <Link
-                      to={`/customers/${item.customerId}`}
-                      className="text-blue-600 hover:text-blue-800 hover:underline"
-                    >
-                      {item.customerName}
-                    </Link>
+                    <div className="flex flex-col leading-tight">
+                      <Link
+                        to={`/customers/${item.customerId}`}
+                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        {item.customerName}
+                      </Link>
+                      <Link
+                        to={`/contracts/${item.contractId}`}
+                        className="text-xs text-gray-500 hover:text-blue-700 hover:underline"
+                      >
+                        {item.contractName || `#${item.contractId}`}
+                      </Link>
+                    </div>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-sm">
-                    <Link
-                      to={`/contracts/${item.contractId}`}
-                      className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
-                    >
-                      {item.contractName || `#${item.contractId}`}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <span className="font-medium text-gray-900">
-                      {itemLabel(item) || '-'}
-                    </span>
-                    {item.dependentItemsCount > 0 && (
-                      <span className="ml-2 text-xs text-gray-500">
-                        {t('projects.dependentCount', { count: item.dependentItemsCount })}
+                  {isVisible('item') && (
+                    <td className="px-4 py-3 text-sm">
+                      <span className="font-medium text-gray-900">
+                        {itemLabel(item) || '-'}
                       </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-700">
-                    {item.orderConfirmationNumber || <span className="text-gray-400">–</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    {item.deliveryStatus === 'pending' && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                        <CircleDot className="h-3 w-3" />
-                        {t('contracts.delivery.pending')}
-                      </span>
-                    )}
-                    {item.deliveryStatus === 'delivered' && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                        <CheckCircle2 className="h-3 w-3" />
-                        {t('contracts.delivery.delivered')}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {item.deliveryStatus === 'pending' ? (
-                      <Input
-                        type="date"
-                        className="h-8 w-40"
-                        value={item.estimatedDeliveryDate || ''}
-                        onChange={(e) => handleSetEta(item, e.target.value)}
-                      />
-                    ) : item.deliveredAt ? (
-                      formatDate(item.deliveredAt)
-                    ) : (
-                      '-'
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm text-gray-700">
-                    {formatNumber(item.hoursBooked, { maximumFractionDigits: 1 })}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm text-gray-700">
-                    {formatCurrency(item.orderValue)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm">
-                    <PsRatioCell value={item.psRatio} />
-                  </td>
+                      {item.dependentItemsCount > 0 && (
+                        <span className="ml-2 text-xs text-gray-500">
+                          {t('projects.dependentCount', { count: item.dependentItemsCount })}
+                        </span>
+                      )}
+                    </td>
+                  )}
+                  {isVisible('ocNumber') && (
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {item.orderConfirmationNumber || <span className="text-gray-400">–</span>}
+                    </td>
+                  )}
+                  {isVisible('status') && (
+                    <td className="px-4 py-3">
+                      {item.deliveryStatus === 'pending' && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                          <CircleDot className="h-3 w-3" />
+                          {t('contracts.delivery.pending')}
+                        </span>
+                      )}
+                      {item.deliveryStatus === 'delivered' && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                          <CheckCircle2 className="h-3 w-3" />
+                          {t('contracts.delivery.delivered')}
+                        </span>
+                      )}
+                    </td>
+                  )}
+                  {isVisible('eta') && (
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      {item.deliveryStatus === 'pending' ? (
+                        <Input
+                          type="date"
+                          className="h-8 w-40"
+                          value={item.estimatedDeliveryDate || ''}
+                          onChange={(e) => handleSetEta(item, e.target.value)}
+                        />
+                      ) : item.deliveredAt ? (
+                        formatDate(item.deliveredAt)
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+                  )}
+                  {isVisible('hours') && (
+                    <td className="px-4 py-3 text-right text-sm text-gray-700">
+                      {formatNumber(item.hoursBooked, { maximumFractionDigits: 1 })}
+                    </td>
+                  )}
+                  {isVisible('orderValue') && (
+                    <td className="px-4 py-3 text-right text-sm text-gray-700">
+                      {formatCurrency(item.orderValue)}
+                    </td>
+                  )}
+                  {isVisible('psRatio') && (
+                    <td className="px-4 py-3 text-right text-sm">
+                      <PsRatioCell value={item.psRatio} />
+                    </td>
+                  )}
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     {item.deliveryStatus === 'pending' && (
                       <Button
@@ -498,16 +661,31 @@ export function ProjectList() {
             </tbody>
             <tfoot className="bg-gray-50">
               <tr>
-                <td colSpan={6} className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                {/* Label spans: customer/contract (1) + visible text cols before numerics */}
+                <td
+                  colSpan={
+                    1 +
+                    (isVisible('item') ? 1 : 0) +
+                    (isVisible('ocNumber') ? 1 : 0) +
+                    (isVisible('status') ? 1 : 0) +
+                    (isVisible('eta') ? 1 : 0)
+                  }
+                  className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500"
+                >
                   {t('common.total', { defaultValue: 'Total' })}
                 </td>
-                <td className="px-4 py-2 text-right text-sm font-semibold text-gray-900">
-                  {formatNumber(totals.hours, { maximumFractionDigits: 1 })}
-                </td>
-                <td className="px-4 py-2 text-right text-sm font-semibold text-gray-900">
-                  {formatCurrency(totals.value)}
-                </td>
-                <td colSpan={2} />
+                {isVisible('hours') && (
+                  <td className="px-4 py-2 text-right text-sm font-semibold text-gray-900">
+                    {formatNumber(totals.hours, { maximumFractionDigits: 1 })}
+                  </td>
+                )}
+                {isVisible('orderValue') && (
+                  <td className="px-4 py-2 text-right text-sm font-semibold text-gray-900">
+                    {formatCurrency(totals.value)}
+                  </td>
+                )}
+                {isVisible('psRatio') && <td />}
+                <td />
               </tr>
             </tfoot>
           </table>

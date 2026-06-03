@@ -2306,7 +2306,11 @@
     "psRatio": "PS Ratio",
     "search": "Search",
     "searchPlaceholder": "Customer, contract, item or OC number...",
-    "totals": "{{count}} items · {{hours}} hrs · {{value}}"
+    "totals": "{{count}} items · {{hours}} hrs · {{value}}",
+    "totalPsRatio": "Ø PS ratio",
+    "totalPsRatioHint": "Hours-weighted average across delivered items with booked hours and order value",
+    "columns": "Columns",
+    "resetColumns": "Reset"
   },
   "comments": {
     "title": "Comments",
