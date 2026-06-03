@@ -440,9 +440,24 @@ class InvoiceRecord(TenantModel):
     def overdue_days(self) -> int:
         """Number of days this invoice is overdue.
 
-        Returns 0 if the invoice is paid, has no due date, or is not yet due.
+        Returns 0 for invoices that cannot meaningfully be overdue:
+          - credit notes (Storno) are never overdue,
+          - voided invoices are no longer outstanding,
+          - invoices already cancelled by a storno are no longer outstanding,
+          - paid invoices,
+          - invoices with no due date,
+          - invoices not yet due.
         """
+        if self.document_type == self.DocumentType.STORNO:
+            return 0
+        if self.status == self.Status.VOIDED:
+            return 0
         if self.due_date is None or self.is_paid:
+            return 0
+        # An invoice that has a storno against it is no longer outstanding,
+        # even if its own status is still SENT/DUNNING (the void path may
+        # not have run, or it was reversed manually via a credit note).
+        if self.storno_records.exists():
             return 0
         delta = (timezone.now().date() - self.due_date).days
         return delta if delta > 0 else 0

@@ -149,6 +149,39 @@ class TestOverdueDays:
         invoice = _make_invoice(tenant, due_date=None)
         assert invoice.overdue_days == 0
 
+    def test_voided_invoice_is_never_overdue(self, tenant):
+        invoice = _make_invoice(
+            tenant,
+            due_date=date.today() - timedelta(days=30),
+            status=InvoiceRecord.Status.VOIDED,
+        )
+        assert invoice.overdue_days == 0
+
+    def test_storno_credit_note_is_never_overdue(self, tenant):
+        invoice = _make_invoice(
+            tenant,
+            invoice_number="CN-2026-0001",
+            due_date=date.today() - timedelta(days=30),
+            document_type=InvoiceRecord.DocumentType.STORNO,
+        )
+        assert invoice.overdue_days == 0
+
+    def test_invoice_with_storno_is_not_overdue(self, tenant):
+        invoice = _make_invoice(
+            tenant,
+            due_date=date.today() - timedelta(days=30),
+            status=InvoiceRecord.Status.SENT,
+        )
+        _make_invoice(
+            tenant,
+            invoice_number="CN-2026-0002",
+            document_type=InvoiceRecord.DocumentType.STORNO,
+            storno_of=invoice,
+            due_date=date.today() - timedelta(days=5),
+            status=InvoiceRecord.Status.SENT,
+        )
+        assert invoice.overdue_days == 0
+
 
 # --- 4.6 Eligibility, fee, interest, template tests -------------------------
 

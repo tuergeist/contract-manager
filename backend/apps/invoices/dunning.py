@@ -55,6 +55,9 @@ def is_dunning_eligible(invoice, settings: dict | None = None) -> bool:
         return False
     if invoice.is_paid:
         return False
+    # An invoice that has been credited via a storno is no longer collectable.
+    if invoice.storno_records.exists():
+        return False
     if settings is None:
         settings = get_dunning_settings(invoice.tenant)
     threshold = int(settings["mahnfaehig_threshold_days"])
