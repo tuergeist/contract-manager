@@ -929,9 +929,17 @@ class InvoiceQuery:
         if contract_id:
             qs = qs.filter(contract_id=contract_id)
 
-        # Search by invoice number
+        # Search across invoice number, customer name (extracted snapshot
+        # and linked Customer record) and the original PDF filename so the
+        # global /invoices search behaves like the generated-invoices search
+        # — typing the customer name surfaces both sides.
         if search:
-            qs = qs.filter(invoice_number__icontains=search)
+            qs = qs.filter(
+                Q(invoice_number__icontains=search)
+                | Q(customer_name__icontains=search)
+                | Q(customer__name__icontains=search)
+                | Q(original_filename__icontains=search)
+            )
 
         # Filter by payment status
         if payment_status == PaymentStatusFilter.PAID:
