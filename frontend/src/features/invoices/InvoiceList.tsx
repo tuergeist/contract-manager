@@ -555,6 +555,27 @@ export function InvoiceList() {
 
   const invoices: Invoice[] = data?.invoices?.items ?? []
   const generatedInvoices: GeneratedInvoice[] = generatedData?.invoiceRecords?.items ?? []
+
+  // ImportedInvoiceType has no due_date field server-side. Derive overdue
+  // days from invoice_date + tenant default payment term so the Verzug
+  // column is populated for imported invoices too, not only generated
+  // ones. Matches the server-side formula for InvoiceRecord.
+  const computeImportedOverdueDays = (
+    invoiceDate: string | null,
+    isPaid: boolean,
+  ): number => {
+    if (!invoiceDate || isPaid || !dunningSettings) return 0
+    const due = new Date(invoiceDate)
+    if (Number.isNaN(due.getTime())) return 0
+    due.setDate(due.getDate() + dunningSettings.defaultPaymentTermDays)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    due.setHours(0, 0, 0, 0)
+    const diffDays = Math.floor(
+      (today.getTime() - due.getTime()) / (1000 * 60 * 60 * 24),
+    )
+    return diffDays > 0 ? diffDays : 0
+  }
   const batches: InvoiceImportBatch[] = batchData?.importBatches?.items ?? []
   const hasPendingUploads = batches.some((b) => b.pendingCount > 0)
   const unsentCount = generatedInvoices.filter(
@@ -577,7 +598,7 @@ export function InvoiceList() {
           contractId: inv.contractId,
           amount: inv.totalAmount ? parseFloat(inv.totalAmount) : null,
           currency: inv.currency,
-          overdueDays: 0,
+          overdueDays: computeImportedOverdueDays(inv.invoiceDate, inv.isPaid),
           imported: inv,
         })
       }
@@ -1244,7 +1265,7 @@ export function InvoiceList() {
                     className="px-4 py-3 text-right font-mono"
                     data-testid={`invoice-overdue-${row.generated ? row.generated.id : row.imported?.id}`}
                   >
-                    {row.source === 'generated' && row.overdueDays > 0 ? (
+                    {row.overdueDays > 0 ? (
                       <span
                         className={cn(
                           dunningSettings &&
