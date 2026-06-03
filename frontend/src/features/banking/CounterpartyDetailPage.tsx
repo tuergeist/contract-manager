@@ -1009,8 +1009,13 @@ export function CounterpartyDetailPage() {
           )}
         </div>
         {(() => {
-          const inYear = (iso?: string) => {
-            if (summaryYear === 'total' || !iso) return true
+          // Year filter applies to invoice_date only — never to createdAt /
+          // import date. Imported invoices without an extracted invoice_date
+          // are excluded when a specific year is selected, so the figure
+          // reflects what was actually invoiced in that year.
+          const inYear = (iso?: string | null) => {
+            if (summaryYear === 'total') return true
+            if (!iso) return false
             return iso.startsWith(summaryYear)
           }
           const outFiltered = allOutInvoices.filter((inv: any) => inYear(inv.invoiceDate))
@@ -1247,10 +1252,13 @@ export function CounterpartyDetailPage() {
         } else {
           // Creditor: incoming invoices + payments sent
           for (const inv of cpInvoices) {
-            const invDate = inv.invoiceDate || inv.createdAt?.split('T')[0] || ''
+            // Year filter must apply to the actual Rechnungsdatum, not the
+            // import / createdAt date. Imported supplier invoices that lack
+            // an extracted invoice_date are hidden when a specific year is
+            // selected (use "total" to see them).
             if (summaryYear !== 'total' && yearScope === 'payment') {
               if (!paidInvoiceIds.has(String(inv.id))) continue
-            } else if (!ledgerInYear(invDate)) continue
+            } else if (!ledgerInYear(inv.invoiceDate)) continue
             entries.push({
               date: inv.invoiceDate || inv.createdAt?.split('T')[0] || '',
               description: `${t('incomingInvoices.invoiceNumber')}: ${inv.invoiceNumber || inv.originalFilename}`,
@@ -1738,8 +1746,10 @@ export function CounterpartyDetailPage() {
                     {allOutInvoicesSorted.map((inv) => {
                       const isStorno = inv.documentType === 'storno'
                       const gross = parseFloat(inv.totalGross || '0')
+                      // Imported and generated invoices share the same route;
+                      // ImportedInvoiceDetail is selected via ?type=imported.
                       const detailHref = inv.source === 'imported'
-                        ? `/invoices/imported/${inv.id}`
+                        ? `/invoices/${inv.id}?type=imported`
                         : `/invoices/${inv.id}`
                       return (
                       <tr key={`${inv.source}-${inv.id}`} className="border-b hover:bg-gray-50">
