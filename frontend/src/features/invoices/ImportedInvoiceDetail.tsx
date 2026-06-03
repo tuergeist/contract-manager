@@ -78,6 +78,77 @@ const IMPORTED_INVOICE_QUERY = gql`
       createdByName
       receiverEmails
       uploadStatus
+      documentType
+      voidReason
+      voidedAt
+      voidedByName
+      stornoOfId
+      stornoOfNumber
+      creditNoteId
+      creditNoteNumber
+    }
+  }
+`
+
+const VOID_IMPORTED_INVOICE = gql`
+  mutation VoidImportedInvoiceDetail($invoiceId: ID!, $reason: String!, $creditNoteId: ID) {
+    voidImportedInvoice(invoiceId: $invoiceId, reason: $reason, creditNoteId: $creditNoteId) {
+      success
+      error
+    }
+  }
+`
+
+const UNVOID_IMPORTED_INVOICE = gql`
+  mutation UnvoidImportedInvoiceDetail($invoiceId: ID!) {
+    unvoidImportedInvoice(invoiceId: $invoiceId) {
+      success
+      error
+    }
+  }
+`
+
+const LINK_CREDIT_NOTE = gql`
+  mutation LinkImportedCreditNoteDetail(
+    $creditNoteId: ID!
+    $targetInvoiceId: ID!
+    $reason: String!
+  ) {
+    linkImportedCreditNote(
+      creditNoteId: $creditNoteId
+      targetInvoiceId: $targetInvoiceId
+      reason: $reason
+    ) {
+      success
+      error
+    }
+  }
+`
+
+const UNLINK_CREDIT_NOTE = gql`
+  mutation UnlinkImportedCreditNoteDetail($creditNoteId: ID!, $keepTargetVoided: Boolean) {
+    unlinkImportedCreditNote(creditNoteId: $creditNoteId, keepTargetVoided: $keepTargetVoided) {
+      success
+      error
+    }
+  }
+`
+
+const SEARCH_INVOICES_FOR_LINKING = gql`
+  query SearchInvoicesForLinking($search: String) {
+    invoices(search: $search, limit: 20) {
+      items {
+        id
+        invoiceNumber
+        invoiceDate
+        totalAmount
+        currency
+        customerName
+        customerDisplayName
+        documentType
+        extractionStatus
+        stornoOfId
+      }
     }
   }
 `
@@ -267,6 +338,27 @@ interface ImportedInvoice {
   createdByName: string | null
   receiverEmails: string[]
   uploadStatus: string
+  documentType: string
+  voidReason: string
+  voidedAt: string | null
+  voidedByName: string | null
+  stornoOfId: number | null
+  stornoOfNumber: string | null
+  creditNoteId: number | null
+  creditNoteNumber: string | null
+}
+
+interface InvoiceSearchHit {
+  id: string
+  invoiceNumber: string
+  invoiceDate: string | null
+  totalAmount: string | null
+  currency: string
+  customerName: string
+  customerDisplayName: string | null
+  documentType: string
+  extractionStatus: string
+  stornoOfId: number | null
 }
 
 interface CustomerMatch {
@@ -315,6 +407,12 @@ function ExtractionStatusBadge({ status }: { status: string }) {
           {t('invoices.import.statusFailed')}
         </span>
       )
+    case 'voided':
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-gray-200 px-2.5 py-1 text-sm font-medium text-gray-700 line-through">
+          {t('importedInvoiceDetail.voided', { defaultValue: 'Voided' })}
+        </span>
+      )
     default:
       return (
         <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-sm font-medium text-gray-600">
@@ -345,6 +443,16 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
   const [showCustomerPicker, setShowCustomerPicker] = useState(false)
   const [showContractPicker, setShowContractPicker] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+
+  // Void / credit-note linking dialogs
+  const [showVoidDialog, setShowVoidDialog] = useState(false)
+  const [voidReason, setVoidReason] = useState('')
+  const [voidSearchTerm, setVoidSearchTerm] = useState('')
+  const [selectedCreditNote, setSelectedCreditNote] = useState<InvoiceSearchHit | null>(null)
+  const [showLinkDialog, setShowLinkDialog] = useState(false)
+  const [linkSearchTerm, setLinkSearchTerm] = useState('')
+  const [selectedTarget, setSelectedTarget] = useState<InvoiceSearchHit | null>(null)
+  const [linkReason, setLinkReason] = useState('')
 
   // Inline editing state
   const [editing, setEditing] = useState<'invoiceNumber' | 'invoiceDate' | 'totalAmount' | null>(null)
@@ -383,6 +491,15 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
   const [confirmCustomerMatch] = useMutation(CONFIRM_CUSTOMER_MATCH)
   const [unlinkCustomer] = useMutation(UNLINK_CUSTOMER)
   const [assignContract] = useMutation(ASSIGN_INVOICE_CONTRACT)
+  const [voidImportedInvoice, { loading: voiding }] = useMutation(VOID_IMPORTED_INVOICE)
+  const [unvoidImportedInvoice, { loading: unvoiding }] = useMutation(UNVOID_IMPORTED_INVOICE)
+  const [linkCreditNote, { loading: linking }] = useMutation(LINK_CREDIT_NOTE)
+  const [unlinkCreditNote, { loading: unlinking }] = useMutation(UNLINK_CREDIT_NOTE)
+
+  const [searchInvoicesForCreditNote, { data: voidSearchData, loading: voidSearchLoading }] =
+    useLazyQuery(SEARCH_INVOICES_FOR_LINKING)
+  const [searchInvoicesForLink, { data: linkSearchData, loading: linkSearchLoading }] =
+    useLazyQuery(SEARCH_INVOICES_FOR_LINKING)
 
   const invoice = data?.invoice
   const suggestions: CustomerMatch[] = suggestionsData?.customerMatchSuggestions || []
@@ -556,6 +673,132 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
     setShowPaymentModal(true)
   }
 
+  // Void / credit-note handlers
+  const openVoidDialog = () => {
+    setVoidReason('')
+    setSelectedCreditNote(null)
+    setVoidSearchTerm('')
+    setShowVoidDialog(true)
+  }
+
+  const handleVoidSubmit = async () => {
+    if (!invoice) return
+    if (!voidReason.trim()) {
+      setToast({ type: 'error', message: t('importedInvoiceDetail.voidReasonRequired') })
+      return
+    }
+    try {
+      const result = await voidImportedInvoice({
+        variables: {
+          invoiceId: invoice.id,
+          reason: voidReason.trim(),
+          creditNoteId: selectedCreditNote?.id ?? null,
+        },
+      })
+      if (result.data?.voidImportedInvoice?.success) {
+        setShowVoidDialog(false)
+        setToast({ type: 'success', message: t('importedInvoiceDetail.voided') })
+        refetch()
+      } else {
+        setToast({
+          type: 'error',
+          message: result.data?.voidImportedInvoice?.error || t('importedInvoiceDetail.voidFailed'),
+        })
+      }
+    } catch {
+      setToast({ type: 'error', message: t('importedInvoiceDetail.voidFailed') })
+    }
+  }
+
+  const handleUnvoid = async () => {
+    if (!invoice) return
+    if (!confirm(t('importedInvoiceDetail.confirmUnvoid'))) return
+    try {
+      const result = await unvoidImportedInvoice({ variables: { invoiceId: invoice.id } })
+      if (result.data?.unvoidImportedInvoice?.success) {
+        setToast({ type: 'success', message: t('importedInvoiceDetail.unvoided') })
+        refetch()
+      } else {
+        setToast({
+          type: 'error',
+          message: result.data?.unvoidImportedInvoice?.error || t('common.error'),
+        })
+      }
+    } catch {
+      setToast({ type: 'error', message: t('common.error') })
+    }
+  }
+
+  const openLinkDialog = () => {
+    setLinkReason('')
+    setSelectedTarget(null)
+    setLinkSearchTerm('')
+    setShowLinkDialog(true)
+  }
+
+  const handleLinkSubmit = async () => {
+    if (!invoice || !selectedTarget) return
+    try {
+      const result = await linkCreditNote({
+        variables: {
+          creditNoteId: invoice.id,
+          targetInvoiceId: selectedTarget.id,
+          reason: linkReason.trim(),
+        },
+      })
+      if (result.data?.linkImportedCreditNote?.success) {
+        setShowLinkDialog(false)
+        setToast({ type: 'success', message: t('importedInvoiceDetail.creditNoteLinked') })
+        refetch()
+      } else {
+        setToast({
+          type: 'error',
+          message: result.data?.linkImportedCreditNote?.error || t('common.error'),
+        })
+      }
+    } catch {
+      setToast({ type: 'error', message: t('common.error') })
+    }
+  }
+
+  const handleUnlinkCreditNote = async () => {
+    if (!invoice) return
+    if (!confirm(t('importedInvoiceDetail.confirmUnlinkCreditNote'))) return
+    try {
+      const result = await unlinkCreditNote({
+        variables: { creditNoteId: invoice.id, keepTargetVoided: false },
+      })
+      if (result.data?.unlinkImportedCreditNote?.success) {
+        setToast({ type: 'success', message: t('importedInvoiceDetail.creditNoteUnlinked') })
+        refetch()
+      } else {
+        setToast({
+          type: 'error',
+          message: result.data?.unlinkImportedCreditNote?.error || t('common.error'),
+        })
+      }
+    } catch {
+      setToast({ type: 'error', message: t('common.error') })
+    }
+  }
+
+  // Debounced search for credit-note picker
+  useEffect(() => {
+    if (!showVoidDialog) return
+    const handle = setTimeout(() => {
+      searchInvoicesForCreditNote({ variables: { search: voidSearchTerm || null } })
+    }, 250)
+    return () => clearTimeout(handle)
+  }, [showVoidDialog, voidSearchTerm, searchInvoicesForCreditNote])
+
+  useEffect(() => {
+    if (!showLinkDialog) return
+    const handle = setTimeout(() => {
+      searchInvoicesForLink({ variables: { search: linkSearchTerm || null } })
+    }, 250)
+    return () => clearTimeout(handle)
+  }, [showLinkDialog, linkSearchTerm, searchInvoicesForLink])
+
   // Loading
   if (loading) {
     return (
@@ -583,6 +826,13 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
   }
 
   const isEditable = invoice.extractionStatus === 'extracted' || invoice.extractionStatus === 'confirmed' || invoice.extractionStatus === 'extraction_failed'
+  const isVoided = invoice.extractionStatus === 'voided'
+  const isCreditNote = invoice.documentType === 'storno'
+  const canBeVoided =
+    !isVoided &&
+    !isCreditNote &&
+    ['extracted', 'confirmed', 'sent', 'paid'].includes(invoice.extractionStatus)
+  const canLinkAsCreditNote = !isVoided && !isCreditNote
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
@@ -650,6 +900,43 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
                 </a>
               </Button>
             )}
+            {/* Void */}
+            {canWrite && canBeVoided && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openVoidDialog}
+                className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800"
+                data-testid="void-imported-invoice"
+              >
+                <X className="mr-1 h-4 w-4" />
+                {t('importedInvoiceDetail.void')}
+              </Button>
+            )}
+            {/* Unvoid (revert) */}
+            {canWrite && isVoided && !isCreditNote && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleUnvoid}
+                disabled={unvoiding}
+              >
+                {unvoiding ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1 h-4 w-4" />}
+                {t('importedInvoiceDetail.unvoid')}
+              </Button>
+            )}
+            {/* Mark as credit note for another invoice */}
+            {canWrite && canLinkAsCreditNote && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openLinkDialog}
+                data-testid="link-as-credit-note"
+              >
+                <LinkIcon className="mr-1 h-4 w-4" />
+                {t('importedInvoiceDetail.markAsCreditNote')}
+              </Button>
+            )}
             {/* Delete */}
             {canWrite && (
               <Button
@@ -665,6 +952,91 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
           </div>
         </div>
       </div>
+
+      {/* Void / credit-note status banner */}
+      {(isVoided || isCreditNote) && (
+        <div
+          className={cn(
+            'mb-6 rounded-lg border p-4 text-sm',
+            isCreditNote
+              ? 'border-purple-200 bg-purple-50 text-purple-900'
+              : 'border-amber-200 bg-amber-50 text-amber-900',
+          )}
+          data-testid="void-status-banner"
+        >
+          {isCreditNote && (
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold">
+                  {t('importedInvoiceDetail.isCreditNote')}
+                </div>
+                <div className="mt-1 text-xs">
+                  {invoice.stornoOfId ? (
+                    <>
+                      {t('importedInvoiceDetail.creditNoteFor')}{' '}
+                      <Link
+                        to={`/invoices/${invoice.stornoOfId}?type=imported`}
+                        className="font-medium underline hover:no-underline"
+                      >
+                        {invoice.stornoOfNumber || `#${invoice.stornoOfId}`}
+                      </Link>
+                    </>
+                  ) : (
+                    t('importedInvoiceDetail.creditNoteUnlinkedTarget')
+                  )}
+                </div>
+              </div>
+              {canWrite && invoice.stornoOfId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleUnlinkCreditNote}
+                  disabled={unlinking}
+                >
+                  <Unlink className="mr-1 h-4 w-4" />
+                  {t('importedInvoiceDetail.unlinkCreditNote')}
+                </Button>
+              )}
+            </div>
+          )}
+          {isVoided && !isCreditNote && (
+            <div className="space-y-2">
+              <div className="font-semibold">
+                {t('importedInvoiceDetail.invoiceVoided')}
+                {invoice.voidedAt && (
+                  <span className="ml-2 font-normal text-amber-700">
+                    {formatDateTime(invoice.voidedAt)}
+                    {invoice.voidedByName && ` · ${invoice.voidedByName}`}
+                  </span>
+                )}
+              </div>
+              {invoice.voidReason && (
+                <div className="text-xs">
+                  <span className="font-medium">{t('importedInvoiceDetail.voidReason')}:</span>{' '}
+                  {invoice.voidReason}
+                </div>
+              )}
+              <div className="text-xs">
+                {invoice.creditNoteId ? (
+                  <>
+                    {t('importedInvoiceDetail.linkedCreditNote')}:{' '}
+                    <Link
+                      to={`/invoices/${invoice.creditNoteId}?type=imported`}
+                      className="font-medium underline hover:no-underline"
+                    >
+                      {invoice.creditNoteNumber || `#${invoice.creditNoteId}`}
+                    </Link>
+                  </>
+                ) : (
+                  <span className="italic">
+                    {t('importedInvoiceDetail.noCreditNoteLinked')}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Main column */}
@@ -1020,6 +1392,222 @@ export function ImportedInvoiceDetail({ id }: { id: number }) {
           )}
         </div>
       </div>
+
+      {/* Void Imported Invoice Dialog */}
+      <Dialog open={showVoidDialog} onOpenChange={setShowVoidDialog}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{t('importedInvoiceDetail.voidDialogTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('importedInvoiceDetail.voidDialogDescription', {
+                number: invoice.invoiceNumber || invoice.originalFilename,
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-sm font-medium">
+                {t('importedInvoiceDetail.voidReason')} <span className="text-red-600">*</span>
+              </label>
+              <Input
+                value={voidReason}
+                onChange={(e) => setVoidReason(e.target.value)}
+                placeholder={t('importedInvoiceDetail.voidReasonPlaceholder')}
+                className="mt-1"
+                data-testid="void-reason-input"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">
+                {t('importedInvoiceDetail.linkCreditNoteOptional')}
+              </label>
+              <p className="text-xs text-muted-foreground">
+                {t('importedInvoiceDetail.linkCreditNoteHint')}
+              </p>
+              <Input
+                value={voidSearchTerm}
+                onChange={(e) => setVoidSearchTerm(e.target.value)}
+                placeholder={t('importedInvoiceDetail.searchCreditNote')}
+                className="mt-2"
+              />
+              <div className="mt-2 max-h-56 overflow-y-auto rounded border">
+                {voidSearchLoading ? (
+                  <div className="py-4 text-center">
+                    <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                  </div>
+                ) : (
+                  (voidSearchData?.invoices?.items || [])
+                    .filter((i: InvoiceSearchHit) => i.id !== invoice.id)
+                    .map((i: InvoiceSearchHit) => {
+                      const isSelected = selectedCreditNote?.id === i.id
+                      const disabled =
+                        i.documentType === 'storno' &&
+                        i.stornoOfId != null &&
+                        String(i.stornoOfId) !== String(invoice.id)
+                      return (
+                        <button
+                          key={i.id}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => setSelectedCreditNote(isSelected ? null : i)}
+                          className={cn(
+                            'flex w-full items-center justify-between border-b px-3 py-2 text-left text-sm last:border-b-0',
+                            isSelected ? 'bg-blue-50' : 'hover:bg-muted/50',
+                            disabled && 'cursor-not-allowed opacity-50',
+                          )}
+                        >
+                          <div>
+                            <div className="font-medium">
+                              {i.invoiceNumber || `#${i.id}`}
+                              {i.documentType === 'storno' && (
+                                <Badge variant="secondary" className="ml-2 text-xs">
+                                  {t('importedInvoiceDetail.creditNoteBadge')}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {(i.customerDisplayName || i.customerName) ?? '-'}
+                              {i.invoiceDate && ` · ${formatDate(i.invoiceDate)}`}
+                              {i.totalAmount && ` · ${formatCurrency(i.totalAmount)}`}
+                            </div>
+                          </div>
+                          {isSelected && <CheckCircle className="h-4 w-4 text-blue-600" />}
+                        </button>
+                      )
+                    })
+                )}
+                {!voidSearchLoading &&
+                  (voidSearchData?.invoices?.items || []).length === 0 && (
+                    <div className="py-4 text-center text-xs text-muted-foreground">
+                      {t('importedInvoiceDetail.noInvoicesFound')}
+                    </div>
+                  )}
+              </div>
+              {selectedCreditNote && (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  {t('importedInvoiceDetail.selectedCreditNote')}:{' '}
+                  <span className="font-medium">
+                    {selectedCreditNote.invoiceNumber || `#${selectedCreditNote.id}`}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVoidDialog(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleVoidSubmit}
+              disabled={voiding || !voidReason.trim()}
+              data-testid="confirm-void"
+            >
+              {voiding && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+              {t('importedInvoiceDetail.confirmVoid')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link as Credit Note Dialog */}
+      <Dialog open={showLinkDialog} onOpenChange={setShowLinkDialog}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{t('importedInvoiceDetail.linkAsCreditNoteTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('importedInvoiceDetail.linkAsCreditNoteDescription')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-sm font-medium">
+                {t('importedInvoiceDetail.searchTargetInvoice')}
+              </label>
+              <Input
+                value={linkSearchTerm}
+                onChange={(e) => setLinkSearchTerm(e.target.value)}
+                placeholder={t('importedInvoiceDetail.searchTargetInvoicePlaceholder')}
+                className="mt-1"
+              />
+              <div className="mt-2 max-h-56 overflow-y-auto rounded border">
+                {linkSearchLoading ? (
+                  <div className="py-4 text-center">
+                    <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                  </div>
+                ) : (
+                  (linkSearchData?.invoices?.items || [])
+                    .filter(
+                      (i: InvoiceSearchHit) =>
+                        i.id !== invoice.id && i.documentType !== 'storno',
+                    )
+                    .map((i: InvoiceSearchHit) => {
+                      const isSelected = selectedTarget?.id === i.id
+                      return (
+                        <button
+                          key={i.id}
+                          type="button"
+                          onClick={() => setSelectedTarget(isSelected ? null : i)}
+                          className={cn(
+                            'flex w-full items-center justify-between border-b px-3 py-2 text-left text-sm last:border-b-0',
+                            isSelected ? 'bg-blue-50' : 'hover:bg-muted/50',
+                          )}
+                        >
+                          <div>
+                            <div className="font-medium">
+                              {i.invoiceNumber || `#${i.id}`}
+                              {i.extractionStatus === 'voided' && (
+                                <Badge variant="secondary" className="ml-2 text-xs">
+                                  voided
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {(i.customerDisplayName || i.customerName) ?? '-'}
+                              {i.invoiceDate && ` · ${formatDate(i.invoiceDate)}`}
+                              {i.totalAmount && ` · ${formatCurrency(i.totalAmount)}`}
+                            </div>
+                          </div>
+                          {isSelected && <CheckCircle className="h-4 w-4 text-blue-600" />}
+                        </button>
+                      )
+                    })
+                )}
+                {!linkSearchLoading &&
+                  (linkSearchData?.invoices?.items || []).length === 0 && (
+                    <div className="py-4 text-center text-xs text-muted-foreground">
+                      {t('importedInvoiceDetail.noInvoicesFound')}
+                    </div>
+                  )}
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">
+                {t('importedInvoiceDetail.voidReason')}
+              </label>
+              <Input
+                value={linkReason}
+                onChange={(e) => setLinkReason(e.target.value)}
+                placeholder={t('importedInvoiceDetail.voidReasonPlaceholder')}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLinkDialog(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onClick={handleLinkSubmit}
+              disabled={linking || !selectedTarget}
+              data-testid="confirm-link-credit-note"
+            >
+              {linking && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+              {t('importedInvoiceDetail.confirmLink')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

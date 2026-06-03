@@ -400,6 +400,15 @@ class InvoiceType:
     receiver_emails: List[str]
     upload_status: str
     import_batch_id: int | None
+    # Void / credit-note tracking
+    document_type: str
+    void_reason: str
+    voided_at: str | None
+    voided_by_name: str | None
+    storno_of_id: int | None
+    storno_of_number: str | None
+    credit_note_id: int | None
+    credit_note_number: str | None
 
 
 @strawberry.type
@@ -2054,6 +2063,307 @@ class InvoiceMutation:
         )
 
     @strawberry.mutation
+    def void_imported_invoice(
+        self,
+        info: Info[Context, None],
+        invoice_id: strawberry.ID,
+        reason: str,
+        credit_note_id: strawberry.ID | None = None,
+    ) -> InvoiceResult:
+        """Void an imported invoice (mirrors InvoiceRecord void).
+
+        Optionally links an existing imported invoice as the credit note that
+        reverses this one. The credit note is marked document_type=STORNO
+        and storno_of=<this invoice>.
+        """
+        from django.db import transaction as db_transaction
+        from django.utils import timezone as dj_tz
+
+        user, err = check_perm(info, "invoices", "generate")
+        if err:
+            return InvoiceResult(success=False, error=err)
+
+        if not reason.strip():
+            return InvoiceResult(success=False, error="A void reason is required")
+
+        try:
+            invoice = ImportedInvoice.objects.get(id=invoice_id, tenant=user.tenant)
+        except ImportedInvoice.DoesNotExist:
+            return InvoiceResult(success=False, error="Invoice not found")
+
+        if invoice.is_voided:
+            return InvoiceResult(success=False, error="Invoice is already voided")
+        if invoice.is_credit_note:
+            return InvoiceResult(success=False, error="Credit notes cannot be voided")
+
+        credit_note = None
+        if credit_note_id is not None:
+            try:
+                credit_note = ImportedInvoice.objects.get(
+                    id=credit_note_id, tenant=user.tenant
+                )
+            except ImportedInvoice.DoesNotExist:
+                return InvoiceResult(success=False, error="Credit note not found")
+            if credit_note.id == invoice.id:
+                return InvoiceResult(
+                    success=False, error="Credit note cannot be the same invoice"
+                )
+            if credit_note.is_credit_note and credit_note.storno_of_id not in (
+                None,
+                invoice.id,
+            ):
+                return InvoiceResult(
+                    success=False,
+                    error="Credit note is already linked to another invoice",
+                )
+
+        with db_transaction.atomic():
+            invoice.extraction_status = ImportedInvoice.ExtractionStatus.VOIDED
+            invoice.void_reason = reason.strip()
+            invoice.voided_at = dj_tz.now()
+            invoice.voided_by = user
+            invoice.save(
+                update_fields=[
+                    "extraction_status",
+                    "void_reason",
+                    "voided_at",
+                    "voided_by",
+                    "updated_at",
+                ]
+            )
+            if credit_note is not None:
+                credit_note.document_type = ImportedInvoice.DocumentType.STORNO
+                credit_note.storno_of = invoice
+                credit_note.save(
+                    update_fields=["document_type", "storno_of", "updated_at"]
+                )
+
+        invoice = ImportedInvoice.objects.select_related(
+            "customer", "created_by", "contract", "voided_by", "storno_of"
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty", "storno_records"
+        ).get(id=invoice.id)
+
+        return InvoiceResult(success=True, invoice=_convert_imported_invoice(invoice))
+
+    @strawberry.mutation
+    def unvoid_imported_invoice(
+        self, info: Info[Context, None], invoice_id: strawberry.ID
+    ) -> InvoiceResult:
+        """Revert a voided imported invoice back to confirmed/extracted state.
+
+        Unlinks any credit note (sets it back to document_type=INVOICE).
+        """
+        from django.db import transaction as db_transaction
+
+        user, err = check_perm(info, "invoices", "generate")
+        if err:
+            return InvoiceResult(success=False, error=err)
+
+        try:
+            invoice = ImportedInvoice.objects.get(id=invoice_id, tenant=user.tenant)
+        except ImportedInvoice.DoesNotExist:
+            return InvoiceResult(success=False, error="Invoice not found")
+
+        if not invoice.is_voided:
+            return InvoiceResult(success=False, error="Invoice is not voided")
+
+        # Choose a sensible non-voided status to restore.
+        restored = (
+            ImportedInvoice.ExtractionStatus.PAID
+            if invoice.payment_matches.exists()
+            else ImportedInvoice.ExtractionStatus.CONFIRMED
+        )
+
+        with db_transaction.atomic():
+            for credit_note in invoice.storno_records.all():
+                credit_note.document_type = ImportedInvoice.DocumentType.INVOICE
+                credit_note.storno_of = None
+                credit_note.save(
+                    update_fields=["document_type", "storno_of", "updated_at"]
+                )
+            invoice.extraction_status = restored
+            invoice.void_reason = ""
+            invoice.voided_at = None
+            invoice.voided_by = None
+            invoice.save(
+                update_fields=[
+                    "extraction_status",
+                    "void_reason",
+                    "voided_at",
+                    "voided_by",
+                    "updated_at",
+                ]
+            )
+
+        invoice = ImportedInvoice.objects.select_related(
+            "customer", "created_by", "contract", "voided_by", "storno_of"
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty", "storno_records"
+        ).get(id=invoice.id)
+
+        return InvoiceResult(success=True, invoice=_convert_imported_invoice(invoice))
+
+    @strawberry.mutation
+    def link_imported_credit_note(
+        self,
+        info: Info[Context, None],
+        credit_note_id: strawberry.ID,
+        target_invoice_id: strawberry.ID,
+        reason: str = "",
+    ) -> InvoiceResult:
+        """Link a credit note to a target imported invoice.
+
+        Marks the source as document_type=STORNO + storno_of=target, and
+        sets the target to VOIDED (mirrors the self-issued storno flow).
+        Returns the now-voided target invoice.
+        """
+        from django.db import transaction as db_transaction
+        from django.utils import timezone as dj_tz
+
+        user, err = check_perm(info, "invoices", "generate")
+        if err:
+            return InvoiceResult(success=False, error=err)
+
+        try:
+            credit_note = ImportedInvoice.objects.get(
+                id=credit_note_id, tenant=user.tenant
+            )
+        except ImportedInvoice.DoesNotExist:
+            return InvoiceResult(success=False, error="Credit note not found")
+
+        try:
+            target = ImportedInvoice.objects.get(
+                id=target_invoice_id, tenant=user.tenant
+            )
+        except ImportedInvoice.DoesNotExist:
+            return InvoiceResult(success=False, error="Target invoice not found")
+
+        if credit_note.id == target.id:
+            return InvoiceResult(
+                success=False, error="Credit note cannot reference itself"
+            )
+        if target.is_credit_note:
+            return InvoiceResult(
+                success=False, error="Target cannot itself be a credit note"
+            )
+        if credit_note.is_credit_note and credit_note.storno_of_id not in (
+            None,
+            target.id,
+        ):
+            return InvoiceResult(
+                success=False,
+                error="Credit note is already linked to another invoice",
+            )
+
+        void_reason = reason.strip() or (
+            target.void_reason
+            or f"Voided by credit note {credit_note.invoice_number or credit_note.id}"
+        )
+
+        with db_transaction.atomic():
+            credit_note.document_type = ImportedInvoice.DocumentType.STORNO
+            credit_note.storno_of = target
+            credit_note.save(
+                update_fields=["document_type", "storno_of", "updated_at"]
+            )
+            if not target.is_voided:
+                target.extraction_status = ImportedInvoice.ExtractionStatus.VOIDED
+                target.void_reason = void_reason
+                target.voided_at = dj_tz.now()
+                target.voided_by = user
+                target.save(
+                    update_fields=[
+                        "extraction_status",
+                        "void_reason",
+                        "voided_at",
+                        "voided_by",
+                        "updated_at",
+                    ]
+                )
+
+        target = ImportedInvoice.objects.select_related(
+            "customer", "created_by", "contract", "voided_by", "storno_of"
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty", "storno_records"
+        ).get(id=target.id)
+
+        return InvoiceResult(success=True, invoice=_convert_imported_invoice(target))
+
+    @strawberry.mutation
+    def unlink_imported_credit_note(
+        self,
+        info: Info[Context, None],
+        credit_note_id: strawberry.ID,
+        keep_target_voided: bool = False,
+    ) -> InvoiceResult:
+        """Unlink a credit note from its target invoice.
+
+        Resets the credit note's document_type back to INVOICE. If
+        keep_target_voided is False, restores the target to a non-voided
+        state when no other credit notes remain.
+        Returns the affected target invoice (or the credit note if no target).
+        """
+        from django.db import transaction as db_transaction
+
+        user, err = check_perm(info, "invoices", "generate")
+        if err:
+            return InvoiceResult(success=False, error=err)
+
+        try:
+            credit_note = ImportedInvoice.objects.get(
+                id=credit_note_id, tenant=user.tenant
+            )
+        except ImportedInvoice.DoesNotExist:
+            return InvoiceResult(success=False, error="Credit note not found")
+
+        if not credit_note.is_credit_note:
+            return InvoiceResult(success=False, error="Invoice is not a credit note")
+
+        target = credit_note.storno_of
+
+        with db_transaction.atomic():
+            credit_note.document_type = ImportedInvoice.DocumentType.INVOICE
+            credit_note.storno_of = None
+            credit_note.save(
+                update_fields=["document_type", "storno_of", "updated_at"]
+            )
+
+            if (
+                target is not None
+                and target.is_voided
+                and not keep_target_voided
+                and not target.storno_records.exclude(id=credit_note.id).exists()
+            ):
+                restored = (
+                    ImportedInvoice.ExtractionStatus.PAID
+                    if target.payment_matches.exists()
+                    else ImportedInvoice.ExtractionStatus.CONFIRMED
+                )
+                target.extraction_status = restored
+                target.void_reason = ""
+                target.voided_at = None
+                target.voided_by = None
+                target.save(
+                    update_fields=[
+                        "extraction_status",
+                        "void_reason",
+                        "voided_at",
+                        "voided_by",
+                        "updated_at",
+                    ]
+                )
+
+        reload_id = target.id if target is not None else credit_note.id
+        invoice = ImportedInvoice.objects.select_related(
+            "customer", "created_by", "contract", "voided_by", "storno_of"
+        ).prefetch_related(
+            "payment_matches__transaction__counterparty", "storno_records"
+        ).get(id=reload_id)
+
+        return InvoiceResult(success=True, invoice=_convert_imported_invoice(invoice))
+
+    @strawberry.mutation
     def confirm_customer_match(
         self, info: Info[Context, None], invoice_id: strawberry.ID, customer_id: int
     ) -> InvoiceResult:
@@ -2904,6 +3214,17 @@ def _convert_imported_invoice(inv: ImportedInvoice) -> InvoiceType:
     paid_at = first_match.transaction.entry_date if first_match else None
     first_payment_transaction_id = first_match.transaction_id if first_match else None
 
+    # Storno linkage (this invoice is itself a credit note)
+    storno_of = inv.storno_of if inv.storno_of_id else None
+    storno_of_number = storno_of.invoice_number if storno_of else None
+
+    # Reverse linkage (this invoice was voided and a credit note covers it)
+    credit_note = None
+    if inv.is_voided:
+        credit_note = inv.storno_records.order_by("-created_at").first()
+    credit_note_id = credit_note.id if credit_note else None
+    credit_note_number = credit_note.invoice_number if credit_note else None
+
     return InvoiceType(
         id=strawberry.ID(str(inv.id)),
         invoice_number=inv.invoice_number or "",
@@ -2932,6 +3253,14 @@ def _convert_imported_invoice(inv: ImportedInvoice) -> InvoiceType:
         receiver_emails=inv.receiver_emails or [],
         upload_status=inv.upload_status,
         import_batch_id=inv.import_batch_id,
+        document_type=inv.document_type or "invoice",
+        void_reason=inv.void_reason or "",
+        voided_at=inv.voided_at.isoformat() if inv.voided_at else None,
+        voided_by_name=inv.voided_by.email if inv.voided_by_id else None,
+        storno_of_id=inv.storno_of_id,
+        storno_of_number=storno_of_number,
+        credit_note_id=credit_note_id,
+        credit_note_number=credit_note_number,
     )
 
 

@@ -523,6 +523,11 @@ class ImportedInvoice(TenantModel):
         CONFIRMED = "confirmed", "Confirmed"
         SENT = "sent", "Sent"
         PAID = "paid", "Paid"
+        VOIDED = "voided", "Voided"
+
+    class DocumentType(models.TextChoices):
+        INVOICE = "invoice", "Invoice"
+        STORNO = "storno", "Storno (Credit Note)"
 
     # Invoice identification (from extraction)
     invoice_number = models.CharField(
@@ -638,6 +643,37 @@ class ImportedInvoice(TenantModel):
         help_text="Upload status: pending (from CSV) or uploaded (has PDF)",
     )
 
+    # Storno / void tracking (mirrors InvoiceRecord pattern)
+    document_type = models.CharField(
+        max_length=10,
+        choices=DocumentType.choices,
+        default=DocumentType.INVOICE,
+    )
+    storno_of = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="storno_records",
+        help_text="The original imported invoice this credit note reverses",
+    )
+    void_reason = models.TextField(
+        blank=True,
+        help_text="Reason for voiding the invoice",
+    )
+    voided_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the invoice was voided",
+    )
+    voided_by = models.ForeignKey(
+        "tenants.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="voided_imported_invoices",
+    )
+
     class Meta:
         ordering = ["-invoice_date", "-created_at"]
         indexes = [
@@ -645,6 +681,7 @@ class ImportedInvoice(TenantModel):
             models.Index(fields=["tenant", "extraction_status"]),
             models.Index(fields=["tenant", "upload_status"]),
             models.Index(fields=["tenant", "expected_filename"]),
+            models.Index(fields=["tenant", "document_type"]),
         ]
 
     def __str__(self):
@@ -656,6 +693,14 @@ class ImportedInvoice(TenantModel):
     def is_paid(self) -> bool:
         """Check if this invoice has at least one payment match."""
         return self.payment_matches.exists()
+
+    @property
+    def is_voided(self) -> bool:
+        return self.extraction_status == self.ExtractionStatus.VOIDED
+
+    @property
+    def is_credit_note(self) -> bool:
+        return self.document_type == self.DocumentType.STORNO
 
 
 class InvoicePaymentMatch(TenantModel):
