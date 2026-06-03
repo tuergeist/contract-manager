@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
         ('contracts', '0051_contract_payment_term_days'),
         ('customers', '0011_customer_payment_term_days'),
         ('invoices', '0027_grant_reminder_permissions'),
-        ('tenants', '0020_remove_tenant_slack_config'),
+        ('tenants', '0018_reportschedule'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
