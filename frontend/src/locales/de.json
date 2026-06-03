@@ -933,6 +933,7 @@
       "statusFailed": "Fehlgeschlagen",
       "statusDuplicate": "Duplikat",
       "statusConfirmed": "Bestätigt",
+      "statusSent": "Versendet",
       "paid": "Bezahlt",
       "unpaid": "Unbezahlt",
       "extract": "Extrahieren",

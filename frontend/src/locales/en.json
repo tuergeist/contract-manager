@@ -933,6 +933,7 @@
       "statusFailed": "Failed",
       "statusDuplicate": "Duplicate",
       "statusConfirmed": "Confirmed",
+      "statusSent": "Sent",
       "paid": "Paid",
       "unpaid": "Unpaid",
       "extract": "Extract",

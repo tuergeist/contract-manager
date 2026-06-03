@@ -206,6 +206,49 @@ class TestUnvoidImportedInvoice:
         assert result.success, result.error
         invoice.refresh_from_db()
         assert not invoice.is_voided
-        assert invoice.extraction_status == ImportedInvoice.ExtractionStatus.CONFIRMED
+        # invoice has invoice_date set → restored to SENT
+        assert invoice.extraction_status == ImportedInvoice.ExtractionStatus.SENT
         assert invoice.void_reason == ""
         assert invoice.voided_at is None
+
+
+class TestSentDateLifecycle:
+    def test_confirm_with_invoice_date_goes_to_sent(self, tenant, user, customer):
+        inv = ImportedInvoice.objects.create(
+            tenant=tenant,
+            invoice_number="X-1",
+            invoice_date=date(2026, 2, 1),
+            total_amount=Decimal("50.00"),
+            currency="EUR",
+            customer_name="Test Co",
+            customer=customer,
+            original_filename="x.pdf",
+            file_size=10,
+            extraction_status=ImportedInvoice.ExtractionStatus.EXTRACTED,
+            created_by=user,
+        )
+        info = _Info(user)
+        result = _mutation().confirm_invoice(info, id=str(inv.id))
+        assert result.success, result.error
+        inv.refresh_from_db()
+        assert inv.extraction_status == ImportedInvoice.ExtractionStatus.SENT
+
+    def test_confirm_without_invoice_date_stays_confirmed(self, tenant, user, customer):
+        inv = ImportedInvoice.objects.create(
+            tenant=tenant,
+            invoice_number="X-2",
+            invoice_date=None,
+            total_amount=Decimal("50.00"),
+            currency="EUR",
+            customer_name="Test Co",
+            customer=customer,
+            original_filename="x.pdf",
+            file_size=10,
+            extraction_status=ImportedInvoice.ExtractionStatus.EXTRACTED,
+            created_by=user,
+        )
+        info = _Info(user)
+        result = _mutation().confirm_invoice(info, id=str(inv.id))
+        assert result.success, result.error
+        inv.refresh_from_db()
+        assert inv.extraction_status == ImportedInvoice.ExtractionStatus.CONFIRMED

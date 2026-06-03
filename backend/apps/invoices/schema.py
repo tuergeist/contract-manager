@@ -1836,7 +1836,7 @@ class InvoiceMutation:
                 error="Invoice must be extracted before confirmation",
             )
 
-        invoice.extraction_status = ImportedInvoice.ExtractionStatus.CONFIRMED
+        invoice.extraction_status = _active_status_for_imported(invoice)
         invoice.save(update_fields=["extraction_status", "updated_at"])
 
         # Reload with relations
@@ -1949,7 +1949,7 @@ class InvoiceMutation:
         invoice.invoice_number = input.invoice_number
         invoice.invoice_date = input.invoice_date
         invoice.total_amount = input.total_amount
-        invoice.extraction_status = ImportedInvoice.ExtractionStatus.CONFIRMED
+        invoice.extraction_status = _active_status_for_imported(invoice)
         invoice.save(update_fields=[
             "invoice_number", "invoice_date", "total_amount",
             "extraction_status", "updated_at",
@@ -2168,12 +2168,8 @@ class InvoiceMutation:
         if not invoice.is_voided:
             return InvoiceResult(success=False, error="Invoice is not voided")
 
-        # Choose a sensible non-voided status to restore.
-        restored = (
-            ImportedInvoice.ExtractionStatus.PAID
-            if invoice.payment_matches.exists()
-            else ImportedInvoice.ExtractionStatus.CONFIRMED
-        )
+        # Choose a sensible non-voided status to restore (PAID > SENT > CONFIRMED).
+        restored = _active_status_for_imported(invoice)
 
         with db_transaction.atomic():
             for credit_note in invoice.storno_records.all():
@@ -2335,11 +2331,7 @@ class InvoiceMutation:
                 and not keep_target_voided
                 and not target.storno_records.exclude(id=credit_note.id).exists()
             ):
-                restored = (
-                    ImportedInvoice.ExtractionStatus.PAID
-                    if target.payment_matches.exists()
-                    else ImportedInvoice.ExtractionStatus.CONFIRMED
-                )
+                restored = _active_status_for_imported(target)
                 target.extraction_status = restored
                 target.void_reason = ""
                 target.voided_at = None
@@ -3204,6 +3196,21 @@ def _convert_payment_match(match: InvoicePaymentMatch) -> PaymentMatchType:
         value_date=tx.value_date,
         account_name=tx.account.name if tx.account_id else "",
     )
+
+
+def _active_status_for_imported(inv: ImportedInvoice) -> str:
+    """Pick the right non-voided lifecycle status for an imported invoice.
+
+    Priority:
+      PAID    – any payment match exists
+      SENT    – has an invoice_date (treated as the date it was sent)
+      CONFIRMED – no invoice_date yet
+    """
+    if inv.payment_matches.exists():
+        return ImportedInvoice.ExtractionStatus.PAID
+    if inv.invoice_date:
+        return ImportedInvoice.ExtractionStatus.SENT
+    return ImportedInvoice.ExtractionStatus.CONFIRMED
 
 
 def _convert_imported_invoice(inv: ImportedInvoice) -> InvoiceType:

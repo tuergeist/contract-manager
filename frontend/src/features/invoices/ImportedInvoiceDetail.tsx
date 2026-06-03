@@ -400,6 +400,20 @@ function ExtractionStatusBadge({ status }: { status: string }) {
           {t('invoices.import.statusConfirmed')}
         </span>
       )
+    case 'sent':
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-sm font-medium text-blue-800">
+          <Mail className="h-3 w-3" />
+          {t('invoices.import.statusSent', { defaultValue: 'Sent' })}
+        </span>
+      )
+    case 'paid':
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-sm font-medium text-emerald-800">
+          <CheckCircle className="h-3 w-3" />
+          {t('invoices.import.paid')}
+        </span>
+      )
     case 'extraction_failed':
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-sm font-medium text-red-700">
