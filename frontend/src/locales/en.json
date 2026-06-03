@@ -1934,6 +1934,7 @@
     "linkedItem": "Item",
     "linkToItem": "Link to item",
     "noItemLink": "No item (contract-level)",
+    "assignItemPlaceholder": "Assign item…",
     "autoLink": {
       "title": "Auto-link Rules",
       "addRule": "Add Auto-link Rule",

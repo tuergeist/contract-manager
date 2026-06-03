@@ -1934,6 +1934,7 @@
     "linkedItem": "Position",
     "linkToItem": "Mit Position verknüpfen",
     "noItemLink": "Keine Position (Vertragsebene)",
+    "assignItemPlaceholder": "Position zuweisen…",
     "autoLink": {
       "title": "Auto-Link Regeln",
       "addRule": "Auto-Link Regel hinzufügen",

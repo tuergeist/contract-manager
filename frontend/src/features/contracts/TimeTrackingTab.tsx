@@ -107,6 +107,15 @@ const UNMAP_PROJECT_MUTATION = gql`
   }
 `
 
+const UPDATE_MAPPING_ITEM_MUTATION = gql`
+  mutation UpdateTimeTrackingMappingItem($mappingId: ID!, $contractItemId: ID) {
+    updateTimeTrackingMappingItem(mappingId: $mappingId, contractItemId: $contractItemId) {
+      success
+      error
+    }
+  }
+`
+
 const CREATE_AUTO_LINK_RULE_MUTATION = gql`
   mutation CreateAutoLinkRule($contractId: ID!, $pattern: String!, $matchType: String!, $contractItemId: ID) {
     createAutoLinkRule(contractId: $contractId, pattern: $pattern, matchType: $matchType, contractItemId: $contractItemId) {
@@ -200,6 +209,8 @@ export function TimeTrackingTab({ contractId, customerName, clockodoCustomerId, 
 
   const [unmapProject] = useMutation(UNMAP_PROJECT_MUTATION)
   const [deleteAutoLinkRule] = useMutation(DELETE_AUTO_LINK_RULE_MUTATION)
+  const [updateMappingItem, { loading: updatingMappingItem }] = useMutation(UPDATE_MAPPING_ITEM_MUTATION)
+  const [savingMappingId, setSavingMappingId] = useState<number | null>(null)
 
   const summary = data?.timeTrackingSummary
   const isConfigured = data?.timeTrackingSettings?.isConfigured
@@ -209,6 +220,21 @@ export function TimeTrackingTab({ contractId, customerName, clockodoCustomerId, 
     if (!confirm(t('timeTracking.unlinkConfirm'))) return
     await unmapProject({ variables: { mappingId: String(mappingId) } })
     refetch()
+  }
+
+  const handleAssignItem = async (mappingId: number, contractItemId: string) => {
+    setSavingMappingId(mappingId)
+    try {
+      await updateMappingItem({
+        variables: {
+          mappingId: String(mappingId),
+          contractItemId: contractItemId || null,
+        },
+      })
+      await refetch()
+    } finally {
+      setSavingMappingId(null)
+    }
   }
 
   const handleDeleteRule = async (ruleId: string) => {
@@ -296,7 +322,35 @@ export function TimeTrackingTab({ contractId, customerName, clockodoCustomerId, 
                         </div>
                       </td>
                       <td className="py-2 text-gray-600">{m.externalCustomerName}</td>
-                      <td className="py-2 text-gray-500 text-xs">{m.contractItemName || '-'}</td>
+                      <td className="py-2 text-gray-500 text-xs">
+                        {m.contractItemId != null ? (
+                          m.contractItemName || '-'
+                        ) : allItems.length > 0 ? (
+                          <div className="flex items-center gap-2">
+                            <select
+                              className="h-7 rounded border border-gray-300 bg-white px-1.5 text-xs text-gray-700 focus:border-blue-500 focus:outline-none disabled:opacity-50"
+                              value=""
+                              disabled={updatingMappingItem && savingMappingId === m.id}
+                              onChange={(e) => handleAssignItem(m.id, e.target.value)}
+                              data-testid={`assign-item-select-${m.id}`}
+                            >
+                              <option value="" disabled>
+                                {t('timeTracking.assignItemPlaceholder', { defaultValue: 'Item zuweisen…' })}
+                              </option>
+                              {allItems.map((it) => (
+                                <option key={it.id} value={it.id}>
+                                  {it.name}
+                                </option>
+                              ))}
+                            </select>
+                            {savingMappingId === m.id && (
+                              <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
+                            )}
+                          </div>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
                       <td className="py-2 text-right text-gray-600">{m.cachedTotalHours.toFixed(1)}h</td>
                       <td className="py-2 text-right text-gray-600">
                         {revenuePerHour != null

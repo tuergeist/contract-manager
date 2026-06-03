@@ -6347,6 +6347,62 @@ class ContractMutation:
         return DeleteResult(success=True)
 
     @strawberry.mutation
+    def update_time_tracking_mapping_item(
+        self,
+        info: Info[Context, None],
+        mapping_id: strawberry.ID,
+        contract_item_id: strawberry.ID | None = None,
+    ) -> TimeTrackingMappingResult:
+        """Assign or change the contract item for an existing project mapping.
+
+        Pass contract_item_id=null to clear the assignment.
+        """
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return TimeTrackingMappingResult(success=False, error=err)
+        if not user.tenant:
+            return TimeTrackingMappingResult(success=False, error="No tenant assigned")
+
+        mapping = (
+            TimeTrackingProjectMapping.objects
+            .filter(tenant=user.tenant, id=mapping_id)
+            .select_related("contract", "contract_item", "contract_item__product")
+            .first()
+        )
+        if not mapping:
+            return TimeTrackingMappingResult(success=False, error="Mapping not found")
+
+        contract_item = None
+        if contract_item_id:
+            contract_item = ContractItem.objects.filter(
+                contract=mapping.contract, id=contract_item_id
+            ).first()
+            if not contract_item:
+                return TimeTrackingMappingResult(
+                    success=False, error="Item not found in this contract"
+                )
+
+        mapping.contract_item = contract_item
+        mapping.save(update_fields=["contract_item", "updated_at"])
+
+        return TimeTrackingMappingResult(
+            success=True,
+            mapping=TimeTrackingMappingType(
+                id=mapping.id,
+                external_project_id=mapping.external_project_id,
+                external_project_name=mapping.external_project_name,
+                external_customer_name=mapping.external_customer_name,
+                contract_item_id=mapping.contract_item_id,
+                contract_item_name=(
+                    contract_item.product.name if contract_item and contract_item.product
+                    else contract_item.description[:50] if contract_item
+                    else None
+                ),
+                cached_total_hours=mapping.cached_total_hours,
+            ),
+        )
+
+    @strawberry.mutation
     def create_clockodo_project_for_contract(
         self,
         info: Info[Context, None],
