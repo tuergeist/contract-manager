@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.31.13",
+    "date": "2026-06-03",
+    "title": "Mahn-Vorlagen im E-Mail-Tab + Verzugs-Bugfixes",
+    "description": "Mahn-Vorlagen sind jetzt unter „E-Mail-Vorlagen → Mahnungen\" mit klickbaren Platzhaltern und Live-Vorschau. Mehrere Fehler bei der Verzugsanzeige, Counterparty-Filtern und Rollen-Übersetzungen behoben.",
+    "type": "feature",
+    "details": [
+      "Mahn-Vorlagen aus „Buchhaltung → Mahnwesen\" in „E-Mail-Vorlagen → Mahnungen\" verschoben — mit Sprache + Stufe + Title/Subject/Body, klickbare Platzhalter ({invoice_number}, {invoice_date}, {due_date}, {overdue_days}, {amount}) und Live-Preview",
+      "E-Mail-Template-Vorschau (Rechnung + Auftragsbestätigung) nutzt jetzt den echten Firmennamen aus den Unternehmensdaten statt „Acme Corp\"",
+      "Verzugsspalte in /invoices auch für importierte Rechnungen befüllt — Frontend rechnet aus invoiceDate + Zahlungsziel",
+      "Storno-Belege und voided Rechnungen werden nicht mehr als überfällig angezeigt; eine durch Storno gutgeschriebene Rechnung ist ebenfalls nicht mehr überfällig oder mahnfähig",
+      "Counterparty-Jahresfilter nutzt strikt das Rechnungsdatum — bei importierten Lieferantenrechnungen fällt er nicht mehr auf das Import-Datum zurück",
+      "Outgoing-Summary-Kachel rechnet Rechnungen ohne Datum nicht mehr in ein ausgewähltes Jahr ein",
+      "Kaputter Link aus Counterparty-Tabelle (/invoices/imported/:id → Blank Page) repariert; verwendet jetzt /invoices/:id?type=imported",
+      "Übersetzungen in der Rollen-/Permission-Verwaltung ergänzt (Mahnungen, Abteilungsanalyse, Assistent + Senden/Neu generieren/Finalisieren/Nutzen)"
+    ]
+  },
+  {
     "version": "2.31.12",
     "date": "2026-06-02",
     "title": "CI-Fix: Migrations-Abhängigkeit für Mahnungen-Release",
