@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.31.14",
+    "date": "2026-06-03",
+    "title": "Suche findet importierte Rechnungen nach Kundenname",
+    "description": "Die Suche im /invoices-Tab matcht importierte Rechnungen jetzt auch über Kundenname und PDF-Dateinamen, nicht mehr nur über die Rechnungsnummer.",
+    "type": "bugfix",
+    "details": [
+      "Suche „Sigma\" liefert importierte INV-VSX-25-0375 (Kunde Sigma Group) jetzt mit",
+      "Importierte Rechnungen werden nun auf invoice_number, customer_name (Snapshot), customer.name (verknüpfter Customer) und original_filename gematcht — analog zur Suche für generierte Rechnungen"
+    ]
+  },
+  {
     "version": "2.31.13",
     "date": "2026-06-03",
     "title": "Mahn-Vorlagen im E-Mail-Tab + Verzugs-Bugfixes",
