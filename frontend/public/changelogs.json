@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.32.1",
+    "date": "2026-06-03",
+    "title": "CI-Fix: Migrations-Abhängigkeit für 2.32.0",
+    "description": "Re-Release von 2.32.0 — die neue Storno-Migration hing an einer in CI nicht vorhandenen Tenants-Migration und brach den Build. Inhalt identisch zu 2.32.0.",
+    "type": "bugfix",
+    "details": [
+      "invoices.0028_importedinvoice_document_type_and_more hängt jetzt an tenants.0018_reportschedule statt an einer ungetrackten Tenants-Migration",
+      "Sonst keine Änderungen gegenüber 2.32.0"
+    ]
+  },
+  {
     "version": "2.32.0",
     "date": "2026-06-03",
     "title": "Storno für importierte Rechnungen + Projekte als eine flache Tabelle",
