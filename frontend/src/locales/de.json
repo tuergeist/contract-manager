@@ -1935,6 +1935,8 @@
     "linkToItem": "Mit Position verknüpfen",
     "noItemLink": "Keine Position (Vertragsebene)",
     "assignItemPlaceholder": "Position zuweisen…",
+    "psRatio": "PS-Ratio",
+    "psRatioHint": "Umsatz pro Stunde geteilt durch PS-Stundensatz",
     "autoLink": {
       "title": "Auto-Link Regeln",
       "addRule": "Auto-Link Regel hinzufügen",

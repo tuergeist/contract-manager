@@ -60,6 +60,7 @@ const TIME_TRACKING_SUMMARY_QUERY = gql`
       isConfigured
       showRevenue
     }
+    psHourlyRate
   }
 `
 
@@ -215,6 +216,7 @@ export function TimeTrackingTab({ contractId, customerName, clockodoCustomerId, 
   const summary = data?.timeTrackingSummary
   const isConfigured = data?.timeTrackingSettings?.isConfigured
   const showRevenue = data?.timeTrackingSettings?.showRevenue ?? true
+  const psHourlyRate: number | null = data?.psHourlyRate ?? null
 
   const handleUnlink = async (mappingId: number) => {
     if (!confirm(t('timeTracking.unlinkConfirm'))) return
@@ -292,6 +294,14 @@ export function TimeTrackingTab({ contractId, customerName, clockodoCustomerId, 
                   <th className="pb-2 font-medium">{t('timeTracking.linkedItem')}</th>
                   <th className="pb-2 text-right font-medium">{t('timeTracking.hours')}</th>
                   <th className="pb-2 text-right font-medium">{t('timeTracking.revenuePerHour')}</th>
+                  {psHourlyRate != null && psHourlyRate > 0 && (
+                    <th
+                      className="pb-2 text-right font-medium"
+                      title={t('timeTracking.psRatioHint', { defaultValue: 'Rev/h ÷ PS-Stundensatz' })}
+                    >
+                      {t('timeTracking.psRatio', { defaultValue: 'PS-Ratio' })}
+                    </th>
+                  )}
                   <th className="pb-2 font-medium"></th>
                 </tr>
               </thead>
@@ -357,6 +367,28 @@ export function TimeTrackingTab({ contractId, customerName, clockodoCustomerId, 
                           ? new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(revenuePerHour)
                           : '-'}
                       </td>
+                      {psHourlyRate != null && psHourlyRate > 0 && (
+                        <td className="py-2 text-right">
+                          {revenuePerHour != null ? (
+                            (() => {
+                              const ratio = revenuePerHour / psHourlyRate
+                              const color =
+                                ratio >= 1
+                                  ? 'text-green-700'
+                                  : ratio >= 0.8
+                                  ? 'text-amber-700'
+                                  : 'text-red-700'
+                              return (
+                                <span className={`font-medium ${color}`}>
+                                  {ratio.toFixed(2)}
+                                </span>
+                              )
+                            })()
+                          ) : (
+                            <span className="text-gray-400">–</span>
+                          )}
+                        </td>
+                      )}
                       <td className="py-2 text-right">
                         <button
                           onClick={() => handleUnlink(m.id)}

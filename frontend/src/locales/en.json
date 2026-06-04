@@ -1935,6 +1935,8 @@
     "linkToItem": "Link to item",
     "noItemLink": "No item (contract-level)",
     "assignItemPlaceholder": "Assign item…",
+    "psRatio": "PS ratio",
+    "psRatioHint": "Revenue per hour divided by the PS hourly rate",
     "autoLink": {
       "title": "Auto-link Rules",
       "addRule": "Add Auto-link Rule",
