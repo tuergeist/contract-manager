@@ -15,6 +15,7 @@ import {
   Columns,
 } from 'lucide-react'
 import { formatDate, formatCurrency, formatNumber } from '@/lib/utils'
+import { psRatioColorClass, PsRatioThresholds, DEFAULT_PS_RATIO_THRESHOLDS } from '@/lib/psRatio'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -58,6 +59,11 @@ const DELIVERABLE_ITEMS_QUERY = gql`
       orderValue
       orderConfirmationNumber
       psRatio
+    }
+    psRatioThresholds {
+      amberMin
+      yellowMin
+      greenMin
     }
   }
 `
@@ -162,14 +168,18 @@ function compareItems(a: DeliverableItem, b: DeliverableItem, field: SortField):
   }
 }
 
-function PsRatioCell({ value }: { value: number | null }) {
+function PsRatioCell({
+  value,
+  thresholds,
+}: {
+  value: number | null
+  thresholds: PsRatioThresholds
+}) {
   if (value == null) {
     return <span className="text-gray-400">–</span>
   }
-  const color =
-    value >= 1 ? 'text-green-700' : value >= 0.8 ? 'text-amber-700' : 'text-red-700'
   return (
-    <span className={`font-medium ${color}`}>
+    <span className={`font-medium ${psRatioColorClass(value, thresholds)}`}>
       {formatNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
     </span>
   )
@@ -233,6 +243,7 @@ export function ProjectList() {
   const [setEta] = useMutation(SET_DELIVERABLE_ETA_MUTATION)
 
   const items = (data?.deliverableItems || []) as DeliverableItem[]
+  const thresholds: PsRatioThresholds = data?.psRatioThresholds ?? DEFAULT_PS_RATIO_THRESHOLDS
 
   const filteredItems = useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
@@ -367,13 +378,7 @@ export function ProjectList() {
                 {' · '}
                 <span title={t('projects.totalPsRatioHint', { defaultValue: 'Hours-weighted average of delivered items with hours > 0 and order value > 0' })}>
                   {t('projects.totalPsRatio', { defaultValue: 'PS-Ratio' })}{' '}
-                  <span className={
-                    totalPsRatio >= 1
-                      ? 'font-medium text-green-700'
-                      : totalPsRatio >= 0.8
-                      ? 'font-medium text-amber-700'
-                      : 'font-medium text-red-700'
-                  }>
+                  <span className={`font-medium ${psRatioColorClass(totalPsRatio, thresholds)}`}>
                     {formatNumber(totalPsRatio, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </span>
@@ -628,7 +633,7 @@ export function ProjectList() {
                   )}
                   {isVisible('psRatio') && (
                     <td className="px-4 py-3 text-right text-sm">
-                      <PsRatioCell value={item.psRatio} />
+                      <PsRatioCell value={item.psRatio} thresholds={thresholds} />
                     </td>
                   )}
                   <td className="whitespace-nowrap px-4 py-3 text-right">

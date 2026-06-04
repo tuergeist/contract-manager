@@ -1461,8 +1461,19 @@
       "rateLabel": "PS-Stundensatz (EUR)",
       "rateHint": "Standard 160 EUR. Wird zur Berechnung der PS-Ratio je Projekt verwendet.",
       "save": "Einstellungen speichern",
-      "saved": "PS-Stundensatz gespeichert",
-      "saveFailed": "PS-Stundensatz konnte nicht gespeichert werden"
+      "saved": "PS-Einstellungen gespeichert",
+      "saveFailed": "Einstellungen konnten nicht gespeichert werden",
+      "thresholdsTitle": "PS-Ratio Farbschwellen",
+      "thresholdsDescription": "Ab welchem Wert die PS-Ratio in welcher Farbe dargestellt wird. Werte müssen aufsteigend sein.",
+      "amberMin": "Ab (Amber)",
+      "amberHint": "Ab diesem Wert: Amber. Darunter: Rot.",
+      "yellowMin": "Ab (Gelb)",
+      "yellowHint": "Ab diesem Wert: Gelb.",
+      "greenMin": "Ab (Grün)",
+      "greenHint": "Ab diesem Wert: Grün.",
+      "thresholdsLegend": "Rot < {{amber}} ≤ Amber < {{yellow}} ≤ Gelb < {{green}} ≤ Grün",
+      "invalidThresholds": "Schwellenwerte müssen gültige Zahlen sein",
+      "thresholdsNotIncreasing": "Schwellen müssen streng aufsteigend sein (Amber < Gelb < Grün)"
     },
     "banking": {
       "title": "Banking-Einstellungen",

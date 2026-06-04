@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { formatDateTime } from '@/lib/utils'
+import { psRatioColorClass, PsRatioThresholds, DEFAULT_PS_RATIO_THRESHOLDS } from '@/lib/psRatio'
 
 const TIME_TRACKING_SUMMARY_QUERY = gql`
   query TimeTrackingSummary($contractId: ID!) {
@@ -61,6 +62,11 @@ const TIME_TRACKING_SUMMARY_QUERY = gql`
       showRevenue
     }
     psHourlyRate
+    psRatioThresholds {
+      amberMin
+      yellowMin
+      greenMin
+    }
   }
 `
 
@@ -217,6 +223,7 @@ export function TimeTrackingTab({ contractId, customerName, clockodoCustomerId, 
   const isConfigured = data?.timeTrackingSettings?.isConfigured
   const showRevenue = data?.timeTrackingSettings?.showRevenue ?? true
   const psHourlyRate: number | null = data?.psHourlyRate ?? null
+  const psRatioThresholds: PsRatioThresholds = data?.psRatioThresholds ?? DEFAULT_PS_RATIO_THRESHOLDS
 
   const handleUnlink = async (mappingId: number) => {
     if (!confirm(t('timeTracking.unlinkConfirm'))) return
@@ -372,14 +379,13 @@ export function TimeTrackingTab({ contractId, customerName, clockodoCustomerId, 
                           {revenuePerHour != null ? (
                             (() => {
                               const ratio = revenuePerHour / psHourlyRate
-                              const color =
-                                ratio >= 1
-                                  ? 'text-green-700'
-                                  : ratio >= 0.8
-                                  ? 'text-amber-700'
-                                  : 'text-red-700'
                               return (
-                                <span className={`font-medium ${color}`}>
+                                <span
+                                  className={`font-medium ${psRatioColorClass(
+                                    ratio,
+                                    psRatioThresholds,
+                                  )}`}
+                                >
                                   {ratio.toFixed(2)}
                                 </span>
                               )

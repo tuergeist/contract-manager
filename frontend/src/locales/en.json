@@ -1461,8 +1461,19 @@
       "rateLabel": "PS Hourly Rate (EUR)",
       "rateHint": "Default 160 EUR. Used to compute the PS ratio per project.",
       "save": "Save Settings",
-      "saved": "PS hourly rate saved",
-      "saveFailed": "Failed to save PS hourly rate"
+      "saved": "PS settings saved",
+      "saveFailed": "Failed to save settings",
+      "thresholdsTitle": "PS-ratio color thresholds",
+      "thresholdsDescription": "At which value the PS ratio is rendered in which color. Values must be strictly increasing.",
+      "amberMin": "Amber starts at",
+      "amberHint": "Values from here render amber. Below this: red.",
+      "yellowMin": "Yellow starts at",
+      "yellowHint": "Values from here render yellow.",
+      "greenMin": "Green starts at",
+      "greenHint": "Values from here render green.",
+      "thresholdsLegend": "Red < {{amber}} ≤ Amber < {{yellow}} ≤ Yellow < {{green}} ≤ Green",
+      "invalidThresholds": "Thresholds must be valid numbers",
+      "thresholdsNotIncreasing": "Thresholds must be strictly increasing (Amber < Yellow < Green)"
     },
     "banking": {
       "title": "Banking Settings",

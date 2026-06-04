@@ -196,6 +196,18 @@ class PermissionResource:
 
 
 @strawberry.type
+class PsRatioThresholdsType:
+    """Color thresholds for PS-ratio display.
+
+    Coloring is monotonic: ratio < amber_min is red, [amber_min, yellow_min)
+    is amber, [yellow_min, green_min) is yellow, >= green_min is green.
+    """
+    amber_min: float
+    yellow_min: float
+    green_min: float
+
+
+@strawberry.type
 class HubSpotCompanyFilter:
     """A filter for HubSpot company sync."""
     property_name: str  # e.g., "lifecyclestage"
@@ -974,6 +986,18 @@ class TenantQuery:
         if not user.tenant:
             return 160.0
         return float((user.tenant.settings or {}).get("ps_hourly_rate", 160.0))
+
+    @strawberry.field
+    def ps_ratio_thresholds(self, info: Info[Context, None]) -> PsRatioThresholdsType:
+        """Get configurable PS-ratio color thresholds for the current tenant."""
+        user = get_current_user(info)
+        settings_dict = (user.tenant.settings or {}) if user.tenant else {}
+        thresholds = settings_dict.get("ps_ratio_thresholds") or {}
+        return PsRatioThresholdsType(
+            amber_min=float(thresholds.get("amber_min", 1.0)),
+            yellow_min=float(thresholds.get("yellow_min", 1.5)),
+            green_min=float(thresholds.get("green_min", 2.0)),
+        )
 
     @strawberry.field
     def notification_preferences(self, info: Info[Context, None]) -> NotificationPreferencesType | None:
@@ -2385,6 +2409,41 @@ class TenantMutation:
             return OperationResult(success=False, error="Rate must not be negative")
         s = tenant.settings or {}
         s["ps_hourly_rate"] = rate
+        tenant.settings = s
+        tenant.save(update_fields=["settings"])
+        return OperationResult(success=True)
+
+    @strawberry.mutation
+    def save_ps_ratio_thresholds(
+        self,
+        info: Info[Context, None],
+        amber_min: float,
+        yellow_min: float,
+        green_min: float,
+    ) -> OperationResult:
+        """Save PS-ratio color thresholds. Requires settings.write.
+
+        Thresholds must be strictly increasing and non-negative.
+        """
+        user = require_perm(info, "settings", "write")
+        tenant = user.tenant
+        if not tenant:
+            return OperationResult(success=False, error="No tenant assigned")
+        if amber_min < 0 or yellow_min < 0 or green_min < 0:
+            return OperationResult(
+                success=False, error="Thresholds must be non-negative"
+            )
+        if not (amber_min < yellow_min < green_min):
+            return OperationResult(
+                success=False,
+                error="Thresholds must be strictly increasing (amber_min < yellow_min < green_min)",
+            )
+        s = tenant.settings or {}
+        s["ps_ratio_thresholds"] = {
+            "amber_min": amber_min,
+            "yellow_min": yellow_min,
+            "green_min": green_min,
+        }
         tenant.settings = s
         tenant.save(update_fields=["settings"])
         return OperationResult(success=True)
