@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.33.1",
+    "date": "2026-06-04",
+    "title": "Zeiterfassung: PS-Ratio-Spalte neben Rev/h",
+    "description": "Auf dem Zeiterfassungs-Tab eines Vertrags steht jetzt neben der Umsatz-pro-Stunde-Spalte eine PS-Ratio-Spalte. Die Spalte erscheint nur, wenn der PS-Stundensatz in den Allgemeinen Einstellungen gesetzt ist.",
+    "type": "feature",
+    "details": [
+      "PS-Ratio pro Mapping = Umsatz pro Stunde ÷ PS-Stundensatz, farbcodiert grün/gelb/rot (≥1,0 / ≥0,8 / darunter) — dieselben Schwellen wie auf der Projekte-Seite",
+      "Spalte wird automatisch ausgeblendet, wenn kein PS-Stundensatz konfiguriert ist (Settings → Allgemein → Verträge)",
+      "Header-Tooltip zeigt die Berechnungsformel an"
+    ]
+  },
+  {
     "version": "2.33.0",
     "date": "2026-06-03",
     "title": "Projekte: ausblendbare Spalten + Ø PS-Ratio · Zeiterfassung: Item-Zuweisung inline",
