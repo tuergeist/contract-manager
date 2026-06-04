@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.33.2",
+    "date": "2026-06-04",
+    "title": "PS-Ratio: konfigurierbare Farbschwellen mit vier Stufen",
+    "description": "Die Farbgebung der PS-Ratio ist jetzt in den Einstellungen konfigurierbar — mit einer neuen vierten Stufe „Gelb\" zwischen Amber und Grün. Defaults: rot < 1,0 ≤ amber < 1,5 ≤ gelb < 2,0 ≤ grün.",
+    "type": "feature",
+    "details": [
+      "Neue Eingabefelder „Ab (Amber)\", „Ab (Gelb)\", „Ab (Grün)\" unter Settings → Allgemein → Verträge mit Live-Legende; Validierung erzwingt streng aufsteigende, nicht-negative Werte",
+      "Vier Farbstufen statt drei: zusätzliche gelbe Zwischenstufe für Ratios zwischen Amber und Grün",
+      "Schwellen wirken einheitlich an allen drei Anzeigeorten: Projekte-Tabelle (Cell + Ø PS-Ratio unter der Überschrift) und Vertrag-Zeiterfassungs-Tab",
+      "Standardwerte 1,0 / 1,5 / 2,0 werden benutzt, solange in den Einstellungen nichts gespeichert ist — bestehende Tenants sehen sofort die neue gelbe Stufe",
+      "Tests: 7 Backend-Tests für Query-Defaults, gespeicherte Werte, Validierung (nicht-aufsteigend, gleiche Werte, negativ) und Permission (Viewer darf nicht speichern)"
+    ]
+  },
+  {
     "version": "2.33.1",
     "date": "2026-06-04",
     "title": "Zeiterfassung: PS-Ratio-Spalte neben Rev/h",
