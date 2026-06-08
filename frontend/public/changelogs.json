@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.33.3",
+    "date": "2026-06-08",
+    "title": "Abteilungs-Analyse: Krank-Spalten zu einer kompakten Spalte zusammengefasst",
+    "description": "Statt drei separater Krank-Spalten (Krank / Krank AU / Kind krank) zeigt die User-Matrix jetzt eine einzige Krank-Spalte mit Gesamtwert oben und den drei Unterkategorien als kleine, farbcodierte Zeile darunter — spart Tabellenbreite ohne Informationsverlust.",
+    "type": "feature",
+    "details": [
+      "Eine Spalte „Krank\" statt drei — Sortierung nutzt die Summe aller drei Kategorien",
+      "Zelle zeigt Gesamttage in roter Schrift, darunter krank: X · AU: Y · Kind: Z mit Tooltip pro Kategorie",
+      "Leere Zellen werden als „-\" angezeigt",
+      "CSV-Export bleibt dreispaltig — granulare Datenanalyse weiterhin möglich"
+    ]
+  },
+  {
     "version": "2.33.2",
     "date": "2026-06-04",
     "title": "PS-Ratio: konfigurierbare Farbschwellen mit vier Stufen",
