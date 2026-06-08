@@ -2456,6 +2456,11 @@
     "sickDaysHint": "Sick without certificate",
     "sickCertificateDaysHint": "Sick with medical certificate",
     "sickChildDaysHint": "Child sick",
+    "sickCombined": "Sick",
+    "sickCombinedHint": "Total sick days — split by: no cert / with cert / child sick",
+    "sickShort": "sick",
+    "sickCertShort": "cert",
+    "sickChildShort": "child",
     "absenceDaysHint": "Total absence days (incl. vacation and sick)",
     "exportUserMatrix": "Export user matrix as CSV"
   },

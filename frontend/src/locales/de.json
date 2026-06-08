@@ -2456,6 +2456,11 @@
     "sickDaysHint": "Krank ohne Krankenschein",
     "sickCertificateDaysHint": "Krank mit Krankenschein (Arbeitsunfähigkeitsbescheinigung)",
     "sickChildDaysHint": "Kind krank",
+    "sickCombined": "Krank",
+    "sickCombinedHint": "Krankheitstage gesamt — aufgeteilt nach: ohne AU / mit AU / Kind krank",
+    "sickShort": "krank",
+    "sickCertShort": "AU",
+    "sickChildShort": "Kind",
     "absenceDaysHint": "Gesamt-Abwesenheitstage (inkl. Urlaub und Krank)",
     "exportUserMatrix": "User-Matrix als CSV exportieren"
   },

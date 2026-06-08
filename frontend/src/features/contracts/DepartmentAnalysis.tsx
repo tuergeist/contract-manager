@@ -214,11 +214,10 @@ function DepartmentAnalysisContent() {
       } else if (sortBy === '__absence') {
         cmp = (a.absenceDays || 0) - (b.absenceDays || 0)
       } else if (sortBy === '__sick') {
-        cmp = (a.sickDays || 0) - (b.sickDays || 0)
-      } else if (sortBy === '__sickCert') {
-        cmp = (a.sickCertificateDays || 0) - (b.sickCertificateDays || 0)
-      } else if (sortBy === '__sickChild') {
-        cmp = (a.sickChildDays || 0) - (b.sickChildDays || 0)
+        // Combined column sorts by total of all three sick categories
+        const at = (a.sickDays || 0) + (a.sickCertificateDays || 0) + (a.sickChildDays || 0)
+        const bt = (b.sickDays || 0) + (b.sickCertificateDays || 0) + (b.sickChildDays || 0)
+        cmp = at - bt
       } else if (sortBy === '__total') {
         cmp = a.totalHours - b.totalHours
       } else {
@@ -632,31 +631,14 @@ function DepartmentAnalysisContent() {
                         <th
                           className="cursor-pointer px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
                           onClick={() => handleSort('__sick')}
-                          title={t('departmentAnalysis.sickDaysHint', 'Krank ohne Krankenschein')}
+                          title={t(
+                            'departmentAnalysis.sickCombinedHint',
+                            'Krankheitstage gesamt — aufgeteilt nach: ohne AU / mit AU / Kind krank',
+                          )}
                         >
                           <div className="flex items-center justify-end">
-                            {t('departmentAnalysis.sickDays')}
+                            {t('departmentAnalysis.sickCombined', 'Krank')}
                             <SortIcon field="__sick" />
-                          </div>
-                        </th>
-                        <th
-                          className="cursor-pointer px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
-                          onClick={() => handleSort('__sickCert')}
-                          title={t('departmentAnalysis.sickCertificateDaysHint', 'Krank mit Krankenschein (AU)')}
-                        >
-                          <div className="flex items-center justify-end">
-                            {t('departmentAnalysis.sickCertificateDays')}
-                            <SortIcon field="__sickCert" />
-                          </div>
-                        </th>
-                        <th
-                          className="cursor-pointer px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 hover:bg-gray-100"
-                          onClick={() => handleSort('__sickChild')}
-                          title={t('departmentAnalysis.sickChildDaysHint', 'Kind krank')}
-                        >
-                          <div className="flex items-center justify-end">
-                            {t('departmentAnalysis.sickChildDays')}
-                            <SortIcon field="__sickChild" />
                           </div>
                         </th>
                       </>
@@ -693,15 +675,53 @@ function DepartmentAnalysisContent() {
                           <td className={`px-6 py-3 text-right text-sm ${row.absenceDays && row.absenceDays > 0 ? 'text-orange-600 font-medium' : 'text-gray-300'}`}>
                             {row.absenceDays != null ? row.absenceDays.toFixed(1) : '-'}
                           </td>
-                          <td className={`px-6 py-3 text-right text-sm ${row.sickDays && row.sickDays > 0 ? 'text-red-600' : 'text-gray-300'}`}>
-                            {row.sickDays != null && row.sickDays > 0 ? row.sickDays.toFixed(1) : '-'}
-                          </td>
-                          <td className={`px-6 py-3 text-right text-sm ${row.sickCertificateDays && row.sickCertificateDays > 0 ? 'text-red-700 font-medium' : 'text-gray-300'}`}>
-                            {row.sickCertificateDays != null && row.sickCertificateDays > 0 ? row.sickCertificateDays.toFixed(1) : '-'}
-                          </td>
-                          <td className={`px-6 py-3 text-right text-sm ${row.sickChildDays && row.sickChildDays > 0 ? 'text-amber-600' : 'text-gray-300'}`}>
-                            {row.sickChildDays != null && row.sickChildDays > 0 ? row.sickChildDays.toFixed(1) : '-'}
-                          </td>
+                          {(() => {
+                            const s = row.sickDays || 0
+                            const sc = row.sickCertificateDays || 0
+                            const sk = row.sickChildDays || 0
+                            const total = s + sc + sk
+                            if (total === 0) {
+                              return (
+                                <td className="px-6 py-3 text-right text-sm text-gray-300">-</td>
+                              )
+                            }
+                            return (
+                              <td className="px-6 py-3 text-right text-sm">
+                                <div className="font-medium text-red-700">
+                                  {total.toFixed(1)}
+                                </div>
+                                <div className="mt-0.5 flex justify-end gap-2 text-xs text-gray-500">
+                                  <span
+                                    className={s > 0 ? 'text-red-600' : 'text-gray-300'}
+                                    title={t(
+                                      'departmentAnalysis.sickDaysHint',
+                                      'Krank ohne Krankenschein',
+                                    )}
+                                  >
+                                    {t('departmentAnalysis.sickShort', 'krank')}: {s.toFixed(1)}
+                                  </span>
+                                  <span
+                                    className={sc > 0 ? 'text-red-700 font-medium' : 'text-gray-300'}
+                                    title={t(
+                                      'departmentAnalysis.sickCertificateDaysHint',
+                                      'Krank mit Krankenschein (AU)',
+                                    )}
+                                  >
+                                    {t('departmentAnalysis.sickCertShort', 'AU')}: {sc.toFixed(1)}
+                                  </span>
+                                  <span
+                                    className={sk > 0 ? 'text-amber-600' : 'text-gray-300'}
+                                    title={t(
+                                      'departmentAnalysis.sickChildDaysHint',
+                                      'Kind krank',
+                                    )}
+                                  >
+                                    {t('departmentAnalysis.sickChildShort', 'Kind')}: {sk.toFixed(1)}
+                                  </span>
+                                </div>
+                              </td>
+                            )
+                          })()}
                         </>
                       )}
                       {deptNames.map((name: string) => {
