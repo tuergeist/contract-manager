@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.33.5",
+    "date": "2026-06-08",
+    "title": "Banking: Partial-Match-Marker auch auf Counterparty-Seite",
+    "description": "Der mit 2.33.4 eingeführte amber Marker für teilweise zugeordnete Zahlungen erscheint jetzt auch in der Transaktionsliste der Counterparty-Detail-Seite, nicht nur auf /banking.",
+    "type": "feature",
+    "details": [
+      "Counterparty-Detail-Seite zeigt amber Left-Border + Warning-Icon mit Tooltip nach denselben Regeln wie die Hauptliste",
+      "Schwelle bleibt eine zentrale Einstellung (Settings → Banking) und wirkt überall identisch"
+    ]
+  },
+  {
     "version": "2.33.4",
     "date": "2026-06-08",
     "title": "Banking: Teil-Zuordnungen mit hohem Restbetrag werden markiert",
