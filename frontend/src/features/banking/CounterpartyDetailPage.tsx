@@ -43,7 +43,7 @@ import { Button } from '@/components/ui/button'
 import { TransactionMatchSheet } from './TransactionMatchSheet'
 import { IncomingInvoiceDetail } from '../incoming-invoices/IncomingInvoiceDetail'
 import { Badge } from '@/components/ui/badge'
-import { Link2, FileText, Receipt } from 'lucide-react'
+import { Link2, FileText, Receipt, AlertTriangle } from 'lucide-react'
 
 const COUNTERPARTY_DETAIL = gql`
   query CounterpartyDetail($id: ID!, $dateFrom: Date, $dateTo: Date) {
@@ -124,11 +124,16 @@ const BANK_TRANSACTIONS = gql`
           invoiceNumber
           invoiceType
         }
+        matchedAmount
+        unmatchedAmount
       }
       totalCount
       page
       pageSize
       hasNextPage
+    }
+    bankingSettings {
+      partialMatchThreshold
     }
   }
 `
@@ -312,6 +317,8 @@ interface BankTransaction {
   accountName: string
   matchedInvoice: { invoiceId: string; invoiceNumber: string; invoiceType: string } | null
   matchedInvoices?: { invoiceId: string; invoiceNumber: string; invoiceType: string }[]
+  matchedAmount: string | null
+  unmatchedAmount: string | null
 }
 
 interface CounterpartySummary {
@@ -527,6 +534,9 @@ export function CounterpartyDetailPage() {
   const totalCount = txData?.bankTransactions?.totalCount ?? 0
   const hasNextPage = txData?.bankTransactions?.hasNextPage ?? false
   const totalPages = Math.ceil(totalCount / pageSize)
+  const partialMatchThreshold = parseFloat(
+    txData?.bankingSettings?.partialMatchThreshold ?? '200',
+  )
 
   // Search counterparties for merge
   const { data: searchData } = useQuery(SEARCH_COUNTERPARTIES, {
@@ -1433,10 +1443,17 @@ export function CounterpartyDetailPage() {
                 transactions.map((tx) => {
                   const amount = parseFloat(tx.amount)
                   const isExpanded = expandedTxId === tx.id
+                  const unmatched = tx.unmatchedAmount != null ? parseFloat(tx.unmatchedAmount) : 0
+                  const isPartialMatch =
+                    tx.matchedInvoice != null && unmatched > partialMatchThreshold
                   return (
                     <tr
                       key={tx.id}
-                      className="cursor-pointer hover:bg-gray-50"
+                      data-tx-id={tx.id}
+                      data-partial-match={isPartialMatch || undefined}
+                      className={`cursor-pointer hover:bg-gray-50 ${
+                        isPartialMatch ? 'border-l-4 border-l-amber-500' : ''
+                      }`}
                       onClick={() => setExpandedTxId(isExpanded ? null : tx.id)}
                     >
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-900">
@@ -1526,6 +1543,21 @@ export function CounterpartyDetailPage() {
                             >
                               <FileText className="h-4 w-4" />
                             </Link>
+                          )}
+                          {isPartialMatch && (
+                            <span
+                              title={t('banking.partialMatchTooltip', {
+                                defaultValue: 'Teilweise zugeordnet — {{remaining}} offen',
+                                remaining: formatCurrency(tx.unmatchedAmount ?? '0', {
+                                  currency: tx.currency || 'EUR',
+                                }),
+                              })}
+                              aria-label={t('banking.partialMatchWarning', {
+                                defaultValue: 'Teilweise zugeordnet',
+                              })}
+                            >
+                              <AlertTriangle className="h-4 w-4 text-amber-600" />
+                            </span>
                           )}
                           {formatCurrency(tx.amount, { currency: tx.currency || 'EUR' })}
                         </div>
