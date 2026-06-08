@@ -124,6 +124,10 @@ class BankTransactionType:
     cost_center: CostCenterType | None = None
     matched_invoice: InvoiceMatchInfoType | None = None
     matched_invoices: List[InvoiceMatchInfoType] = strawberry.field(default_factory=list)
+    # Sum of all matched invoice amounts (gross). None when no matches exist.
+    matched_amount: Decimal | None = None
+    # abs(amount) - matched_amount; positive => partial match. None when no matches.
+    unmatched_amount: Decimal | None = None
 
 
 @strawberry.type
@@ -493,11 +497,14 @@ def _make_transaction_type(t, include_invoice_match: bool = True) -> BankTransac
     """Convert a BankTransaction model to BankTransactionType."""
     matched_invoice = None
     matched_invoices: list[InvoiceMatchInfoType] = []
+    matched_amount: Decimal | None = None
+    unmatched_amount: Decimal | None = None
     if include_invoice_match:
         # Collect ALL matches (a payment can be matched against multiple invoices)
         all_matches = []
         if hasattr(t, "invoice_matches"):
             all_matches = list(t.invoice_matches.all())
+        total_matched = Decimal("0")
         for match in all_matches:
             info: InvoiceMatchInfoType | None = None
             if match.invoice_id:
@@ -510,6 +517,7 @@ def _make_transaction_type(t, include_invoice_match: bool = True) -> BankTransac
                     customer_id=match.invoice.customer_id,
                     invoice_type="imported",
                 )
+                total_matched += match.invoice.total_amount or Decimal("0")
             elif match.invoice_record_id:
                 info = InvoiceMatchInfoType(
                     invoice_id=strawberry.ID(str(match.invoice_record_id)),
@@ -520,6 +528,7 @@ def _make_transaction_type(t, include_invoice_match: bool = True) -> BankTransac
                     customer_id=match.invoice_record.customer_id,
                     invoice_type="generated",
                 )
+                total_matched += match.invoice_record.total_gross or Decimal("0")
             elif match.incoming_invoice_id:
                 inc = match.incoming_invoice
                 info = InvoiceMatchInfoType(
@@ -531,10 +540,15 @@ def _make_transaction_type(t, include_invoice_match: bool = True) -> BankTransac
                     customer_id=None,
                     invoice_type="incoming",
                 )
+                total_matched += inc.gross_amount or Decimal("0")
             if info is not None:
                 matched_invoices.append(info)
         # Preserve legacy single-match field
         matched_invoice = matched_invoices[0] if matched_invoices else None
+
+        if matched_invoices:
+            matched_amount = total_matched
+            unmatched_amount = abs(t.amount) - total_matched
 
     return BankTransactionType(
         id=t.id,
@@ -550,6 +564,8 @@ def _make_transaction_type(t, include_invoice_match: bool = True) -> BankTransac
         cost_center=_make_cost_center_type(getattr(t, "cost_center", None)),
         matched_invoice=matched_invoice,
         matched_invoices=matched_invoices,
+        matched_amount=matched_amount,
+        unmatched_amount=unmatched_amount,
     )
 
 

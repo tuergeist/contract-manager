@@ -51,7 +51,7 @@ import {
 import { useAuth } from '@/lib/auth'
 import { HelpVideoButton } from '@/components/HelpVideoButton'
 import { TransactionMatchSheet } from './TransactionMatchSheet'
-import { Link2 } from 'lucide-react'
+import { Link2, AlertTriangle } from 'lucide-react'
 
 // --- GraphQL ---
 
@@ -134,11 +134,16 @@ const BANK_TRANSACTIONS = gql`
           customerId
           invoiceType
         }
+        matchedAmount
+        unmatchedAmount
       }
       totalCount
       page
       pageSize
       hasNextPage
+    }
+    bankingSettings {
+      partialMatchThreshold
     }
   }
 `
@@ -307,6 +312,8 @@ interface BankTransaction {
   accountName: string
   costCenter: { id: string; code: string; name: string } | null
   matchedInvoice: { invoiceId: string; invoiceNumber: string; contractId: number | null; customerId: number | null; invoiceType: string } | null
+  matchedAmount: string | null
+  unmatchedAmount: string | null
 }
 
 // --- Component ---
@@ -455,6 +462,9 @@ export function BankingPage() {
   const hasNextPage = txData?.bankTransactions?.hasNextPage ?? false
   const returnedPage = txData?.bankTransactions?.page ?? page
   const totalPages = Math.ceil(totalCount / pageSize)
+  const partialMatchThreshold = parseFloat(
+    txData?.bankingSettings?.partialMatchThreshold ?? '200',
+  )
 
   // Handle URL parameter for transaction expansion - wait for data to load
   useEffect(() => {
@@ -1258,11 +1268,19 @@ export function BankingPage() {
                   transactions.map((tx) => {
                     const amount = parseFloat(tx.amount)
                     const isExpanded = expandedTxId === tx.id
+                    const unmatched = tx.unmatchedAmount != null ? parseFloat(tx.unmatchedAmount) : 0
+                    const isPartialMatch =
+                      tx.matchedInvoice != null && unmatched > partialMatchThreshold
                     return (
                       <tr
                         key={tx.id}
                         data-tx-id={tx.id}
-                        className={`cursor-pointer hover:bg-gray-50 ${isExpanded ? 'bg-blue-50' : ''}`}
+                        data-partial-match={isPartialMatch || undefined}
+                        className={`cursor-pointer hover:bg-gray-50 ${
+                          isExpanded ? 'bg-blue-50' : ''
+                        } ${
+                          isPartialMatch ? 'border-l-4 border-l-amber-500' : ''
+                        }`}
                         onClick={() => setExpandedTxId(isExpanded ? null : tx.id)}
                       >
                         <td className="whitespace-nowrap px-4 py-2.5 text-gray-900">
@@ -1455,6 +1473,21 @@ export function BankingPage() {
                               >
                                 <FileText className="h-4 w-4" />
                               </Link>
+                            )}
+                            {isPartialMatch && (
+                              <span
+                                title={t('banking.partialMatchTooltip', {
+                                  defaultValue: 'Teilweise zugeordnet — {{remaining}} offen',
+                                  remaining: formatCurrency(tx.unmatchedAmount ?? '0', {
+                                    currency: tx.currency || 'EUR',
+                                  }),
+                                })}
+                                aria-label={t('banking.partialMatchWarning', {
+                                  defaultValue: 'Teilweise zugeordnet',
+                                })}
+                              >
+                                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                              </span>
                             )}
                             {formatCurrency(tx.amount, { currency: tx.currency || 'EUR' })}
                           </div>

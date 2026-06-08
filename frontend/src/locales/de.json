@@ -1483,6 +1483,8 @@
       "feeTolerancePercent": "Prozentuale Toleranz (%)",
       "feeTolerancePercentHint": "Zusätzlicher Prozentsatz des Rechnungsbetrags, der toleriert wird",
       "formulaHint": "Toleranz = Fest + (Prozent × Rechnungsbetrag)",
+      "partialMatchThreshold": "Partial-Match-Schwelle (EUR)",
+      "partialMatchThresholdHint": "Transaktionen mit nicht zugeordnetem Restbetrag über dieser Schwelle werden in der Banking-Liste markiert. Default: 200 EUR.",
       "save": "Einstellungen speichern",
       "saved": "Banking-Einstellungen gespeichert",
       "saveFailed": "Banking-Einstellungen konnten nicht gespeichert werden"
@@ -2145,6 +2147,8 @@
     "period": "Zeitraum",
     "unmatchedCredits": "Nur nicht zugeordnete Haben",
     "matchedInvoice": "Zugeordnet zu Rechnung",
+    "partialMatchWarning": "Teilweise zugeordnet",
+    "partialMatchTooltip": "Teilweise zugeordnet — {{remaining}} offen",
     "linkToCustomer": "Mit Kunde verknüpfen",
     "linkCustomerDescription": "\"{{name}}\" mit einem Kunden im System verknüpfen für automatische Zahlungszuordnung.",
     "selectCustomerToLink": "Kunde auswählen",

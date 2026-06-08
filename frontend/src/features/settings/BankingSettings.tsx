@@ -8,13 +8,22 @@ const BANKING_SETTINGS_QUERY = gql`
     bankingSettings {
       feeToleranceFixed
       feeTolerancePercent
+      partialMatchThreshold
     }
   }
 `
 
 const SAVE_BANKING_SETTINGS = gql`
-  mutation SaveBankingSettings($feeToleranceFixed: Decimal!, $feeTolerancePercent: Decimal!) {
-    saveBankingSettings(feeToleranceFixed: $feeToleranceFixed, feeTolerancePercent: $feeTolerancePercent) {
+  mutation SaveBankingSettings(
+    $feeToleranceFixed: Decimal!
+    $feeTolerancePercent: Decimal!
+    $partialMatchThreshold: Decimal
+  ) {
+    saveBankingSettings(
+      feeToleranceFixed: $feeToleranceFixed
+      feeTolerancePercent: $feeTolerancePercent
+      partialMatchThreshold: $partialMatchThreshold
+    ) {
       success
       error
     }
@@ -25,6 +34,7 @@ export function BankingSettings() {
   const { t } = useTranslation()
   const [feeToleranceFixed, setFeeToleranceFixed] = useState('0')
   const [feeTolerancePercent, setFeeTolerancePercent] = useState('0')
+  const [partialMatchThreshold, setPartialMatchThreshold] = useState('200')
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const { data } = useQuery(BANKING_SETTINGS_QUERY)
@@ -35,6 +45,7 @@ export function BankingSettings() {
     if (settings) {
       setFeeToleranceFixed(settings.feeToleranceFixed || '0')
       setFeeTolerancePercent(settings.feeTolerancePercent || '0')
+      setPartialMatchThreshold(settings.partialMatchThreshold || '200')
     }
   }, [data])
 
@@ -45,6 +56,7 @@ export function BankingSettings() {
         variables: {
           feeToleranceFixed,
           feeTolerancePercent,
+          partialMatchThreshold,
         },
       })
       if (result?.saveBankingSettings?.success) {
@@ -95,6 +107,26 @@ export function BankingSettings() {
         <p className="text-xs text-gray-500 italic">
           {t('settings.banking.formulaHint')}
         </p>
+
+        <div className="max-w-sm border-t pt-4">
+          <label className="block text-sm font-medium text-gray-700">
+            {t('settings.banking.partialMatchThreshold', { defaultValue: 'Partial-Match-Schwelle (EUR)' })}
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={partialMatchThreshold}
+            onChange={(e) => setPartialMatchThreshold(e.target.value)}
+            className={inputClass}
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            {t('settings.banking.partialMatchThresholdHint', {
+              defaultValue:
+                'Transaktionen mit nicht zugeordnetem Restbetrag über dieser Schwelle werden in der Banking-Liste markiert. Default: 200 EUR.',
+            })}
+          </p>
+        </div>
 
         <div className="flex gap-2">
           <button

@@ -1483,6 +1483,8 @@
       "feeTolerancePercent": "Percentage Tolerance (%)",
       "feeTolerancePercentHint": "Additional percentage of invoice total that is tolerated",
       "formulaHint": "Tolerance = Fixed + (Percent × invoice total)",
+      "partialMatchThreshold": "Partial-match threshold (EUR)",
+      "partialMatchThresholdHint": "Transactions with an unmatched remaining amount above this threshold are highlighted in the banking list. Default: 200 EUR.",
       "save": "Save Settings",
       "saved": "Banking settings saved",
       "saveFailed": "Failed to save banking settings"
@@ -2145,6 +2147,8 @@
     "period": "Period",
     "unmatchedCredits": "Unmatched credits only",
     "matchedInvoice": "Matched to invoice",
+    "partialMatchWarning": "Partially matched",
+    "partialMatchTooltip": "Partially matched — {{remaining}} open",
     "linkToCustomer": "Link to Customer",
     "linkCustomerDescription": "Link \"{{name}}\" to a customer in the system for automatic payment matching.",
     "selectCustomerToLink": "Select Customer",

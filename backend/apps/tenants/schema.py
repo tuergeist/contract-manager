@@ -452,6 +452,7 @@ class BankingSettingsType:
     """Banking fee tolerance settings for invoice matching."""
     fee_tolerance_fixed: Decimal
     fee_tolerance_percent: Decimal
+    partial_match_threshold: Decimal
 
 
 @strawberry.type
@@ -969,6 +970,7 @@ class TenantQuery:
         return BankingSettingsType(
             fee_tolerance_fixed=Decimal(config.get("fee_tolerance_fixed", "0")),
             fee_tolerance_percent=Decimal(config.get("fee_tolerance_percent", "0")),
+            partial_match_threshold=Decimal(config.get("partial_match_threshold", "200")),
         )
 
     @strawberry.field
@@ -2358,6 +2360,7 @@ class TenantMutation:
         info: Info[Context, None],
         fee_tolerance_fixed: Decimal,
         fee_tolerance_percent: Decimal,
+        partial_match_threshold: Decimal | None = None,
     ) -> OperationResult:
         """Save banking fee tolerance settings. Requires settings.write."""
         user = require_perm(info, "settings", "write")
@@ -2366,11 +2369,23 @@ class TenantMutation:
             return OperationResult(success=False, error="No tenant assigned")
         if fee_tolerance_fixed < 0 or fee_tolerance_percent < 0:
             return OperationResult(success=False, error="Tolerance values must be >= 0")
+        if partial_match_threshold is not None and partial_match_threshold < 0:
+            return OperationResult(
+                success=False, error="Partial-match threshold must be >= 0"
+            )
         if not tenant.settings:
             tenant.settings = {}
+        # Preserve existing partial_match_threshold when caller omits it.
+        existing = (tenant.settings or {}).get("banking", {})
+        threshold = (
+            partial_match_threshold
+            if partial_match_threshold is not None
+            else Decimal(existing.get("partial_match_threshold", "200"))
+        )
         tenant.settings["banking"] = {
             "fee_tolerance_fixed": str(fee_tolerance_fixed),
             "fee_tolerance_percent": str(fee_tolerance_percent),
+            "partial_match_threshold": str(threshold),
         }
         tenant.save(update_fields=["settings"])
         return OperationResult(success=True)
