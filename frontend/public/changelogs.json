@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.33.4",
+    "date": "2026-06-08",
+    "title": "Banking: Teil-Zuordnungen mit hohem Restbetrag werden markiert",
+    "description": "Transaktionen, bei denen die zugeordneten Rechnungen den Buchungsbetrag nicht vollständig abdecken, fallen in der Banking-Liste jetzt durch einen amber Randstreifen und ein Warnsymbol vor dem Betrag auf. Die Schwelle (Default 200 EUR) ist in den Banking-Einstellungen konfigurierbar.",
+    "type": "feature",
+    "details": [
+      "Banking-Liste: amber Left-Border + Warning-Icon vor dem Betrag, wenn die Summe der zugeordneten Rechnungen den Buchungsbetrag um mehr als die Schwelle unterschreitet",
+      "Tooltip am Warning-Icon zeigt den offenen Restbetrag",
+      "Neue Einstellung „Partial-Match-Schwelle (EUR)\" unter Einstellungen → Banking, Default 200 EUR",
+      "Backend: BankTransactionType bekommt matched_amount und unmatched_amount; aggregiert ohne zusätzliche Queries aus dem bestehenden invoice_matches-Prefetch"
+    ]
+  },
+  {
     "version": "2.33.3",
     "date": "2026-06-08",
     "title": "Abteilungs-Analyse: Krank-Spalten zu einer kompakten Spalte zusammengefasst",
