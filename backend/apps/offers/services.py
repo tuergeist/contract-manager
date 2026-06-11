@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.template.loader import render_to_string
 
 try:
@@ -196,31 +196,56 @@ class OfferService:
         today = date.today()
         valid_until = today + relativedelta(days=30)
 
-        with transaction.atomic():
+        # Retry on duplicate offer_number — happens when the scheme counter
+        # falls behind existing records (e.g. an offer with the same number
+        # was created out-of-band, or a delete + re-create races).
+        #
+        # Two correctness requirements:
+        # 1. The scheme counter increment must NOT roll back when the
+        #    OfferRecord insert fails — otherwise we loop forever on the
+        #    same number. get_next_number() has its own transaction.atomic()
+        #    and runs first, so the increment is already committed (or held
+        #    at the savepoint above this loop).
+        # 2. The failing INSERT must not poison the surrounding transaction;
+        #    we wrap each attempt in its own atomic() block so the savepoint
+        #    rolls back on IntegrityError without leaving the connection in
+        #    a broken-transaction state.
+        max_attempts = 10
+        record = None
+        for attempt in range(max_attempts):
             offer_number = numbering.get_next_number(billing_date)
+            try:
+                with transaction.atomic():
+                    record = OfferRecord.objects.create(
+                        tenant=self.tenant,
+                        contract=contract,
+                        customer=contract.customer,
+                        offer_number=offer_number,
+                        offer_date=today,
+                        valid_until=valid_until,
+                        billing_date=billing_date,
+                        period_start=period_start,
+                        period_end=period_end,
+                        total_net=total_net,
+                        tax_rate=tax_rate,
+                        tax_amount=tax_amount,
+                        total_gross=total_gross,
+                        line_items_snapshot=line_items_snapshot,
+                        company_data_snapshot=company_snapshot,
+                        status=OfferRecord.Status.DRAFT,
+                        customer_name=contract.customer.name,
+                        contract_name=contract.name or f"Contract {contract.id}",
+                        vat_sentence=vat_sentence,
+                        scoped_item_ids=item_ids,
+                    )
+                break
+            except IntegrityError:
+                # Number already taken — counter was behind. Loop; the next
+                # get_next_number call will advance the scheme counter.
+                if attempt == max_attempts - 1:
+                    raise
 
-            record = OfferRecord.objects.create(
-                tenant=self.tenant,
-                contract=contract,
-                customer=contract.customer,
-                offer_number=offer_number,
-                offer_date=today,
-                valid_until=valid_until,
-                billing_date=billing_date,
-                period_start=period_start,
-                period_end=period_end,
-                total_net=total_net,
-                tax_rate=tax_rate,
-                tax_amount=tax_amount,
-                total_gross=total_gross,
-                line_items_snapshot=line_items_snapshot,
-                company_data_snapshot=company_snapshot,
-                status=OfferRecord.Status.DRAFT,
-                customer_name=contract.customer.name,
-                contract_name=contract.name or f"Contract {contract.id}",
-                vat_sentence=vat_sentence,
-                scoped_item_ids=item_ids,
-            )
+        assert record is not None  # Loop either sets record or raises
 
         # Generate PDF synchronously (offers are single-page, fast)
         language = contract.customer.get_effective_invoice_language(default="en") if contract.customer else "en"

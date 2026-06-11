@@ -363,6 +363,54 @@ class TestOfferServiceCreateOffer:
         assert r2.offer_number == "2026-0002"
 
     @patch("apps.offers.services.HTML")
+    def test_retries_on_duplicate_offer_number(
+        self, mock_html, tenant, contract_with_items, legal_data
+    ):
+        """If the scheme counter is behind existing records, create_offer
+        retries until it finds a free number rather than raising."""
+        from apps.offers.services import OfferService
+
+        mock_html.return_value.render.return_value.write_pdf.return_value = b"%PDF-fake"
+
+        # Seed the scheme so the next generated number is 0001, but also
+        # create an OfferRecord that already occupies 0001 — this is the
+        # exact state the bug report described (deleted-then-recreated /
+        # stale scheme counter).
+        OfferNumberScheme.objects.create(
+            tenant=tenant,
+            pattern="{YYYY}-{NNNN}",
+            next_counter=1,
+            reset_period=OfferNumberScheme.ResetPeriod.YEARLY,
+            last_reset_year=2026,
+        )
+        OfferRecord.objects.create(
+            tenant=tenant,
+            contract=contract_with_items,
+            customer=contract_with_items.customer,
+            offer_number="2026-0001",
+            offer_date=date(2026, 1, 1),
+            valid_until=date(2026, 2, 1),
+            billing_date=date(2026, 1, 1),
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+            total_net=Decimal("100.00"),
+            tax_rate=Decimal("19.00"),
+            tax_amount=Decimal("19.00"),
+            total_gross=Decimal("119.00"),
+            line_items_snapshot=[],
+            company_data_snapshot={},
+            status=OfferRecord.Status.DRAFT,
+            customer_name="Test Customer GmbH",
+            contract_name="Monthly SaaS",
+        )
+
+        service = OfferService(tenant)
+        record = service.create_offer(contract_with_items.id, date(2026, 1, 1))
+
+        # Should land on the next free number, not raise IntegrityError.
+        assert record.offer_number == "2026-0002"
+
+    @patch("apps.offers.services.HTML")
     def test_snapshots_company_data(
         self, mock_html, tenant, contract_with_items, legal_data
     ):
