@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.33.6",
+    "date": "2026-06-11",
+    "title": "Bugfix: Angebotserstellung scheitert bei kollidierender Angebotsnummer",
+    "description": "createOffer warf in seltenen Fällen einen Duplicate-Key-Fehler, wenn der Zähler im Angebots-Nummernschema hinter den tatsächlich existierenden Angebotsnummern lag (z. B. nach einer Löschung). Die Erstellung versucht jetzt automatisch die nächste freie Nummer.",
+    "type": "bugfix",
+    "details": [
+      "OfferService.create_offer hängt die Insert-Operation in eine Retry-Schleife (max 10 Versuche). Bei einer Kollision wird der Schema-Zähler weitergedreht und es wird mit der nächsten Nummer versucht",
+      "Schema-Increment läuft jetzt unabhängig von der Insert-Transaktion, damit der Counter nicht zusammen mit dem fehlgeschlagenen Insert zurückgerollt wird",
+      "Regressionstest deckt den Fall ab: Schema steht auf 0001, aber 0001 ist schon vergeben → neues Angebot bekommt 0002 statt eines Fehlers"
+    ]
+  },
+  {
     "version": "2.33.5",
     "date": "2026-06-08",
     "title": "Banking: Partial-Match-Marker auch auf Counterparty-Seite",
