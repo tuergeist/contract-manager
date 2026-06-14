@@ -20,7 +20,7 @@ PERMISSION_REGISTRY = {
     "notes": ["read", "write"],
     "invoices": ["read", "write", "delete", "export", "generate", "settings"],
     "reminders": ["send", "settings"],
-    "offers": ["read", "write", "delete"],
+    "offers": ["read", "write", "delete", "finalize"],
     "banking": ["read", "write"],
     "incoming_invoices": ["read", "write", "config"],
     "cost_centers": ["read", "write", "config"],

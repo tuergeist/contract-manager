@@ -47,6 +47,13 @@ class OfferRecordType:
     email_sent_to: list[str]
     email_message_id: str
     scoped_item_ids: list[int] | None = None
+    # New editable surface (offer-edit-and-finalize change)
+    free_text_after_items: str = ""
+    free_text_before_terms: str = ""
+    minimum_term_months: int | None = None
+    notice_period_months: int | None = None
+    cloned_from_id: int | None = None
+    is_locked: bool = False
 
 
 @strawberry.type
@@ -74,6 +81,41 @@ class UpdateOfferStatusResult:
 
 @strawberry.type
 class UpdateOfferResult:
+    success: bool
+    error: str | None = None
+    offer: OfferRecordType | None = None
+    # Distinguish lock errors from validation errors so the frontend can
+    # surface a "this offer is locked" banner directly. See
+    # openspec/specs/offer-finalize/spec.md.
+    is_locked_error: bool = False
+
+
+@strawberry.input
+class UpdateOfferInput:
+    """Editable surface for the new updateOffer mutation.
+
+    Matches OfferRecord._user_editable_fields(). Anything else is rejected
+    by the service layer.
+    """
+
+    free_text_after_items: str | None = None
+    free_text_before_terms: str | None = None
+    valid_until: date | None = strawberry.UNSET
+    minimum_term_months: int | None = strawberry.UNSET
+    notice_period_months: int | None = strawberry.UNSET
+    scoped_item_ids: list[int] | None = strawberry.UNSET
+
+
+@strawberry.type
+class FinalizeOfferResult:
+    success: bool
+    error: str | None = None
+    offer: OfferRecordType | None = None
+    is_locked_error: bool = False
+
+
+@strawberry.type
+class CloneOfferResult:
     success: bool
     error: str | None = None
     offer: OfferRecordType | None = None
@@ -143,6 +185,12 @@ def _convert_offer_record(record) -> OfferRecordType:
         email_sent_to=record.email_sent_to or [],
         email_message_id=record.email_message_id or "",
         scoped_item_ids=record.scoped_item_ids,
+        free_text_after_items=record.free_text_after_items or "",
+        free_text_before_terms=record.free_text_before_terms or "",
+        minimum_term_months=record.minimum_term_months,
+        notice_period_months=record.notice_period_months,
+        cloned_from_id=record.cloned_from_id,
+        is_locked=record.is_locked,
     )
 
 
@@ -308,38 +356,19 @@ class OfferMutation:
     def update_offer_status(
         self, info: Info[Context, None], id: int, status: str
     ) -> UpdateOfferStatusResult:
-        """Update an offer's status with transition validation."""
-        from apps.offers.models import OfferRecord
+        """Deprecated. Use `finalizeOffer`, `sendOfferEmail`, or `deleteOffer`.
 
-        user, err = check_perm(info, "offers", "write")
-        if err:
-            return UpdateOfferStatusResult(success=False, error=err)
-
-        try:
-            record = OfferRecord.objects.get(id=id, tenant=user.tenant)
-        except OfferRecord.DoesNotExist:
-            return UpdateOfferStatusResult(success=False, error="Offer not found")
-
-        valid_statuses = {c[0] for c in OfferRecord.Status.choices}
-        if status not in valid_statuses:
-            return UpdateOfferStatusResult(
-                success=False,
-                error=f"Invalid status. Must be one of: {', '.join(sorted(valid_statuses))}",
-            )
-
-        allowed_next = _VALID_TRANSITIONS.get(record.status, set())
-        if status not in allowed_next:
-            return UpdateOfferStatusResult(
-                success=False,
-                error=f"Cannot transition from '{record.status}' to '{status}'.",
-            )
-
-        record.status = status
-        record.save(update_fields=["status", "updated_at"])
-        record.refresh_from_db()
+        Kept as a stub so existing GraphQL clients receive a clear error
+        rather than an unknown-field response. The offer lifecycle is now
+        `draft -> sent | finalized` and there is no manual transition.
+        """
         return UpdateOfferStatusResult(
-            success=True,
-            offer=_convert_offer_record(record),
+            success=False,
+            error=(
+                "updateOfferStatus is deprecated. The offer lifecycle is "
+                "draft -> sent (via sendOfferEmail) or draft -> finalized "
+                "(via finalizeOffer). Use deleteOffer to remove a draft."
+            ),
         )
 
     @strawberry.mutation
@@ -347,39 +376,162 @@ class OfferMutation:
         self,
         info: Info[Context, None],
         id: int,
-        valid_until: date | None = None,
-        notes: str | None = None,
+        input: UpdateOfferInput,
     ) -> UpdateOfferResult:
-        """Update editable fields on a draft offer."""
+        """Update editable fields on a draft offer.
+
+        Accepts only the editable surface defined in
+        OfferRecord._user_editable_fields(). Service layer enforces lock
+        via select_for_update + _guard_writable.
+        """
         from apps.offers.models import OfferRecord
+        from apps.offers.services import OfferLockedError, OfferService
+
+        user, err = check_perm(info, "offers", "write")
+        if err:
+            return UpdateOfferResult(success=False, error=err)
+
+        # Build the fields dict, treating absent (UNSET) as "do not touch"
+        # while letting None through explicitly for nullable fields.
+        fields: dict = {}
+        if input.free_text_after_items is not None:
+            fields["free_text_after_items"] = input.free_text_after_items
+        if input.free_text_before_terms is not None:
+            fields["free_text_before_terms"] = input.free_text_before_terms
+        if input.valid_until is not strawberry.UNSET:
+            fields["valid_until"] = input.valid_until
+        if input.minimum_term_months is not strawberry.UNSET:
+            fields["minimum_term_months"] = input.minimum_term_months
+        if input.notice_period_months is not strawberry.UNSET:
+            fields["notice_period_months"] = input.notice_period_months
+        if input.scoped_item_ids is not strawberry.UNSET:
+            fields["scoped_item_ids"] = input.scoped_item_ids
+
+        if not fields:
+            return UpdateOfferResult(
+                success=False, error="No fields supplied to update."
+            )
+
+        try:
+            service = OfferService(user.tenant)
+            record = service.update_offer(id, **fields)
+        except OfferRecord.DoesNotExist:
+            return UpdateOfferResult(success=False, error="Offer not found")
+        except OfferLockedError as e:
+            return UpdateOfferResult(
+                success=False, error=str(e), is_locked_error=True
+            )
+        except ValueError as e:
+            return UpdateOfferResult(success=False, error=str(e))
+
+        return UpdateOfferResult(
+            success=True, offer=_convert_offer_record(record)
+        )
+
+    @strawberry.mutation
+    def recreate_offer_from_contract(
+        self,
+        info: Info[Context, None],
+        id: int,
+    ) -> UpdateOfferResult:
+        """Re-snapshot the contract's current billing data into a draft.
+
+        Preserves user-edited fields and the offer_number. Rejects locked
+        offers via OfferLockedError. Reports NoBillingEventError when the
+        contract was edited so the offer's billing_date no longer has a
+        matching event.
+        """
+        from apps.offers.models import OfferRecord
+        from apps.offers.services import (
+            NoBillingEventError,
+            OfferLockedError,
+            OfferService,
+        )
 
         user, err = check_perm(info, "offers", "write")
         if err:
             return UpdateOfferResult(success=False, error=err)
 
         try:
-            record = OfferRecord.objects.get(id=id, tenant=user.tenant)
+            service = OfferService(user.tenant)
+            record = service.recreate_offer_from_contract(id)
         except OfferRecord.DoesNotExist:
             return UpdateOfferResult(success=False, error="Offer not found")
-
-        if record.status != OfferRecord.Status.DRAFT:
+        except OfferLockedError as e:
             return UpdateOfferResult(
-                success=False, error="Only draft offers can be edited."
+                success=False, error=str(e), is_locked_error=True
+            )
+        except NoBillingEventError as e:
+            return UpdateOfferResult(success=False, error=str(e))
+        except ValueError as e:
+            return UpdateOfferResult(success=False, error=str(e))
+
+        return UpdateOfferResult(
+            success=True, offer=_convert_offer_record(record)
+        )
+
+    @strawberry.mutation
+    def finalize_offer(
+        self,
+        info: Info[Context, None],
+        id: int,
+    ) -> FinalizeOfferResult:
+        """Transition a draft offer to finalized.
+
+        Gated on the new `offers.finalize` permission. Idempotent on
+        already-finalized records. Rejects sent + legacy statuses with
+        is_locked_error=True so the frontend can show a precise banner.
+        """
+        from apps.offers.models import OfferRecord
+        from apps.offers.services import OfferLockedError, OfferService
+
+        user, err = check_perm(info, "offers", "finalize")
+        if err:
+            return FinalizeOfferResult(success=False, error=err)
+
+        try:
+            service = OfferService(user.tenant)
+            record = service.finalize_offer(id)
+        except OfferRecord.DoesNotExist:
+            return FinalizeOfferResult(success=False, error="Offer not found")
+        except OfferLockedError as e:
+            return FinalizeOfferResult(
+                success=False, error=str(e), is_locked_error=True
             )
 
-        update_fields = ["updated_at"]
-        if valid_until is not None:
-            record.valid_until = valid_until
-            update_fields.append("valid_until")
-        if notes is not None:
-            record.notes = notes
-            update_fields.append("notes")
+        return FinalizeOfferResult(
+            success=True, offer=_convert_offer_record(record)
+        )
 
-        record.save(update_fields=update_fields)
-        record.refresh_from_db()
-        return UpdateOfferResult(
-            success=True,
-            offer=_convert_offer_record(record),
+    @strawberry.mutation
+    def clone_offer_to_draft(
+        self,
+        info: Info[Context, None],
+        id: int,
+    ) -> CloneOfferResult:
+        """Copy-to-edit a locked offer into a new draft.
+
+        Reads the source offer's snapshots verbatim (does NOT re-read the
+        contract). New offer_number; cloned_from points back to the
+        source for audit.
+        """
+        from apps.offers.models import OfferRecord
+        from apps.offers.services import OfferService
+
+        user, err = check_perm(info, "offers", "write")
+        if err:
+            return CloneOfferResult(success=False, error=err)
+
+        try:
+            service = OfferService(user.tenant)
+            record = service.clone_offer_to_draft(id)
+        except OfferRecord.DoesNotExist:
+            return CloneOfferResult(success=False, error="Offer not found")
+        except ValueError as e:
+            return CloneOfferResult(success=False, error=str(e))
+
+        return CloneOfferResult(
+            success=True, offer=_convert_offer_record(record)
         )
 
     @strawberry.mutation

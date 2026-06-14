@@ -105,6 +105,17 @@ def send_offer_email_task(
     from apps.core.m365 import get_document_bcc
     bcc = get_document_bcc(record.tenant, "offer")
 
+    # Pre-flight: the offer must still be a draft when we attempt to send.
+    # We re-check inside the post-send transaction with select_for_update
+    # to guard against a concurrent Finalize. See
+    # openspec/specs/offer-finalize/spec.md::Send failure does not lock.
+    if record.status != OfferRecord.Status.DRAFT:
+        logger.warning(
+            "Skipping send for OfferRecord %s: status=%s is already locked",
+            offer_id, record.status,
+        )
+        return False
+
     try:
         message_id = send_mail(
             record.tenant,
@@ -114,16 +125,63 @@ def send_offer_email_task(
             attachments=attachments,
             bcc=bcc or None,
         )
-        record.email_sent_at = timezone.now()
-        record.email_sent_to = recipients
-        record.email_message_id = message_id or ""
-        record.status = OfferRecord.Status.SENT
-        record.save(update_fields=[
-            "email_sent_at", "email_sent_to", "email_message_id", "status",
-        ])
+    except M365Error as e:
+        # Send failed — leave the offer fully editable so the user can retry.
+        logger.error("Failed to send offer email for record %s: %s", offer_id, e)
+        return False
+
+    # Send succeeded. Persist email metadata + transition draft → sent
+    # under a row-level lock so a concurrent Finalize cannot overwrite us.
+    from django.db import transaction
+    from apps.offers.services import OfferLockedError, OfferService
+
+    try:
+        with transaction.atomic():
+            locked = (
+                OfferRecord.objects.select_for_update()
+                .select_related("contract", "tenant")
+                .get(id=record.id)
+            )
+            if locked.status != OfferRecord.Status.DRAFT:
+                # Another path won the race (Finalize). Email already went
+                # out — log loudly but do not overwrite the lock.
+                logger.error(
+                    "Concurrent lock detected on OfferRecord %s: status=%s "
+                    "but email was already dispatched. Email metadata NOT "
+                    "persisted to avoid corrupting the locked state.",
+                    offer_id, locked.status,
+                )
+                return False
+
+            locked.email_sent_at = timezone.now()
+            locked.email_sent_to = recipients
+            locked.email_message_id = message_id or ""
+            locked.status = OfferRecord.Status.SENT
+            locked.save(update_fields=[
+                "email_sent_at", "email_sent_to", "email_message_id",
+                "status", "updated_at",
+            ])
+
+            # Copy the PDF onto the contract as an attachment. Idempotent
+            # if the offer was already attached by a previous run.
+            try:
+                service = OfferService(locked.tenant)
+                service.attach_pdf_to_contract(locked)
+            except OfferLockedError:
+                # Should not happen — we hold the lock. Log defensively.
+                logger.exception(
+                    "Unexpected OfferLockedError during attach for %s",
+                    offer_id,
+                )
 
         logger.info("Offer email sent for record %s to %s", offer_id, recipients)
         return True
-    except M365Error as e:
-        logger.error("Failed to send offer email for record %s: %s", offer_id, e)
+    except Exception:
+        # Email already went out; persisting metadata failed. Log + return
+        # success so we do not double-send on retry. The offer stays in
+        # draft until manual intervention.
+        logger.exception(
+            "Email sent but persisting status failed for OfferRecord %s",
+            offer_id,
+        )
         return False

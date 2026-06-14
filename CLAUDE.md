@@ -193,6 +193,46 @@ paused → active, cancelled
 cancelled → ended
 ```
 
+## Offer Lifecycle (since 2.34.0)
+
+```
+draft → sent       (system: set after a successful email_sent_at)
+draft → finalized  (user: explicit Finalize action, gated on offers.finalize)
+```
+
+Both `sent` and `finalized` are **terminal locked states**. The legacy
+`accepted / rejected / cancelled / expired` values still exist in the
+`OfferRecord.Status` enum for backwards-compatible reads but no new
+transition lands there.
+
+**Editable surface on drafts only** — `OfferService.update_offer` accepts
+only the fields returned by `OfferRecord._user_editable_fields()`:
+`free_text_after_items`, `free_text_before_terms`, `valid_until`,
+`minimum_term_months`, `notice_period_months`, `scoped_item_ids`. Any
+write to a non-draft offer raises `OfferLockedError` (mapped to
+`is_locked_error=true` on the GraphQL result types).
+
+**Re-create from contract** rewrites only the contract-derived snapshot
+fields (`OfferRecord._contract_derived_fields()`) and preserves the
+editable surface. The `offer_number` is preserved across re-create.
+Anything that fails because the contract was edited so the offer's
+`billing_date` no longer has a matching event raises
+`NoBillingEventError`.
+
+**Locked offers attach the PDF to the contract** via the
+`ContractAttachment` row with `category=offer` and a `source_offer` FK
+back to the OfferRecord. The attachment owns its own bytes (FK is
+`SET_NULL`) so the contract's audit history survives an offer delete.
+**Copy-to-edit** clones a locked offer into a new draft with a fresh
+`offer_number` and `cloned_from` pointing back to the source — it does
+NOT re-read the contract (use Re-create on the clone if you want that).
+
+The `offers.finalize` permission is **separate from `offers.write`** by
+design so a finance reviewer role can be granted finalize without full
+edit access. Admin role gets it by default; data migration
+`tenants/0021_grant_offers_finalize_to_admin.py` backfilled existing
+tenants.
+
 ## Firefox Debugging Agent
 
 Use the `firefox-debugger` agent for interactive frontend debugging:

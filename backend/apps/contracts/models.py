@@ -1595,6 +1595,19 @@ class ContractAttachment(TenantModel):
         blank=True,
         help_text="Cached AI extraction result (line items + metadata). Persisted to avoid repeated API calls.",
     )
+    source_offer = models.ForeignKey(
+        "offers.OfferRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contract_attachments",
+        help_text=(
+            "When this attachment was produced by an offer transitioning to "
+            "sent or finalized, points back to the source OfferRecord. "
+            "SET_NULL on offer delete so the attachment survives as the "
+            "historical record of what the customer received."
+        ),
+    )
 
     class Meta:
         ordering = ["-created_at"]

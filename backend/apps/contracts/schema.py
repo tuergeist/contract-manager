@@ -171,6 +171,9 @@ class ContractAttachmentType:
     uploaded_at: datetime
     uploaded_by_name: str | None
     download_url: str
+    # Set when this attachment was produced by an offer transitioning to a
+    # locked state. Frontend uses it to render an "open source offer" link.
+    source_offer_id: int | None = None
 
 
 @strawberry.type
@@ -565,6 +568,7 @@ class ContractType:
                 uploaded_at=a.created_at,
                 uploaded_by_name=a.uploaded_by.email if a.uploaded_by else None,
                 download_url=f"/api/attachments/{a.id}/download/",
+                source_offer_id=a.source_offer_id,
             ))
         # Surface order confirmations as virtual attachments (negative id = synthetic)
         ocs = OrderConfirmation.objects.filter(contract=self).select_related("created_by")

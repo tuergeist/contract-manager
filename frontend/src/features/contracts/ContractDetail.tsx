@@ -839,6 +839,11 @@ export function ContractDetail() {
   const [todoModalOpen, setTodoModalOpen] = useState(false)
   const [todoContext, setTodoContext] = useState<TodoContext | undefined>()
   const [abDialogOpen, setAbDialogOpen] = useState(false)
+  // Create-Offer dialog (only available on draft contracts; see
+  // openspec/changes/offer-edit-and-finalize/specs/offer-generation/spec.md)
+  const [createOfferDialogOpen, setCreateOfferDialogOpen] = useState(false)
+  const [createOfferBillingDate, setCreateOfferBillingDate] = useState<string>('')
+  const [createOfferError, setCreateOfferError] = useState<string | null>(null)
 
   const { data, loading, error, refetch } = useQuery(CONTRACT_DETAIL_QUERY, {
     variables: { id },
@@ -889,6 +894,7 @@ export function ContractDetail() {
     )
   }
 
+  const [createOfferFromContract, { loading: creatingOffer }] = useMutation(CREATE_OFFER_MUTATION)
   const [updateNotes, { loading: savingNotes }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
   const [updateInvoiceText, { loading: savingInvoiceText }] = useMutation(UPDATE_CONTRACT_NOTES_MUTATION)
   const [reorderItems] = useMutation(REORDER_CONTRACT_ITEMS_MUTATION)
@@ -972,6 +978,41 @@ export function ContractDetail() {
     if (!confirm(t('contracts.delivery.confirmRevert'))) return
     await revertDelivery({ variables: { itemId: item.id } })
     refetch()
+  }
+
+  // Open the Create-Offer dialog with a sensible default billing date.
+  // Per spec: defaults to the contract's start date if available, else today.
+  const openCreateOfferDialog = () => {
+    setCreateOfferError(null)
+    const start = contract?.startDate
+    const defaultDate = start && typeof start === 'string'
+      ? start
+      : new Date().toISOString().slice(0, 10)
+    setCreateOfferBillingDate(defaultDate)
+    setCreateOfferDialogOpen(true)
+  }
+
+  const submitCreateOfferDialog = async () => {
+    if (!contract || !createOfferBillingDate) return
+    setCreateOfferError(null)
+    try {
+      const result = await createOfferFromContract({
+        variables: {
+          contractId: parseInt(contract.id),
+          billingDate: createOfferBillingDate,
+        },
+      })
+      if (result.data?.createOffer?.success && result.data.createOffer.offer) {
+        setCreateOfferDialogOpen(false)
+        navigate(`/offers/${result.data.createOffer.offer.id}`)
+      } else {
+        setCreateOfferError(
+          result.data?.createOffer?.error || t('common.unknownError', { defaultValue: 'Unknown error' }),
+        )
+      }
+    } catch (e) {
+      setCreateOfferError(e instanceof Error ? e.message : String(e))
+    }
   }
 
   const handleSaveNotes = async () => {
@@ -1151,6 +1192,16 @@ export function ContractDetail() {
         {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
           <HelpVideoButton />
+          {contract.status === 'draft' && (
+            <Button
+              variant="outline"
+              onClick={openCreateOfferDialog}
+              data-testid="contract-create-offer"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              {t('offers.createOffer', { defaultValue: 'Create Offer' })}
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => {
@@ -1198,6 +1249,60 @@ export function ContractDetail() {
           window.location.reload()
         }}
       />
+
+      {/* Create Offer Dialog (draft contracts only) */}
+      <Dialog
+        open={createOfferDialogOpen}
+        onOpenChange={(open) => {
+          setCreateOfferDialogOpen(open)
+          if (!open) setCreateOfferError(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {t('offers.createOfferDialogTitle', { defaultValue: 'Create Offer' })}
+            </DialogTitle>
+            <DialogDescription>
+              {t('offers.createOfferDialogDescription', {
+                defaultValue:
+                  'Pick the billing date the offer should cover. Defaults to the contract start.',
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <label className="block text-sm font-medium">
+              {t('offers.billingDate', { defaultValue: 'Billing date' })}
+            </label>
+            <Input
+              type="date"
+              value={createOfferBillingDate}
+              onChange={(e) => setCreateOfferBillingDate(e.target.value)}
+              data-testid="contract-create-offer-date"
+            />
+            {createOfferError && (
+              <p className="text-sm text-red-600">{createOfferError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setCreateOfferDialogOpen(false)}
+              disabled={creatingOffer}
+            >
+              {t('common.cancel', { defaultValue: 'Cancel' })}
+            </Button>
+            <Button
+              onClick={submitCreateOfferDialog}
+              disabled={creatingOffer || !createOfferBillingDate}
+              data-testid="contract-create-offer-submit"
+            >
+              {creatingOffer && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {t('offers.createOffer', { defaultValue: 'Create Offer' })}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Overview Cards */}
       <div className="mb-6 grid gap-4 md:grid-cols-5">

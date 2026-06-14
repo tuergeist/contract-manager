@@ -386,6 +386,12 @@
         </tbody>
     </table>
 
+    {% if free_text_after_items_html %}
+    <div class="offer-free-text after-items" style="margin: 12px 0; font-size: 9pt; line-height: 1.4;">
+        {{ free_text_after_items_html|safe }}
+    </div>
+    {% endif %}
+
     <!-- Totals -->
     <div class="totals">
         <div class="total-row subtotal">
@@ -405,6 +411,23 @@
     </div>
 
     <div style="clear: both;"></div>
+
+    {% if minimum_term_line %}
+    <div class="offer-notes" style="font-size: 9pt; margin-top: 8px;">
+        {{ minimum_term_line }}
+    </div>
+    {% endif %}
+    {% if notice_period_line %}
+    <div class="offer-notes" style="font-size: 9pt;">
+        {{ notice_period_line }}
+    </div>
+    {% endif %}
+
+    {% if free_text_before_terms_html %}
+    <div class="offer-free-text before-terms" style="margin: 12px 0; font-size: 9pt; line-height: 1.4;">
+        {{ free_text_before_terms_html|safe }}
+    </div>
+    {% endif %}
 
     {% if vat_sentence %}
     <div class="offer-notes" style="font-weight: bold; font-size: 8pt; color: #555;">

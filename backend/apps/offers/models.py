@@ -53,9 +53,15 @@ class OfferRecord(TenantModel):
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
         SENT = "sent", "Sent"
-        ACCEPTED = "accepted", "Accepted"
-        REJECTED = "rejected", "Rejected"
-        CANCELLED = "cancelled", "Cancelled"
+        FINALIZED = "finalized", "Finalized"
+        # Legacy values kept for backwards compatibility with existing rows
+        # and for read-only display in the offer list. They MUST NOT be used
+        # as the target of a new transition. The supported lifecycle is:
+        #   draft -> sent       (system: on successful email_sent_at)
+        #   draft -> finalized  (user: explicit Finalize action)
+        ACCEPTED = "accepted", "Accepted (legacy)"
+        REJECTED = "rejected", "Rejected (legacy)"
+        CANCELLED = "cancelled", "Cancelled (legacy)"
 
     contract = models.ForeignKey(
         "contracts.Contract",
@@ -128,6 +134,35 @@ class OfferRecord(TenantModel):
         help_text="List of contract item IDs this offer covers. Null = all items.",
     )
 
+    # User-editable free-form Markdown blocks rendered in the PDF.
+    free_text_after_items = models.TextField(
+        blank=True,
+        default="",
+        help_text="Markdown rendered directly below the line-item table.",
+    )
+    free_text_before_terms = models.TextField(
+        blank=True,
+        default="",
+        help_text="Markdown rendered directly above the VAT block and any T&C section.",
+    )
+
+    # Snapshotted from contract.min_duration_months / notice_period_months at
+    # create time; user-overridable on drafts. Rendered into the PDF only when
+    # set and greater than zero.
+    minimum_term_months = models.PositiveIntegerField(null=True, blank=True)
+    notice_period_months = models.PositiveIntegerField(null=True, blank=True)
+
+    # Set when this offer was produced by "Copy to edit" on a locked source.
+    # SET_NULL so deleting the source does not cascade-destroy the clone audit
+    # trail.
+    cloned_from = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="clones",
+    )
+
     # Email sending tracking
     email_sent_at = models.DateTimeField(null=True, blank=True)
     email_sent_to = models.JSONField(default=list, blank=True)
@@ -144,3 +179,46 @@ class OfferRecord(TenantModel):
 
     def __str__(self):
         return f"Offer {self.offer_number} - {self.customer_name}"
+
+    # ------------------------------------------------------------------ #
+    # Field-group contract — single source of truth for what re-create
+    # overwrites vs what update_offer mutates. See
+    # openspec/specs/offer-edit/spec.md and design.md::Decision 1.
+    # ------------------------------------------------------------------ #
+    @classmethod
+    def _contract_derived_fields(cls) -> frozenset[str]:
+        """Fields rewritten by recreate_offer_from_contract."""
+        return frozenset({
+            "line_items_snapshot",
+            "company_data_snapshot",
+            "customer_name",
+            "contract_name",
+            "period_start",
+            "period_end",
+            "billing_date",
+            "total_net",
+            "tax_rate",
+            "tax_amount",
+            "total_gross",
+            "vat_sentence",
+        })
+
+    @classmethod
+    def _user_editable_fields(cls) -> frozenset[str]:
+        """Fields accepted by update_offer; preserved by re-create."""
+        return frozenset({
+            "free_text_after_items",
+            "free_text_before_terms",
+            "valid_until",
+            "minimum_term_months",
+            "notice_period_months",
+            "scoped_item_ids",
+        })
+
+    @property
+    def is_locked(self) -> bool:
+        """True when the offer is in a terminal locked status."""
+        return self.status in (
+            self.Status.SENT,
+            self.Status.FINALIZED,
+        )
