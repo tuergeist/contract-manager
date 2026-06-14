@@ -1,5 +1,24 @@
 [
   {
+    "version": "2.34.0",
+    "date": "2026-06-14",
+    "title": "Angebote: Entwürfe bearbeiten, finalisieren, PDF am Vertrag anhängen",
+    "description": "Angebote im Status „Entwurf\" sind jetzt direkt im Detail bearbeitbar (Markdown-Freitexte, Mindestlaufzeit, Kündigungsfrist, Gültig bis). Sobald ein Angebot versendet oder über die neue Aktion „Festschreiben\" gesperrt wird, hängt das PDF automatisch in der Anhängeliste des Vertrages. Gesperrte Angebote lassen sich per „Zum Bearbeiten kopieren\" als neuer Entwurf weiterverwenden.",
+    "type": "feature",
+    "details": [
+      "Neuer Button „Angebot erstellen\" im Header von Entwurfs-Verträgen (links neben „Add Todo\")",
+      "Angebotsdetail: zwei Markdown-Freitextfelder mit Live-Vorschau (nach Positionen, vor AGB), inline-editierbare Felder für Gültig bis, Mindestlaufzeit und Kündigungsfrist; Auto-Speichern beim Verlassen des Feldes",
+      "Mindestlaufzeit und Kündigungsfrist werden nur ins PDF gedruckt, wenn der Wert > 0 ist (deutscher und englischer Wortlaut)",
+      "Lebenszyklus vereinfacht: Entwurf → Versendet (nach erfolgreichem E-Mail-Versand) oder Festgeschrieben (manuell). Beide Zielzustände sind gesperrt — kein Bearbeiten, keine Statuswechsel mehr",
+      "Aktion „Aus Vertrag neu einlesen\" auf Entwürfen: aktualisiert Positionen, Beträge und Firmendaten aus dem aktuellen Vertrag, erhält Freitexte und manuelle Überschreibungen, Angebotsnummer bleibt",
+      "Gesperrte Angebote zeigen einen prominenten Hinweisbanner mit Versanddatum / Festschreibedatum und dem Hinweis auf „Zum Bearbeiten kopieren\"",
+      "„Zum Bearbeiten kopieren\" erzeugt aus einem gesperrten Angebot einen neuen Entwurf mit frischer Angebotsnummer; Inhalt wird 1:1 kopiert, der Vertrag wird dabei nicht neu eingelesen",
+      "Festgeschriebene oder versendete Angebote werden als Anhang mit Kategorie „offer\" automatisch in den Vertragsanhängen sichtbar; mehrere Anhänge pro Vertrag möglich (Audit-Trail)",
+      "Neue Berechtigung „offers.finalize\" — separat von Schreibrechten, damit z. B. eine Finance-Rolle festschreiben darf ohne Vollzugriff. Admin-Rolle erhält das Recht automatisch via Migration",
+      "20 neue Service-Layer-Tests + 23 PDF-Rendering-Tests; gesamte Backend-Suite bei 1525 grün"
+    ]
+  },
+  {
     "version": "2.33.6",
     "date": "2026-06-11",
     "title": "Bugfix: Angebotserstellung scheitert bei kollidierender Angebotsnummer",
