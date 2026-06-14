@@ -67,7 +67,7 @@
 
 ## 8. Docs + rollout
 
-- [ ] 8.1 Update CLAUDE.md with the editable-surface contract and the lifecycle change.
-- [ ] 8.2 Add changelog entry for the release that ships this change.
-- [ ] 8.3 Verify the change end-to-end on staging: create from contract page → edit free-text → finalize → confirm the PDF appears as a `ContractAttachment` on the contract detail page; clone-to-edit → new draft has same content + new number.
-- [ ] 8.4 Run `/opsx:verify offer-edit-and-finalize` before archiving the change.
+- [x] 8.1 CLAUDE.md updated with a dedicated "Offer Lifecycle (since 2.34.0)" section: state machine, editable-surface contract, re-create semantics, attachment behavior, copy-to-edit, and the new `offers.finalize` permission.
+- [x] 8.2 Changelog entry for 2.34.0 added to `frontend/public/changelogs.json`. Type `feature`. Tag 2.34.0 pushed.
+- [ ] 8.3 Staging smoke test — user-side action, not runnable from here. Smoke path: open a draft contract → Create Offer → edit Markdown blocks → save → Finalize → confirm the offer PDF appears in the contract attachments tab; on the locked offer → Copy to edit → verify the new draft has the same content + a fresh offer_number.
+- [x] 8.4 `/opsx:verify offer-edit-and-finalize` run: 43/50 done with 7 explicit deferrals (E2E ×2, scoped-item picker, Vitest, staging smoke). `openspec validate` green. Ship-ready verdict locked.

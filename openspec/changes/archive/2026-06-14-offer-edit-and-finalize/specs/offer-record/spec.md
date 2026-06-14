@@ -115,16 +115,23 @@ The system SHALL extend `OfferRecord` with the new fields needed to support draf
 - **THEN** existing `OfferRecord` rows SHALL have `free_text_*` set to empty string, `minimum_term_months` and `notice_period_months` set to `None`, and `cloned_from` set to `None`
 - **AND** no retroactive snapshot updates SHALL occur
 
-## REMOVED Requirements
+<!--
+  Notes on removed behavior (handled by the MODIFIED requirements above):
 
-### Requirement: Update offer validity
+  - The previous `updateOffer(id, validUntil, notes)` mutation signature is
+    replaced by `updateOffer(id, input: UpdateOfferInput!)` covering the
+    full editable surface. The legacy `notes` field stays on the model for
+    backwards-compatible reads but is no longer rendered.
+  - The previous free-form `updateOfferStatus(id, status)` mutation is
+    deprecated. The lifecycle is now `draft → sent | finalized` only;
+    `sent` is system-driven inside the email-send task, `finalized` is the
+    user-driven Finalize action. The old `accepted / rejected / cancelled /
+    expired` values stay readable in existing rows but no new transition
+    lands there.
 
-**Reason**: The previous `updateOffer(id, validUntil, notes)` mutation is replaced by the broader editable-surface mutation defined in the new `offer-edit` spec, which supports the Markdown free-text fields, minimum-term / notice-period, and scoped item edits.
+  These are captured in the MODIFIED "GraphQL API for offers" and
+  "Offer status lifecycle" requirements above. No formal REMOVED block
+  is needed because the legacy behavior was scenarios inside existing
+  requirements, not requirements of their own.
+-->
 
-**Migration**: Callers of the old mutation SHOULD switch to `updateOffer(id, input: UpdateOfferInput!)`. The `notes` field is replaced by `freeTextAfterItems` plus `freeTextBeforeTerms`. Existing `OfferRecord.notes` content (if any) is preserved in the database but is no longer surfaced or rendered.
-
-### Requirement: Update offer status
-
-**Reason**: Free-form status transitions are replaced by the dedicated `finalizeOffer` mutation plus the system-driven `sent` transition inside the email-send task. The lifecycle is reduced to `draft → sent | finalized` and there is no longer a manual `accepted` / `rejected` / `cancelled` action.
-
-**Migration**: Callers of `updateOfferStatus(id, status)` SHOULD be removed. Use `finalizeOffer(id)` for the user-driven lock, the existing `sendOfferEmail` flow for the system-driven lock, and `deleteOffer(id)` for cancelling a draft. Existing `OfferRecord` rows with status `accepted`, `rejected`, `cancelled`, or `expired` are preserved in the database; the GraphQL enum keeps these values for backwards-compatible reads. New transitions to these statuses are no longer allowed.
