@@ -235,10 +235,16 @@ export function OfferDetail() {
   const [validUntil, setValidUntil] = useState('')
   const [minimumTerm, setMinimumTerm] = useState('')
   const [noticePeriod, setNoticePeriod] = useState('')
+  const [isDirty, setIsDirty] = useState(false)
+  // Bumped after each successful save so the PDF preview re-fetches even
+  // though `pdfUrl` is the same string (backend writes to the same path).
+  const [pdfReloadToken, setPdfReloadToken] = useState(0)
 
-  // Reset local state whenever the offer is refetched. We deliberately
-  // do not echo the local state back into the query cache — the source
-  // of truth is the server response after each save.
+  // Reset local state ONLY when the offer ID changes (i.e. user navigates
+  // to a different offer). Refetches of the SAME offer must not blow
+  // away in-progress edits — that was the bug behind "save doesn't stick":
+  // typing field A, blurring, then typing in field B; the refetch after
+  // A's save would clobber B's draft state with the stale server value.
   useEffect(() => {
     if (!offer) return
     setFreeTextAfter(offer.freeTextAfterItems || '')
@@ -250,14 +256,19 @@ export function OfferDetail() {
     setNoticePeriod(
       offer.noticePeriodMonths != null ? String(offer.noticePeriodMonths) : '',
     )
-  }, [offer?.id, offer?.freeTextAfterItems, offer?.freeTextBeforeTerms, offer?.validUntil, offer?.minimumTermMonths, offer?.noticePeriodMonths])
+    setIsDirty(false)
+  }, [offer?.id])
 
-  // ---------- PDF blob fetch (keeps existing pattern) ----------
+  // ---------- PDF blob fetch ----------
+  // Re-runs when `pdfReloadToken` changes (after each save) so the
+  // preview reflects the server-side regenerated PDF. Without this, the
+  // iframe keeps showing the pre-save PDF because `offer.pdfUrl` is the
+  // same string after re-save (same file path, contents replaced).
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null)
   useEffect(() => {
     if (!offer?.pdfUrl) return
     const token = getToken()
-    fetch(`/api/offers/${offer.id}/pdf/`, {
+    fetch(`/api/offers/${offer.id}/pdf/?t=${pdfReloadToken}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => (r.ok ? r.blob() : Promise.reject()))
@@ -269,7 +280,7 @@ export function OfferDetail() {
         return null
       })
     }
-  }, [offer?.id, offer?.pdfUrl])
+  }, [offer?.id, offer?.pdfUrl, pdfReloadToken])
 
   // Auto-dismiss toast
   useEffect(() => {
@@ -332,12 +343,17 @@ export function OfferDetail() {
 
   const saveAll = async () => {
     if (!isDraft) return
+    if (!isDirty) return
     const result = await updateOffer({
       variables: { id: offer.id, input: buildUpdateInput() },
     })
     const payload = result.data?.updateOffer
     if (payload?.success) {
       setToast({ kind: 'success', text: t('offers.saved') })
+      setIsDirty(false)
+      // Force the PDF preview to re-fetch even though the URL string
+      // didn't change — server overwrote the same file path.
+      setPdfReloadToken((n) => n + 1)
       refetch()
     } else {
       setToast({
@@ -353,6 +369,7 @@ export function OfferDetail() {
     const payload = result.data?.recreateOfferFromContract
     if (payload?.success) {
       setToast({ kind: 'success', text: t('offers.recreated') })
+      setPdfReloadToken((n) => n + 1)
       refetch()
     } else {
       setToast({
@@ -368,6 +385,7 @@ export function OfferDetail() {
     const payload = result.data?.finalizeOffer
     if (payload?.success) {
       setToast({ kind: 'success', text: t('offers.finalized') })
+      setPdfReloadToken((n) => n + 1)
       refetch()
     } else {
       setToast({
@@ -491,11 +509,18 @@ export function OfferDetail() {
           {/* Draft actions */}
           {isDraft && (
             <>
+              {isDirty && !saving && (
+                <span className="text-xs italic text-amber-600">
+                  {t('offers.unsavedChanges', {
+                    defaultValue: 'Ungespeicherte Änderungen',
+                  })}
+                </span>
+              )}
               <Button
                 size="sm"
-                variant="outline"
+                variant={isDirty ? 'default' : 'outline'}
                 onClick={saveAll}
-                disabled={saving}
+                disabled={saving || !isDirty}
                 data-testid="offer-save"
               >
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -614,7 +639,7 @@ export function OfferDetail() {
                   type="date"
                   className="h-7 text-sm"
                   value={validUntil}
-                  onChange={(e) => setValidUntil(e.target.value)}
+                  onChange={(e) => { setValidUntil(e.target.value); setIsDirty(true) }}
                   onBlur={saveAll}
                   data-testid="offer-valid-until"
                 />
@@ -683,7 +708,7 @@ export function OfferDetail() {
                   step="1"
                   className="h-7 text-sm"
                   value={minimumTerm}
-                  onChange={(e) => setMinimumTerm(e.target.value)}
+                  onChange={(e) => { setMinimumTerm(e.target.value); setIsDirty(true) }}
                   onBlur={saveAll}
                   data-testid="offer-min-term"
                 />
@@ -705,7 +730,7 @@ export function OfferDetail() {
                   step="1"
                   className="h-7 text-sm"
                   value={noticePeriod}
-                  onChange={(e) => setNoticePeriod(e.target.value)}
+                  onChange={(e) => { setNoticePeriod(e.target.value); setIsDirty(true) }}
                   onBlur={saveAll}
                   data-testid="offer-notice-period"
                 />
@@ -724,7 +749,7 @@ export function OfferDetail() {
             label={t('offers.freeTextAfterItems')}
             hint={t('offers.freeTextHint')}
             value={freeTextAfter}
-            onChange={setFreeTextAfter}
+            onChange={(v) => { setFreeTextAfter(v); setIsDirty(true) }}
             onBlur={saveAll}
             readOnly={!isDraft}
             testid="offer-free-text-after"
@@ -733,7 +758,7 @@ export function OfferDetail() {
             label={t('offers.freeTextBeforeTerms')}
             hint={t('offers.freeTextHint')}
             value={freeTextBefore}
-            onChange={setFreeTextBefore}
+            onChange={(v) => { setFreeTextBefore(v); setIsDirty(true) }}
             onBlur={saveAll}
             readOnly={!isDraft}
             testid="offer-free-text-before"
@@ -844,6 +869,14 @@ export function OfferDetail() {
 
         {/* Right: PDF Preview */}
         <div>
+          {isDraft && (
+            <p className="mb-2 text-xs text-gray-500">
+              {t('offers.pdfPreviewHint', {
+                defaultValue:
+                  'PDF wird beim Speichern neu erzeugt. Klick auf „Speichern", um Änderungen zu übernehmen.',
+              })}
+            </p>
+          )}
           {pdfBlobUrl ? (
             <div
               className="overflow-hidden rounded-lg border bg-white"

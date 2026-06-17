@@ -2379,6 +2379,8 @@
     "lockedBannerHint": "No further edits possible. Use \"Copy to edit\" to start a new draft from this offer.",
     "saveFailed": "Save failed",
     "saved": "Saved",
+    "unsavedChanges": "Unsaved changes",
+    "pdfPreviewHint": "PDF is regenerated on save. Click \"Save\" to apply changes.",
     "searchPlaceholder": "Search by offer number, customer, contract...",
     "noOffers": "No offers found",
     "allStatuses": "All",
