@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.34.1",
+    "date": "2026-06-17",
+    "title": "Angebote: Bearbeitung speichert zuverlässig, PDF-Vorschau aktualisiert nach Speichern",
+    "description": "Behebt zwei Folgefehler aus 2.34.0 auf der Angebotsdetailseite: Eingaben in Bearbeitungsfeldern gingen unter Umständen verloren, und die PDF-Vorschau zeigte nach dem Speichern noch den alten Stand.",
+    "type": "bugfix",
+    "details": [
+      "Eingaben in einem Feld werden nicht mehr überschrieben, während gerade ein anderes Feld gespeichert wird (Race-Bedingung zwischen Blur-Save und Server-Antwort behoben)",
+      "PDF-Vorschau im rechten Panel lädt nach jedem Speichern, „Aus Vertrag neu einlesen\" oder „Festschreiben\" automatisch neu — vorher zeigte das iframe den vor-Speicher-Stand",
+      "„Speichern\"-Button wechselt auf Blau und zeigt einen amber „Ungespeicherte Änderungen\"-Hinweis, sobald ein Feld geändert wurde",
+      "Hinweistext unter der PDF-Vorschau erklärt, dass das PDF beim Speichern neu erzeugt wird"
+    ]
+  },
+  {
     "version": "2.34.0",
     "date": "2026-06-14",
     "title": "Angebote: Entwürfe bearbeiten, finalisieren, PDF am Vertrag anhängen",
