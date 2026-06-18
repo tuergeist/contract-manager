@@ -363,7 +363,12 @@ class OfferService:
 
         with transaction.atomic():
             record = (
-                OfferRecord.objects.select_for_update()
+                # of=("self",) so the row-level lock only applies to the
+                # OfferRecord row, not the joined contract/customer tables.
+                # Both FKs are nullable (on_delete=SET_NULL) so select_related
+                # generates a LEFT OUTER JOIN, and Postgres refuses
+                # FOR UPDATE on the nullable side of an outer join.
+                OfferRecord.objects.select_for_update(of=("self",))
                 .select_related("contract", "customer")
                 .get(id=record_id, tenant=self.tenant)
             )
@@ -406,7 +411,12 @@ class OfferService:
 
         with transaction.atomic():
             record = (
-                OfferRecord.objects.select_for_update()
+                # of=("self",) so the row-level lock only applies to the
+                # OfferRecord row, not the joined contract/customer tables.
+                # Both FKs are nullable (on_delete=SET_NULL) so select_related
+                # generates a LEFT OUTER JOIN, and Postgres refuses
+                # FOR UPDATE on the nullable side of an outer join.
+                OfferRecord.objects.select_for_update(of=("self",))
                 .select_related("contract", "customer")
                 .get(id=record_id, tenant=self.tenant)
             )
@@ -462,7 +472,8 @@ class OfferService:
 
         with transaction.atomic():
             record = (
-                OfferRecord.objects.select_for_update()
+                # of=("self",) — same nullable-FK trap as update_offer.
+                OfferRecord.objects.select_for_update(of=("self",))
                 .select_related("contract")
                 .get(id=record_id, tenant=self.tenant)
             )

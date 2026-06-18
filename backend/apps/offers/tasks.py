@@ -138,7 +138,9 @@ def send_offer_email_task(
     try:
         with transaction.atomic():
             locked = (
-                OfferRecord.objects.select_for_update()
+                # of=("self",) — contract FK is nullable so select_related
+                # produces a LEFT OUTER JOIN that Postgres refuses to lock.
+                OfferRecord.objects.select_for_update(of=("self",))
                 .select_related("contract", "tenant")
                 .get(id=record.id)
             )
