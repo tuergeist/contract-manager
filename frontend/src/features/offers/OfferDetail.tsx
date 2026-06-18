@@ -366,21 +366,35 @@ export function OfferDetail() {
   const saveAll = async () => {
     if (!isDraft) return
     if (!isDirty) return
-    const result = await updateOffer({
-      variables: { id: offer.id, input: buildUpdateInput() },
-    })
-    const payload = result.data?.updateOffer
-    if (payload?.success) {
-      setToast({ kind: 'success', text: t('offers.saved') })
-      // isDirty is derived from local vs server values — after refetch
-      // returns the new server values that match what we just sent,
-      // isDirty becomes false automatically. No setter needed.
-      setPdfReloadToken((n) => n + 1)
-      refetch()
-    } else {
+    try {
+      const result = await updateOffer({
+        variables: { id: offer.id, input: buildUpdateInput() },
+      })
+      const payload = result.data?.updateOffer
+      if (payload?.success) {
+        setToast({ kind: 'success', text: t('offers.saved') })
+        // isDirty is derived from local vs server values — after refetch
+        // returns the new server values that match what we just sent,
+        // isDirty becomes false automatically. No setter needed.
+        setPdfReloadToken((n) => n + 1)
+        refetch()
+      } else {
+        setToast({
+          kind: 'error',
+          text: payload?.error || t('offers.saveFailed'),
+        })
+      }
+    } catch (e) {
+      // Network error, GraphQL errors with errorPolicy=none, or any
+      // other throw inside the Apollo client. Without this catch, the
+      // promise rejection was swallowed and the user saw nothing —
+      // looked like "save silently fails".
+      const message = e instanceof Error ? e.message : String(e)
+      // eslint-disable-next-line no-console
+      console.error('Offer save threw:', e)
       setToast({
         kind: 'error',
-        text: payload?.error || t('offers.saveFailed'),
+        text: `${t('offers.saveFailed')}: ${message}`,
       })
     }
   }
@@ -904,11 +918,28 @@ export function OfferDetail() {
               className="overflow-hidden rounded-lg border bg-white"
               style={{ height: '80vh' }}
             >
-              <iframe
-                src={pdfBlobUrl}
+              {/*
+                Use <object> (not <iframe>) for the PDF preview. Chrome's
+                built-in PDFium viewer behaves differently with iframes
+                vs <object>/<embed> — iframes hosting a PDF can cause the
+                DevTools panel to detach or auto-close (reported as
+                page-specific "DevTools not allowed" by users on this
+                detail page). <object> with type=application/pdf renders
+                the same way without that quirk. The `key` forces a clean
+                remount when the blob URL changes (after each save) so the
+                viewer picks up the new PDF instead of caching the old one.
+              */}
+              <object
+                key={pdfBlobUrl}
+                data={pdfBlobUrl}
+                type="application/pdf"
                 className="h-full w-full"
-                title={`Offer ${offer.offerNumber}`}
-              />
+                aria-label={`Offer ${offer.offerNumber}`}
+              >
+                <p className="p-4 text-sm text-gray-500">
+                  {t('offers.detail.noPdf')}
+                </p>
+              </object>
             </div>
           ) : (
             <div
