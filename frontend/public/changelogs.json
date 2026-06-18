@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.34.4",
+    "date": "2026-06-18",
+    "title": "Angebote: DevTools-Quirk im PDF-Preview behoben + Speichern-Fehler sichtbar",
+    "description": "Zwei kleinere Folgefixe auf der Angebotsdetailseite: Chrome-DevTools schlossen sich beim Navigieren zur Seite automatisch (PDF-Vorschau im iframe), und Netzwerkfehler beim Speichern blieben unsichtbar.",
+    "type": "bugfix",
+    "details": [
+      "PDF-Vorschau nutzt jetzt <object> statt <iframe> — verhindert ein Chromium-Quirk, bei dem PDFium den iframe übernimmt und die DevTools des umgebenden Tabs auto-schließt",
+      "Bei Netzwerk- oder GraphQL-Fehlern während des Speicherns wird jetzt ein Toast mit der Fehlermeldung angezeigt und zusätzlich in der Browser-Konsole geloggt — vorher schlug Speichern teilweise lautlos fehl"
+    ]
+  },
+  {
     "version": "2.34.3",
     "date": "2026-06-18",
     "title": "CI-Fix: TS7022 in OfferDetail-Tests",
