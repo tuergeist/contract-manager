@@ -168,7 +168,7 @@ describe('OfferDetail — save flow', () => {
   it('clears dirty state after a successful save', async () => {
     // Mock cache reflects the updated value after the save mutation +
     // refetch round-trip, so the derived isDirty flips back to false.
-    const queryEntry = {
+    const queryEntry: QueryResult = {
       data: { offer: makeOffer() },
       loading: false,
       refetch: vi.fn().mockImplementation(async () => {
@@ -200,7 +200,7 @@ describe('OfferDetail — save flow', () => {
   it('typing in field B after field A was saved does NOT lose field B on the next refetch', async () => {
     // Repro of the 2.34.1 regression: race between blur-save of A and
     // user typing into B. State reset on refetch must not wipe B.
-    const queryEntry = {
+    const queryEntry: QueryResult = {
       data: { offer: makeOffer({ freeTextAfterItems: '' }) },
       loading: false,
       refetch: vi.fn().mockResolvedValue({}),
