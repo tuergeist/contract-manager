@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.34.5",
+    "date": "2026-06-18",
+    "title": "Angebote: Speichern auf Postgres reparariert (FOR UPDATE auf Outer Join)",
+    "description": "Beim Klick auf „Speichern\" warf das Backend in Produktion 'FOR UPDATE cannot be applied to the nullable side of an outer join'. Ursache: select_for_update kombiniert mit select_related auf nullable Fremdschlüsseln (contract, customer) erzeugte einen LEFT OUTER JOIN, den Postgres nicht sperren kann. Die Test-Suite lief gegen SQLite und hat den Fehler deshalb nicht erwischt.",
+    "type": "bugfix",
+    "details": [
+      "select_for_update(of=('self',)) sperrt jetzt nur die OfferRecord-Zeile selbst, nicht die verknüpften Tabellen",
+      "Fix gilt für alle vier locked-update-Pfade: updateOffer, recreateOfferFromContract, finalizeOffer und den post-send Status-Übergang im Email-Versand-Task",
+      "Lokal mit dem Docker-Postgres reproduziert und verifiziert"
+    ]
+  },
+  {
     "version": "2.34.4",
     "date": "2026-06-18",
     "title": "Angebote: DevTools-Quirk im PDF-Preview behoben + Speichern-Fehler sichtbar",
