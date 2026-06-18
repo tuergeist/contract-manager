@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.34.2",
+    "date": "2026-06-18",
+    "title": "Angebote: „Ungespeicherte Änderungen\"-Anzeige stabilisiert + erste Frontend-Tests",
+    "description": "Behebt eine Folge des 2.34.1-Fix: nach dem Klick auf „Speichern\" konnte der Hinweis „Ungespeicherte Änderungen\" kurz verschwinden und sofort wieder erscheinen, obwohl nichts geändert wurde.",
+    "type": "bugfix",
+    "details": [
+      "„Ungespeicherte Änderungen\" wird jetzt direkt aus dem Vergleich zwischen lokalem und Server-Zustand abgeleitet, statt über ein separates Flag gepflegt — kein Setter-Race mehr möglich",
+      "Nach erfolgreichem Speichern verschwindet der Hinweis sauber, sobald die Server-Daten zurückkommen, und bleibt weg",
+      "Neue Vitest-Coverage für die Angebotsdetailseite (7 Fälle): Save-Button-Gating, Race-Bedingung beim Wechsel zwischen Feldern, Locked-Banner und Fehlerbehandlung"
+    ]
+  },
+  {
     "version": "2.34.1",
     "date": "2026-06-17",
     "title": "Angebote: Bearbeitung speichert zuverlässig, PDF-Vorschau aktualisiert nach Speichern",
