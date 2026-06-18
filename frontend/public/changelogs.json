@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.34.3",
+    "date": "2026-06-18",
+    "title": "CI-Fix: TS7022 in OfferDetail-Tests",
+    "description": "Re-Release von 2.34.2 — Type-Check schlug auf einer Closure-Self-Referenz in den neuen Vitest-Mocks fehl und brach den Build. Funktional identisch zu 2.34.2.",
+    "type": "bugfix",
+    "details": [
+      "queryEntry in den OfferDetail-Tests explizit typisiert, damit der TypeScript-Compiler den Zirkelverweis nicht mehr meldet",
+      "Sonst keine Änderungen gegenüber 2.34.2"
+    ]
+  },
+  {
     "version": "2.34.2",
     "date": "2026-06-18",
     "title": "Angebote: „Ungespeicherte Änderungen\"-Anzeige stabilisiert + erste Frontend-Tests",
