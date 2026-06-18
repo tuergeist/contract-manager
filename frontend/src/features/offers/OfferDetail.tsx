@@ -235,16 +235,13 @@ export function OfferDetail() {
   const [validUntil, setValidUntil] = useState('')
   const [minimumTerm, setMinimumTerm] = useState('')
   const [noticePeriod, setNoticePeriod] = useState('')
-  const [isDirty, setIsDirty] = useState(false)
   // Bumped after each successful save so the PDF preview re-fetches even
   // though `pdfUrl` is the same string (backend writes to the same path).
   const [pdfReloadToken, setPdfReloadToken] = useState(0)
 
   // Reset local state ONLY when the offer ID changes (i.e. user navigates
   // to a different offer). Refetches of the SAME offer must not blow
-  // away in-progress edits — that was the bug behind "save doesn't stick":
-  // typing field A, blurring, then typing in field B; the refetch after
-  // A's save would clobber B's draft state with the stale server value.
+  // away in-progress edits.
   useEffect(() => {
     if (!offer) return
     setFreeTextAfter(offer.freeTextAfterItems || '')
@@ -256,8 +253,33 @@ export function OfferDetail() {
     setNoticePeriod(
       offer.noticePeriodMonths != null ? String(offer.noticePeriodMonths) : '',
     )
-    setIsDirty(false)
   }, [offer?.id])
+
+  // `isDirty` is DERIVED, not stored. Comparing local state to the
+  // server-side offer values means we never have to maintain a flag that
+  // can drift out of sync (which was the source of the "pill flickers back"
+  // user report — manual setIsDirty(false) after save could race against a
+  // re-render that picked up stale state). Pure-function approach is also
+  // immune to controlled-component onChange edge cases.
+  const isDirty = useMemo(() => {
+    if (!offer) return false
+    const serverMin = offer.minimumTermMonths != null ? String(offer.minimumTermMonths) : ''
+    const serverNotice = offer.noticePeriodMonths != null ? String(offer.noticePeriodMonths) : ''
+    return (
+      freeTextAfter !== (offer.freeTextAfterItems || '') ||
+      freeTextBefore !== (offer.freeTextBeforeTerms || '') ||
+      validUntil !== (offer.validUntil || '') ||
+      minimumTerm !== serverMin ||
+      noticePeriod !== serverNotice
+    )
+  }, [
+    offer,
+    freeTextAfter,
+    freeTextBefore,
+    validUntil,
+    minimumTerm,
+    noticePeriod,
+  ])
 
   // ---------- PDF blob fetch ----------
   // Re-runs when `pdfReloadToken` changes (after each save) so the
@@ -350,9 +372,9 @@ export function OfferDetail() {
     const payload = result.data?.updateOffer
     if (payload?.success) {
       setToast({ kind: 'success', text: t('offers.saved') })
-      setIsDirty(false)
-      // Force the PDF preview to re-fetch even though the URL string
-      // didn't change — server overwrote the same file path.
+      // isDirty is derived from local vs server values — after refetch
+      // returns the new server values that match what we just sent,
+      // isDirty becomes false automatically. No setter needed.
       setPdfReloadToken((n) => n + 1)
       refetch()
     } else {
@@ -639,7 +661,7 @@ export function OfferDetail() {
                   type="date"
                   className="h-7 text-sm"
                   value={validUntil}
-                  onChange={(e) => { setValidUntil(e.target.value); setIsDirty(true) }}
+                  onChange={(e) => { setValidUntil(e.target.value) }}
                   onBlur={saveAll}
                   data-testid="offer-valid-until"
                 />
@@ -708,7 +730,7 @@ export function OfferDetail() {
                   step="1"
                   className="h-7 text-sm"
                   value={minimumTerm}
-                  onChange={(e) => { setMinimumTerm(e.target.value); setIsDirty(true) }}
+                  onChange={(e) => { setMinimumTerm(e.target.value) }}
                   onBlur={saveAll}
                   data-testid="offer-min-term"
                 />
@@ -730,7 +752,7 @@ export function OfferDetail() {
                   step="1"
                   className="h-7 text-sm"
                   value={noticePeriod}
-                  onChange={(e) => { setNoticePeriod(e.target.value); setIsDirty(true) }}
+                  onChange={(e) => { setNoticePeriod(e.target.value) }}
                   onBlur={saveAll}
                   data-testid="offer-notice-period"
                 />
@@ -749,7 +771,7 @@ export function OfferDetail() {
             label={t('offers.freeTextAfterItems')}
             hint={t('offers.freeTextHint')}
             value={freeTextAfter}
-            onChange={(v) => { setFreeTextAfter(v); setIsDirty(true) }}
+            onChange={(v) => { setFreeTextAfter(v) }}
             onBlur={saveAll}
             readOnly={!isDraft}
             testid="offer-free-text-after"
@@ -758,7 +780,7 @@ export function OfferDetail() {
             label={t('offers.freeTextBeforeTerms')}
             hint={t('offers.freeTextHint')}
             value={freeTextBefore}
-            onChange={(v) => { setFreeTextBefore(v); setIsDirty(true) }}
+            onChange={(v) => { setFreeTextBefore(v) }}
             onBlur={saveAll}
             readOnly={!isDraft}
             testid="offer-free-text-before"

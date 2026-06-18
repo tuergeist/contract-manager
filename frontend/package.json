@@ -74,5 +74,8 @@
     "typescript-eslint": "^8.0.0",
     "vite": "^5.1.0",
     "vitest": "^1.2.0"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-darwin-x64": "^4.62.0"
   }
 }
