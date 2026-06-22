@@ -12,13 +12,20 @@ logger = logging.getLogger(__name__)
 
 
 class ClockodoProvider(TimeTrackingProvider):
-    """Clockodo API v2 integration.
+    """Clockodo API v3 integration.
+
+    Clockodo deprecated v2 in mid-2026. POST requests on v2 now return
+    HTTP 410 with the message "This API version has been deprecated and
+    is no longer available. Please upgrade to the latest version." All
+    endpoints we use (aggregates/users/me, absences, entrygroups,
+    customers, projects) are available on v3 with the same paths and
+    payload shapes documented at https://www.clockodo.com/en/api/.
 
     API docs: https://www.clockodo.com/en/api/
-    Base URL: https://my.clockodo.com/api/v2
+    Base URL: https://my.clockodo.com/api/v3
     """
 
-    API_BASE = "https://my.clockodo.com/api/v2"
+    API_BASE = "https://my.clockodo.com/api/v3"
 
     def __init__(self, config: dict):
         self.api_email = config.get("api_email", "")
