@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.34.6",
+    "date": "2026-06-22",
+    "title": "Clockodo: API v2 → v3 (Clockodo hat v2 abgeschaltet)",
+    "description": "Beim Anlegen eines One-off-Projekts (und anderen Schreiboperationen) gab Clockodo neuerdings 'This API version has been deprecated and is no longer available. Please upgrade to the latest version.' zurück. Auf v3 umgestellt.",
+    "type": "bugfix",
+    "details": [
+      "ClockodoProvider verwendet jetzt https://my.clockodo.com/api/v3 als Basis-URL",
+      "Alle genutzten Endpunkte (aggregates/users/me, absences, entrygroups, customers, projects) sind auf v3 in identischer Form vorhanden; keine weiteren Anpassungen nötig"
+    ]
+  },
+  {
     "version": "2.34.5",
     "date": "2026-06-18",
     "title": "Angebote: Speichern auf Postgres reparariert (FOR UPDATE auf Outer Join)",
