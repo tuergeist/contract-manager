@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.34.7",
+    "date": "2026-06-23",
+    "title": "Claude-Modell zentralisiert + auf aktuellen Sonnet-Snapshot gebumpt",
+    "description": "Anthropic hat das bisher verwendete Sonnet-Snapshot zurückgezogen, die Extraktion lief auf 404. Wir verwenden jetzt eine zentrale Modell-Konfiguration (ANTHROPIC_MODEL, Default: claude-sonnet-4-6); zukünftige Modellwechsel sind eine 1-Zeilen-Änderung statt fünf.",
+    "type": "bugfix",
+    "details": [
+      "Alle fünf Code-Stellen (PDF-Extraktion, Eingangsrechnungs-Extraktion, zwei PDF-Analyse-Pfade, Assistent) lesen jetzt aus settings.ANTHROPIC_MODEL",
+      "Default auf claude-sonnet-4-6 (aktueller Sonnet-Snapshot); via ANTHROPIC_MODEL env-var überschreibbar",
+      "Während des Modell-Outages hängengebliebene importierte Rechnungen können mit dem bestehenden „Re-Extract\"-Button neu eingelesen werden — kein Löschen + neu Hochladen nötig"
+    ]
+  },
+  {
     "version": "2.34.6",
     "date": "2026-06-22",
     "title": "Clockodo: API v2 → v3 (Clockodo hat v2 abgeschaltet)",
