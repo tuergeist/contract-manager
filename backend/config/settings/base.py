@@ -201,8 +201,14 @@ CACHES = {
     }
 }
 
-# Anthropic (Claude API for PDF analysis)
+# Anthropic (Claude API for PDF analysis, invoice extraction, assistant)
 ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
+# Single point of truth for the Claude model ID. Anthropic does NOT support
+# a bare "claude-sonnet" alias (the historical "*-latest" aliases were
+# deprecated to prevent silent model swaps). Pin to a specific snapshot
+# here and override via env when bumping. Last bump: claude-sonnet-4-20250514
+# returned 404 (model removed) in mid-2026.
+ANTHROPIC_MODEL = env("ANTHROPIC_MODEL", default="claude-sonnet-4-6")
 
 # Feedback integration
 FEEDBACK_BACKEND = env("FEEDBACK_BACKEND", default="todoist")  # "todoist" or "github"

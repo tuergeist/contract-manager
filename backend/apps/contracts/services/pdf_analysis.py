@@ -127,7 +127,7 @@ def _extract_from_pdf(pdf_data: bytes) -> dict:
     pdf_base64 = base64.standard_b64encode(pdf_data).decode("utf-8")
     client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
     message = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model=settings.ANTHROPIC_MODEL,
         max_tokens=4096,
         messages=[
             {

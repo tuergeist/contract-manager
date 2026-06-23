@@ -120,7 +120,7 @@ class ChatView(View):
             max_iterations = 10
             for _ in range(max_iterations):
                 response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model=settings.ANTHROPIC_MODEL,
                     max_tokens=4096,
                     system=SYSTEM_PROMPT,
                     tools=TOOL_DEFINITIONS,
