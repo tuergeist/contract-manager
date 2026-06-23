@@ -12,20 +12,40 @@ logger = logging.getLogger(__name__)
 
 
 class ClockodoProvider(TimeTrackingProvider):
-    """Clockodo API v3 integration.
+    """Clockodo API integration.
 
-    Clockodo deprecated v2 in mid-2026. POST requests on v2 now return
-    HTTP 410 with the message "This API version has been deprecated and
-    is no longer available. Please upgrade to the latest version." All
-    endpoints we use (aggregates/users/me, absences, entrygroups,
-    customers, projects) are available on v3 with the same paths and
-    payload shapes documented at https://www.clockodo.com/en/api/.
+    Clockodo does NOT have a single versioned base URL. Each resource
+    lives on its own version path. The canonical mapping is published at
+    https://docs.clockodo.com/ (OpenAPI spec). As of June 2026:
 
-    API docs: https://www.clockodo.com/en/api/
-    Base URL: https://my.clockodo.com/api/v3
+        customers      → api/v3/customers
+        users          → api/v3/users
+        projects       → api/v4/projects      (v2+v3 deprecated → 404/410)
+        services       → api/v4/services      (v2+v3 deprecated → 410)
+        absences       → api/v4/absences      (v2+v3 deprecated)
+        entrygroups    → api/v2/entrygroups   (still the current path)
+        users/me            → api/v4/users/me             (v2/aggregates/users/me deprecated)
+
+    Our _request() now accepts a full path that already includes the version
+    prefix (e.g. "v4/projects"). API_BASE strips the version so callers
+    compose "v{N}/endpoint" strings.
     """
 
-    API_BASE = "https://my.clockodo.com/api/v3"
+    API_BASE = "https://my.clockodo.com/api"
+
+    # Per-resource version prefixes derived from docs.clockodo.com OpenAPI spec.
+    # Full-path entries take precedence over resource-key entries.
+    _PATH_VERSIONS: dict[str, str] = {
+        "users/me": "v4",          # v4/users/me (successor to deprecated v2/aggregates/users/me)
+    }
+    _RESOURCE_VERSIONS: dict[str, str] = {
+        "customers": "v3",
+        "users": "v3",             # v3/users for listing all users
+        "projects": "v4",          # v4/projects (v2+v3 both deprecated)
+        "services": "v4",          # v4/services (v2+v3 both deprecated)
+        "absences": "v4",          # v4/absences (v2+v3 both deprecated)
+        "entrygroups": "v2",       # v2/entrygroups (still the current path, not yet in v3+)
+    }
 
     def __init__(self, config: dict):
         self.api_email = config.get("api_email", "")
@@ -39,8 +59,38 @@ class ClockodoProvider(TimeTrackingProvider):
             "Accept": "application/json",
         }
 
+    def _versioned(self, endpoint: str) -> str:
+        """Prefix `endpoint` with the correct Clockodo version segment.
+
+        Clockodo uses different version prefixes per resource (v2/v3/v4).
+        Callers pass the bare resource path WITHOUT version prefix
+        (e.g. "projects", "entrygroups", "users/me"); this method looks
+        up the right prefix and returns the full versioned path.
+
+        Full-path entries in _PATH_VERSIONS take precedence over
+        resource-key entries in _RESOURCE_VERSIONS so that "users/me"
+        can resolve to v4 while "users" resolves to v3.
+        """
+        # Full path match first (e.g. "users/me" → v4)
+        version = self._PATH_VERSIONS.get(endpoint)
+        if version is None:
+            # Fall back to top-level resource key
+            resource = endpoint.split("/")[0]
+            version = self._RESOURCE_VERSIONS.get(resource)
+        if version is None:
+            raise ValueError(
+                f"Unknown Clockodo resource '{endpoint}'. "
+                f"Add it to ClockodoProvider._PATH_VERSIONS or _RESOURCE_VERSIONS "
+                f"with the correct version prefix."
+            )
+        return f"{version}/{endpoint}"
+
     def _request(self, method: str, endpoint: str, **kwargs) -> dict:
         """Make an API request with exponential backoff retry on 429 and 5xx.
+
+        `endpoint` is the bare resource path WITHOUT a version prefix
+        (e.g. "projects", "entrygroups", "users/me"). The
+        correct version is looked up via _versioned().
 
         Clockodo's quota window is on the order of minutes, so the initial
         backoff starts high (30s) and doubles on each retry. Total worst-case
@@ -49,7 +99,7 @@ class ClockodoProvider(TimeTrackingProvider):
         On 4xx errors, the response body is logged and embedded in the raised
         exception so callers can surface a meaningful message to the user.
         """
-        url = f"{self.API_BASE}/{endpoint}"
+        url = f"{self.API_BASE}/{self._versioned(endpoint)}"
         max_attempts = 6
         initial_wait = 30  # seconds — Clockodo recovers slowly from 429
         for attempt in range(max_attempts):
@@ -125,7 +175,7 @@ class ClockodoProvider(TimeTrackingProvider):
     def test_connection(self) -> dict:
         """Test the Clockodo API connection."""
         try:
-            self._get("aggregates/users/me")
+            self._get("users/me")  # v4/users/me — v2/aggregates/users/me is deprecated
             return {"success": True}
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
@@ -137,7 +187,7 @@ class ClockodoProvider(TimeTrackingProvider):
     def get_projects(self) -> list[TimeTrackingProject]:
         """Fetch all projects from Clockodo."""
         try:
-            projects = self._get_all_pages("projects", "projects")
+            projects = self._get_all_pages("projects", "data")
         except Exception as e:
             logger.error("Failed to fetch Clockodo projects: %s", e)
             return []
@@ -145,7 +195,7 @@ class ClockodoProvider(TimeTrackingProvider):
         # Fetch customer names
         customers_by_id: dict[int, str] = {}
         try:
-            customers = self._get_all_pages("customers", "customers")
+            customers = self._get_all_pages("customers", "data")
             for c in customers:
                 customers_by_id[c["id"]] = c.get("name", "")
         except Exception as e:
@@ -166,7 +216,7 @@ class ClockodoProvider(TimeTrackingProvider):
     def get_services(self) -> list[dict]:
         """Fetch all services from Clockodo."""
         try:
-            services = self._get_all_pages("services", "services")
+            services = self._get_all_pages("services", "data")
             return [{"id": str(s["id"]), "name": s.get("name", "")} for s in services]
         except Exception as e:
             logger.error("Failed to fetch Clockodo services: %s", e)
@@ -175,7 +225,7 @@ class ClockodoProvider(TimeTrackingProvider):
     def get_users(self) -> list[dict]:
         """Fetch all users from Clockodo."""
         try:
-            users = self._get_all_pages("users", "users")
+            users = self._get_all_pages("users", "data")
             return [{"id": str(u["id"]), "name": u.get("name", "")} for u in users]
         except Exception as e:
             logger.error("Failed to fetch Clockodo users: %s", e)
@@ -185,7 +235,7 @@ class ClockodoProvider(TimeTrackingProvider):
         """Fetch absences for a given year from Clockodo."""
         try:
             data = self._get("absences", {"year": year})
-            absences = data.get("absences", [])
+            absences = data.get("data", [])
             return [
                 {
                     "user_id": str(a["users_id"]),
@@ -237,7 +287,7 @@ class ClockodoProvider(TimeTrackingProvider):
         # Fetch users for name lookup
         users_by_id: dict[int, str] = {}
         try:
-            users = self._get_all_pages("users", "users")
+            users = self._get_all_pages("users", "data")
             for u in users:
                 users_by_id[u["id"]] = u.get("name", "")
         except Exception as e:
@@ -246,7 +296,7 @@ class ClockodoProvider(TimeTrackingProvider):
         # Fetch services for name lookup
         services_by_id: dict[int, str] = {}
         try:
-            services = self._get_all_pages("services", "services")
+            services = self._get_all_pages("services", "data")
             for s in services:
                 services_by_id[s["id"]] = s.get("name", "")
         except Exception as e:
@@ -318,7 +368,7 @@ class ClockodoProvider(TimeTrackingProvider):
         # Fetch services for name lookup
         services_by_id: dict[int, str] = {}
         try:
-            services = self._get_all_pages("services", "services")
+            services = self._get_all_pages("services", "data")
             for s in services:
                 services_by_id[s["id"]] = s.get("name", "")
         except Exception as e:
@@ -410,7 +460,7 @@ class ClockodoProvider(TimeTrackingProvider):
             dict with 'id' (int) and 'name' (str)
         """
         data = self._post("customers", {"name": name})
-        customer = data.get("customer", data)
+        customer = data.get("data", data)
         return {"id": str(customer["id"]), "name": customer.get("name", name)}
 
     def create_project(self, customer_id: str, name: str, active: bool = True) -> dict:
@@ -424,13 +474,13 @@ class ClockodoProvider(TimeTrackingProvider):
             "customers_id": int(customer_id),
             "active": active,
         })
-        project = data.get("project", data)
+        project = data.get("data", data)
         return {"id": str(project["id"]), "name": project.get("name", name)}
 
     def get_customer_projects(self, customer_id: str) -> list[TimeTrackingProject]:
         """Fetch all projects for a specific Clockodo customer."""
         try:
-            projects = self._get_all_pages("projects", "projects", {
+            projects = self._get_all_pages("projects", "data", {
                 "filter[customers_id]": customer_id,
             })
             return [
@@ -449,7 +499,7 @@ class ClockodoProvider(TimeTrackingProvider):
     def get_customers(self, active_only: bool = True) -> list[dict]:
         """Fetch customers from Clockodo, optionally filtering out archived ones."""
         try:
-            customers = self._get_all_pages("customers", "customers")
+            customers = self._get_all_pages("customers", "data")
             if active_only:
                 customers = [c for c in customers if c.get("active", True)]
             return [{"id": str(c["id"]), "name": c.get("name", "")} for c in customers]

@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.34.8",
+    "date": "2026-06-23",
+    "title": "Clockodo: Korrekte API-Versionierung pro Endpunkt",
+    "description": "Clockodo verwendet keine einheitliche Basis-URL, sondern versionsiert jeden Endpunkt separat. Projekte und Services lagen auf v4, Entrygroups auf v2, Kunden/Nutzer auf v3 — außerdem verwenden alle v3/v4-Endpunkte \"data\" als Listenschlüssel statt ressourcenspezifischer Keys. Alle Fehler (leer zurückgegebene Projektlisten, fehlende Zeiterfassungsdaten, 404/410 auf Projekten und Services) sind damit behoben.",
+    "type": "bugfix",
+    "details": [
+      "Neue _versioned()-Methode: schlägt pro Endpunkt die korrekte Versionsnummer nach (v4: projects, services, absences, users/me — v3: customers, users — v2: entrygroups)",
+      "Alle GET-Antworten lesen jetzt den \"data\"-Schlüssel (v3/v4 einheitlich), statt des alten ressourcenspezifischen Keys",
+      "POST-Antworten (create_customer, create_project) ebenfalls auf \"data\" umgestellt",
+      "test_connection() nutzt v4/users/me statt des deprecated v2/aggregates/users/me"
+    ]
+  },
+  {
     "version": "2.34.7",
     "date": "2026-06-23",
     "title": "Claude-Modell zentralisiert + auf aktuellen Sonnet-Snapshot gebumpt",
