@@ -416,10 +416,42 @@ class TestCreateClockodoProjectForContract:
 
     @patch("apps.contracts.tasks.sync_time_tracking_mapping_task.delay")
     @patch("apps.contracts.services.time_tracking.get_provider")
-    def test_customer_not_linked_to_clockodo_returns_error(
+    def test_customer_not_linked_auto_creates_clockodo_customer(
         self, mock_get_provider, mock_sync, user, contract
     ):
-        """Contract whose customer lacks clockodo_customer_id is rejected."""
+        """When customer lacks clockodo_customer_id, the mutation auto-creates
+        the Clockodo customer and saves the ID back to the customer record."""
+        mock_provider = Mock()
+        mock_provider.create_customer.return_value = {"id": "CK-AUTO", "name": contract.customer.name}
+        mock_provider.create_project.return_value = {"id": "P-1", "name": "New Project"}
+        mock_get_provider.return_value = mock_provider
+
+        result = run_graphql(
+            CREATE_CLOCKODO_PROJECT_MUTATION,
+            {
+                "contractId": str(contract.id),
+                "projectName": "New Project",
+            },
+            make_context(user),
+        )
+
+        assert result.errors is None
+        data = result.data["createClockodoProjectForContract"]
+        assert data["success"] is True
+        mock_provider.create_customer.assert_called_once_with(contract.customer.name)
+        contract.customer.refresh_from_db()
+        assert contract.customer.clockodo_customer_id == "CK-AUTO"
+
+    @patch("apps.contracts.tasks.sync_time_tracking_mapping_task.delay")
+    @patch("apps.contracts.services.time_tracking.get_provider")
+    def test_customer_auto_create_failure_returns_error(
+        self, mock_get_provider, mock_sync, user, contract
+    ):
+        """When auto-creating the Clockodo customer fails, return the error."""
+        mock_provider = Mock()
+        mock_provider.create_customer.side_effect = Exception("Clockodo unreachable")
+        mock_get_provider.return_value = mock_provider
+
         result = run_graphql(
             CREATE_CLOCKODO_PROJECT_MUTATION,
             {
@@ -432,8 +464,7 @@ class TestCreateClockodoProjectForContract:
         assert result.errors is None
         data = result.data["createClockodoProjectForContract"]
         assert data["success"] is False
-        assert data["error"] == "Customer is not linked to Clockodo"
-        mock_get_provider.assert_not_called()
+        assert "Failed to create Clockodo customer" in data["error"]
 
     @patch("apps.contracts.tasks.sync_time_tracking_mapping_task.delay")
     @patch("apps.contracts.services.time_tracking.get_provider")
@@ -441,7 +472,9 @@ class TestCreateClockodoProjectForContract:
         self, mock_get_provider, mock_sync, user, tenant, contract_with_clockodo
     ):
         """When a maintenance mapping (contract_item=None) exists, omitting
-        contract_item_id returns an error."""
+        contract_item_id returns an error before any project is created."""
+        mock_provider = Mock()
+        mock_get_provider.return_value = mock_provider
         TimeTrackingProjectMapping.objects.create(
             tenant=tenant,
             contract=contract_with_clockodo,
@@ -463,7 +496,7 @@ class TestCreateClockodoProjectForContract:
         data = result.data["createClockodoProjectForContract"]
         assert data["success"] is False
         assert "maintenance project already exists" in data["error"].lower()
-        mock_get_provider.assert_not_called()
+        mock_provider.create_project.assert_not_called()
 
     @patch("apps.contracts.tasks.sync_time_tracking_mapping_task.delay")
     @patch("apps.contracts.services.time_tracking.get_provider")
@@ -618,7 +651,9 @@ class TestCreateClockodoProjectForContract:
         customer_with_clockodo,
         product,
     ):
-        """An item belonging to a different contract is rejected."""
+        """An item belonging to a different contract is rejected before any project is created."""
+        mock_provider = Mock()
+        mock_get_provider.return_value = mock_provider
         other_contract = Contract.objects.create(
             tenant=tenant,
             customer=customer_with_clockodo,
@@ -651,7 +686,7 @@ class TestCreateClockodoProjectForContract:
         data = result.data["createClockodoProjectForContract"]
         assert data["success"] is False
         assert data["error"] == "Item not found in this contract"
-        mock_get_provider.assert_not_called()
+        mock_provider.create_project.assert_not_called()
 
     @patch("apps.contracts.tasks.sync_time_tracking_mapping_task.delay")
     @patch("apps.contracts.services.time_tracking.get_provider")

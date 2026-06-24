@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Search, Sparkles, Bug, Zap, Shield, Loader2 } from 'lucide-react'
+import { Search, Sparkles, Bug, Zap, Shield, Loader2, ExternalLink, Github, Scale } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { formatDateTime, formatDate as formatDateUtil } from '@/lib/utils'
@@ -66,7 +66,7 @@ export function AboutPage() {
     fetch('/licenses-frontend.json')
       .then((r) => r.json())
       .then((data) => {
-        // license-checker-rsync2 returns an object keyed by package name
+        // license-checker returns an object keyed by "package@version"
         if (data && !Array.isArray(data)) {
           const entries = Object.entries(data).map(([key, val]) => {
             const v = val as LicenseEntry
@@ -185,6 +185,45 @@ export function AboutPage() {
         </TabsContent>
 
         <TabsContent value="about" className="mt-6 space-y-6">
+          {/* Project info: GitHub + License */}
+          <div className="rounded-lg border bg-white p-6">
+            <h2 className="mb-4 text-lg font-semibold">{t('about.project')}</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <h3 className="mb-2 text-sm font-medium text-gray-500 flex items-center gap-1.5">
+                  <Github className="h-4 w-4" />
+                  {t('about.sourceCode')}
+                </h3>
+                <a
+                  href="https://github.com/tuergeist/contract-manager"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  github.com/tuergeist/contract-manager
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
+              <div>
+                <h3 className="mb-2 text-sm font-medium text-gray-500 flex items-center gap-1.5">
+                  <Scale className="h-4 w-4" />
+                  {t('about.license')}
+                </h3>
+                <p className="text-sm font-medium">{t('about.licenseType')}</p>
+                <p className="mt-1 text-xs text-gray-500">{t('about.licenseDescription')}</p>
+                <a
+                  href="https://github.com/tuergeist/contract-manager/blob/main/LICENSE"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  {t('about.viewLicense')}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            </div>
+          </div>
+
           {/* Version Info */}
           <div className="rounded-lg border bg-white p-6">
             <h2 className="mb-4 text-lg font-semibold">{t('about.versionInfo')}</h2>

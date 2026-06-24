@@ -2290,7 +2290,13 @@
       "bugfix": "Bugfix",
       "improvement": "Improvement",
       "security": "Security"
-    }
+    },
+    "project": "Project",
+    "sourceCode": "Source Code on GitHub",
+    "license": "License",
+    "licenseType": "GNU General Public License v3.0 (GPL-3.0)",
+    "licenseDescription": "This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 or later.",
+    "viewLicense": "View License"
   },
   "helpVideo": {
     "button": "Quick Guide",
