@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.34.10",
+    "date": "2026-06-24",
+    "title": "Info-Tab: GitHub-Link, GPL-Lizenz + Projektname-Vorlage beim Anlegen",
+    "description": "Der Info-Tab zeigt jetzt den GitHub-Link und die GPL-v3-Lizenzinformationen. Beim Anlegen eines neuen Clockodo-Projekts wird der Projektname aus der Namens-Vorlage vorgeschlagen (statt leerem Feld).",
+    "type": "improvement",
+    "details": [
+      "Info-Tab: Link zu github.com/tuergeist/contract-manager und GPL-v3-Beschreibung mit Link zum Lizenzdokument",
+      "\"Neues Projekt anlegen\"-Formular: Projektname wird aus der konfigurierten Vorlage vorgeschlagen (via previewContractActivation)"
+    ]
+  },
+  {
     "version": "2.34.9",
     "date": "2026-06-24",
     "title": "Zeiterfassung: \"Neues Projekt anlegen\" immer verfügbar",
