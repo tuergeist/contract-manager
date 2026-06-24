@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useQuery, useMutation, gql } from '@apollo/client'
+import { useQuery, useLazyQuery, useMutation, gql } from '@apollo/client'
 import { Loader2, Plus, Link2, Clock, Search, Trash2, Wand2 } from 'lucide-react'
 import {
   Dialog,
@@ -599,6 +599,14 @@ export function TimeTrackingTab({ contractId, customerName, clockodoCustomerId, 
   )
 }
 
+const PROPOSED_PROJECT_NAME_QUERY = gql`
+  query ProposedClockodoProjectName($contractId: ID!) {
+    previewContractActivation(contractId: $contractId) {
+      maintenanceProjectName
+    }
+  }
+`
+
 const CREATE_CLOCKODO_PROJECT_MUTATION = gql`
   mutation CreateClockodoProjectForContract(
     $contractId: ID!
@@ -642,7 +650,7 @@ function LinkProjectDialog({
   const [search, setSearch] = useState(customerName)
   const [selectedItemId, setSelectedItemId] = useState('none')
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [newProjectName, setNewProjectName] = useState(customerName)
+  const [newProjectName, setNewProjectName] = useState('')
   const [createItemId, setCreateItemId] = useState('none')
   const [createError, setCreateError] = useState<string | null>(null)
   const [linkError, setLinkError] = useState<{
@@ -651,6 +659,14 @@ function LinkProjectDialog({
     conflictContractName: string | null
     conflictItemName: string | null
   } | null>(null)
+
+  const [fetchProposedName] = useLazyQuery(PROPOSED_PROJECT_NAME_QUERY, {
+    variables: { contractId },
+    onCompleted: (d) => {
+      const proposed = d?.previewContractActivation?.maintenanceProjectName
+      if (proposed && !newProjectName) setNewProjectName(proposed)
+    },
+  })
 
   const { data, loading } = useQuery(TIME_TRACKING_PROJECTS_QUERY, {
     variables: { search },
@@ -723,7 +739,7 @@ function LinkProjectDialog({
           <div className="rounded-lg border border-dashed border-gray-300 p-4">
               {!showCreateForm ? (
                 <button
-                  onClick={() => setShowCreateForm(true)}
+                  onClick={() => { setShowCreateForm(true); fetchProposedName() }}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   <Plus className="h-4 w-4" />
