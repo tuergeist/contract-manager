@@ -631,7 +631,6 @@ interface LinkProjectDialogProps {
 function LinkProjectDialog({
   contractId,
   customerName,
-  clockodoCustomerId,
   linkedProjectIds,
   hasMaintenance,
   allItems,
@@ -643,7 +642,7 @@ function LinkProjectDialog({
   const [search, setSearch] = useState(customerName)
   const [selectedItemId, setSelectedItemId] = useState('none')
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [newProjectName, setNewProjectName] = useState('')
+  const [newProjectName, setNewProjectName] = useState(customerName)
   const [createItemId, setCreateItemId] = useState('none')
   const [createError, setCreateError] = useState<string | null>(null)
   const [linkError, setLinkError] = useState<{
@@ -721,8 +720,7 @@ function LinkProjectDialog({
 
         <div className="space-y-4">
           {/* Create new project section */}
-          {clockodoCustomerId && (
-            <div className="rounded-lg border border-dashed border-gray-300 p-4">
+          <div className="rounded-lg border border-dashed border-gray-300 p-4">
               {!showCreateForm ? (
                 <button
                   onClick={() => setShowCreateForm(true)}
@@ -796,7 +794,6 @@ function LinkProjectDialog({
                 </div>
               )}
             </div>
-          )}
 
           {/* Search existing projects */}
           <div className="relative">

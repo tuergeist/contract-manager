@@ -6430,10 +6430,23 @@ class ContractMutation:
             return TimeTrackingMappingResult(success=False, error="Contract not found")
 
         customer = contract.customer
-        if not customer.clockodo_customer_id:
+
+        provider = get_provider(user.tenant)
+        if not provider:
             return TimeTrackingMappingResult(
-                success=False, error="Customer is not linked to Clockodo"
+                success=False, error="No time tracking provider configured"
             )
+
+        # Auto-create and link Clockodo customer if not yet linked
+        if not customer.clockodo_customer_id:
+            try:
+                clockodo_customer = provider.create_customer(customer.name)
+                customer.clockodo_customer_id = clockodo_customer["id"]
+                customer.save(update_fields=["clockodo_customer_id"])
+            except Exception as e:
+                return TimeTrackingMappingResult(
+                    success=False, error=f"Failed to create Clockodo customer: {e}"
+                )
 
         # If a maintenance mapping already exists, require a contract item
         has_maintenance = TimeTrackingProjectMapping.objects.filter(
@@ -6457,12 +6470,6 @@ class ContractMutation:
                 return TimeTrackingMappingResult(
                     success=False, error="Item not found in this contract"
                 )
-
-        provider = get_provider(user.tenant)
-        if not provider:
-            return TimeTrackingMappingResult(
-                success=False, error="No time tracking provider configured"
-            )
 
         try:
             result = provider.create_project(
