@@ -99,8 +99,8 @@ def preview_activation(contract: Contract) -> dict:
         "one_off_items": [],
     }
 
-    if not provider or not customer.clockodo_customer_id:
-        # Still populate items info even without linking
+    if not provider:
+        # Clockodo not configured — populate items info only
         items = contract.items.all()
         result["maintenance_needed"] = any(not item.is_one_off for item in items)
         result["one_off_items"] = [
@@ -124,14 +124,15 @@ def preview_activation(contract: Contract) -> dict:
         )
         result["maintenance_project_name"] = maintenance_name
 
-        # Check if maintenance project already exists in Clockodo
-        try:
-            existing_projects = provider.get_customer_projects(customer.clockodo_customer_id)
-            result["maintenance_project_exists"] = any(
-                p.name.lower() == maintenance_name.lower() for p in existing_projects
-            )
-        except Exception:
-            pass
+        # Check if project already exists in Clockodo — only possible when customer is linked
+        if customer.clockodo_customer_id:
+            try:
+                existing_projects = provider.get_customer_projects(customer.clockodo_customer_id)
+                result["maintenance_project_exists"] = any(
+                    p.name.lower() == maintenance_name.lower() for p in existing_projects
+                )
+            except Exception:
+                pass
 
     # Collect one-off items
     result["one_off_items"] = [
