@@ -463,17 +463,31 @@ class ClockodoProvider(TimeTrackingProvider):
         customer = data.get("data", data)
         return {"id": str(customer["id"]), "name": customer.get("name", name)}
 
-    def create_project(self, customer_id: str, name: str, active: bool = True) -> dict:
+    def create_project(
+        self,
+        customer_id: str,
+        name: str,
+        active: bool = True,
+        budget_amount: float | None = None,
+    ) -> dict:
         """Create a project in Clockodo under a specific customer.
 
+        Args:
+            budget_amount: Monetary budget in the tenant's currency. When set,
+                the project is created with a monetary budget (monetary=True).
+                Pass None to create a project without a budget.
+
         Returns:
-            dict with 'id' (int) and 'name' (str)
+            dict with 'id' (str) and 'name' (str)
         """
-        data = self._post("projects", {
+        payload: dict = {
             "name": name,
             "customers_id": int(customer_id),
             "active": active,
-        })
+        }
+        if budget_amount is not None:
+            payload["budget"] = {"amount": float(budget_amount), "monetary": True}
+        data = self._post("projects", payload)
         project = data.get("data", data)
         return {"id": str(project["id"]), "name": project.get("name", name)}
 

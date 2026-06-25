@@ -544,7 +544,7 @@ class TestCreateClockodoProjectForContract:
         assert data["mapping"]["contractItemId"] == contract_item_clockodo.id
 
         mock_provider.create_project.assert_called_once_with(
-            "CK-999", "Test Project"
+            "CK-999", "Test Project", budget_amount=200.0
         )
         mock_sync.assert_called_once()
 
@@ -741,5 +741,5 @@ class TestCreateClockodoProjectForContract:
         assert data["success"] is True
 
         mock_provider.create_project.assert_called_once_with(
-            "CK-999", "Trimmed Name"
+            "CK-999", "Trimmed Name", budget_amount=None
         )

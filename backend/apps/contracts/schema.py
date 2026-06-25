@@ -6471,9 +6471,21 @@ class ContractMutation:
                     success=False, error="Item not found in this contract"
                 )
 
+        # Derive budget from the selected contract item (quantity × current price)
+        budget_amount: float | None = None
+        if contract_item:
+            from datetime import date as _date
+            try:
+                price = contract_item.get_price_at(_date.today())
+                budget_amount = float(contract_item.quantity * price)
+            except Exception:
+                pass  # budget stays None — project created without budget
+
         try:
             result = provider.create_project(
-                customer.clockodo_customer_id, project_name.strip()
+                customer.clockodo_customer_id,
+                project_name.strip(),
+                budget_amount=budget_amount,
             )
         except Exception as e:
             return TimeTrackingMappingResult(

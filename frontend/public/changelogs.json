@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.34.11",
+    "date": "2026-06-25",
+    "title": "Clockodo: Budget aus Vertragsposition übertragen",
+    "description": "Wird beim manuellen Anlegen eines Clockodo-Projekts eine Vertragsposition ausgewählt, wird deren Budget (Menge × aktueller Preis) automatisch als monetäres Budget an Clockodo übertragen.",
+    "type": "improvement",
+    "details": [
+      "Neues Clockodo-Projekt erhält Budget wenn contractItemId angegeben: Menge × get_price_at(heute)",
+      "Budget wird als monetäres Budget (monetary: true) in Clockodo gesetzt",
+      "Kein Budget wenn keine Position ausgewählt oder Preis nicht ermittelbar"
+    ]
+  },
+  {
     "version": "2.34.10",
     "date": "2026-06-24",
     "title": "Info-Tab: GitHub-Link, GPL-Lizenz + Projektname-Vorlage beim Anlegen",
