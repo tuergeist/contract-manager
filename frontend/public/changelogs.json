@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.34.12",
+    "date": "2026-07-01",
+    "title": "Auftragsbestätigung: MwSt. nach Kundenland",
+    "description": "Auftragsbestätigungen berechneten immer den Standardsatz (19%), unabhängig vom Kundenland. Jetzt wird die MwSt. wie bei Rechnungen nach Kundenklassifizierung ermittelt.",
+    "type": "bugfix",
+    "details": [
+      "Inländische Kunden erhalten den Standardsatz (19%)",
+      "EU-Kunden erhalten 0% mit Reverse-Charge-Hinweis",
+      "Drittland-Kunden erhalten 0% mit Ort-der-Leistung-Hinweis",
+      "Steuerzeile entfällt bei ausländischen Kunden; konfigurierbarer MwSt.-Hinweis (vat_text_eu/non_eu) wird angezeigt"
+    ]
+  },
+  {
     "version": "2.34.11",
     "date": "2026-06-25",
     "title": "Clockodo: Budget aus Vertragsposition übertragen",
