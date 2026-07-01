@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.35.0",
+    "date": "2026-07-01",
+    "title": "Hinweis auf neue Version",
+    "description": "Installierte Instanzen prüfen den öffentlichen GitHub-Repo auf den neuesten Release-Tag und zeigen bei einer neueren Version eine grüne Hinweiszeile mit Link zum Changelog.",
+    "type": "feature",
+    "details": [
+      "Grüne Zeile oben im Layout, sobald ein neuerer Release-Tag verfügbar ist",
+      "Link führt zum Changelog auf GitHub (Tags des öffentlichen Repos)",
+      "Pro Version ausblendbar; erscheint beim nächsten Release erneut",
+      "Backend cached die GitHub-Abfrage 1 Stunde und funktioniert offline still weiter"
+    ]
+  },
+  {
     "version": "2.34.12",
     "date": "2026-07-01",
     "title": "Auftragsbestätigung: MwSt. nach Kundenland",
