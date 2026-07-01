@@ -269,7 +269,7 @@ export function Sidebar() {
   return (
     <aside className="flex w-64 flex-col border-r bg-white">
       <div className="flex h-16 items-center border-b px-6">
-        <img src="/vsx-logo.jpg" alt="VSX Vogel Software" className="h-10" />
+        <span className="text-lg font-semibold text-gray-900">Contract Manager</span>
       </div>
       {/* Search Bar - outside nav to avoid overflow clipping */}
       <div className="relative px-4 pt-4 pb-1">
