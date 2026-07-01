@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.35.1",
+    "date": "2026-07-01",
+    "title": "Auftragsbestätigung erneut senden",
+    "description": "Auf der Detailseite einer Auftragsbestätigung lässt sich das aktuelle PDF jetzt erneut an den Kunden senden — z.B. nachdem es mit korrigierten Daten neu erzeugt wurde.",
+    "type": "feature",
+    "details": [
+      "Neuer Button \"Erneut senden\" auf der AB-Detailseite (bzw. \"Senden\" bei noch nicht versendeten ABs)",
+      "Bestätigungsdialog vor dem erneuten Versand",
+      "Versanddatum wird beim erneuten Senden aktualisiert"
+    ]
+  },
+  {
     "version": "2.35.0",
     "date": "2026-07-01",
     "title": "Hinweis auf neue Version",
