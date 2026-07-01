@@ -2298,6 +2298,11 @@
     "licenseDescription": "Dieses Programm ist freie Software. Sie dürfen es weitergeben und/oder modifizieren, gemäß den Bedingungen der GNU General Public License, Version 3 oder höher.",
     "viewLicense": "Lizenzdokument anzeigen"
   },
+  "updateBanner": {
+    "message": "Neue Version {{version}} verfügbar (installiert: {{current}}).",
+    "action": "Changelog ansehen",
+    "dismiss": "Ausblenden"
+  },
   "helpVideo": {
     "button": "Kurze Anleitung",
     "settings": {

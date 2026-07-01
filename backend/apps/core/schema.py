@@ -175,6 +175,16 @@ class CoreQuery:
         return settings.SIGNUP_ENABLED
 
     @strawberry.field
+    def latest_version(self) -> str | None:
+        """Newest released version tag from the public GitHub repo.
+
+        Returns null when the lookup is unavailable (offline / rate limited).
+        The frontend compares this against the running build version.
+        """
+        from apps.core.version_check import get_latest_version
+        return get_latest_version()
+
+    @strawberry.field
     def me(self, info: Info[Context, None]) -> CurrentUser | None:
         """Get current authenticated user."""
         user = info.context.user
