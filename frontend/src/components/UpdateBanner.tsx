@@ -3,12 +3,13 @@ import { useTranslation } from 'react-i18next'
 import { ArrowUpCircle, X } from 'lucide-react'
 import { useUpdateStatus, CURRENT_VERSION } from '@/lib/versionCheck'
 
-const REPO_TAGS_URL = 'https://github.com/tuergeist/contract-manager/tags'
+const CHANGELOG_URL =
+  'https://github.com/tuergeist/contract-manager/blob/main/frontend/public/changelogs.json'
 const DISMISS_KEY = 'updateBannerDismissedVersion'
 
 /**
  * Thin green line shown at the top of the app when a newer released version is
- * available on GitHub. Links to the repo's tags/changelog. Dismissable per
+ * available on GitHub. Links to the repo's changelog. Dismissable per
  * version (remembered in localStorage) so it reappears for the next release.
  */
 export function UpdateBanner() {
@@ -39,7 +40,7 @@ export function UpdateBanner() {
         })}
       </span>
       <a
-        href={REPO_TAGS_URL}
+        href={CHANGELOG_URL}
         target="_blank"
         rel="noopener noreferrer"
         className="font-medium underline underline-offset-2 hover:text-green-100"
