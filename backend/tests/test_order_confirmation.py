@@ -548,6 +548,101 @@ class TestOrderConfirmationPricePeriods:
         assert ctx["totals"]["one_off_net"] == Decimal("2000.00")
 
 
+# ---- VAT classification ----
+
+
+def _make_legal_data(tenant, country="Deutschland"):
+    from apps.invoices.models import CompanyLegalData
+    return CompanyLegalData.objects.create(
+        tenant=tenant,
+        company_name="Test GmbH",
+        country=country,
+        vat_id="DE123456789",
+        managing_directors=["Max Mustermann"],
+        default_tax_rate=Decimal("19.00"),
+    )
+
+
+class TestOrderConfirmationVat:
+    """VAT must reflect the customer country, not always the default rate."""
+
+    def _customer(self, tenant, country):
+        return Customer.objects.create(
+            tenant=tenant,
+            name=f"Customer {country}",
+            is_active=True,
+            address={"country": country},
+        )
+
+    def _contract(self, tenant, customer):
+        contract = Contract.objects.create(
+            tenant=tenant,
+            customer=customer,
+            name="VAT Contract",
+            status=Contract.Status.ACTIVE,
+            start_date=date(2026, 1, 1),
+            billing_start_date=date(2026, 1, 1),
+            billing_interval=Contract.BillingInterval.MONTHLY,
+            billing_anchor_day=1,
+        )
+        ContractItem.objects.create(
+            tenant=tenant,
+            contract=contract,
+            description="Service",
+            quantity=1,
+            unit_price=Decimal("100.00"),
+        )
+        return contract
+
+    def test_domestic_customer_has_vat(self, tenant):
+        """German customer (company in Germany) is charged 19% VAT."""
+        _make_legal_data(tenant, country="Deutschland")
+        customer = self._customer(tenant, "Deutschland")
+        contract = self._contract(tenant, customer)
+
+        ctx = OrderConfirmationService(tenant).build_template_context(contract)
+
+        assert ctx["totals"]["tax_rate"] == Decimal("19.00")
+        assert ctx["totals"]["tax_amount"] == Decimal("19.00")
+        assert ctx["totals"]["gross"] == Decimal("119.00")
+        assert ctx["vat_sentence"] == ""
+
+    def test_eu_customer_reverse_charge(self, tenant):
+        """EU customer gets 0% VAT and a reverse-charge note."""
+        _make_legal_data(tenant, country="Deutschland")
+        customer = self._customer(tenant, "France")
+        contract = self._contract(tenant, customer)
+
+        ctx = OrderConfirmationService(tenant).build_template_context(contract)
+
+        assert ctx["totals"]["tax_amount"] is None
+        assert ctx["totals"]["gross"] == Decimal("100.00")
+        assert "Reverse Charge" in ctx["vat_sentence"]
+
+    def test_non_eu_customer_no_vat(self, tenant):
+        """Non-EU (third country) customer gets 0% VAT and a place-of-supply note."""
+        _make_legal_data(tenant, country="Deutschland")
+        customer = self._customer(tenant, "United States")
+        contract = self._contract(tenant, customer)
+
+        ctx = OrderConfirmationService(tenant).build_template_context(contract)
+
+        assert ctx["totals"]["tax_amount"] is None
+        assert ctx["totals"]["gross"] == Decimal("100.00")
+        assert ctx["vat_sentence"]
+        assert "Reverse Charge" not in ctx["vat_sentence"]
+
+    def test_eu_note_hidden_tax_row_in_html(self, tenant):
+        """Reverse-charge HTML omits the tax row and shows the VAT note."""
+        _make_legal_data(tenant, country="Deutschland")
+        customer = self._customer(tenant, "France")
+        contract = self._contract(tenant, customer)
+
+        html = OrderConfirmationService(tenant).render_html(contract, language="de")
+
+        assert "Reverse Charge" in html
+
+
 # ---- Model ----
 
 class TestOrderConfirmationModel:

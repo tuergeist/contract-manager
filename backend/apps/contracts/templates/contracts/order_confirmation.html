@@ -400,7 +400,7 @@
             <span>{{ labels.net_total }}</span>
             <span>{{ currency_symbol }}{{ totals.net|money:language }}</span>
         </div>
-        {% if totals.tax_amount %}
+        {% if not vat_sentence and totals.tax_amount %}
         <div class="total-row tax-row">
             <span>{{ labels.tax }} ({{ totals.tax_rate|money:language }}%)</span>
             <span>{{ currency_symbol }}{{ totals.tax_amount|money:language }}</span>
@@ -411,6 +411,12 @@
             <span>{{ currency_symbol }}{{ totals.gross|money:language }}</span>
         </div>
     </div>
+
+    {% if vat_sentence %}
+    <div class="vat-note" style="margin-top: 12px; font-size: 11px; color: #444;">
+        {{ vat_sentence }}
+    </div>
+    {% endif %}
 
     <div style="clear: both;"></div>
 

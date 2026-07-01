@@ -140,6 +140,7 @@ class OrderConfirmationService:
                 "managing_directors": [], "bank_name": "", "iban": "", "bic": "",
                 "phone": "", "email": "", "website": "", "share_capital": "",
                 "default_tax_rate": "19.00",
+                "vat_text_eu": "", "vat_text_non_eu": "",
             }
 
         accent_color = "#2563eb"
@@ -249,15 +250,36 @@ class OrderConfirmationService:
         language: str = "de",
     ) -> dict:
         """Build the full template context for rendering the AB HTML."""
+        from types import SimpleNamespace
+
+        from apps.invoices.services import _classify_customer, _get_vat_sentence
+
         labels = AB_LABELS.get(language, AB_LABELS["de"])
         template_ctx = self._get_template_context()
         line_items = self._build_line_items(contract, labels)
-        totals = self._build_totals(line_items, template_ctx["tax_rate"])
         currency_symbol = self.tenant.currency_symbol
 
         customer = contract.customer
         customer_address = customer.address if customer else {}
         customer_vat_id = customer.vat_id if customer else ""
+
+        # VAT classification: domestic customers get the default rate, foreign
+        # customers (EU reverse charge / non-EU) get 0% + an explanatory sentence.
+        company = template_ctx["company"]
+        classification = _classify_customer(
+            company.get("country", ""), customer_address or {}
+        )
+        is_domestic = classification == "domestic"
+        effective_tax_rate = (
+            template_ctx["tax_rate"] if is_domestic else Decimal("0.00")
+        )
+        legal_data = SimpleNamespace(
+            vat_text_eu=company.get("vat_text_eu", ""),
+            vat_text_non_eu=company.get("vat_text_non_eu", ""),
+        )
+        vat_sentence = _get_vat_sentence(classification, legal_data)
+
+        totals = self._build_totals(line_items, effective_tax_rate)
 
         recurring_items = [i for i in line_items if not i["is_one_off"]]
         one_off_items = [i for i in line_items if i["is_one_off"]]
@@ -277,6 +299,7 @@ class OrderConfirmationService:
             "one_off_items": one_off_items,
             "has_both_sections": has_both_sections,
             "totals": totals,
+            "vat_sentence": vat_sentence,
             "personal_message": personal_message,
             "include_message_in_pdf": include_message_in_pdf,
             **template_ctx,
