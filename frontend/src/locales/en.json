@@ -2561,7 +2561,13 @@
       "number": "OC No.",
       "createdBy": "Created by",
       "regenerate": "Regenerate PDF",
-      "regenerateHint": "Regenerate PDF with current customer data + language"
+      "regenerateHint": "Regenerate PDF with current customer data + language",
+      "send": "Send",
+      "resend": "Resend",
+      "resendHint": "Send the current PDF to the customer again",
+      "confirmResend": "Resend the order confirmation to the customer?",
+      "sending": "Sending …",
+      "sendSuccess": "Order confirmation sent"
     },
     "numberScheme": {
       "title": "OC Number Scheme",

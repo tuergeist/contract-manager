@@ -255,6 +255,36 @@ class OrderConfirmationMutation:
         return OrderConfirmationResult(order_confirmation=ab, success=True)
 
     @strawberry.mutation
+    def resend_order_confirmation(
+        self,
+        info: Info[Context, None],
+        order_confirmation_id: strawberry.ID,
+    ) -> OrderConfirmationResult:
+        """Re-send an already-sent order confirmation email.
+
+        Unlike ``send_order_confirmation`` this deliberately allows sending
+        again when the OC is already SENT — e.g. after the PDF was
+        re-generated with corrected data. The send service refreshes
+        ``sent_at``/``sent_to`` on success.
+        """
+        user, err = check_perm(info, "contracts", "write")
+        if err:
+            return OrderConfirmationResult(error=err)
+        if not user.tenant:
+            return OrderConfirmationResult(error="No tenant assigned")
+
+        ab = OrderConfirmation.objects.filter(
+            tenant=user.tenant, id=order_confirmation_id
+        ).first()
+        if not ab:
+            return OrderConfirmationResult(error="Order confirmation not found")
+
+        from apps.contracts.tasks import send_order_confirmation_email_task
+        send_order_confirmation_email_task.delay(ab.id, user_id=user.id)
+
+        return OrderConfirmationResult(order_confirmation=ab, success=True)
+
+    @strawberry.mutation
     def preview_order_confirmation_html(
         self,
         info: Info[Context, None],

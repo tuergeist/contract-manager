@@ -2561,7 +2561,13 @@
       "number": "AB-Nr.",
       "createdBy": "Erstellt von",
       "regenerate": "PDF neu erzeugen",
-      "regenerateHint": "PDF mit aktuellen Kundendaten + Sprache neu erzeugen"
+      "regenerateHint": "PDF mit aktuellen Kundendaten + Sprache neu erzeugen",
+      "send": "Senden",
+      "resend": "Erneut senden",
+      "resendHint": "Die aktuelle PDF erneut an den Kunden senden",
+      "confirmResend": "Auftragsbestätigung erneut an den Kunden senden?",
+      "sending": "Wird gesendet …",
+      "sendSuccess": "Auftragsbestätigung gesendet"
     },
     "numberScheme": {
       "title": "AB-Nummernschema",
