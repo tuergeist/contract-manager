@@ -2301,7 +2301,9 @@
   "updateBanner": {
     "message": "New version {{version}} available (installed: {{current}}).",
     "action": "View changelog",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "modalTitle": "What's new",
+    "modalSubtitle": "Changes since your installed version {{current}}"
   },
   "helpVideo": {
     "button": "Quick Guide",
