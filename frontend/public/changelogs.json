@@ -1,5 +1,17 @@
 [
   {
+    "version": "2.35.2",
+    "date": "2026-07-02",
+    "title": "Update-Hinweis mit Changelog-Modal",
+    "description": "Der Hinweis auf neue Versionen zeigt die Änderungen jetzt direkt in einem scrollbaren Modal an. Außerdem wurde das produktfremde Logo entfernt.",
+    "type": "improvement",
+    "details": [
+      "\"Changelog ansehen\" öffnet ein Modal mit allen Änderungen seit der installierten Version (aus dem Repo geladen)",
+      "Einträge mit Typ-Kennzeichnung und Details, scrollbar",
+      "Sidebar zeigt den Produktnamen \"Contract Manager\" statt eines externen Logos"
+    ]
+  },
+  {
     "version": "2.35.1",
     "date": "2026-07-01",
     "title": "Auftragsbestätigung erneut senden",
